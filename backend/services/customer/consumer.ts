@@ -1,0 +1,149 @@
+import type { Pool, PoolClient } from 'pg';
+import { PermanentStreamError, StreamConsumer, type RedisStreams, type StreamEnvelope } from '../../packages/streams/index.ts';
+import { creditMembership, lockClaim, sameSale, settleClaim } from './claims.ts';
+import { isRecord, isUuid, type SaleLink } from './pos-client.ts';
+
+type Quantity = { allocationId: string; quantity: number };
+const invalidEvent = () => new PermanentStreamError('INVALID_CUSTOMER_POS_EVENT');
+
+function storeOf(event: StreamEnvelope) {
+  if (!isUuid(event.storeId) || event.scopeKey !== event.storeId) throw invalidEvent();
+  return event.storeId;
+}
+
+function saleOf(payload: Record<string, unknown>): SaleLink {
+  const { settlementId, billId, orderId } = payload;
+  if (!isUuid(settlementId) || !isUuid(billId) || !isUuid(orderId)) throw invalidEvent();
+  return { settlementId, billId, orderId };
+}
+
+function quantities(input: unknown, min: number): Quantity[] {
+  if (!Array.isArray(input) || input.length === 0 || input.length > 100) throw invalidEvent();
+  const seen = new Set<string>();
+  const rows = input.map((entry: unknown) => {
+    if (!isRecord(entry) || !isUuid(entry.allocationId) || typeof entry.quantity !== 'number'
+      || !Number.isInteger(entry.quantity) || entry.quantity < min || entry.quantity > 99
+      || seen.has(entry.allocationId)) throw invalidEvent();
+    seen.add(entry.allocationId);
+    return { allocationId: entry.allocationId, quantity: entry.quantity };
+  });
+  return rows.sort((a, b) => a.allocationId.localeCompare(b.allocationId));
+}
+
+async function registerContributions(db: PoolClient, storeId: string, useId: string, contributions: Quantity[]) {
+  const { rows } = await db.query<Quantity>(`
+    SELECT allocation_id AS "allocationId", quantity FROM customer.membership_contribution
+    WHERE store_id = $1 AND use_id = $2
+  `, [storeId, useId]);
+  if (rows.length) {
+    const prior = new Map(rows.map(row => [row.allocationId, row.quantity]));
+    if (prior.size !== contributions.length || contributions.some(row => prior.get(row.allocationId) !== row.quantity)) {
+      throw new PermanentStreamError('MEMBERSHIP_CONTRIBUTIONS_MISMATCH');
+    }
+    return;
+  }
+  await db.query(`
+    INSERT INTO customer.membership_contribution (store_id, use_id, allocation_id, quantity)
+    SELECT $1, $2, line."allocationId", line.quantity
+    FROM jsonb_to_recordset($3) AS line("allocationId" uuid, quantity int)
+  `, [storeId, useId, JSON.stringify(contributions)]);
+}
+
+async function recognize(db: PoolClient, event: StreamEnvelope) {
+  const storeId = storeOf(event);
+  const payload = event.payload;
+  if (!isRecord(payload)) throw invalidEvent();
+  if (payload.claimId === undefined) return;
+  if (!isUuid(payload.claimId)) throw invalidEvent();
+  const sale = saleOf(payload);
+  if (event.aggregateId !== sale.settlementId) throw invalidEvent();
+
+  const claim = await lockClaim(db, storeId, payload.claimId);
+  if (!claim) throw new PermanentStreamError('CUSTOMER_CLAIM_NOT_FOUND');
+  if (claim.state === 'released' || (claim.state !== 'held' && !sameSale(claim, sale))) {
+    throw new PermanentStreamError('CUSTOMER_POS_OUTCOME_MISMATCH');
+  }
+  await settleClaim(db, storeId, claim, { status: 'committed', sale });
+  if (claim.kind !== 'membership_use') return;
+
+  // The fixture applies a count use to whole allocations of one settlement.
+  const original = quantities(payload.lines, 1);
+  const covered = payload.membershipContributions === undefined ? original : quantities(payload.membershipContributions, 1);
+  const sold = new Map(original.map(row => [row.allocationId, row.quantity]));
+  if (covered.some(row => sold.get(row.allocationId) !== row.quantity)) {
+    // A partial allocation needs POS to identify which units a correction actually returns.
+    throw new PermanentStreamError('UNSUPPORTED_MEMBERSHIP_CONTRIBUTION');
+  }
+  await registerContributions(db, storeId, claim.claimId, covered);
+}
+
+async function recordCorrection(db: PoolClient, storeId: string, correctionId: string, eventId: string,
+  useId: string, effect: object) {
+  const encoded = JSON.stringify(effect);
+  const result = await db.query(`
+    INSERT INTO customer.membership_correction (store_id, correction_id, event_id, use_id, effect)
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT (store_id, correction_id) DO NOTHING
+  `, [storeId, correctionId, eventId, useId, encoded]);
+  if (result.rowCount) return true;
+
+  const duplicate = await db.query(`
+    SELECT 1 FROM customer.membership_correction
+    WHERE store_id = $1 AND correction_id = $2 AND use_id = $3 AND effect = $4::jsonb
+  `, [storeId, correctionId, useId, encoded]);
+  if (!duplicate.rowCount) throw new PermanentStreamError('MEMBERSHIP_CORRECTION_MISMATCH');
+  return false;
+}
+
+async function correct(db: PoolClient, event: StreamEnvelope) {
+  const storeId = storeOf(event);
+  const payload = event.payload;
+  if (!isRecord(payload) || !isUuid(payload.settlementId)) throw invalidEvent();
+  const { rows: [match] } = await db.query<{ claim_id: string }>(`
+    SELECT claim_id FROM customer.pos_claim
+    WHERE store_id = $1 AND settlement_id = $2 AND membership_id IS NOT NULL
+  `, [storeId, payload.settlementId]);
+  if (!match) return;
+
+  const claim = await lockClaim(db, storeId, match.claim_id);
+  const { correctionId, kind, target, usageEffect } = payload;
+  if (!claim || !sameSale(claim, saleOf(payload)) || !isUuid(correctionId) || correctionId !== event.aggregateId
+    || target !== 'recognized_sale'
+    || !((kind === 'cancel' && usageEffect === 'restore') || (kind === 'refund' && usageEffect === 'keep'))) {
+    throw invalidEvent();
+  }
+  const lines = quantities(payload.lines, kind === 'cancel' ? 1 : 0);
+  if (!(await recordCorrection(db, storeId, correctionId, event.eventId, claim.claimId, { kind, lines }))) return;
+  if (kind === 'refund') return;
+
+  const { rows } = await db.query<Quantity & { returned: number }>(`
+    SELECT allocation_id AS "allocationId", quantity, returned FROM customer.membership_contribution
+    WHERE store_id = $1 AND use_id = $2
+  `, [storeId, claim.claimId]);
+  if (!rows.length) throw new PermanentStreamError('MEMBERSHIP_CONTRIBUTIONS_MISSING');
+
+  const byAllocation = new Map(lines.map(row => [row.allocationId, row.quantity]));
+  const updated = rows.map(row => ({ ...row, returned: row.returned + (byAllocation.get(row.allocationId) ?? 0) }));
+  if (updated.some(row => row.returned > row.quantity)) throw new PermanentStreamError('MEMBERSHIP_OVER_REVERSAL');
+  await db.query(`
+    UPDATE customer.membership_contribution SET returned = line.returned
+    FROM jsonb_to_recordset($3) AS line("allocationId" uuid, returned int)
+    WHERE store_id = $1 AND use_id = $2 AND allocation_id = line."allocationId"
+  `, [storeId, claim.claimId, JSON.stringify(updated)]);
+
+  if (claim.state !== 'committed' || updated.some(row => row.returned < row.quantity)) return;
+  await creditMembership(db, storeId, claim.sourceId);
+  await db.query(`
+    UPDATE customer.pos_claim SET state = 'restored' WHERE store_id = $1 AND claim_id = $2
+  `, [storeId, claim.claimId]);
+}
+
+type ConsumerOptions = Partial<Pick<ConstructorParameters<typeof StreamConsumer>[0], 'reclaimIdleMs' | 'afterCommit'>>;
+
+export function createCustomerConsumer(database: Pool, redis: RedisStreams, name: string, options: ConsumerOptions = {}) {
+  return new StreamConsumer({
+    ...options,
+    database, redis, name, service: 'customer', producer: 'pos', group: 'customer',
+    handlers: { 'pos.sale_recognized.v1': recognize, 'pos.sale_corrected.v1': correct },
+  });
+}
