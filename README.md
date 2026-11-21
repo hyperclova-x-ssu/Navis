@@ -221,12 +221,20 @@ Navis/
 │   ├── shared/                # 서버와 화면이 함께 쓰는 Navis 도구 스키마
 │   ├── scripts/               # 시드 생성·서버 시험 실행 스크립트
 │   └── public/                # 메뉴 사진, CCTV 예시 탐지 결과
-├── backend/                   # MSA 서비스 6개 + gateway + worker (순차 공개)
+├── backend/                   # 서버 (MSA)
+│   ├── gateway/               # API gateway: JWT 검증, 매장 권한, 내부 서비스 전달
+│   ├── services/              # account · pos · inventory · customer · marketing · insight
+│   ├── workers/               # 입고 영수증 소비, 마케팅 작업기, 수요 예측 크론
+│   ├── relay/                 # outbox → Redis Streams 이벤트 전달
+│   ├── packages/              # 공용 계약 타입, DB 접속·마이그레이션, 이벤트 스트림
+│   ├── infra/                 # nginx edge, PostgreSQL 초기화, 로컬 비밀값 생성
+│   ├── deploy/                # NKS 배포 샘플 (Helm 차트, GitHub Actions 예시)
+│   └── compose.yaml           # 로컬 실행 (Docker Compose)
 ├── db/seed/                   # 가상 카페 '안숭잘부'의 90일 운영 시드 생성기
 └── docs/images/               # README 이미지
 ```
 
-> 폴더별 자세한 설명은 [`frontend/README.md`](frontend/README.md)에 있습니다.
+> 폴더별 자세한 설명은 [`frontend/README.md`](frontend/README.md)와 [`backend/README.md`](backend/README.md)에 있습니다.
 
 <br/>
 
