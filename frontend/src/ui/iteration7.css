@@ -1,0 +1,14 @@
+.ui-overlay-actions .detail-fullscreen-toggle { flex: none; min-height: var(--target-default); }
+.detail-fullscreen-toggle .ui-icon { width: var(--space-5); height: var(--space-5); }
+.ui-dialog:has(.detail-fullscreen-toggle) > .ui-overlay-header { gap: var(--space-2); }
+.ui-dialog:has(.detail-fullscreen-toggle) .ui-overlay-heading { flex: 1 1 auto; }
+.ui-dialog:has(.detail-fullscreen-toggle) .ui-overlay-actions + .ui-button { margin-inline-start: 0; }
+.ui-modal-viewport:has(.detail-fullscreen-toggle) { transition: padding var(--motion-duration-fly) var(--motion-ease-out); }
+.ui-modal-viewport:has(.detail-fullscreen-toggle) .ui-dialog { transition: width var(--motion-duration-fly) var(--motion-ease-out), height var(--motion-duration-fly) var(--motion-ease-out), border-radius var(--motion-duration-fly) var(--motion-ease-out); }
+.ui-modal-viewport:has(.detail-fullscreen-toggle) .ui-dialog--fullscreen { border: 0; }
+[data-reduced-motion="true"] .ui-modal-viewport:has(.detail-fullscreen-toggle),
+[data-reduced-motion="true"] .ui-modal-viewport:has(.detail-fullscreen-toggle) .ui-dialog { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ui-modal-viewport:has(.detail-fullscreen-toggle),
+  .ui-modal-viewport:has(.detail-fullscreen-toggle) .ui-dialog { transition: none; }
+}

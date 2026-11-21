@@ -1,0 +1,245 @@
+/* R4 DS12 / MOTION10. Logical canvas pixels; UiProvider owns the fit transform. */
+:root,[data-theme] {
+  --group-products:var(--group-local);--group-stock:var(--group-operations);--group-finance:var(--group-money);--group-members:var(--group-customers);--group-store:var(--group-recommend);--group-misc:var(--muted-foreground);--group-schedule:var(--group-news);
+  --spotlight-ring-inner:var(--ring);--spotlight-ring-outer:var(--foreground);
+  --table-header-height:48px;--table-row-min:56px;--table-cell-padding-x:12px;--table-toolbar-height:56px;--table-expand-max:360px;--table-name-min:200px;--table-action-width:56px;--table-search-width:480px;
+  --minitable-row-min:48px;--sidepanel-width:560px;--sidepanel-header:72px;--onboarding-content-top:136px;--stepper-circle:28px;--choicecard-width:480px;--choicecard-height:288px;--template-card-width:464px;--template-tag:32px;--template-preview-ratio:1768 / 880;--empty-start-width:448px;--empty-start-height:80px;
+  --tablegrid-cols:9;--tablegrid-rows:6;--tablegrid-cell:104px;--tablegrid-tile-inset:8px;--table-settings-width:448px;--table-seat-input-width:96px;
+  --spotlight-padding:8px;--spotlight-ring-width:2px;--tourcard-width:400px;--tourcard-max-height:360px;--closing-button-width:160px;--closing-badge-slot:144px;--stillframe-width:240px;--stillframe-height:180px;
+  --motion-duration-onboarding-step:220ms;--motion-duration-spotlight:220ms;--motion-stagger-template:20ms;--motion-duration-sort:180ms;--motion-duration-side-in:240ms;--motion-duration-side-out:200ms;--motion-duration-row-in:120ms;--motion-duration-row-out:120ms;--time-tour-start:400ms;
+}
+[data-screen-preset="B"] {--table-expand-max:480px;--sidepanel-width:640px;--table-search-width:560px;--template-card-width:592px;--template-preview-ratio:2408 / 1240;--empty-start-width:560px;--tablegrid-cell:136px;--table-settings-width:480px;}
+[data-text-scale="125"] {--table-row-min:64px;--minitable-row-min:64px;--table-header-height:56px;}
+.ui-data-grid {position:relative;display:flex;flex-direction:column;min-width:0;min-height:0;height:100%;gap:var(--space-2);}
+.ui-data-grid__toolbar {display:flex;align-items:center;gap:var(--space-4);min-height:var(--table-toolbar-height);flex-wrap:wrap;flex-shrink:0;}
+.ui-data-grid__toolbar .ui-search-field {width:var(--table-search-width);max-width:100%;}
+/* DS 12.1 ToolRow: the search field is 48 high (the generic .ui-search-field__control is the 56 primary target). The input fills the control so the whole box is the click target. */
+.ui-data-grid__toolbar .ui-search-field__control {height:var(--target-default);min-height:0;}
+.ui-data-grid__toolbar .ui-search-field__control .ui-input {min-height:0;align-self:stretch;padding-block:0;}
+.ui-data-grid__toolbar>.ui-button:last-child {margin-left:auto;}
+.ui-data-grid__toolbar>.ui-button {min-height:var(--target-default);}
+.ui-data-grid__scroll {min-width:0;min-height:calc(var(--table-header-height) + 3 * var(--table-row-min) + 3 * var(--stroke-hairline));flex:1;overflow:auto;scrollbar-gutter:stable;overflow-anchor:none;overscroll-behavior:contain;isolation:isolate;contain:layout style;border:var(--stroke-hairline) solid var(--border);border-radius:var(--radius-lg);scroll-padding-top:var(--table-header-height);}
+/* Explicit tracks isolate row layout from every other row. All semantic rows/cells
+   remain mounted; auto content visibility keeps offscreen content in the a11y tree. */
+.ui-data-grid__table {position:relative;display:block;width:100%;min-width:var(--data-grid-min-width);border-spacing:0;font-size:var(--type-body);line-height:var(--leading-body);}
+.ui-data-grid__table>thead,.ui-data-grid__table>tbody {display:block;}
+.ui-data-grid__table>thead {position:sticky;top:0;z-index:3;background:var(--muted);}
+.ui-data-grid__table tr {display:grid;grid-template-columns:var(--data-grid-columns);}
+.ui-data-grid__table [data-grid-row] {contain:layout style;content-visibility:auto;contain-intrinsic-block-size:auto var(--table-row-min);}
+.ui-data-grid__table [data-grid-row]:focus-within,.ui-data-grid__table [data-grid-row][data-editing] {content-visibility:visible;}
+.ui-data-grid__table th,.ui-data-grid__table td {display:block;align-content:center;min-width:0;text-align:left;padding:0 var(--table-cell-padding-x);border-bottom:var(--stroke-hairline) solid var(--border);min-height:var(--table-row-min);position:relative;}
+.ui-data-grid__table th {position:sticky;top:0;z-index:3;background:var(--muted);min-height:var(--table-header-height);font-size:var(--type-caption);line-height:var(--leading-caption);font-weight:var(--weight-bold);}
+.ui-data-grid__table th:first-child,.ui-data-grid__table td:first-child {position:sticky;left:0;z-index:2;background:var(--card);}
+.ui-data-grid__table th:first-child {z-index:4;background:var(--muted);}
+.ui-data-grid__table[data-has-expand="true"] [data-first] {position:sticky;left:var(--target-default);z-index:2;background:var(--card);}
+.ui-data-grid__table[data-has-expand="true"] th:nth-child(2) {position:sticky;left:var(--target-default);z-index:4;}
+.ui-data-grid__header-content {display:flex;align-items:center;min-height:var(--table-header-height);}
+.ui-data-grid__header-content>span {display:flex;align-items:center;min-height:var(--target-default);flex:1;}
+.ui-data-grid__sort {display:flex;align-items:center;justify-content:flex-start;min-height:var(--target-default);flex:1;min-width:0;font-weight:inherit;text-align:left;}
+.ui-data-grid__sort-label {min-width:0;word-break:keep-all;}
+.ui-data-grid__sort-tail {white-space:nowrap;}
+.ui-data-grid__sort svg {width:var(--space-3);height:var(--space-3);flex-shrink:0;}
+.ui-data-grid__sort-tail svg {display:inline-block;vertical-align:middle;margin-inline-start:var(--space-2);}
+.ui-grid-press {color:inherit;border:0;background:transparent;font:inherit;touch-action:manipulation;cursor:pointer;}
+.ui-grid-press:active>.ui-data-grid__value,.ui-grid-press:active>svg,.ui-grid-press:active.ui-data-grid__sort>span {transform:scale(var(--motion-scale-press));transition:transform var(--motion-duration-press) var(--motion-ease-out);}
+.ui-grid-press:focus-visible {outline:var(--stroke-focus) solid var(--ring);outline-offset:calc(-1 * var(--stroke-focus));}
+.ui-data-grid__icon {min-width:var(--target-default);min-height:var(--target-default);display:inline-flex;align-items:center;justify-content:center;padding:0;}
+.ui-data-grid__icon[aria-disabled="true"] {color:var(--disabled-foreground);}
+.ui-data-grid__expand-col {width:var(--target-default);}
+.ui-data-grid__action-col {width:var(--table-action-width);}
+.ui-data-grid__table td:has(>.ui-data-grid__icon),.ui-data-grid__table td.ui-data-grid__actions {padding:0;}
+.ui-data-grid__value {display:block;min-width:0;white-space:nowrap;transition:transform var(--motion-duration-press) var(--motion-ease-out);}
+.ui-data-grid__cell[data-first] .ui-data-grid__value {white-space:normal;overflow-wrap:anywhere;min-width:var(--table-name-min);}
+.ui-data-grid__cell[data-kind="number"],.ui-data-grid__cell[data-kind="computed"] {text-align:right;font-variant-numeric:tabular-nums;}
+.ui-data-grid__value small {font-size:var(--type-caption);color:var(--muted-foreground);}
+.ui-data-grid__cell[data-kind="computed"] {background:var(--muted);cursor:default;}
+.ui-data-grid__table tr[aria-selected="true"]>td {background:var(--selection);}
+.ui-data-grid__table tr[aria-selected="true"]>td:first-child {box-shadow:inset var(--space-1) 0 var(--selection-foreground);}
+.ui-data-grid__cell[inert] {pointer-events:none;}
+.ui-data-grid__cell[data-editing] {background:var(--card);box-shadow:inset 0 0 0 var(--stroke-control) var(--ring);}
+.ui-grid-editor {display:flex;align-items:center;gap:var(--space-2);width:100%;}
+.ui-grid-editor input,.ui-grid-editor select {min-width:0;width:100%;border:0;outline:0;background:var(--card);color:var(--foreground);font:inherit;padding:var(--space-2) 0;}
+.ui-grid-editor input {text-align:inherit;}
+.ui-grid-editor:has([aria-invalid="true"]),.ui-grid-editor[data-invalid="true"] {box-shadow:0 0 0 var(--stroke-control) var(--destructive);}
+/* K-E 5: a date cell edits with the kit DateField. Its label is spoken, not drawn (the row height never changes) and the field fills the cell. */
+.ui-grid-editor[data-editor="date"] .ui-field {flex:1;min-width:0;gap:0;}
+.ui-grid-editor[data-editor="date"] .ui-field__label {position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0;}
+/* the row never grows for the editor: the field is the 44 target, shows the same short date as the cell, and the calendar (already open) is the affordance */
+.ui-grid-editor[data-editor="date"] .ui-picker-field__button {min-height:var(--target-min);height:var(--target-min);padding-inline:var(--space-2);white-space:nowrap;}
+.ui-grid-editor[data-editor="date"] .ui-picker-field__button .ui-icon {display:none;}
+.ui-cell-error {position:absolute;top:100%;left:0;z-index:5;display:flex;align-items:flex-start;gap:var(--space-2);width:max-content;max-width:min(var(--tourcard-width),100%);padding:var(--space-2) var(--space-3);background:var(--popover);border:var(--stroke-hairline) solid var(--destructive);border-radius:var(--radius-md);font-size:var(--type-caption);line-height:var(--leading-caption);color:var(--destructive);white-space:normal;}
+.ui-cell-error[data-above="true"] {top:auto;bottom:100%;}
+.ui-cell-error svg {width:var(--space-4);height:var(--space-4);flex-shrink:0;}
+.ui-grid-help {position:absolute;top:100%;right:0;z-index:6;width:var(--tourcard-width);max-width:var(--canvas-width);padding:var(--space-5);background:var(--popover);border:var(--stroke-hairline) solid var(--input);border-radius:var(--radius-xl);box-shadow:var(--shadow-floating);}
+.ui-grid-expanded {padding:var(--space-4);max-height:var(--table-expand-max);overflow:auto;background:var(--muted);animation:ui-grid-expand var(--motion-duration-short) var(--motion-ease-out);}
+.ui-grid-expanded .ui-data-grid {height:auto;}
+.ui-data-grid__table td[colspan] {grid-column:1 / -1;}
+.ui-grid-warning {display:flex;align-items:flex-start;gap:var(--space-2);margin:0;padding:var(--space-2) 0;color:var(--warning);font-size:var(--type-caption);line-height:var(--leading-caption);overflow-wrap:anywhere;}
+.ui-grid-warning>svg {width:var(--space-4);height:var(--space-4);flex-shrink:0;}
+.ui-grid-warning-row>td {background:var(--warning-bg)!important;}
+.ui-grid-new-row {background:var(--selection);}
+.ui-data-grid__empty {padding:var(--space-6)!important;text-align:center!important;}
+.ui-data-grid__noresults {display:flex;flex-direction:column;align-items:center;gap:var(--space-3);}
+.ui-data-grid__noresults>p {margin:0;}
+/* DS 12.1 header for the plain kit Table, wherever it is used (detail dialog, dashboard panel, side panel): 48 (56 at 125%) + 1px --border, caption 16/24 700 on --muted,
+   sticky at the top, growing only with its text lines. `.ui-table.ui-table` (0,2,2) beats `.ui-table th` (tokens.css) and a widget's own padding without needing a container. */
+.ui-table.ui-table thead th {box-sizing:border-box;height:calc(var(--table-header-height) + var(--stroke-hairline));padding-block:0;background:var(--muted);color:var(--foreground);font-size:var(--type-caption);line-height:var(--leading-caption);font-weight:var(--weight-bold);vertical-align:middle;position:sticky;top:0;z-index:1;}
+/* DS 12.2 selected row for the plain kit Table: --selection face + 4px --selection-foreground bar (set aria-selected on the row) */
+.ui-table tbody tr[aria-selected="true"]>* {background:var(--selection);}
+.ui-table tbody tr[aria-selected="true"]>:first-child {box-shadow:inset var(--space-1) 0 var(--selection-foreground);}
+.ui-grid-notice {display:flex;align-items:center;gap:var(--space-4);background:var(--popover);border:var(--stroke-hairline) solid var(--input);padding:var(--space-3);}
+@keyframes ui-grid-expand {from{opacity:0;transform:translateY(calc(-1 * var(--space-2)));}to{opacity:1;transform:translateY(0);}}
+.ui-overlay-body:has(.ui-detail-side-panel) {position:relative;}
+/* DS 12.2: width 560, header 72, body padding 24; never taller than the dialog body (DetailSidePanel also sets an inline px max-height from it) and
+   only its own body scrolls, so it can neither push the table away nor scroll the window body. */
+.ui-detail-side-panel {position:absolute;inset:0 0 0 auto;width:var(--sidepanel-width);max-width:100%;max-height:100%;min-height:0;box-sizing:border-box;overflow:hidden;background:var(--card);border-left:var(--stroke-hairline) solid var(--border);box-shadow:var(--shadow-floating);z-index:calc(var(--layer-dialog) + 1);display:flex;flex-direction:column;}
+.ui-detail-side-panel>header {min-height:var(--sidepanel-header);box-sizing:border-box;display:flex;align-items:center;gap:var(--space-4);padding:var(--space-3) var(--space-6);flex-shrink:0;}
+.ui-detail-side-panel h3 {font-size:var(--type-section);line-height:var(--leading-section);margin:0;min-width:0;overflow-wrap:anywhere;flex:1;}
+.ui-detail-side-panel__body {flex:1;overflow:auto;overscroll-behavior:contain;min-height:0;padding:var(--space-6);animation:ui-kit-fade var(--motion-duration-content) var(--motion-ease-out);}
+/* specificity 0,3,0: a widget stylesheet cannot shrink the 24 padding */
+.ui-detail-side-panel[role="region"]>.ui-detail-side-panel__body {padding:var(--space-6);}
+/* DS 12.2 slot order: the danger zone is the last item of the body, a ghost destructive action under a 1px divider */
+.ui-detail-side-panel__danger {margin-top:var(--space-6);padding-top:var(--space-6);border-top:var(--stroke-hairline) solid var(--border);display:flex;flex-direction:column;align-items:stretch;gap:var(--space-3);}
+.ui-detail-side-panel__danger .ui-button>.ui-press-surface {background:transparent;color:var(--destructive);box-shadow:none;border-color:transparent;}
+.ui-detail-side-panel>footer {padding:var(--space-6);flex-shrink:0;}
+/* DS 12.2 push/shrink: beside an overlay panel the table gets calc(100% - panel - 24px) and scrolls horizontally INSIDE the table,
+   so no column is ever hidden under the panel (a panel that already owns a grid column is data-layout="flow" and is left alone).
+   Specificity 0,5,0 on purpose: it also beats a widget rule that forgot the 24px gap. */
+.ui-overlay-body :has(>.ui-detail-side-panel[data-layout="overlay"])>.ui-data-grid.ui-data-grid {width:calc(100% - var(--sidepanel-width) - var(--space-6));min-width:0;}
+.ui-choice-card.ui-button,.ui-template-card.ui-button {height:auto;max-height:none;padding:var(--space-6);background:var(--card);border:var(--stroke-hairline) solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-panel);white-space:normal;}
+.ui-choice-card {width:var(--choicecard-width);min-height:var(--choicecard-height);}
+.ui-choice-card>.ui-press-surface,.ui-template-card>.ui-press-surface {display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-4);text-align:left;position:relative;width:100%;}
+.ui-choice-card strong,.ui-template-card strong {font-size:var(--type-section);line-height:var(--leading-section);}
+.ui-choice-card>.ui-press-surface>svg:first-child {width:var(--target-default);height:var(--target-default);}
+.ui-choice-card[aria-checked="true"],.ui-template-card[aria-checked="true"] {background:var(--selection);box-shadow:inset 0 0 0 var(--stroke-control) var(--selection-foreground);}
+.ui-choice-check {color:var(--selection-foreground);position:absolute;right:0;top:0;}
+.ui-template-card {width:var(--template-card-width);align-self:stretch;}
+.ui-template-card__top {display:flex;align-items:center;gap:var(--space-2);min-height:var(--template-tag);width:100%;}
+.ui-template-tag {width:var(--template-tag);height:var(--template-tag);display:grid;place-items:center;background:var(--secondary);font-weight:var(--weight-bold);}
+.ui-template-card__count {font-size:var(--type-caption);font-weight:var(--weight-bold);}
+.ui-template-card__names {display:flex;flex-wrap:wrap;}
+.ui-template-card__names>span {white-space:nowrap;}
+.ui-template-preview {display:grid;gap:var(--stroke-hairline);width:100%;aspect-ratio:var(--template-preview-ratio);border:var(--stroke-hairline) dashed var(--border);}
+.ui-template-preview>span {border:var(--stroke-hairline) solid var(--border);border-left:var(--space-1) solid var(--group-color);border-radius:var(--radius-sm);background:var(--card);padding:var(--space-1) var(--space-2);font-size:var(--type-caption);line-height:var(--leading-caption);white-space:nowrap;}
+.ui-empty-start.ui-button {width:var(--empty-start-width);height:var(--empty-start-height);}
+.ui-empty-start>.ui-press-surface {width:100%;justify-content:space-between;border-color:var(--input);}
+.ui-empty-start .ui-press-surface>span {display:flex;flex-direction:column;text-align:left;}
+.ui-empty-start .ui-press-surface>span>span {font-size:var(--type-caption);color:var(--muted-foreground);}
+.ui-onboarding {position:absolute;inset:0;padding:var(--layout-margin);background:var(--background);display:flex;flex-direction:column;}
+.ui-onboarding>header {display:flex;align-items:center;gap:var(--space-4);height:var(--layout-header);flex-shrink:0;}
+.ui-onboarding-brand {font-weight:var(--weight-bold);width:96px;}
+.ui-step-indicator {display:flex;align-items:center;list-style:none;gap:var(--space-6);padding:0;margin:0 auto;}
+.ui-step-indicator li {display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-control);}
+.ui-step-indicator li+li:before {content:'';width:var(--space-6);height:var(--stroke-hairline);background:var(--input);}
+.ui-step-indicator__circle {display:grid;place-items:center;width:var(--stepper-circle);height:var(--stepper-circle);border:var(--stroke-hairline) solid var(--input);border-radius:50%;font-size:var(--type-caption);}
+.ui-step-indicator [data-state="current"] .ui-step-indicator__circle {background:var(--primary);color:var(--primary-foreground);border-color:var(--primary);}
+.ui-step-indicator [data-state="done"] .ui-step-indicator__circle {background:var(--success-bg);color:var(--success);}
+.ui-step-indicator [data-state="off"] {color:var(--disabled-foreground);}
+.ui-onboarding-content {min-height:0;flex:1;display:flex;flex-direction:column;align-items:center;gap:var(--space-4);padding-top:var(--space-12);}
+.ui-onboarding h1 {font-size:var(--type-heading);line-height:var(--leading-heading);margin:0;}
+.ui-onboarding-reason {display:flex;align-items:center;justify-content:center;gap:var(--space-2);font-size:var(--type-caption);margin:0;color:var(--muted-foreground);}
+.ui-onboarding-footer__row {display:flex;align-items:center;justify-content:space-between;min-height:var(--target-primary);}
+.ui-onboarding-footer__row>div:last-child {display:flex;gap:var(--space-4);}
+.ui-table-editor {width:calc(var(--tablegrid-cols) * var(--tablegrid-cell));}
+.ui-table-grid {display:grid;grid-template-columns:repeat(9,var(--tablegrid-cell));grid-template-rows:repeat(6,var(--tablegrid-cell));border:var(--stroke-hairline) solid var(--input);border-radius:var(--radius-lg);background:var(--background);touch-action:none;position:relative;}
+.ui-table-grid>[data-table-cell] {border:var(--stroke-hairline) dashed var(--border);}
+.ui-table-tile-motion {display:flex;min-width:0;min-height:0;}
+.ui-table-tile-motion>.ui-table-tile {flex:1;}
+.ui-table-tile.ui-button,.ui-table-drag {margin:var(--tablegrid-tile-inset);width:auto;height:auto;min-width:0;min-height:0;border:var(--stroke-hairline) solid var(--input);border-radius:var(--radius-md);background:var(--card);box-shadow:var(--shadow-panel);z-index:1;}
+.ui-table-tile>.ui-press-surface,.ui-table-drag {display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-1);}
+.ui-table-tile span span,.ui-table-drag>span {font-size:var(--type-caption);}
+.ui-table-tile[aria-pressed="true"] {background:var(--selection);box-shadow:inset 0 0 0 var(--stroke-control) var(--selection-foreground);}
+.ui-table-tile[data-dragging="true"] {visibility:hidden;}
+.ui-table-drag {pointer-events:none;z-index:4;box-shadow:var(--shadow-lift);}
+.ui-table-drop {margin:var(--tablegrid-tile-inset);border:var(--stroke-control) dashed var(--selection-foreground);background:var(--selection);z-index:2;pointer-events:none;display:grid;place-items:center;}
+.ui-table-drop[data-valid="false"] {border-color:var(--destructive);background:var(--change-up-bg);color:var(--destructive);}
+.ui-table-grid__notice {font-size:var(--type-caption);min-height:var(--leading-caption);margin:0;}
+.ui-table-settings {width:var(--table-settings-width);height:calc(6 * var(--tablegrid-cell));padding:var(--space-6);border:var(--stroke-hairline) solid var(--border);border-radius:var(--radius-lg);background:var(--card);display:flex;flex-direction:column;gap:var(--space-4);}
+.ui-table-settings h3,.ui-table-settings p {margin:0;}
+.ui-table-settings__list {min-height:0;overflow:auto;overscroll-behavior:contain;}
+.ui-table-stepper {display:flex;align-items:center;gap:var(--space-2);min-height:var(--table-row-min);}
+.ui-table-stepper>span:first-child,.ui-table-stepper>label {flex:1;min-width:0;}
+.ui-table-stepper__value {font-variant-numeric:tabular-nums;min-width:var(--space-8);}
+.ui-table-stepper input {width:var(--table-seat-input-width);min-width:0;min-height:var(--target-default);border:var(--stroke-hairline) solid var(--input);border-radius:var(--radius-md);padding:var(--space-2);background:var(--card);color:var(--foreground);font:inherit;font-variant-numeric:tabular-nums;text-align:center;appearance:textfield;}
+.ui-table-stepper input::-webkit-inner-spin-button,.ui-table-stepper input::-webkit-outer-spin-button {appearance:none;margin:0;}
+.ui-table-stepper input[aria-invalid="true"] {border-color:var(--destructive);}
+.ui-table-stepper input:focus-visible,.ui-table-settings__list>[tabindex]:focus-visible {outline:var(--stroke-focus) solid var(--ring);outline-offset:calc(-1 * var(--stroke-focus));}
+.ui-table-settings__list>[data-selected="true"] {background:var(--selection);}
+.ui-table-stepper__error {display:flex;align-items:flex-start;gap:var(--space-2);font-size:var(--type-caption);line-height:var(--leading-caption);color:var(--warning);}
+.ui-table-stepper__error>svg {width:var(--space-4);height:var(--space-4);flex-shrink:0;}
+.ui-spotlight {position:absolute;inset:0;z-index:var(--layer-coach);pointer-events:auto;}
+.ui-spotlight-rings {position:fixed;inset:0;z-index:var(--layer-coach);pointer-events:none;animation:ui-kit-fade var(--motion-duration-short) var(--motion-ease-out);}
+.ui-tour-layer {position:absolute;inset:0;z-index:var(--layer-coach);}
+.ui-tour-layer {animation:ui-kit-fade var(--motion-duration-short) var(--motion-ease-out);}
+.ui-tour-card {transform-origin:var(--tour-tail-offset) 0;transition:opacity var(--motion-duration-short) var(--motion-ease-out),transform var(--motion-duration-short) var(--motion-ease-out);}
+.ui-tour-card[data-starting-style] {opacity:0;transform:scale(.98);}
+.ui-tour-card[data-side="top"] {transform-origin:var(--tour-tail-offset) 100%;}
+.ui-tour-card[data-side="right"] {transform-origin:0 var(--tour-tail-offset);}
+.ui-tour-card[data-side="left"] {transform-origin:100% var(--tour-tail-offset);}
+[data-reduced-motion="true"] .ui-tour-card {transition:opacity var(--motion-duration-reduced) var(--motion-ease-out);}
+[data-reduced-motion="true"] .ui-tour-card[data-starting-style] {transform:none;}
+[data-reduced-motion="true"] .ui-tour-layer {animation-duration:var(--motion-duration-reduced);}
+.ui-spotlight-rings[data-reduced-motion="true"] {animation-duration:var(--motion-duration-reduced);}
+.ui-tour-card {position:absolute;pointer-events:auto;z-index:calc(var(--layer-coach) + 1);width:var(--tourcard-width);max-height:var(--tourcard-max-height);padding:var(--space-5);border:var(--stroke-hairline) solid var(--input);border-radius:var(--radius-xl);background:var(--popover);box-shadow:var(--shadow-floating);display:flex;flex-direction:column;gap:var(--space-2);}
+.ui-tour-card h2,.ui-tour-card p {margin:0;font-size:var(--type-control);line-height:var(--leading-control);}
+.ui-tour-card__tail {position:absolute;pointer-events:none;}
+.ui-tour-card[data-side="bottom"] .ui-tour-card__tail {top:calc(-1 * var(--coach-tail));left:calc(var(--tour-tail-offset) - var(--coach-tail));}
+.ui-tour-card[data-side="top"] .ui-tour-card__tail {bottom:calc(-1 * var(--coach-tail));left:calc(var(--tour-tail-offset) - var(--coach-tail));transform:rotate(180deg);}
+.ui-tour-card[data-side="right"] .ui-tour-card__tail {left:calc(-1 * var(--coach-tail-base) + var(--space-1));top:calc(var(--tour-tail-offset) - var(--space-1));transform:rotate(-90deg);}
+.ui-tour-card[data-side="left"] .ui-tour-card__tail {right:calc(-1 * var(--coach-tail-base) + var(--space-1));top:calc(var(--tour-tail-offset) - var(--space-1));transform:rotate(90deg);}
+.ui-tour-card__intro {color:var(--muted-foreground);}
+.ui-tour-card__description {overflow:auto;min-height:0;font-size:var(--type-body);line-height:var(--leading-body);animation:ui-kit-fade var(--motion-duration-content) var(--motion-ease-out);}
+.ui-tour-card footer {display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-2);flex-shrink:0;}
+.ui-tour-card footer>span {margin-right:auto;font-size:var(--type-caption);font-variant-numeric:tabular-nums;}
+.ui-status-chip {box-sizing:border-box;display:inline-flex;gap:var(--space-1);align-items:center;height:28px;min-height:28px;padding:0 var(--space-2);background:var(--secondary);color:var(--foreground);border-radius:var(--radius-sm);font-size:var(--type-caption);line-height:28px;font-weight:var(--weight-bold);white-space:nowrap;}
+.ui-status-chip svg {width:var(--space-4);height:var(--space-4);flex-shrink:0;}
+.ui-status-chip[data-tone="success"] {background:var(--success-bg);color:var(--success);}
+.ui-status-chip[data-tone="warning"] {background:var(--warning-bg);color:var(--warning);}
+.ui-status-chip[data-tone="danger"] {background:var(--change-up-bg);color:var(--destructive);}
+.ui-status-chip[data-compact] {background:transparent;padding:0;height:auto;min-height:var(--space-6);line-height:var(--leading-caption);font-weight:var(--weight-regular);}
+.ui-closed-day[data-variant="header"] {width:var(--closing-badge-slot);display:inline-flex;}
+.ui-closed-day[data-variant="header"] .ui-status-chip {min-height:var(--space-8);}
+.ui-closing-button.ui-button {width:var(--closing-button-width);height:var(--target-default);}
+.ui-closing-columns {display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:var(--space-8);height:100%;min-height:0;}
+.ui-closing-columns>section {min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;}
+.ui-closing-columns>section:last-child {display:flex;flex-direction:column;overflow:hidden;}
+.ui-mini-table {width:100%;border-collapse:collapse;}
+.ui-mini-table th {text-align:left;font-size:var(--type-caption);line-height:var(--leading-caption);height:var(--space-6);color:var(--muted-foreground);}
+.ui-mini-table td {padding:0 var(--space-2);height:var(--minitable-row-min);border-bottom:var(--stroke-hairline) solid var(--border);}
+.ui-mini-table [data-numeric] {text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.ui-category-mark {display:inline-flex;align-items:center;gap:var(--space-2);}
+.ui-category-mark i {width:var(--space-2);height:var(--space-2);background:var(--group-schedule);border-radius:50%;}
+.ui-category-mark[data-category="stock"] i {background:var(--group-stock);border-radius:0;}
+.ui-category-mark[data-category="finance"] i {background:var(--group-finance);border-radius:0;clip-path:polygon(50% 0,100% 100%,0 100%);}
+.ui-grade-bar>div {display:flex;gap:var(--stroke-control);height:var(--space-2);}
+.ui-grade-bar ul {display:flex;justify-content:space-between;list-style:none;padding:0;gap:var(--space-2);font-size:var(--type-caption);}
+.ui-visible-value {position:relative;isolation:isolate;}
+.ui-visible-value:before {content:'';position:absolute;inset:0;z-index:-1;background:var(--selection);border-radius:var(--radius-sm);opacity:0;transition:opacity var(--motion-duration-press) var(--motion-ease-out);pointer-events:none;}
+.ui-visible-value[data-highlighted]:before {opacity:1;}
+[data-reduced-motion="true"] .ui-visible-value:before {transition:none;}
+.ui-still-frame-container {margin:0;min-width:var(--stillframe-width);}
+.ui-still-frame {display:block;width:100%;height:auto;aspect-ratio:4 / 3;background:var(--secondary);color:var(--muted-foreground);border:var(--stroke-hairline) solid var(--border);border-radius:var(--radius-md);}
+.ui-still-frame-container figcaption {font-size:var(--type-caption);color:var(--muted-foreground);}
+@keyframes ui-kit-fade {from{opacity:0;}to{opacity:1;}}
+[data-reduced-motion="true"] .ui-grid-press:active>* {transform:none;}
+[data-reduced-motion="true"] .ui-grid-expanded {animation:ui-kit-fade var(--motion-duration-reduced);}
+@media (prefers-reduced-motion:reduce) {.ui-grid-press:active>*{transform:none!important;}.ui-grid-expanded{animation:ui-kit-fade var(--motion-duration-reduced);}}
+@media (hover:hover) and (pointer:fine) {.ui-data-grid__cell[data-editable]:hover{box-shadow:inset 0 0 0 var(--stroke-hairline) var(--input);}.ui-data-grid__icon:hover,.ui-data-grid__sort:hover{background:var(--selection);}}
+
+.ui-root :is(h1,h2,h3,h4,h5,h6)[tabindex="-1"]:focus:not(:focus-visible), .ui-root :is(h1,h2,h3,h4,h5,h6)[data-pointer-heading-focus]:focus { outline:none; }
+.ui-root :is(h1,h2,h3,h4,h5,h6)[tabindex="-1"]:focus-visible:not([data-pointer-heading-focus]) { outline:var(--stroke-focus) solid var(--ring); outline-offset:var(--focus-offset); }
+
+.ui-onboarding>header {display:grid;grid-template-columns:280px 1fr 280px;gap:0;}
+.ui-onboarding-header-start {display:flex;align-items:center;gap:var(--space-4);}
+.ui-step-indicator {justify-content:center;}
+.ui-step-indicator li {min-width:0;}
+.ui-choice-card>.ui-press-surface,.ui-template-card>.ui-press-surface {justify-content:flex-start;}
+.ui-template-card>.ui-press-surface>strong {min-height:38px;}
+.ui-template-card>.ui-press-surface>strong+span {height:56px;flex-shrink:0;}
+[data-text-scale="125"] .ui-template-card>.ui-press-surface>strong+span {height:70px;}
+.ui-choice-card>.ui-press-surface>span:not(.ui-choice-check) {font-weight:var(--weight-medium);}
+
+.ui-data-grid__toolbar>[data-grid-add] {margin-inline-start:auto;}
+.ui-data-grid__table th:is([data-kind="number"],[data-kind="computed"]) .ui-data-grid__header-content>span,.ui-data-grid__table th:is([data-kind="number"],[data-kind="computed"]) .ui-data-grid__sort {justify-content:flex-end;text-align:right;}
+
+.ui-choice-card>.ui-press-surface,.ui-template-card>.ui-press-surface {background:transparent;border:0;box-shadow:none;padding:0;}

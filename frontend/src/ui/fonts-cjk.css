@@ -1,0 +1,27 @@
+/* T-056 / DS 11.3.1: Chinese Han subsets (Noto Sans CJK, SIL OFL 1.1; src/assets/fonts/SOURCE.txt).
+   unicode-range keeps digits, Latin, won sign and % in NanumSquareNeo; 700 also serves 800 (no synthesis). */
+@font-face {
+  font-family: "Navis Hans";
+  src: url('../assets/fonts/NavisHans-500.woff2') format('woff2');
+  font-style: normal; font-weight: 500; font-display: swap; font-synthesis: none;
+  unicode-range: U+00B7, U+2010-2027, U+2E80-2FDF, U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF01-FF60, U+FFE0-FFE6;
+}
+@font-face {
+  font-family: "Navis Hans";
+  src: url('../assets/fonts/NavisHans-700.woff2') format('woff2');
+  font-style: normal; font-weight: 700 800; font-display: swap; font-synthesis: none;
+  unicode-range: U+00B7, U+2010-2027, U+2E80-2FDF, U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF01-FF60, U+FFE0-FFE6;
+}
+@font-face {
+  font-family: "Navis Hant";
+  src: url('../assets/fonts/NavisHant-500.woff2') format('woff2');
+  font-style: normal; font-weight: 500; font-display: swap; font-synthesis: none;
+  unicode-range: U+00B7, U+2010-2027, U+2E80-2FDF, U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF01-FF60, U+FFE0-FFE6;
+}
+@font-face {
+  font-family: "Navis Hant";
+  src: url('../assets/fonts/NavisHant-700.woff2') format('woff2');
+  font-style: normal; font-weight: 700 800; font-display: swap; font-synthesis: none;
+  unicode-range: U+00B7, U+2010-2027, U+2E80-2FDF, U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF01-FF60, U+FFE0-FFE6;
+}
+

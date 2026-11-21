@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="96.53 365.8 288.94 288.94">
+  <defs>
+    <linearGradient id="navis-symbol-gradient-0" x1="7.938" x2="22.25" y1="29.22" y2="44.87" gradientTransform="scale(12.8)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0CF274" offset="0"/>
+      <stop stop-color="#14F0C6" offset=".4896"/>
+      <stop stop-color="#12E4E0" offset=".724"/>
+      <stop stop-color="#11C7F8" offset="1"/>
+    </linearGradient>
+    <linearGradient id="navis-symbol-gradient-1" x1="18.87" x2="28.83" y1="29.22" y2="39.17" gradientTransform="scale(12.8)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10F2A7" offset="0"/>
+      <stop stop-color="#12F0CE" offset=".4427"/>
+      <stop stop-color="#11C7F8" offset="1"/>
+    </linearGradient>
+    <linearGradient id="navis-symbol-gradient-2" x1="18.76" x2="28.69" y1="39.64" y2="50.06" gradientTransform="scale(12.8)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#15F1D6" offset="0"/>
+      <stop stop-color="#14D0F4" offset=".5156"/>
+      <stop stop-color="#11ABFF" offset="1"/>
+    </linearGradient>
+  </defs>
+  <path d="m227.1 374h-69.12c-30.72 0-56.32 25.86-56.32 56.19v153.6c0 33.66 31.74 61.44 61.57 61.44h63.87v-271.2z" fill="url(#navis-symbol-gradient-0)"/>
+  <path d="m241.7 374h91.26c23.3 1.792 40.19 18.18 42.62 40.58v81.79h-133.9v-122.4z" fill="url(#navis-symbol-gradient-1)"/>
+  <circle cx="310.5" cy="576.7" r="69.84" fill="url(#navis-symbol-gradient-2)"/>
+</svg>

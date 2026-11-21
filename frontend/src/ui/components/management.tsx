@@ -1,0 +1,30 @@
+import { koreanScreenText } from '../../i18n';
+import { useId, type ReactNode } from 'react';
+import { useKitT } from '../kit-i18n';
+import { Icon } from '../icons';
+import { statusSemanticIcon, statusSemantics, type StatusSemanticProp } from './badges';
+import { ActionButton, type ActionButtonProps } from './controls';
+import { DetailDialog, type DetailDialogProps } from './overlays';
+import { POS_NOW_TIME } from '../../pos/clock';
+
+/**
+ * DS 12 StatusChip: height 28 (125% text: 30), radius.sm, icon 16 + caption 700, padding 0/8, colour + icon + words, static.
+ * Pass `semantic` (G-22) so the icon follows the meaning; without it the icon is the old tone default (success ✓, warning ⚠, danger ⊖, neutral ◷).
+ * `semantic="none"` is a text-only kind/type chip. The icon and tone mapping lives in ./badges (statusSemantics), shared with StatusBadge.
+ */
+export function StatusChip({children,tone,compact=false,semantic}:{children:ReactNode;tone?:'neutral'|'success'|'warning'|'danger';compact?:boolean;/** G-22: icon by meaning (done ✓ · info ⓘ · waiting ◷ · paused ‖ · warning ⚠ · recommend/rating ★ · positive thumb · none). */semantic?:StatusSemanticProp}){const meaning=semantic&&semantic!=='none'?statusSemantics[semantic]:null,resolved=tone??meaning?.tone??'neutral',icon=semantic!==undefined?statusSemanticIcon(semantic):resolved==='success'?'check':resolved==='warning'?'warning':resolved==='danger'?'no-entry':'clock';return <span className="ui-status-chip" lang="ko" data-tone={resolved} data-semantic={semantic} data-compact={compact||undefined}>{icon?<Icon name={icon}/>:null}<span>{children}</span></span>;}
+/** DataGrid cell helper: `render: row => renderStatusChip(label, 'waiting')`. One 28-high chip per cell, icon by meaning, never a hand-picked icon. */
+export function renderStatusChip(label:ReactNode,semantic:StatusSemanticProp,tone?:'neutral'|'success'|'warning'|'danger'){return <StatusChip semantic={semantic} tone={tone}>{label}</StatusChip>;}
+export function ClosingButton({closed=false,time=POS_NOW_TIME,...props}:Omit<ActionButtonProps,'children'> & {closed?:boolean;time?:string}){const {t}=useKitT(),id=useId();return <><ActionButton {...props} lang="ko" variant="secondary" className="ui-closing-button" aria-label={t('ui.closing.open')} aria-describedby={closed?id:undefined}><Icon name="receipt"/>{t('ui.closing.button')}</ActionButton>{closed?<span id={id} className="ui-sr-only">{t('ui.closing.closedAt',{time})}</span>:null}</>;}
+export function ClosedDayState({closed,time=POS_NOW_TIME,variant='standard',onPress}:{closed:boolean;time?:string;variant?:'header'|'standard'|'text';onPress?:()=>void}){const {t,locale}=useKitT();const text=closed?t(variant==='header'?'ui.closing.closed':'ui.closing.closedAt',{time}):t('ui.closing.before');const content=<span className="ui-closed-day" data-variant={variant}><StatusChip tone={closed?'success':'neutral'} compact={variant==='text'}>{locale==='ko'?koreanScreenText(text):text}</StatusChip></span>;return onPress?<ActionButton variant="ghost" aria-label={t('ui.closing.open')} onClick={onPress}>{content}</ActionButton>:content;}
+export function ClosingDialog({title,...props}:Omit<DetailDialogProps,'title'> & {title?:string}){const {t}=useKitT();return <DetailDialog {...props} title={title??t('ui.closing.title')} entryMotion="dialogFromButtonIn" contentLang="ko" popupStyle={{...props.popupStyle,transformOrigin:'top right'}}/>;}
+export function ConfirmedMark(){const {t}=useKitT();return <StatusChip tone="success">{t('ui.closing.confirmed')}</StatusChip>;}
+export function ClosingColumns({summary,payments}:{summary:ReactNode;payments:ReactNode}){return <div className="ui-closing-columns"><section>{summary}</section><section>{payments}</section></div>;}
+export interface MiniTableColumn<Row>{id:string;label:string;render:(row:Row)=>ReactNode;numeric?:boolean}
+export function MiniTable<Row>({rows,columns,getRowId,label}:{rows:readonly Row[];columns:readonly MiniTableColumn<Row>[];getRowId:(row:Row)=>string;label?:string}){return <table className="ui-mini-table" aria-label={label}><thead><tr>{columns.map(c=><th key={c.id} data-numeric={c.numeric||undefined}>{c.label}</th>)}</tr></thead><tbody>{rows.map(row=><tr key={getRowId(row)}>{columns.map(c=><td key={c.id} data-numeric={c.numeric||undefined}>{c.render(row)}</td>)}</tr>)}</tbody></table>;}
+export function CategoryMark({category,children}:{category:'store'|'stock'|'finance';children:ReactNode}){return <span className="ui-category-mark" data-category={category}><i aria-hidden="true"/>{children}</span>;}
+export function GradeBar({segments,label}:{segments:readonly {label:string;value:number;display:string}[];label:string}){const total=segments.reduce((sum,v)=>sum+Math.max(0,v.value),0);return <div className="ui-grade-bar"><div role="img" aria-label={label}>{segments.map((s,i)=><span key={s.label} style={{flex:total?Math.max(0,s.value):1,background:`var(--chart-${[1,2,5,4][i%4]})`}}/>)}</div><ul>{segments.map(s=><li key={s.label}>{s.label} {s.display}</li>)}</ul></div>;}
+export function StillFrame({name,scene='hall',onPress}:{name:string;scene?:'entrance'|'counter'|'hall';onPress?:()=>void}){const {t}=useKitT();const picture=<svg viewBox="0 0 320 240" width="320" height="240" role="img" aria-label={t('ui.stillFrame.alt',{name})} className="ui-still-frame"><path d={scene==='entrance'?'M30 210V30h130v180M50 210V50h90v160M120 130h1M180 100h110v110H180Z':scene==='counter'?'M20 150h280v70H20ZM40 150V70h100v80M160 150v-50h90v50M180 100V60h60v40':'M30 60h90v60H30ZM180 60h90v60h-90ZM30 160h90v60H30ZM180 160h90v60h-90Z'} fill="none" stroke="currentColor" strokeWidth="3"/></svg>;return <figure className="ui-still-frame-container" lang="ko">{onPress?<ActionButton variant="ghost" onClick={onPress}>{picture}</ActionButton>:picture}</figure>;}
+
+/** A column whose action stays visible while its content scrolls. */
+export function PinnedColumn({children,footer}:{children:ReactNode;footer:ReactNode}){return <div className="ui-pinned-column"><div className="ui-pinned-column__body">{children}</div><footer className="ui-pinned-column__footer">{footer}</footer></div>;}

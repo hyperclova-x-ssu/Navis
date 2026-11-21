@@ -1,0 +1,22 @@
+/* DS 15.12 A: the same photo is used in the card, preview, picker and table. */
+.ui-menu-photo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: calc(var(--space-16) + var(--space-16) + var(--space-8));
+  height: calc(var(--space-16) + var(--space-10));
+  overflow: hidden;
+  border: var(--stroke-hairline) solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+  font-weight: var(--weight-bold);
+}
+.ui-menu-photo svg { width: var(--space-16); height: var(--space-16); flex: none; }
+.ui-menu-photo[data-size="picker"] { width: calc(var(--space-16) + var(--space-8)); height: var(--space-16); }
+.ui-menu-photo[data-size="picker"] svg { width: var(--space-10); height: var(--space-10); }
+.ui-menu-photo[data-size="card"] { width: 100%; border: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.ui-menu-photo[data-size="thumbnail"] { width: var(--space-16); height: var(--space-10); vertical-align: middle; }
+.ui-menu-photo[data-size="thumbnail"] svg { width: var(--space-8); height: var(--space-8); }
+.ui-menu-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }

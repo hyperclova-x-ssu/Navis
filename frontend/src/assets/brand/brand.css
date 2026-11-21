@@ -1,0 +1,3 @@
+/* One logo treatment (U-B). The full logo (mark + gradient wordmark) is drawn at the same size in the app header and the chat title;
+   the symbol (mark only, launcher) is a square as tall as the logo, so the mark has the same scale everywhere. Fixed brand colours, readable on light and dark. */
+.navis-logo { display:block; flex:none; width:calc(var(--space-16) + var(--space-8)); height:var(--space-8); object-fit:contain; }
