@@ -1,0 +1,5 @@
+{
+  "extends":"../../tsconfig.json",
+  "include":["../vite-env.d.ts","./**/*.ts","../catalog/**/*.ts","../catalog/**/*.tsx","../layout/**/*.ts","../state/**/*.ts"],
+  "exclude":["../layout/dev/evidence"]
+}
