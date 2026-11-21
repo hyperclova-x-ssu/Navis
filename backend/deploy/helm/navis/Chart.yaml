@@ -1,0 +1,6 @@
+apiVersion: v2
+name: navis
+description: Navis 매장 운영 플랫폼 — NAVER Cloud NKS 배포용 Helm 차트 (샘플)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

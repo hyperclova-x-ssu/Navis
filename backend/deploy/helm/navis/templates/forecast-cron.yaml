@@ -1,0 +1,29 @@
+# 재고 수요 예측: 같은 요일 4주 판매량과 현재 레시피로 다음 영업일 재료 사용량을 계산해 inventory DB에 저장합니다.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: forecast-cron
+spec:
+  schedule: {{ .Values.forecastCron.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            - name: {{ .Values.image.pullSecret }}
+          containers:
+            - name: forecast-cron
+              image: {{ include "navis.image" (dict "root" . "target" "tools") }}
+              command: ["node", "workers/forecast-cron/index.ts"]
+              env:
+                - name: NAVIS_DB_HOST
+                  value: {{ .Values.database.host | quote }}
+              volumeMounts:
+                - { name: secrets, mountPath: /run/secrets, readOnly: true }
+          volumes:
+            - name: secrets
+              secret:
+                secretName: navis-forecast-cron

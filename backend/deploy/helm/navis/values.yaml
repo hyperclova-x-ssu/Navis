@@ -1,0 +1,97 @@
+# Navis Helm values (샘플)
+# 아래 {sample: ...} 값은 모두 예시입니다. 실제 배포 시 환경별 values 파일로 덮어씁니다.
+
+image:
+  # Ncloud Container Registry 주소
+  registry: "{sample: <registry-name>.kr.ncr.ntruss.com, 해당 값은 예시입니다}"
+  repository: navis
+  # GitHub Actions가 빌드한 이미지 태그(커밋 SHA)로 배포합니다.
+  tag: "{sample: 커밋 SHA, 해당 값은 예시입니다}"
+  pullSecret: ncr-pull-secret
+
+ingress:
+  # NKS의 ALB Ingress Controller가 Application Load Balancer를 만듭니다.
+  className: alb
+  host: "{sample: navis.example.com, 해당 값은 예시입니다}"
+  certificateNo: "{sample: Certificate Manager 인증서 번호, 해당 값은 예시입니다}"
+
+database:
+  # Cloud DB for PostgreSQL (사설 엔드포인트, 서비스별 논리 DB 6개)
+  host: "{sample: pg-xxxx.vpc-cdb.ntruss.com, 해당 값은 예시입니다}"
+  port: 5432
+
+redis:
+  image: redis:7.4-alpine
+  storage: 2Gi
+
+# 공통 런타임 설정
+runtime:
+  port: 3000
+  probes:
+    liveness: /healthz
+    readiness: /readyz
+
+# 서비스별 워크로드. target은 backend/Dockerfile의 빌드 타깃 이름입니다.
+workloads:
+  edge:
+    target: edge
+    replicas: 2
+    port: 80
+    serviceType: NodePort        # ALB → edge NodePort → nginx
+  frontend:
+    target: frontend
+    replicas: 2
+    port: 80
+  api-gateway:
+    target: api-gateway
+    replicas: 2
+    env:
+      NAVIS_ACCOUNT_URL: http://account:3000
+      NAVIS_POS_URL: http://pos:3000
+      NAVIS_INVENTORY_URL: http://inventory:3000
+    secrets: [gateway_account_token, gateway_inventory_token, gateway_pos_token, gateway_customer_token]
+  account:
+    target: account
+    replicas: 2
+    db: true
+    secrets: [account_runtime_password, account_signing_key.pem, gateway_account_token]
+  pos:
+    target: pos
+    replicas: 2
+    db: true
+    redis: true
+    secrets: [pos_runtime_password, gateway_pos_token, customer_pos_token, pos_redis_password]
+  inventory:
+    target: inventory
+    replicas: 2
+    db: true
+    redis: true
+    secrets: [inventory_runtime_password, gateway_inventory_token, inventory_redis_password]
+  customer:
+    target: customer
+    replicas: 2
+    db: true
+    redis: true
+    env:
+      NAVIS_POS_URL: http://pos:3000
+    secrets: [customer_runtime_password, gateway_customer_token, customer_pos_token, customer_redis_password]
+  marketing:
+    target: marketing
+    replicas: 1
+    db: true
+    secrets: [marketing_runtime_password]
+  insight:
+    target: insight
+    replicas: 1
+    db: true
+    secrets: [insight_runtime_password]
+  outbox-relay:
+    target: relay
+    replicas: 1
+    redis: true
+    service: false
+    secrets: [pos_relay_password, inventory_relay_password, customer_relay_password, relay_redis_password]
+
+# 하루 한 번 도는 재고 수요 예측 작업
+forecastCron:
+  schedule: "0 4 * * *"   # 매일 04:00 (KST 기준은 클러스터 타임존 설정에 따름)

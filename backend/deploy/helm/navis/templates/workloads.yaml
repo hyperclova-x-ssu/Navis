@@ -1,0 +1,73 @@
+{{- /* 서비스마다 Deployment와 ClusterIP(또는 NodePort) Service를 만듭니다. */ -}}
+{{- range $name, $w := .Values.workloads }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{- include "navis.labels" (dict "name" $name) | nindent 4 }}
+spec:
+  replicas: {{ $w.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels: {{- include "navis.labels" (dict "name" $name) | nindent 8 }}
+    spec:
+      imagePullSecrets:
+        - name: {{ $.Values.image.pullSecret }}
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: {{ $name }}
+          image: {{ include "navis.image" (dict "root" $ "target" $w.target) }}
+          ports:
+            - containerPort: {{ $w.port | default $.Values.runtime.port }}
+          env:
+            {{- if $w.db }}
+            - name: NAVIS_DB_HOST
+              value: {{ $.Values.database.host | quote }}
+            {{- end }}
+            {{- if $w.redis }}
+            - name: NAVIS_REDIS_URL
+              value: redis://redis:6379
+            {{- end }}
+            {{- range $k, $v := $w.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- if ne ($w.service | toString) "false" }}
+          readinessProbe:
+            httpGet: { path: {{ $.Values.runtime.probes.readiness }}, port: {{ $w.port | default $.Values.runtime.port }} }
+          livenessProbe:
+            httpGet: { path: {{ $.Values.runtime.probes.liveness }}, port: {{ $w.port | default $.Values.runtime.port }} }
+          {{- end }}
+          {{- if $w.secrets }}
+          # 비밀값은 환경변수가 아니라 파일로 마운트합니다 (/run/secrets/<이름>).
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+          {{- end }}
+      {{- if $w.secrets }}
+      volumes:
+        - name: secrets
+          secret:
+            secretName: navis-{{ $name }}
+      {{- end }}
+{{- if ne ($w.service | toString) "false" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+spec:
+  type: {{ $w.serviceType | default "ClusterIP" }}
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - port: {{ $w.port | default $.Values.runtime.port }}
+      targetPort: {{ $w.port | default $.Values.runtime.port }}
+{{- end }}
+{{- end }}

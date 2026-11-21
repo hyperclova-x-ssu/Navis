@@ -1,0 +1,64 @@
+# GitHub Actions 배포 워크플로 예시 (샘플)
+# 실제로 쓰려면 .github/workflows/deploy.yml로 옮기고 저장소 Secrets를 등록합니다.
+# 흐름: 시험 → 이미지 빌드 → Ncloud Container Registry 푸시 → NKS에 helm upgrade
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm ci && npm run typecheck && npm run test:unit
+        working-directory: frontend
+      - run: npm ci && npm run typecheck
+        working-directory: backend
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [edge, frontend, api-gateway, account, pos, inventory, customer, marketing, insight, relay, tools]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.NCR_REGISTRY }}
+          username: ${{ secrets.NCP_ACCESS_KEY }}
+          password: ${{ secrets.NCP_SECRET_KEY }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ secrets.NCR_REGISTRY }}/navis/${{ matrix.target }}:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production   # 배포 전 승인 단계
+    steps:
+      - uses: actions/checkout@v4
+      - name: NKS kubeconfig (ncp-iam-authenticator)
+        run: echo "${{ secrets.NKS_KUBECONFIG }}" > kubeconfig
+      - name: helm upgrade
+        env:
+          KUBECONFIG: kubeconfig
+          NCLOUD_ACCESS_KEY: ${{ secrets.NCP_ACCESS_KEY }}
+          NCLOUD_SECRET_KEY: ${{ secrets.NCP_SECRET_KEY }}
+        run: |
+          helm upgrade --install navis backend/deploy/helm/navis \
+            --namespace navis --create-namespace \
+            --set image.registry=${{ secrets.NCR_REGISTRY }} \
+            --set image.tag=${{ github.sha }} \
+            --set database.host=${{ secrets.CLOUD_DB_HOST }}

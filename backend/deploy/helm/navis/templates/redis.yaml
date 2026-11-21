@@ -1,0 +1,47 @@
+# Redis: outbox 이벤트 전달(Streams), 캐시, 잠금. 클러스터 안 사설 서비스로만 노출합니다.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          args: ["--appendonly", "yes", "--aclfile", "/run/secrets/redis_acl"]
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - { name: data, mountPath: /data }
+            - { name: acl, mountPath: /run/secrets, readOnly: true }
+      volumes:
+        - name: acl
+          secret:
+            secretName: navis-redis
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.redis.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app.kubernetes.io/name: redis
+  ports:
+    - port: 6379

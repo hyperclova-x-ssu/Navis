@@ -1,0 +1,21 @@
+# NCP ALB Ingress: 인터넷 → ALB(HTTPS 443) → edge NodePort → nginx가 '/'는 frontend, '/api'는 api-gateway로 나눕니다.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: navis
+  annotations:
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-certificate-no: {{ .Values.ingress.certificateNo | quote }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: edge
+                port:
+                  number: 80
