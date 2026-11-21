@@ -1,0 +1,47 @@
+{
+  "id": "ref-5",
+  "version": "1",
+  "nameKey": "promo.ref.ref-5.name",
+  "cardAspect": "4:5",
+  "posterScene": "s3",
+  "posterAt": 7.2,
+  "previewFrom": 2.7,
+  "previewTo": 7,
+  "moods": [
+    "warm",
+    "clean"
+  ],
+  "concepts": [
+    "day-at-shop",
+    "behind-the-scenes"
+  ],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 6
+      },
+      "photoSlots": {
+        "max": 2
+      }
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 8
+      },
+      "photoSlots": {
+        "max": 3
+      }
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 14
+      },
+      "photoSlots": {
+        "max": 5
+      }
+    }
+  }
+}

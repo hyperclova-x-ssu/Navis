@@ -1,0 +1,260 @@
+{
+  "version": 2,
+  "source": "02_design/PROMO_TEMPLATES.md 0.0·0.1·0.3·0.4·0.5·3·5·6절 [고정] 값 (T-084, 2026-11-10) + T-087(2026-11-10): transition·overlap·still·scene·photoFit",
+  "frame": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30
+  },
+  "safe": {
+    "left": 60,
+    "right": 60,
+    "top": 120,
+    "bottom": 300
+  },
+  "safeRect": {
+    "x0": 60,
+    "x1": 1020,
+    "y0": 120,
+    "y1": 1620
+  },
+  "minFontPx": 36,
+  "roles": {
+    "title": {
+      "fontPx": 88,
+      "perLine": {
+        "cjk": 10,
+        "en": 19
+      },
+      "maxLines": 2
+    },
+    "cap": {
+      "fontPx": 64,
+      "perLine": {
+        "cjk": 14,
+        "en": 27
+      },
+      "maxLines": 2
+    },
+    "sub": {
+      "fontPx": 48,
+      "perLine": {
+        "cjk": 18,
+        "en": 36
+      },
+      "maxLines": 2
+    },
+    "small": {
+      "fontPx": 36,
+      "perLine": {
+        "cjk": 24,
+        "en": 48
+      },
+      "maxLines": 2
+    },
+    "bubble": {
+      "fontPx": 40,
+      "perLine": {
+        "cjk": 16,
+        "en": 30
+      },
+      "maxLines": 2
+    },
+    "number": {
+      "fontPx": 64,
+      "perLine": {
+        "cjk": 4,
+        "en": 8
+      },
+      "maxLines": 1
+    },
+    "label": {
+      "fontPx": 36,
+      "perLine": {
+        "cjk": 12,
+        "en": 24
+      },
+      "maxLines": 1
+    }
+  },
+  "ending": {
+    "storeNameMaxLines": 2,
+    "locationMaxLines": 2,
+    "locationRole": "sub",
+    "taglineRole": "sub",
+    "taglineMaxLines": 1,
+    "ctaMaxLines": 1,
+    "checkAtFromEndSec": 1,
+    "longestLocationChars": 24
+  },
+  "counting": {
+    "cjkLocales": [
+      "ko",
+      "zh-Hans",
+      "zh-Hant"
+    ],
+    "enLocales": [
+      "en"
+    ],
+    "cjkFullWidth": 1,
+    "cjkOther": 0.5,
+    "fullWidthRanges": [
+      "1100-11FF",
+      "2E80-2FDF",
+      "3000-303F",
+      "3040-30FF",
+      "3130-318F",
+      "3200-32FF",
+      "3400-4DBF",
+      "4E00-9FFF",
+      "A960-A97F",
+      "AC00-D7AF",
+      "D7B0-D7FF",
+      "F900-FAFF",
+      "FE30-FE4F",
+      "FF00-FF60",
+      "FFE0-FFE6",
+      "20000-2FA1F"
+    ],
+    "en": "code points (spaces included)",
+    "lines": "split the text on \\n; each part takes ceil(width / perLine) lines (an empty part takes 1); the sum must be <= maxLines"
+  },
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 6
+      },
+      "minSceneSec": 1,
+      "endingSec": 2.5
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 8
+      },
+      "minSceneSec": 1,
+      "endingSec": 3
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 14
+      },
+      "minSceneSec": 1,
+      "endingSec": 4
+    }
+  },
+  "minSceneSecByRef": {
+    "ref-3": 2.5
+  },
+  "minSceneSecByRefSkipFirst": [
+    "ref-3"
+  ],
+  "durationToleranceSec": 0.05,
+  "sceneTimingToleranceSec": 0.3,
+  "fadeOutSec": 0.6,
+  "transition": {
+    "maxSec": 0.4,
+    "probeStepSec": 0.05,
+    "probeSpanSec": 0.6,
+    "fullOpacity": 0.95
+  },
+  "overlap": {
+    "maxRatio": 0.15,
+    "layerCover": 0.9
+  },
+  "still": {
+    "maxSec": 1.5,
+    "pxStep": 0.5,
+    "skipLastScene": true
+  },
+  "scene": {
+    "textlessMaxSec": 1.5,
+    "minMotionPx": 24
+  },
+  "photoFit": {
+    "ko": {
+      "soldOut": "품절|매진|솔드\\s*아웃|다\\s*팔[렸려았]|다\\s*사\\s*갔|다\\s*나갔|남은\\s*게\\s*없|하나도\\s*없",
+      "remaining": "[0-9]+\\s*개\\s*(남|뿐|만\\s*남)|남은\\s*(수량|개수|건)|(한|두|세|네|다섯)\\s*개\\s*(남|뿐)|마지막\\s*([0-9]+\\s*개|하나|한\\s*개)"
+    }
+  },
+  "photo": {
+    "maxUses": 2,
+    "noAdjacent": true,
+    "exteriorId": "store-exterior",
+    "exteriorExempt": true,
+    "useAllBeforeReuse": true
+  },
+  "languages": {
+    "en": {
+      "forbidScripts": [
+        "Hangul",
+        "Han"
+      ]
+    },
+    "zh-Hans": {
+      "forbidScripts": [
+        "Hangul"
+      ]
+    },
+    "zh-Hant": {
+      "forbidScripts": [
+        "Hangul"
+      ]
+    },
+    "ko": {
+      "requireScripts": [
+        "Hangul"
+      ]
+    }
+  },
+  "forbidEmoji": true,
+  "forbidControlChars": true,
+  "bannedWords": [
+    "네이버",
+    "naver",
+    "카카오",
+    "카톡",
+    "kakao",
+    "인스타",
+    "instagram",
+    "유튜브",
+    "youtube",
+    "틱톡",
+    "tiktok",
+    "페이스북",
+    "facebook",
+    "왓츠앱",
+    "whatsapp",
+    "微信",
+    "wechat",
+    "抖音",
+    "小红书",
+    "小紅書",
+    "ライン"
+  ],
+  "bannedPatterns": [
+    "[A-Z]{2,}[-_]?[0-9][A-Z0-9]{2,}",
+    "https?://",
+    "www\\.",
+    "@[A-Za-z0-9_.]{2,}",
+    "\\d{2,4}-\\d{3,4}-\\d{4}",
+    "[\"“”「」『』]"
+  ],
+  "flash": {
+    "maxPerSec": 3,
+    "yavgDelta": 48
+  },
+  "check": {
+    "sampleEverySec": 0.25,
+    "boundaryOffsetsSec": [
+      -0.05,
+      0.05
+    ],
+    "visibleOpacityMin": 0.05
+  },
+  "html": {
+    "maxBytes": 65536
+  }
+}

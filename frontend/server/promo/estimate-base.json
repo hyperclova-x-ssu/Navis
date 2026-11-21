@@ -1,0 +1,59 @@
+{
+  "version": 2,
+  "look": {
+    "secPerBatch": 7.1,
+    "batch": 2
+  },
+  "story": {
+    "a": 21.4,
+    "perL": 0.2,
+    "perN": 0.3
+  },
+  "scenes": {
+    "gen": {
+      "a": 13.8,
+      "perL": 2.4
+    },
+    "fixes": 0.2,
+    "checkSec": 1
+  },
+  "merge": {
+    "a": 0.7,
+    "perL": 1.1
+  },
+  "fixedSec": 1,
+  "tokens": {
+    "photo": {
+      "in": 11700,
+      "out": 450
+    },
+    "story": {
+      "inA": 9100,
+      "inPerN": 320,
+      "outA": 1480,
+      "outPerL": 205
+    },
+    "code": {
+      "inA": 22800,
+      "inPerN": 320,
+      "outA": 2470,
+      "outPerL": 409
+    },
+    "fix": {
+      "inA": 14000,
+      "inPerN": 320,
+      "inPerL": 160,
+      "outA": 2500,
+      "outPerL": 260
+    }
+  },
+  "pricing": {
+    "model": "claude-sonnet-5-5",
+    "inputUsdPerMTok": 2,
+    "outputUsdPerMTok": 10,
+    "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "checkedOn": "2026-11-10"
+  },
+  "krwPerUsd": 1400,
+  "fxCheckedOn": "2026-11-10"
+}

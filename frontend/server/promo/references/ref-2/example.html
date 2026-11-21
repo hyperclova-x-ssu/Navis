@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: #F7F3EE; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #F7F3EE;
+    font-family: "Navis Sans", sans-serif; color: #1E1E23; }
+  .scene { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; }
+  .card { position: absolute; left: 60px; top: 120px; width: 960px; height: 1180px; border-radius: 48px; overflow: hidden;
+    background: #E9E2D8; box-shadow: 0 10px 30px rgba(60, 40, 20, .12); }
+  .card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .bubbles { position: absolute; left: 60px; width: 960px; top: 1340px; height: 280px; }
+  .bub { position: absolute; left: 0; max-width: 900px; box-sizing: border-box; padding: 18px 34px; border-radius: 52px;
+    background: #FFFFFF; border: 2px solid #E3DDD4; font-size: 48px; line-height: 64px; font-weight: 600; color: #1E1E23; }
+  .bub.r { left: auto; right: 0; }
+  .bub b { font-weight: 800; color: #006E38; background: #E4F6EA; border-radius: 12px; padding: 0 8px; }
+  .hook { position: absolute; left: 60px; width: 960px; top: 1352px; text-align: center; font-size: 88px; line-height: 108px;
+    font-weight: 800; letter-spacing: -1px; color: #1E1E23; }
+  .hook b { color: #006E38; background: #E4F6EA; border-radius: 16px; padding: 0 10px; font-weight: 800; }
+  .ext { position: absolute; left: 240px; top: 300px; width: 600px; height: 400px; border-radius: 40px; overflow: hidden;
+    box-shadow: 0 10px 30px rgba(60, 40, 20, .14); }
+  .ext img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .end-name { position: absolute; left: 60px; width: 960px; top: 800px; text-align: center; font-family: "Navis Serif", serif;
+    font-size: 120px; line-height: 150px; font-weight: 800; letter-spacing: 8px; }
+  .end-rule { position: absolute; left: 490px; width: 100px; top: 990px; height: 3px; background: #C9BFB2; }
+  .end-line { position: absolute; left: 60px; width: 960px; text-align: center; font-size: 48px; line-height: 64px; }
+  .end-tag { top: 1040px; font-weight: 700; }
+  .end-loc { top: 1130px; font-weight: 500; color: #55524D; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="scene" data-scene="s1" id="sc1">
+    <div class="card"><img id="p1" data-photo="fin-01" src="assets/photos/fin-01.jpg" alt="" style="object-position: 45% 40%"></div>
+    <div class="hook" id="hook" data-text="t1">바삭한 토핑<br><b>휘낭시에</b> 한 조각</div>
+  </div>
+  <div class="scene" data-scene="s2" id="sc2">
+    <div class="card"><img id="p2" data-photo="fin-04" src="assets/photos/fin-04.jpg" alt="" style="object-position: 60% 55%"></div>
+    <div class="bubbles">
+      <div class="bub" id="b1" style="top: 0" data-text="t2">진열대 가득 <b>여러 맛</b> 휘낭시에</div>
+      <div class="bub r" id="b2" style="top: 124px" data-text="t3"><b>가격표</b>가 하나하나 붙어 있어요</div>
+    </div>
+  </div>
+  <div class="scene" data-scene="s3" id="sc3">
+    <div class="card"><img id="p3" data-photo="fin-08" src="assets/photos/fin-08.jpg" alt="" style="object-position: 50% 55%"></div>
+    <div class="bubbles">
+      <div class="bub" id="b3" style="top: 0" data-text="t4"><b>피스타치오</b> 듬뿍 올린 화이트</div>
+      <div class="bub r" id="b4" style="top: 124px" data-text="t5">한 손에 <b>쏙</b> 들어오는 크기</div>
+    </div>
+  </div>
+  <div class="scene" data-scene="s4" id="sc4">
+    <div class="card"><img id="p4" data-photo="fin-03" src="assets/photos/fin-03.jpg" alt="" style="object-position: 45% 60%"></div>
+    <div class="bubbles">
+      <div class="bub" id="b5" style="top: 0" data-text="t6">커피 두 잔에 <b>견과</b> 휘낭시에</div>
+      <div class="bub r" id="b6" style="top: 124px" data-text="t7">종이 위에 놓인 <b>한 조각</b></div>
+    </div>
+  </div>
+  <div class="scene" data-scene="s5" id="sc5">
+    <div class="ext"><img id="pe" data-photo="store-exterior" src="assets/photos/store-exterior.jpg" alt=""></div>
+    <div class="end-name" id="eName" data-text="store-name">미학당</div>
+    <div class="end-rule" id="eRule"></div>
+    <div class="end-line end-tag" id="eTag" data-text="t8">사진 속 그 맛 그대로 만나요</div>
+    <div class="end-line end-loc" id="eLoc" data-text="store-location">숭실대입구역 3번 출구 · 빨간 벽돌, 초록 문</div>
+  </div>
+</div>
+<script>
+  var L = 15;
+  window.__duration = L;
+  var MS = L * 1000;
+  var $ = function (id) { return document.getElementById(id); };
+  var c = function (x) { return Math.max(0, Math.min(1, x)); };
+  var anim = function (el, f) { return el.animate(f, { duration: MS, fill: 'both', easing: 'linear' }); };
+  var show = function (el, a, b, fin, fout) {
+    var f = [];
+    if (a <= 0) f.push({ offset: 0, opacity: 1 });
+    else f.push({ offset: 0, opacity: 0 }, { offset: c(a / L), opacity: 0 }, { offset: c((a + fin) / L), opacity: 1 });
+    if (b >= L) f.push({ offset: 1, opacity: 1 });
+    else f.push({ offset: c(b / L), opacity: 1 }, { offset: c((b + fout) / L), opacity: 0 }, { offset: 1, opacity: 0 });
+    return anim(el, f);
+  };
+  var move = function (el, a, b, from, to) {
+    return anim(el, [{ offset: 0, transform: from }, { offset: c(a / L), transform: from }, { offset: c(b / L), transform: to }, { offset: 1, transform: to }]);
+  };
+  // scenes cross-fade 300ms around each boundary
+  var S = [['sc1', 0, 2.5], ['sc2', 2.5, 5.5], ['sc3', 5.5, 8.5], ['sc4', 8.5, 12], ['sc5', 12, 15]];
+  S.forEach(function (s) { show($(s[0]), s[1] - 0.15, s[2] - 0.15, 0.3, 0.3); });
+  // gentle Ken Burns 1.00 -> 1.06 inside the rounded card
+  [['p1', 0, 2.7], ['p2', 2.3, 5.7], ['p3', 5.3, 8.7], ['p4', 8.3, 12.2]].forEach(function (p) {
+    move($(p[0]), p[1], p[2], 'scale(1)', 'scale(1.06)');
+  });
+  // hook pops in
+  show($('hook'), 0.2, L, 0.3, 0);
+  move($('hook'), 0.2, 0.5, 'translateY(24px)', 'translateY(0)');
+  // review bubbles rise one at a time (220ms, 0.6s apart)
+  [['b1', 2.9], ['b2', 3.5], ['b3', 5.9], ['b4', 6.5], ['b5', 8.9], ['b6', 9.5]].forEach(function (b) {
+    show($(b[0]), b[1], L, 0.22, 0);
+    move($(b[0]), b[1], b[1] + 0.22, 'translateY(40px)', 'translateY(0)');
+  });
+  // ending
+  move($('pe'), 11.8, 15, 'scale(1)', 'scale(1.05)');
+  show($('eName'), 12.2, L, 0.6, 0);
+  show($('eRule'), 12.6, L, 0.3, 0);
+  show($('eTag'), 12.7, L, 0.3, 0);
+  show($('eLoc'), 12.9, L, 0.3, 0);
+</script>
+</body>
+</html>

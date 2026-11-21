@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: #000; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #000;
+    font-family: "Navis Sans", sans-serif; color: #fff; }
+  .scene { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; overflow: hidden; }
+  .fill { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; object-fit: cover; }
+  .blur { filter: blur(24px); transform: scale(1.12); }
+  .dim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.4); }
+
+  /* s1 lock screen */
+  .lock-date { position: absolute; left: 60px; width: 960px; top: 230px; text-align: center; font-size: 40px; font-weight: 700;
+    text-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  .lock-time { position: absolute; left: 60px; width: 960px; top: 290px; text-align: center; font-size: 200px; line-height: 220px;
+    font-weight: 700; letter-spacing: -4px; font-variant-numeric: tabular-nums; text-shadow: 0 4px 16px rgba(0,0,0,.45); }
+  .notif { position: absolute; left: 80px; width: 920px; box-sizing: border-box; padding: 26px 30px; border-radius: 40px;
+    background: rgba(244, 244, 246, 0.93); color: #111; display: flex; gap: 24px; align-items: flex-start; }
+  .notif .icon { flex: none; width: 76px; height: 76px; border-radius: 20px; background: #4F7BF7; position: relative; }
+  .notif .icon::before { content: ""; position: absolute; left: 16px; top: 18px; width: 44px; height: 34px; border-radius: 50%; background: #fff; }
+  .notif .icon::after { content: ""; position: absolute; left: 22px; top: 44px; border: 9px solid transparent; border-top-color: #fff; transform: rotate(20deg); }
+  .notif .body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .notif .who { font-size: 36px; line-height: 44px; font-weight: 800; }
+  .notif .msg { font-size: 40px; line-height: 52px; font-weight: 500; }
+
+  /* fixed caption (s2~s4) */
+  .cap { position: absolute; left: 60px; width: 960px; top: 150px; text-align: center; }
+  .outline { -webkit-text-stroke: 8px #000; paint-order: stroke fill; text-shadow: 0 4px 10px rgba(0,0,0,.55); }
+  .cap1 { display: block; font-size: 48px; line-height: 64px; font-weight: 800; color: #fff; }
+  .cap2 { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 6px; height: 92px; }
+  .cap2 .w { display: block; font-size: 64px; line-height: 88px; font-weight: 800; color: #fff; }
+  .slot { position: relative; display: block; width: 140px; height: 88px; }
+  .num { position: absolute; left: 0; top: 0; width: 140px; text-align: center; font-size: 64px; line-height: 88px;
+    font-weight: 800; font-variant-numeric: tabular-nums; }
+  .n-yellow { color: #FFD400; } .n-orange { color: #FF9F1C; } .n-red { color: #FF3B30; }
+
+  /* chat bubbles */
+  .chat { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; }
+  .grp { position: absolute; bottom: 320px; display: flex; flex-direction: column; }
+  .grp.in { left: 72px; align-items: flex-start; }
+  .grp.out { right: 72px; align-items: flex-end; }
+  .who-row { display: flex; align-items: center; gap: 12px; height: 44px; margin-bottom: 6px; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #FF8FB1; border: 3px solid #fff; box-sizing: border-box; }
+  .who-name { display: block; font-size: 36px; line-height: 44px; font-weight: 800; color: #fff; }
+  .bub { display: block; max-width: 680px; padding: 22px 30px; border-radius: 30px; font-size: 40px; line-height: 52px;
+    font-weight: 700; box-shadow: 0 6px 16px rgba(0,0,0,.25); }
+  .bub.w { background: #fff; color: #111; }
+  .bub.y { background: #FEE500; color: #111; }
+  .pbub { width: 260px; height: 330px; border-radius: 30px; overflow: hidden; border: 6px solid #fff; box-sizing: border-box;
+    box-shadow: 0 6px 16px rgba(0,0,0,.25); }
+  .pbub img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 45%; display: block; }
+
+  /* ending */
+  .end-name { position: absolute; left: 60px; width: 960px; top: 600px; text-align: center; font-family: "Navis Serif", serif;
+    font-size: 168px; line-height: 200px; font-weight: 800; letter-spacing: 12px; color: #F3EEE6; }
+  .end-rule { position: absolute; left: 480px; width: 120px; top: 852px; height: 3px; background: rgba(255,255,255,.7); }
+  .end-line { position: absolute; left: 60px; width: 960px; text-align: center; font-size: 48px; line-height: 64px; }
+  .end-tag { top: 900px; font-weight: 700; color: #fff; }
+  .end-loc { top: 990px; font-weight: 500; color: #DADADA; }
+  .end-cta { top: 1200px; font-weight: 800; color: #fff; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <!-- s1: lock screen notification -->
+  <div class="scene" data-scene="s1" id="sc1">
+    <img class="fill blur" data-photo="store-exterior" src="assets/photos/store-exterior.jpg" alt="">
+    <div class="dim" style="background: rgba(0,0,0,.25)"></div>
+    <div class="lock-date" data-text="t1">11월 10일 화요일</div>
+    <div class="lock-time" data-text="t2">11:58</div>
+    <div class="notif" id="nt1" style="top: 640px">
+      <div class="icon"></div>
+      <div class="body"><span class="who" data-text="t3">지수</span><span class="msg" data-text="t4">야 미학당 지금 휘낭시에 4개 남음</span></div>
+    </div>
+    <div class="notif" id="nt2" style="top: 820px">
+      <div class="icon"></div>
+      <div class="body"><span class="who" data-text="t3">지수</span><span class="msg" data-text="t5">빨리 와라 진짜</span></div>
+    </div>
+  </div>
+
+  <!-- s2: display case, countdown starts -->
+  <div class="scene" data-scene="s2" id="sc2">
+    <img class="fill" id="ph2" data-photo="fin-04" src="assets/photos/fin-04.jpg" alt="" style="object-position: 55% 50%">
+  </div>
+
+  <!-- s3: store exterior -->
+  <div class="scene" data-scene="s3" id="sc3">
+    <img class="fill" id="ph3" data-photo="store-exterior" src="assets/photos/store-exterior.jpg" alt="" style="object-position: 50% 50%">
+  </div>
+
+  <!-- s4: sold out, another display shot -->
+  <div class="scene" data-scene="s4" id="sc4">
+    <img class="fill" id="ph4" data-photo="fin-08" src="assets/photos/fin-08.jpg" alt="" style="object-position: 50% 55%">
+  </div>
+
+  <!-- s5: ending card -->
+  <div class="scene" data-scene="s5" id="sc5">
+    <img class="fill blur" data-photo="store-exterior" src="assets/photos/store-exterior.jpg" alt="">
+    <div class="dim"></div>
+    <div class="end-name" id="eName" data-text="store-name">미학당</div>
+    <div class="end-rule" id="eRule"></div>
+    <div class="end-line end-tag" id="eTag" data-text="t25">당일 생산 당일 판매, 늦으면 없어요</div>
+    <div class="end-line end-loc" id="eLoc" data-text="store-location">숭실대입구역 3번 출구 · 빨간 벽돌, 초록 문</div>
+    <div class="end-line end-cta" id="eCta" data-text="t26">눈치게임 같이 할 친구 태그</div>
+  </div>
+
+  <!-- fixed caption over s2~s4 -->
+  <div class="cap" id="cap">
+    <span class="cap1 outline" data-text="t6">점심시간 숭실대 단톡방</span>
+    <div class="cap2">
+      <span class="w outline" data-text="t7">휘낭시에에</span>
+      <span class="slot">
+        <span class="num n-yellow outline" id="n4" data-text="t8">4개</span>
+        <span class="num n-yellow outline" id="n3" data-text="t9">3개</span>
+        <span class="num n-yellow outline" id="n2" data-text="t10">2개</span>
+        <span class="num n-orange outline" id="n1" data-text="t11">1개</span>
+        <span class="num n-red outline" id="n0" data-text="t12">품절</span>
+      </span>
+      <span class="w outline" id="left" data-text="t13">남음</span>
+    </div>
+  </div>
+
+  <!-- chat bubbles over s2~s4 (pushed up as new ones arrive) -->
+  <div class="chat" id="chat">
+    <div class="grp in" id="b1"><div class="who-row"><span class="avatar"></span><span class="who-name outline" data-text="t3">지수</span></div><span class="bub w" data-text="t14">야 미학당 지금<br>휘낭시에 4개 남음</span></div>
+    <div class="grp out" id="b2"><span class="bub y" data-text="t15">수업 끝나면 바로 감</span></div>
+    <div class="grp in" id="b3"><div class="who-row"><span class="avatar"></span><span class="who-name outline" data-text="t3">지수</span></div><span class="bub w" data-text="t16">3개</span></div>
+    <div class="grp out" id="b4"><span class="bub y" data-text="t17">?</span></div>
+    <div class="grp in" id="b5"><div class="who-row"><span class="avatar"></span><span class="who-name outline" data-text="t3">지수</span></div><span class="bub w" data-text="t18">2개</span></div>
+    <div class="grp out" id="b6"><span class="bub y" data-text="t19">제발</span></div>
+    <div class="grp in" id="b7"><div class="who-row"><span class="avatar"></span><span class="who-name outline" data-text="t3">지수</span></div><span class="bub w" data-text="t20">1개</span></div>
+    <div class="grp out" id="b8"><span class="bub y" data-text="t21">지금 뛰는 중</span></div>
+    <div class="grp in" id="b9"><div class="who-row"><span class="avatar"></span><span class="who-name outline" data-text="t3">지수</span></div><span class="bub w" data-text="t22">0개</span></div>
+    <div class="grp out" id="b10"><span class="bub y" data-text="t23">…누가 다 사 갔는데</span></div>
+    <div class="grp in" id="b11"><div class="who-row"><span class="avatar"></span><span class="who-name outline" data-text="t3">지수</span></div><div class="pbub"><img data-photo="fin-07" src="assets/photos/fin-07.jpg" alt=""></div></div>
+    <div class="grp in" id="b12"><div class="who-row"><span class="avatar"></span><span class="who-name outline" data-text="t3">지수</span></div><span class="bub w" data-text="t24">미안 내가 다 삼</span></div>
+  </div>
+</div>
+<script>
+  // Every animation is built once at load; the recorder seeks them with currentTime = t*1000.
+  var L = 15;
+  window.__duration = L;
+  var MS = L * 1000;
+  var $ = function (id) { return document.getElementById(id); };
+  var clamp = function (x) { return Math.max(0, Math.min(1, x)); };
+  var anim = function (el, frames) {
+    frames.sort(function (a, b) { return a.offset - b.offset; });
+    return el.animate(frames, { duration: MS, fill: 'both', easing: 'linear' });
+  };
+  // opacity 0 -> 1 over [a, a+fin], 1 -> 0 over [b, b+fout] (seconds)
+  var show = function (el, a, b, fin, fout) {
+    var f = [];
+    if (a <= 0) f.push({ offset: 0, opacity: 1 });
+    else f.push({ offset: 0, opacity: 0 }, { offset: clamp(a / L), opacity: 0 }, { offset: clamp((a + fin) / L), opacity: 1 });
+    if (b >= L) f.push({ offset: 1, opacity: 1 });
+    else f.push({ offset: clamp(b / L), opacity: 1 }, { offset: clamp((b + fout) / L), opacity: 0 }, { offset: 1, opacity: 0 });
+    return anim(el, f);
+  };
+  // scale pop 1.00 -> 1.12 -> 1.00 over 180ms at time a
+  var pop = function (el, a) {
+    anim(el, [
+      { offset: 0, transform: 'scale(1)' }, { offset: clamp(a / L), transform: 'scale(1)' },
+      { offset: clamp((a + 0.09) / L), transform: 'scale(1.12)' }, { offset: clamp((a + 0.18) / L), transform: 'scale(1)' },
+      { offset: 1, transform: 'scale(1)' }
+    ]);
+  };
+  // Ken Burns between [a, b]
+  var kb = function (el, a, b, from, to) {
+    anim(el, [
+      { offset: 0, transform: from }, { offset: clamp(a / L), transform: from },
+      { offset: clamp(b / L), transform: to }, { offset: 1, transform: to }
+    ]);
+  };
+
+  // scenes: 150ms cross-cut around each boundary
+  var X = 0.075;
+  show($('sc1'), 0, 2 - X, 0.15, 0.15);
+  show($('sc2'), 2 - X, 7 - X, 0.15, 0.15);
+  show($('sc3'), 7 - X, 9 - X, 0.15, 0.15);
+  show($('sc4'), 9 - X, 12 - X, 0.15, 0.15);
+  show($('sc5'), 12 - X, L, 0.15, 0);
+  kb($('ph2'), 1.9, 7.1, 'scale(1.0) translate(0, 0)', 'scale(1.10) translate(-2.5%, -2%)');
+  kb($('ph3'), 6.9, 9.1, 'scale(1.10) translate(1.5%, 0)', 'scale(1.0) translate(0, 0)');
+  kb($('ph4'), 8.9, 12.1, 'scale(1.0) translate(0, 1%)', 'scale(1.10) translate(2%, -2%)');
+
+  // lock-screen notifications drop in (240ms)
+  [['nt1', 0.3], ['nt2', 1.1]].forEach(function (p) {
+    var el = $(p[0]), a = p[1];
+    show(el, a, L, 0.24, 0);
+    anim(el, [{ offset: 0, transform: 'translateY(-40px)' }, { offset: a / L, transform: 'translateY(-40px)' },
+      { offset: (a + 0.24) / L, transform: 'translateY(0)' }, { offset: 1, transform: 'translateY(0)' }]);
+  });
+
+  // fixed caption: visible 2.0 ~ 12.0
+  show($('cap'), 2.0, 11.85, 0.15, 0.15);
+  // countdown: one number at a time, switches just after a scene boundary, pop on each change
+  var steps = [['n4', 2.0, 3.4], ['n3', 3.4, 5.0], ['n2', 5.0, 7.02], ['n1', 7.02, 9.02], ['n0', 9.02, 12]];
+  steps.forEach(function (s) {
+    var el = $(s[0]);
+    anim(el, [{ offset: 0, opacity: 0 }, { offset: s[1] / L, opacity: 0 }, { offset: s[1] / L + 1e-6, opacity: 1 },
+      { offset: s[2] / L, opacity: 1 }, { offset: Math.min(1, s[2] / L + 1e-6), opacity: 0 }, { offset: 1, opacity: 0 }]);
+    if (s[1] > 2.0) pop(el, s[1]);
+  });
+  anim($('left'), [{ offset: 0, opacity: 1 }, { offset: 9.02 / L, opacity: 1 }, { offset: 9.02 / L + 1e-6, opacity: 0 }, { offset: 1, opacity: 0 }]);
+
+  // chat: [id, appears at (s), height (px) incl. name row]
+  var GAP = 24, MAXV = 4, RISE = 0.2;
+  var B = [['b1', 2.3, 198], ['b2', 3.0, 96], ['b3', 3.5, 146], ['b4', 4.3, 96], ['b5', 5.1, 146], ['b6', 5.9, 96],
+    ['b7', 7.3, 146], ['b8', 8.1, 96], ['b9', 9.3, 146], ['b10', 9.9, 96], ['b11', 10.6, 380], ['b12', 11.2, 146]];
+  B.forEach(function (b, k) {
+    var el = $(b[0]), a = b[1];
+    var gone = k + MAXV < B.length ? B[k + MAXV][1] : 11.85;
+    show(el, a, gone, RISE, gone >= 11.85 ? 0.15 : RISE);
+    var f = [{ offset: 0, transform: 'translateY(60px)' }, { offset: a / L, transform: 'translateY(60px)' },
+      { offset: (a + RISE) / L, transform: 'translateY(0px)' }];
+    var up = 0;
+    for (var j = k + 1; j < B.length; j++) {
+      f.push({ offset: B[j][1] / L, transform: 'translateY(' + (-up) + 'px)' });
+      up += B[j][2] + GAP;
+      f.push({ offset: Math.min(1, (B[j][1] + RISE) / L), transform: 'translateY(' + (-up) + 'px)' });
+    }
+    f.push({ offset: 1, transform: 'translateY(' + (-up) + 'px)' });
+    anim(el, f);
+  });
+
+  // ending: name fades in 600ms, the rest follow
+  show($('eName'), 12.1, L, 0.6, 0);
+  show($('eRule'), 12.5, L, 0.3, 0);
+  show($('eTag'), 12.6, L, 0.3, 0);
+  show($('eLoc'), 12.8, L, 0.3, 0);
+  show($('eCta'), 13.0, L, 0.3, 0);
+  // T-087: 전환 중 글자는 한 장면 것만 — 나가는 장면 글자는 전환 전에 숨기고 들어오는 장면 글자는 전환 뒤에 보인다(visibility)
+  var gate = function (el, a, b) {
+    var f = [{ offset: 0, visibility: a <= 0 ? 'visible' : 'hidden' }];
+    if (a > 0) f.push({ offset: Math.min(1, a / L), visibility: 'hidden' }, { offset: Math.min(1, a / L), visibility: 'visible' });
+    if (b < L) f.push({ offset: b / L, visibility: 'visible' }, { offset: b / L, visibility: 'hidden' }, { offset: 1, visibility: 'hidden' });
+    else f.push({ offset: 1, visibility: 'visible' });
+    return el.animate(f, { duration: MS, fill: 'both', easing: 'linear' });
+  };
+  var gateScenes = function (list, pre, post) {
+    list.forEach(function (g, i) {
+      var a = i === 0 ? 0 : g[1] + post, b = i === list.length - 1 ? L : g[2] - pre;
+      document.querySelectorAll('[data-scene="' + g[0] + '"] [data-text]').forEach(function (el) { gate(el, a, b); });
+    });
+  };
+  gateScenes([['s1', 0, 2], ['s2', 2, 15]], X, 0);
+</script>
+</body>
+</html>

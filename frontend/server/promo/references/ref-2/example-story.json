@@ -1,0 +1,159 @@
+{
+  "referenceId": "ref-2",
+  "lengthSec": 15,
+  "locale": "ko",
+  "promptVersion": "example-1",
+  "scenes": [
+    {
+      "sceneId": "s1",
+      "start": 0,
+      "duration": 2.5,
+      "photoIds": [
+        "fin-01"
+      ],
+      "textIds": [
+        "t1"
+      ],
+      "direction": "Hook: big two-line title under a rounded photo card of one financier with crunchy topping on a plate."
+    },
+    {
+      "sceneId": "s2",
+      "start": 2.5,
+      "duration": 3,
+      "photoIds": [
+        "fin-04"
+      ],
+      "textIds": [
+        "t2",
+        "t3"
+      ],
+      "direction": "Display case card; two review-style bubbles rise one by one, one keyword in green."
+    },
+    {
+      "sceneId": "s3",
+      "start": 5.5,
+      "duration": 3,
+      "photoIds": [
+        "fin-08"
+      ],
+      "textIds": [
+        "t4",
+        "t5"
+      ],
+      "direction": "Pistachio white financier held in hand; bubbles about pistachio and size."
+    },
+    {
+      "sceneId": "s4",
+      "start": 8.5,
+      "duration": 3.5,
+      "photoIds": [
+        "fin-03"
+      ],
+      "textIds": [
+        "t6",
+        "t7"
+      ],
+      "direction": "Two coffees and a nut financier on paper; bubbles describe what is visible."
+    },
+    {
+      "sceneId": "s5",
+      "start": 12,
+      "duration": 3,
+      "photoIds": [
+        "store-exterior"
+      ],
+      "textIds": [
+        "store-name",
+        "t8",
+        "store-location"
+      ],
+      "direction": "Ending on warm plain background: small rounded storefront card, serif store name, tagline, location."
+    }
+  ],
+  "texts": [
+    {
+      "textId": "t1",
+      "role": "title",
+      "text": "바삭한 토핑\n휘낭시에 한 조각",
+      "sceneIds": [
+        "s1"
+      ]
+    },
+    {
+      "textId": "t2",
+      "role": "sub",
+      "text": "진열대 가득 여러 맛 휘낭시에",
+      "sceneIds": [
+        "s2"
+      ]
+    },
+    {
+      "textId": "t3",
+      "role": "sub",
+      "text": "가격표가 하나하나 붙어 있어요",
+      "sceneIds": [
+        "s2"
+      ]
+    },
+    {
+      "textId": "t4",
+      "role": "sub",
+      "text": "피스타치오 듬뿍 올린 화이트",
+      "sceneIds": [
+        "s3"
+      ]
+    },
+    {
+      "textId": "t5",
+      "role": "sub",
+      "text": "한 손에 쏙 들어오는 크기",
+      "sceneIds": [
+        "s3"
+      ]
+    },
+    {
+      "textId": "t6",
+      "role": "sub",
+      "text": "커피 두 잔에 견과 휘낭시에",
+      "sceneIds": [
+        "s4"
+      ]
+    },
+    {
+      "textId": "t7",
+      "role": "sub",
+      "text": "종이 위에 놓인 한 조각",
+      "sceneIds": [
+        "s4"
+      ]
+    },
+    {
+      "textId": "store-name",
+      "role": "title",
+      "text": "미학당",
+      "sceneIds": [
+        "s5"
+      ]
+    },
+    {
+      "textId": "t8",
+      "role": "sub",
+      "text": "사진 속 그 맛 그대로 만나요",
+      "sceneIds": [
+        "s5"
+      ]
+    },
+    {
+      "textId": "store-location",
+      "role": "sub",
+      "text": "숭실대입구역 3번 출구 · 빨간 벽돌, 초록 문",
+      "sceneIds": [
+        "s5"
+      ]
+    }
+  ],
+  "ending": {
+    "taglineTextId": "t8"
+  },
+  "musicTrackId": "warm-cozy-acoustic"
+}

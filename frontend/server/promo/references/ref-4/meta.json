@@ -1,0 +1,47 @@
+{
+  "id": "ref-4",
+  "version": "1",
+  "nameKey": "promo.ref.ref-4.name",
+  "cardAspect": "9:16",
+  "posterScene": "s2",
+  "posterAt": 4.6,
+  "previewFrom": 0,
+  "previewTo": 4,
+  "moods": [
+    "warm",
+    "lively"
+  ],
+  "concepts": [
+    "new-item",
+    "behind-the-scenes"
+  ],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 6
+      },
+      "photoSlots": {
+        "max": 3
+      }
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 8
+      },
+      "photoSlots": {
+        "max": 4
+      }
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 14
+      },
+      "photoSlots": {
+        "max": 7
+      }
+    }
+  }
+}

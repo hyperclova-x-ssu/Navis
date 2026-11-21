@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: #F7F3EE; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #F7F3EE;
+    font-family: "Navis Sans", sans-serif; color: #1E1E23; }
+  .scene { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; }
+  /* polaroid: white frame, 36 margins, 120 bottom margin for the hand-written line */
+  .pol { position: absolute; left: 160px; top: 330px; width: 760px; height: 1000px; box-sizing: border-box; padding: 36px 36px 120px;
+    background: #FFFFFF; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); transform-origin: 50% 50%; }
+  .pol .ph { width: 688px; height: 844px; overflow: hidden; background: #EEE; }
+  .pol .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pol .line { position: absolute; left: 36px; right: 36px; bottom: 26px; text-align: center; font-size: 56px; line-height: 68px; font-weight: 700; }
+  .hl { background: #FFF2CC; border-radius: 10px; padding: 0 8px; }
+  .tape { position: absolute; width: 220px; height: 64px; background: rgba(255, 212, 0, .6); transform: rotate(12deg); }
+  .back { position: absolute; left: 160px; top: 330px; width: 760px; height: 1000px; background: #FFFFFF; box-shadow: 0 8px 24px rgba(0, 0, 0, .14); }
+  .hook { position: absolute; left: 60px; width: 960px; top: 1380px; text-align: center; font-size: 80px; line-height: 104px; font-weight: 700; }
+  .end-name { position: absolute; left: 60px; width: 960px; top: 760px; text-align: center; font-family: "Navis Serif", serif;
+    font-size: 120px; line-height: 150px; font-weight: 800; letter-spacing: 6px; }
+  .end-line { position: absolute; left: 60px; width: 960px; text-align: center; }
+  .end-tag { top: 960px; font-size: 56px; line-height: 72px; font-weight: 700; }
+  .end-loc { top: 1070px; font-size: 48px; line-height: 64px; font-weight: 500; color: #55524D; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <!-- blank cards stacking behind (decoration, no photo) -->
+  <div class="back" id="bk1" style="transform: rotate(-5deg) translate(-26px, 18px)"></div>
+  <div class="back" id="bk2" style="transform: rotate(4deg) translate(24px, 10px)"></div>
+
+  <div class="scene" data-scene="s1" id="sc1">
+    <div class="pol" id="c1" style="top: 230px; height: 1000px">
+      <div class="ph"><img data-photo="store-exterior" src="assets/photos/store-exterior.jpg" alt=""></div>
+    </div>
+    <div class="tape" style="left: 760px; top: 210px"></div>
+    <div class="hook" id="hook" data-text="t1">오늘의 <span class="hl">작은 행복</span><br>미학당 휘낭시에</div>
+  </div>
+  <div class="scene" data-scene="s2" id="sc2">
+    <div class="pol" id="c2"><div class="ph"><img data-photo="fin-01" src="assets/photos/fin-01.jpg" alt="" style="object-position: 45% 35%"></div>
+      <div class="line" data-text="t2"><span class="hl">바삭</span> 토핑 한 조각</div></div>
+    <div class="tape" style="left: 780px; top: 300px"></div>
+  </div>
+  <div class="scene" data-scene="s3" id="sc3">
+    <div class="pol" id="c3"><div class="ph"><img data-photo="fin-03" src="assets/photos/fin-03.jpg" alt="" style="object-position: 45% 65%"></div>
+      <div class="line" data-text="t3">커피 두 잔, <span class="hl">한 조각</span></div></div>
+    <div class="tape" style="left: 100px; top: 300px; transform: rotate(-12deg)"></div>
+  </div>
+  <div class="scene" data-scene="s4" id="sc4">
+    <div class="pol" id="c4"><div class="ph"><img data-photo="fin-08" src="assets/photos/fin-08.jpg" alt="" style="object-position: 50% 55%"></div>
+      <div class="line" data-text="t4">손에 쥔 <span class="hl">피스타치오</span></div></div>
+    <div class="tape" style="left: 780px; top: 300px"></div>
+  </div>
+  <div class="scene" data-scene="s5" id="sc5">
+    <div class="pol" style="top: 260px; left: 340px; width: 400px; height: 400px; padding: 20px 20px 60px; transform: rotate(-3deg)">
+      <div class="ph" style="width: 360px; height: 320px"><img data-photo="store-exterior" src="assets/photos/store-exterior.jpg" alt=""></div>
+    </div>
+    <div class="tape" style="left: 640px; top: 240px"></div>
+    <div class="end-name" id="eName" data-text="store-name">미학당</div>
+    <div class="end-line end-tag" id="eTag" data-text="t5">오늘도 <span class="hl">달콤하게</span></div>
+    <div class="end-line end-loc" id="eLoc" data-text="store-location">숭실대입구역 3번 출구 · 빨간 벽돌, 초록 문</div>
+  </div>
+</div>
+<script>
+  var L = 15;
+  window.__duration = L;
+  var MS = L * 1000;
+  var $ = function (id) { return document.getElementById(id); };
+  var c = function (x) { return Math.max(0, Math.min(1, x)); };
+  var anim = function (el, f) { return el.animate(f, { duration: MS, fill: 'both', easing: 'linear' }); };
+  var show = function (el, a, b, fin, fout) {
+    var f = [];
+    if (a <= 0) f.push({ offset: 0, opacity: 1 });
+    else f.push({ offset: 0, opacity: 0 }, { offset: c(a / L), opacity: 0 }, { offset: c((a + fin) / L), opacity: 1 });
+    if (b >= L) f.push({ offset: 1, opacity: 1 });
+    else f.push({ offset: c(b / L), opacity: 1 }, { offset: c((b + fout) / L), opacity: 0 }, { offset: 1, opacity: 0 });
+    return anim(el, f);
+  };
+  // each card drops in from above (translateY -120 -> 0, rotate 6deg -> target, 320ms, one soft ease-out);
+  // the previous card fades away over the same 320ms while blank cards stay stacked behind.
+  var drop = function (el, a, angle) {
+    return el.animate([
+      { offset: 0, transform: 'translateY(-120px) rotate(6deg)' },
+      { offset: c(a / L), transform: 'translateY(-120px) rotate(6deg)', easing: 'cubic-bezier(.2, .8, .3, 1)' },
+      { offset: c((a + 0.32) / L), transform: 'translateY(0) rotate(' + angle + 'deg)' },
+      { offset: 1, transform: 'translateY(0) rotate(' + angle + 'deg)' }
+    ], { duration: MS, fill: 'both', easing: 'linear' });
+  };
+  var S = [['sc1', 0, 3, 'c1', -3], ['sc2', 3, 6, 'c2', 3], ['sc3', 6, 9, 'c3', -3], ['sc4', 9, 12, 'c4', 3], ['sc5', 12, 15, null, 0]];
+  S.forEach(function (s, i) {
+    var next = S[i + 1];
+    show($(s[0]), s[1], next ? next[1] : L, 0.1, 0.32);
+    if (s[3]) drop($(s[3]), s[1] === 0 ? 0.2 : s[1], s[4]);
+  });
+  show($('hook'), 0.5, L, 0.4, 0);
+  show($('bk1'), 3, 11.7, 0.3, 0.3);
+  show($('bk2'), 6, 11.7, 0.3, 0.3);
+  show($('eName'), 12.2, L, 0.6, 0);
+  show($('eTag'), 12.6, L, 0.4, 0);
+  show($('eLoc'), 12.8, L, 0.4, 0);
+  // T-087: 전환 중 글자는 한 장면 것만 — 나가는 장면 글자는 전환 전에 숨기고 들어오는 장면 글자는 전환 뒤에 보인다(visibility)
+  var gate = function (el, a, b) {
+    var f = [{ offset: 0, visibility: a <= 0 ? 'visible' : 'hidden' }];
+    if (a > 0) f.push({ offset: Math.min(1, a / L), visibility: 'hidden' }, { offset: Math.min(1, a / L), visibility: 'visible' });
+    if (b < L) f.push({ offset: b / L, visibility: 'visible' }, { offset: b / L, visibility: 'hidden' }, { offset: 1, visibility: 'hidden' });
+    else f.push({ offset: 1, visibility: 'visible' });
+    return el.animate(f, { duration: MS, fill: 'both', easing: 'linear' });
+  };
+  var gateScenes = function (list, pre, post) {
+    list.forEach(function (g, i) {
+      var a = i === 0 ? 0 : g[1] + post, b = i === list.length - 1 ? L : g[2] - pre;
+      document.querySelectorAll('[data-scene="' + g[0] + '"] [data-text]').forEach(function (el) { gate(el, a, b); });
+    });
+  };
+  gateScenes([['s1', 0, 3], ['s2', 3, 6], ['s3', 6, 9], ['s4', 9, 12], ['s5', 12, 15]], 0, 0.32);
+  // T-087: 카드 사진도 장면 동안 천천히 다가간다(1.00 -> 1.06), 같은 화면이 오래 멈추지 않게
+  [['s1', 0, 3.32], ['s2', 3, 6.32], ['s3', 6, 9.32], ['s4', 9, 12.32], ['s5', 12, 15]].forEach(function (p) {
+    var img = document.querySelector('[data-scene="' + p[0] + '"] .ph img');
+    anim(img, [{ offset: 0, transform: 'scale(1)' }, { offset: c(p[1] / L), transform: 'scale(1)' }, { offset: c(p[2] / L), transform: 'scale(1.06)' }, { offset: 1, transform: 'scale(1.06)' }]);
+  });
+</script>
+</body>
+</html>

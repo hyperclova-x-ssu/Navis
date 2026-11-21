@@ -1,0 +1,47 @@
+{
+  "id": "ref-6",
+  "version": "1",
+  "nameKey": "promo.ref.ref-6.name",
+  "cardAspect": "1:1",
+  "posterScene": "s2",
+  "posterAt": 4.8,
+  "previewFrom": 3,
+  "previewTo": 7.5,
+  "moods": [
+    "warm",
+    "elegant"
+  ],
+  "concepts": [
+    "review-roundup",
+    "todays-deal"
+  ],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 6
+      },
+      "photoSlots": {
+        "max": 2
+      }
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 8
+      },
+      "photoSlots": {
+        "max": 3
+      }
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 14
+      },
+      "photoSlots": {
+        "max": 6
+      }
+    }
+  }
+}

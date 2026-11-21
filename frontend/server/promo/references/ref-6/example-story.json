@@ -1,0 +1,132 @@
+{
+  "referenceId": "ref-6",
+  "lengthSec": 15,
+  "locale": "ko",
+  "promptVersion": "example-1",
+  "scenes": [
+    {
+      "sceneId": "s1",
+      "start": 0,
+      "duration": 3,
+      "photoIds": [
+        "store-exterior"
+      ],
+      "textIds": [
+        "t1"
+      ],
+      "direction": "Cream paper background, storefront polaroid drops in with masking tape; two-line hand-written hook with one highlighted phrase."
+    },
+    {
+      "sceneId": "s2",
+      "start": 3,
+      "duration": 3,
+      "photoIds": [
+        "fin-01"
+      ],
+      "textIds": [
+        "t2"
+      ],
+      "direction": "Polaroid of the financier with crunchy topping drops in tilted +3deg, previous card left behind as a blank card."
+    },
+    {
+      "sceneId": "s3",
+      "start": 6,
+      "duration": 3,
+      "photoIds": [
+        "fin-03"
+      ],
+      "textIds": [
+        "t3"
+      ],
+      "direction": "Polaroid of two coffees and a nut financier, tilted -3deg."
+    },
+    {
+      "sceneId": "s4",
+      "start": 9,
+      "duration": 3,
+      "photoIds": [
+        "fin-08"
+      ],
+      "textIds": [
+        "t4"
+      ],
+      "direction": "Polaroid of the pistachio financier held in hand, tilted +3deg."
+    },
+    {
+      "sceneId": "s5",
+      "start": 12,
+      "duration": 3,
+      "photoIds": [
+        "store-exterior"
+      ],
+      "textIds": [
+        "store-name",
+        "t5",
+        "store-location"
+      ],
+      "direction": "Cream ending: small storefront polaroid with tape, serif name, hand-written tagline with highlighter, location."
+    }
+  ],
+  "texts": [
+    {
+      "textId": "t1",
+      "role": "title",
+      "text": "오늘의 작은 행복\n미학당 휘낭시에",
+      "sceneIds": [
+        "s1"
+      ]
+    },
+    {
+      "textId": "t2",
+      "role": "cap",
+      "text": "바삭 토핑 한 조각",
+      "sceneIds": [
+        "s2"
+      ]
+    },
+    {
+      "textId": "t3",
+      "role": "cap",
+      "text": "커피 두 잔, 한 조각",
+      "sceneIds": [
+        "s3"
+      ]
+    },
+    {
+      "textId": "t4",
+      "role": "cap",
+      "text": "손에 쥔 피스타치오",
+      "sceneIds": [
+        "s4"
+      ]
+    },
+    {
+      "textId": "store-name",
+      "role": "title",
+      "text": "미학당",
+      "sceneIds": [
+        "s5"
+      ]
+    },
+    {
+      "textId": "t5",
+      "role": "sub",
+      "text": "오늘도 달콤하게",
+      "sceneIds": [
+        "s5"
+      ]
+    },
+    {
+      "textId": "store-location",
+      "role": "sub",
+      "text": "숭실대입구역 3번 출구 · 빨간 벽돌, 초록 문",
+      "sceneIds": [
+        "s5"
+      ]
+    }
+  ],
+  "ending": {
+    "taglineTextId": "t5"
+  },
+  "musicTrackId": "warm-cozy-acoustic"
+}

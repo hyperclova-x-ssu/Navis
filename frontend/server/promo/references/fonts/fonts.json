@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "urlPrefix": "fonts/",
+  "faces": [
+    { "family": "Navis Sans", "file": "NavisSans-NanumSquareNeo-Variable.woff2", "format": "woff2", "weight": "100 900", "style": "normal" },
+    { "family": "Navis Serif", "file": "NavisSerif-NanumMyeongjo-ExtraBold.ttf", "format": "truetype", "weight": "100 900", "style": "normal" }
+  ],
+  "fallback": {
+    "Navis Sans": "\"Navis Sans\", \"PingFang SC\", \"PingFang TC\", \"Noto Sans CJK SC\", \"Noto Sans CJK TC\", sans-serif",
+    "Navis Serif": "\"Navis Serif\", \"Songti SC\", \"Songti TC\", \"Noto Serif CJK SC\", serif"
+  },
+  "note": "The recorder injects @font-face for each face, served from https://render.invalid/fonts/<file> (allow-list). Han characters missing from these fonts fall back to the system CJK font (Mac PingFang, Linux fonts-noto-cjk). Scene code only names the family: font-family: \"Navis Sans\", sans-serif."
+}

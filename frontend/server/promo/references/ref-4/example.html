@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: #000; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #000;
+    font-family: "Navis Sans", sans-serif; color: #fff; }
+  .scene { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; overflow: hidden; }
+  .fill { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; object-fit: cover; }
+  .band-top { position: absolute; left: 0; width: 1080px; top: 140px; height: 264px; background: rgba(0, 0, 0, .6); }
+  .hook { position: absolute; left: 60px; width: 960px; top: 164px; text-align: center; font-size: 88px; line-height: 108px;
+    font-weight: 800; letter-spacing: -1px; transform-origin: 50% 50%; }
+  .hook b, .cap b { color: #FFD400; font-weight: 800; }
+  .band-bot { position: absolute; left: 0; width: 1080px; top: 1440px; height: 132px; background: rgba(0, 0, 0, .6); }
+  .cap { position: absolute; left: 60px; width: 960px; top: 1464px; text-align: center; font-size: 64px; line-height: 84px; font-weight: 800; }
+  .end-bg { position: absolute; left: -60px; top: -60px; width: 1200px; height: 2040px; object-fit: cover; filter: blur(28px); }
+  .end-dim { position: absolute; inset: 0; background: rgba(30, 30, 35, .86); }
+  .end-name { position: absolute; left: 60px; width: 960px; top: 700px; text-align: center; font-family: "Navis Serif", serif;
+    font-size: 120px; line-height: 150px; font-weight: 800; letter-spacing: 6px; color: #fff; }
+  .end-line { position: absolute; left: 60px; width: 960px; text-align: center; font-size: 48px; line-height: 64px; }
+  .end-tag { top: 900px; font-weight: 800; color: #FFD400; }
+  .end-loc { top: 990px; font-weight: 500; color: #B8B8BE; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="scene" data-scene="s1" id="sc1">
+    <img class="fill" id="p1" data-photo="fin-07" src="assets/photos/fin-07.jpg" alt="" style="object-position: 50% 55%">
+    <div class="band-top"></div>
+    <div class="hook" id="hook" data-text="t1"><b>초코</b>가 콕 박힌<br>한 입 휘낭시에</div>
+  </div>
+  <div class="scene" data-scene="s2" id="sc2">
+    <img class="fill" id="p2" data-photo="fin-01" src="assets/photos/fin-01.jpg" alt="" style="object-position: 45% 35%">
+    <div class="band-bot"></div>
+    <div class="cap" data-text="t2"><b>바삭한</b> 토핑 가득</div>
+  </div>
+  <div class="scene" data-scene="s3" id="sc3">
+    <img class="fill" id="p3" data-photo="fin-08" src="assets/photos/fin-08.jpg" alt="" style="object-position: 50% 55%">
+    <div class="band-bot"></div>
+    <div class="cap" data-text="t3"><b>피스타치오</b> 화이트 한 입</div>
+  </div>
+  <div class="scene" data-scene="s4" id="sc4">
+    <img class="fill" id="p4" data-photo="fin-03" src="assets/photos/fin-03.jpg" alt="" style="object-position: 40% 70%">
+    <div class="band-bot"></div>
+    <div class="cap" data-text="t4">커피랑 같이 <b>한 조각</b></div>
+  </div>
+  <div class="scene" data-scene="s5" id="sc5">
+    <img class="end-bg" data-photo="store-exterior" src="assets/photos/store-exterior.jpg" alt="">
+    <div class="end-dim"></div>
+    <div class="end-name" id="eName" data-text="store-name">미학당</div>
+    <div class="end-line end-tag" id="eTag" data-text="t5">따뜻할 때 한 입 하러 오세요</div>
+    <div class="end-line end-loc" id="eLoc" data-text="store-location">숭실대입구역 3번 출구 · 빨간 벽돌, 초록 문</div>
+  </div>
+</div>
+<script>
+  var L = 15;
+  window.__duration = L;
+  var MS = L * 1000;
+  var $ = function (id) { return document.getElementById(id); };
+  var c = function (x) { return Math.max(0, Math.min(1, x)); };
+  var anim = function (el, f) { return el.animate(f, { duration: MS, fill: 'both', easing: 'linear' }); };
+  var show = function (el, a, b, fin, fout) {
+    var f = [];
+    if (a <= 0) f.push({ offset: 0, opacity: 1 });
+    else f.push({ offset: 0, opacity: 0 }, { offset: c(a / L), opacity: 0 }, { offset: c((a + fin) / L), opacity: 1 });
+    if (b >= L) f.push({ offset: 1, opacity: 1 });
+    else f.push({ offset: c(b / L), opacity: 1 }, { offset: c((b + fout) / L), opacity: 0 }, { offset: 1, opacity: 0 });
+    return anim(el, f);
+  };
+  var move = function (el, a, b, from, to) {
+    return anim(el, [{ offset: 0, transform: from }, { offset: c(a / L), transform: from }, { offset: c(b / L), transform: to }, { offset: 1, transform: to }]);
+  };
+  // fast cuts: 120ms fade centred on each boundary
+  var S = [['sc1', 0, 3], ['sc2', 3, 6], ['sc3', 6, 9], ['sc4', 9, 12], ['sc5', 12, 15]];
+  S.forEach(function (s) { show($(s[0]), s[1] - 0.06, s[2] - 0.06, 0.12, 0.12); });
+  // fast push-in 1.00 -> 1.12 over each scene
+  [['p1', 0, 3.06], ['p2', 2.94, 6.06], ['p3', 5.94, 9.06], ['p4', 8.94, 12.06]].forEach(function (p) {
+    move($(p[0]), p[1], p[2], 'scale(1)', 'scale(1.12)');
+  });
+  // hook pops 0.9 -> 1.0 in the first 0.3s (200ms)
+  anim($('hook'), [{ offset: 0, transform: 'scale(0.9)', opacity: 0 }, { offset: 0.1 / L, transform: 'scale(0.9)', opacity: 0 },
+    { offset: 0.3 / L, transform: 'scale(1)', opacity: 1 }, { offset: 1, transform: 'scale(1)', opacity: 1 }]);
+  show($('eName'), 12.1, L, 0.4, 0);
+  show($('eTag'), 12.4, L, 0.3, 0);
+  show($('eLoc'), 12.6, L, 0.3, 0);
+  // T-087: 전환 중 글자는 한 장면 것만 — 나가는 장면 글자는 전환 전에 숨기고 들어오는 장면 글자는 전환 뒤에 보인다(visibility)
+  var gate = function (el, a, b) {
+    var f = [{ offset: 0, visibility: a <= 0 ? 'visible' : 'hidden' }];
+    if (a > 0) f.push({ offset: Math.min(1, a / L), visibility: 'hidden' }, { offset: Math.min(1, a / L), visibility: 'visible' });
+    if (b < L) f.push({ offset: b / L, visibility: 'visible' }, { offset: b / L, visibility: 'hidden' }, { offset: 1, visibility: 'hidden' });
+    else f.push({ offset: 1, visibility: 'visible' });
+    return el.animate(f, { duration: MS, fill: 'both', easing: 'linear' });
+  };
+  var gateScenes = function (list, pre, post) {
+    list.forEach(function (g, i) {
+      var a = i === 0 ? 0 : g[1] + post, b = i === list.length - 1 ? L : g[2] - pre;
+      document.querySelectorAll('[data-scene="' + g[0] + '"] [data-text]').forEach(function (el) { gate(el, a, b); });
+    });
+  };
+  gateScenes([['s1', 0, 3], ['s2', 3, 6], ['s3', 6, 9], ['s4', 9, 12], ['s5', 12, 15]], 0.06, 0.06);
+</script>
+</body>
+</html>

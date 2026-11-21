@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: #FFF2CC; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #FFF2CC;
+    font-family: "Navis Sans", sans-serif; color: #1E1E23; }
+  .scene { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; overflow: hidden; }
+  .bg { position: absolute; inset: 0; }
+  .tag { position: absolute; left: 120px; top: 180px; font-size: 36px; line-height: 48px; font-weight: 800; color: #1E1E23;
+    padding: 6px 22px; border-radius: 999px; background: rgba(255, 255, 255, .75); }
+  .card { position: absolute; left: 150px; top: 300px; width: 840px; height: 1100px; border-radius: 32px; overflow: hidden;
+    box-shadow: 0 12px 32px rgba(30, 30, 35, .14); background: #ddd; }
+  .card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cap { position: absolute; left: 60px; width: 960px; top: 1468px; text-align: center; font-size: 64px; line-height: 84px; font-weight: 700; }
+  /* vertical timeline at x = 84: 4 dots joined by a line that fills scene by scene */
+  .tl { position: absolute; left: 82px; top: 300px; width: 4px; height: 900px; background: rgba(30, 30, 35, .15); border-radius: 2px; }
+  .tl-fill { position: absolute; left: 82px; top: 300px; width: 4px; height: 900px; background: #1E1E23; border-radius: 2px; transform-origin: 50% 0; }
+  .dot { position: absolute; left: 72px; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 4px solid rgba(30, 30, 35, .3); box-sizing: border-box; }
+  .dot-on { position: absolute; left: 72px; width: 24px; height: 24px; border-radius: 50%; background: #1E1E23; }
+  .ext { position: absolute; left: 290px; top: 420px; width: 500px; height: 330px; border-radius: 32px; overflow: hidden; box-shadow: 0 12px 32px rgba(30, 30, 35, .14); }
+  .ext img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .end-name { position: absolute; left: 60px; width: 960px; top: 830px; text-align: center; font-family: "Navis Serif", serif;
+    font-size: 120px; line-height: 150px; font-weight: 800; letter-spacing: 6px; color: #1E1E23; }
+  .end-line { position: absolute; left: 60px; width: 960px; text-align: center; font-size: 48px; line-height: 64px; }
+  .end-tag { top: 1020px; font-weight: 700; }
+  .end-loc { top: 1110px; font-weight: 500; color: #4A4A55; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="scene" data-scene="s1" id="sc1">
+    <div class="bg" style="background: #FFF2CC"></div>
+    <div class="card" id="k1"><img id="p1" data-photo="store-exterior" src="assets/photos/store-exterior.jpg" alt="" style="object-position: 50% 50%"></div>
+    <div class="tag" data-text="t1">아침</div>
+    <div class="cap" data-text="t2">초록 문이 열리는 시간</div>
+  </div>
+  <div class="scene" data-scene="s2" id="sc2">
+    <div class="bg" style="background: #FFFFFF"></div>
+    <div class="card" id="k2"><img id="p2" data-photo="fin-02" src="assets/photos/fin-02.jpg" alt="" style="object-position: 50% 55%"></div>
+    <div class="tag" data-text="t3">점심</div>
+    <div class="cap" data-text="t4">유리 진열대 가득</div>
+  </div>
+  <div class="scene" data-scene="s3" id="sc3">
+    <div class="bg" style="background: #FBEAED"></div>
+    <div class="card" id="k3"><img id="p3" data-photo="fin-05" src="assets/photos/fin-05.jpg" alt="" style="object-position: 50% 50%"></div>
+    <div class="tag" data-text="t5">오후</div>
+    <div class="cap" data-text="t6">초코, 피스타치오, 견과</div>
+  </div>
+  <div class="scene" data-scene="s4" id="sc4">
+    <div class="bg" style="background: #EAF0FC"></div>
+    <div class="card" id="k4"><img id="p4" data-photo="fin-03" src="assets/photos/fin-03.jpg" alt="" style="object-position: 45% 65%"></div>
+    <div class="tag" data-text="t7">저녁</div>
+    <div class="cap" data-text="t8">커피 두 잔과 한 조각</div>
+  </div>
+  <div class="scene" data-scene="s5" id="sc5">
+    <div class="bg" style="background: #EAF0FC"></div>
+    <div class="ext"><img data-photo="store-exterior" src="assets/photos/store-exterior.jpg" alt=""></div>
+    <div class="end-name" id="eName" data-text="store-name">미학당</div>
+    <div class="end-line end-tag" id="eTag" data-text="t9">하루 중 언제든 들러 주세요</div>
+    <div class="end-line end-loc" id="eLoc" data-text="store-location">숭실대입구역 3번 출구 · 빨간 벽돌, 초록 문</div>
+  </div>
+
+  <div id="timeline">
+    <div class="tl"></div>
+    <div class="tl-fill" id="fill"></div>
+    <div class="dot" style="top: 288px"></div><div class="dot" style="top: 588px"></div>
+    <div class="dot" style="top: 888px"></div><div class="dot" style="top: 1188px"></div>
+    <div class="dot-on" id="d1" style="top: 288px"></div><div class="dot-on" id="d2" style="top: 588px"></div>
+    <div class="dot-on" id="d3" style="top: 888px"></div><div class="dot-on" id="d4" style="top: 1188px"></div>
+  </div>
+</div>
+<script>
+  var L = 15;
+  window.__duration = L;
+  var MS = L * 1000;
+  var $ = function (id) { return document.getElementById(id); };
+  var c = function (x) { return Math.max(0, Math.min(1, x)); };
+  var anim = function (el, f) { return el.animate(f, { duration: MS, fill: 'both', easing: 'linear' }); };
+  var show = function (el, a, b, fin, fout) {
+    var f = [];
+    if (a <= 0) f.push({ offset: 0, opacity: 1 });
+    else f.push({ offset: 0, opacity: 0 }, { offset: c(a / L), opacity: 0 }, { offset: c((a + fin) / L), opacity: 1 });
+    if (b >= L) f.push({ offset: 1, opacity: 1 });
+    else f.push({ offset: c(b / L), opacity: 1 }, { offset: c((b + fout) / L), opacity: 0 }, { offset: 1, opacity: 0 });
+    return anim(el, f);
+  };
+  var move = function (el, a, b, from, to) {
+    return anim(el, [{ offset: 0, transform: from }, { offset: c(a / L), transform: from }, { offset: c(b / L), transform: to }, { offset: 1, transform: to }]);
+  };
+  // card swap 280ms: the whole scene (time-of-day colour, tag, caption) cross-fades, the card slides in from the right
+  var S = [['sc1', 0, 2.5], ['sc2', 2.5, 5.5], ['sc3', 5.5, 8.5], ['sc4', 8.5, 12], ['sc5', 12, 15]];
+  S.forEach(function (s) { show($(s[0]), s[1] - 0.14, s[2] - 0.14, 0.28, 0.28); });
+  [['k2', 2.36], ['k3', 5.36], ['k4', 8.36]].forEach(function (k) { move($(k[0]), k[1], k[1] + 0.28, 'translateX(100%)', 'translateX(0)'); });
+  // photos: gentle Ken Burns 1.00 -> 1.05
+  [['p1', 0, 2.64], ['p2', 2.36, 5.64], ['p3', 5.36, 8.64], ['p4', 8.36, 12.14]].forEach(function (p) {
+    move($(p[0]), p[1], p[2], 'scale(1)', 'scale(1.05)');
+  });
+  // timeline: one step per time of day (240ms), hidden on the ending card
+  var steps = [0, 2.5, 5.5, 8.5];
+  var f = [{ offset: 0, transform: 'scaleY(0)' }];
+  steps.forEach(function (t, i) {
+    f.push({ offset: c(t / L), transform: 'scaleY(' + (i === 0 ? 0 : (i - 1) / 3) + ')' });
+    f.push({ offset: c((t + 0.24) / L), transform: 'scaleY(' + (i / 3) + ')' });
+  });
+  f.push({ offset: 1, transform: 'scaleY(1)' });
+  anim($('fill'), f);
+  steps.forEach(function (t, i) { show($('d' + (i + 1)), t + 0.1, L, 0.24, 0); });
+  show($('timeline'), 0, 11.86, 0, 0.28);
+  show($('eName'), 12.1, L, 0.6, 0);
+  show($('eTag'), 12.5, L, 0.3, 0);
+  show($('eLoc'), 12.7, L, 0.3, 0);
+  // T-087: 전환 중 글자는 한 장면 것만 — 나가는 장면 글자는 전환 전에 숨기고 들어오는 장면 글자는 전환 뒤에 보인다(visibility)
+  var gate = function (el, a, b) {
+    var f = [{ offset: 0, visibility: a <= 0 ? 'visible' : 'hidden' }];
+    if (a > 0) f.push({ offset: Math.min(1, a / L), visibility: 'hidden' }, { offset: Math.min(1, a / L), visibility: 'visible' });
+    if (b < L) f.push({ offset: b / L, visibility: 'visible' }, { offset: b / L, visibility: 'hidden' }, { offset: 1, visibility: 'hidden' });
+    else f.push({ offset: 1, visibility: 'visible' });
+    return el.animate(f, { duration: MS, fill: 'both', easing: 'linear' });
+  };
+  var gateScenes = function (list, pre, post) {
+    list.forEach(function (g, i) {
+      var a = i === 0 ? 0 : g[1] + post, b = i === list.length - 1 ? L : g[2] - pre;
+      document.querySelectorAll('[data-scene="' + g[0] + '"] [data-text]').forEach(function (el) { gate(el, a, b); });
+    });
+  };
+  gateScenes([['s1', 0, 2.5], ['s2', 2.5, 5.5], ['s3', 5.5, 8.5], ['s4', 8.5, 12], ['s5', 12, 15]], 0.14, 0.14);
+</script>
+</body>
+</html>

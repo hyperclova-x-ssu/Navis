@@ -1,0 +1,355 @@
+{
+  "referenceId": "ref-1",
+  "lengthSec": 15,
+  "locale": "ko",
+  "promptVersion": "example-1",
+  "scenes": [
+    {
+      "sceneId": "s1",
+      "start": 0,
+      "duration": 2,
+      "photoIds": [
+        "store-exterior"
+      ],
+      "textIds": [
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5"
+      ],
+      "direction": "Lock screen over blurred storefront; two chat notifications drop in."
+    },
+    {
+      "sceneId": "s2",
+      "start": 2,
+      "duration": 5,
+      "photoIds": [
+        "fin-04"
+      ],
+      "textIds": [
+        "t3",
+        "t6",
+        "t7",
+        "t8",
+        "t9",
+        "t10",
+        "t13",
+        "t14",
+        "t15",
+        "t16",
+        "t17",
+        "t18",
+        "t19"
+      ],
+      "direction": "Display case with priced financiers, slow zoom. Fixed outlined caption; countdown 4-3-2 with pop; chat bubbles rise and push up."
+    },
+    {
+      "sceneId": "s3",
+      "start": 7,
+      "duration": 2,
+      "photoIds": [
+        "store-exterior"
+      ],
+      "textIds": [
+        "t3",
+        "t6",
+        "t7",
+        "t11",
+        "t13",
+        "t16",
+        "t17",
+        "t18",
+        "t19",
+        "t20",
+        "t21"
+      ],
+      "direction": "Cut to storefront (reverse zoom); count is 1; chat continues."
+    },
+    {
+      "sceneId": "s4",
+      "start": 9,
+      "duration": 3,
+      "photoIds": [
+        "fin-08",
+        "fin-07"
+      ],
+      "textIds": [
+        "t3",
+        "t6",
+        "t7",
+        "t12",
+        "t18",
+        "t19",
+        "t20",
+        "t21",
+        "t22",
+        "t23",
+        "t24"
+      ],
+      "direction": "Second display shot; count turns to sold out in red; photo bubble of a chocolate financier held in hand, then the apology line."
+    },
+    {
+      "sceneId": "s5",
+      "start": 12,
+      "duration": 3,
+      "photoIds": [
+        "store-exterior"
+      ],
+      "textIds": [
+        "store-name",
+        "t25",
+        "store-location",
+        "t26"
+      ],
+      "direction": "Ending card on blurred storefront: serif store name fades in, thin rule, tagline, location, call to action."
+    }
+  ],
+  "texts": [
+    {
+      "textId": "t1",
+      "role": "label",
+      "text": "11월 10일 화요일",
+      "sceneIds": [
+        "s1"
+      ]
+    },
+    {
+      "textId": "t2",
+      "role": "title",
+      "text": "11:58",
+      "sceneIds": [
+        "s1"
+      ]
+    },
+    {
+      "textId": "t3",
+      "role": "label",
+      "text": "지수",
+      "sceneIds": [
+        "s1",
+        "s2",
+        "s3",
+        "s4"
+      ]
+    },
+    {
+      "textId": "t4",
+      "role": "bubble",
+      "text": "야 미학당 지금 휘낭시에 4개 남음",
+      "sceneIds": [
+        "s1"
+      ]
+    },
+    {
+      "textId": "t5",
+      "role": "bubble",
+      "text": "빨리 와라 진짜",
+      "sceneIds": [
+        "s1"
+      ]
+    },
+    {
+      "textId": "t6",
+      "role": "sub",
+      "text": "점심시간 숭실대 단톡방",
+      "sceneIds": [
+        "s2",
+        "s3",
+        "s4"
+      ]
+    },
+    {
+      "textId": "t7",
+      "role": "cap",
+      "text": "휘낭시에에",
+      "sceneIds": [
+        "s2",
+        "s3",
+        "s4"
+      ]
+    },
+    {
+      "textId": "t8",
+      "role": "number",
+      "text": "4개",
+      "sceneIds": [
+        "s2"
+      ]
+    },
+    {
+      "textId": "t9",
+      "role": "number",
+      "text": "3개",
+      "sceneIds": [
+        "s2"
+      ]
+    },
+    {
+      "textId": "t10",
+      "role": "number",
+      "text": "2개",
+      "sceneIds": [
+        "s2"
+      ]
+    },
+    {
+      "textId": "t11",
+      "role": "number",
+      "text": "1개",
+      "sceneIds": [
+        "s3"
+      ]
+    },
+    {
+      "textId": "t12",
+      "role": "number",
+      "text": "품절",
+      "sceneIds": [
+        "s4"
+      ]
+    },
+    {
+      "textId": "t13",
+      "role": "cap",
+      "text": "남음",
+      "sceneIds": [
+        "s2",
+        "s3"
+      ]
+    },
+    {
+      "textId": "t14",
+      "role": "bubble",
+      "text": "야 미학당 지금\n휘낭시에 4개 남음",
+      "sceneIds": [
+        "s2"
+      ]
+    },
+    {
+      "textId": "t15",
+      "role": "bubble",
+      "text": "수업 끝나면 바로 감",
+      "sceneIds": [
+        "s2"
+      ]
+    },
+    {
+      "textId": "t16",
+      "role": "bubble",
+      "text": "3개",
+      "sceneIds": [
+        "s2",
+        "s3"
+      ]
+    },
+    {
+      "textId": "t17",
+      "role": "bubble",
+      "text": "?",
+      "sceneIds": [
+        "s2",
+        "s3"
+      ]
+    },
+    {
+      "textId": "t18",
+      "role": "bubble",
+      "text": "2개",
+      "sceneIds": [
+        "s2",
+        "s3",
+        "s4"
+      ]
+    },
+    {
+      "textId": "t19",
+      "role": "bubble",
+      "text": "제발",
+      "sceneIds": [
+        "s2",
+        "s3",
+        "s4"
+      ]
+    },
+    {
+      "textId": "t20",
+      "role": "bubble",
+      "text": "1개",
+      "sceneIds": [
+        "s3",
+        "s4"
+      ]
+    },
+    {
+      "textId": "t21",
+      "role": "bubble",
+      "text": "지금 뛰는 중",
+      "sceneIds": [
+        "s3",
+        "s4"
+      ]
+    },
+    {
+      "textId": "t22",
+      "role": "bubble",
+      "text": "0개",
+      "sceneIds": [
+        "s4"
+      ]
+    },
+    {
+      "textId": "t23",
+      "role": "bubble",
+      "text": "…누가 다 사 갔는데",
+      "sceneIds": [
+        "s4"
+      ]
+    },
+    {
+      "textId": "t24",
+      "role": "bubble",
+      "text": "미안 내가 다 삼",
+      "sceneIds": [
+        "s4"
+      ]
+    },
+    {
+      "textId": "t25",
+      "role": "sub",
+      "text": "당일 생산 당일 판매, 늦으면 없어요",
+      "sceneIds": [
+        "s5"
+      ]
+    },
+    {
+      "textId": "store-name",
+      "role": "title",
+      "text": "미학당",
+      "sceneIds": [
+        "s5"
+      ]
+    },
+    {
+      "textId": "store-location",
+      "role": "sub",
+      "text": "숭실대입구역 3번 출구 · 빨간 벽돌, 초록 문",
+      "sceneIds": [
+        "s5"
+      ]
+    },
+    {
+      "textId": "t26",
+      "role": "sub",
+      "text": "눈치게임 같이 할 친구 태그",
+      "sceneIds": [
+        "s5"
+      ]
+    }
+  ],
+  "ending": {
+    "taglineTextId": "t25",
+    "ctaTextId": "t26"
+  },
+  "musicTrackId": "upbeat-joyfully"
+}

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: #000; }
+  #stage { position: relative; width: 1080px; height: 1920px; overflow: hidden; background: #000;
+    font-family: "Navis Sans", sans-serif; color: #fff; }
+  .scene { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; overflow: hidden; }
+  .pan { position: absolute; top: 0; height: 1920px; display: block; }
+  .scrim { position: absolute; left: 0; width: 1080px; top: 1430px; height: 160px; background: rgba(0, 0, 0, .55); }
+  .cap { position: absolute; left: 60px; width: 960px; top: 1478px; text-align: center; font-size: 48px; line-height: 64px;
+    font-weight: 500; color: #fff; letter-spacing: 0.5px; }
+  .cap b { font-weight: 800; }
+  .blur { position: absolute; left: -60px; top: -60px; width: 1200px; height: 2040px; object-fit: cover; filter: blur(24px); }
+  .dim { position: absolute; inset: 0; background: rgba(0, 0, 0, .55); }
+  .end-name { position: absolute; left: 60px; width: 960px; top: 720px; text-align: center; font-family: "Navis Serif", serif;
+    font-size: 120px; line-height: 150px; font-weight: 800; letter-spacing: .08em; color: #fff; }
+  .end-rule { position: absolute; left: 480px; width: 120px; top: 910px; height: 2px; background: rgba(255,255,255,.8); }
+  .end-line { position: absolute; left: 60px; width: 960px; text-align: center; font-size: 48px; line-height: 64px; }
+  .end-tag { top: 960px; font-weight: 500; color: #fff; }
+  .end-loc { top: 1050px; font-weight: 500; color: #D9D9D9; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <!-- s1: storefront, slow zoom in, no caption -->
+  <div class="scene" data-scene="s1" id="sc1">
+    <img class="pan" id="p1" data-photo="store-exterior" src="assets/photos/store-exterior.jpg" alt="" style="left: -946px; width: 2973px">
+  </div>
+  <!-- s2: two-shelf display case, left -> right pan -->
+  <div class="scene" data-scene="s2" id="sc2">
+    <img class="pan" id="p2" data-photo="fin-09" src="assets/photos/fin-09.jpg" alt="" style="left: -180px; width: 1440px">
+    <div class="scrim" id="m2"></div>
+    <div class="cap" id="c2" data-text="t1"><b>휘낭시에와</b> 마들렌, 두 칸 진열대</div>
+  </div>
+  <!-- s3: three flavours close up, right -> left pan -->
+  <div class="scene" data-scene="s3" id="sc3">
+    <img class="pan" id="p3" data-photo="fin-05" src="assets/photos/fin-05.jpg" alt="" style="left: -738px; width: 2556px">
+    <div class="scrim" id="m3"></div>
+    <div class="cap" id="c3" data-text="t2"><b>휘낭시에</b> 세 가지 맛</div>
+  </div>
+  <!-- s4: coffee and a nut financier, left -> right pan -->
+  <div class="scene" data-scene="s4" id="sc4">
+    <img class="pan" id="p4" data-photo="fin-03" src="assets/photos/fin-03.jpg" alt="" style="left: -227px; width: 1534px">
+    <div class="scrim" id="m4"></div>
+    <div class="cap" id="c4" data-text="t3"><b>휘낭시에와</b> 커피 두 잔</div>
+  </div>
+  <!-- s5: dark ending with serif name -->
+  <div class="scene" data-scene="s5" id="sc5">
+    <img class="blur" data-photo="store-exterior" src="assets/photos/store-exterior.jpg" alt="">
+    <div class="dim"></div>
+    <div class="end-name" id="eName" data-text="store-name">미학당</div>
+    <div class="end-rule" id="eRule"></div>
+    <div class="end-line end-tag" id="eTag" data-text="t4">천천히 들러 보세요</div>
+    <div class="end-line end-loc" id="eLoc" data-text="store-location">숭실대입구역 3번 출구 · 빨간 벽돌, 초록 문</div>
+  </div>
+</div>
+<script>
+  var L = 15;
+  window.__duration = L;
+  var MS = L * 1000;
+  var $ = function (id) { return document.getElementById(id); };
+  var c = function (x) { return Math.max(0, Math.min(1, x)); };
+  var anim = function (el, f) { return el.animate(f, { duration: MS, fill: 'both', easing: 'linear' }); };
+  var show = function (el, a, b, fin, fout) {
+    var f = [];
+    if (a <= 0) f.push({ offset: 0, opacity: 1 });
+    else f.push({ offset: 0, opacity: 0 }, { offset: c(a / L), opacity: 0 }, { offset: c((a + fin) / L), opacity: 1 });
+    if (b >= L) f.push({ offset: 1, opacity: 1 });
+    else f.push({ offset: c(b / L), opacity: 1 }, { offset: c((b + fout) / L), opacity: 0 }, { offset: 1, opacity: 0 });
+    return anim(el, f);
+  };
+  var move = function (el, a, b, from, to) {
+    return anim(el, [{ offset: 0, transform: from }, { offset: c(a / L), transform: from }, { offset: c(b / L), transform: to }, { offset: 1, transform: to }]);
+  };
+  // slow 400ms cross-fades centred on each boundary (T-087: 전환 0.4초 이하)
+  var S = [['sc1', 0, 1.5], ['sc2', 1.5, 6], ['sc3', 6, 9.5], ['sc4', 9.5, 12], ['sc5', 12, 15]];
+  S.forEach(function (s) { show($(s[0]), s[1] - 0.2, s[2] - 0.2, 0.4, 0.4); });
+  // constant-speed pans (no easing), zoom 1.00 -> 1.04, direction alternates
+  move($('p1'), 0, 1.8, 'scale(1)', 'scale(1.04)');
+  move($('p2'), 1.2, 6.3, 'translateX(130px) scale(1)', 'translateX(-130px) scale(1.04)');
+  move($('p3'), 5.7, 9.8, 'translateX(-200px) scale(1)', 'translateX(200px) scale(1.04)');
+  move($('p4'), 9.2, 12.3, 'translateX(100px) scale(1)', 'translateX(-100px) scale(1.04)');
+  // one small caption per photo scene, 400ms fade
+  [['m2', 'c2', 5.0], ['m3', 'c3', 6.8], ['m4', 'c4', 10.2]].forEach(function (p) {
+    show($(p[0]), p[2], L, 0.4, 0);
+    show($(p[1]), p[2], L, 0.4, 0);
+  });
+  show($('eName'), 12.2, L, 0.6, 0);
+  show($('eRule'), 12.6, L, 0.4, 0);
+  show($('eTag'), 12.8, L, 0.4, 0);
+  show($('eLoc'), 13.0, L, 0.4, 0);
+</script>
+</body>
+</html>

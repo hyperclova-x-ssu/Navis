@@ -1,0 +1,10 @@
+{
+  "order": ["lively", "warm", "elegant", "clean"],
+  "moods": {
+    "lively": "Lively: quick rhythm, bright accents, short punchy lines.",
+    "warm": "Warm: soft light colors, friendly casual tone, gentle motion.",
+    "elegant": "Elegant: calm pacing, serif accents, restrained words, dark or neutral tones.",
+    "clean": "Clean: simple layout, lots of space, neutral colors, plain direct sentences."
+  },
+  "musicLabels": { "lively": "활기찬", "warm": "따뜻한", "elegant": "고급스러운", "clean": "깔끔한" }
+}

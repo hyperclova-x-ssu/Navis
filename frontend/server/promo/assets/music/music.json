@@ -1,0 +1,42 @@
+[
+  {
+    "trackId": "upbeat-joyfully",
+    "title": "Joyfully",
+    "artist": "MintoDog",
+    "license": "CC0-1.0",
+    "sourceUrl": "https://opengameart.org/content/joyfully",
+    "file": "upbeat-joyfully.m4a",
+    "sha256": "f90ee959db47e5cf3c45d02ec7e9a2a3e8bec411ee5e318c1df18e35aa1c4df1",
+    "durationSec": 60,
+    "moods": [
+      "활기찬"
+    ]
+  },
+  {
+    "trackId": "warm-cozy-acoustic",
+    "title": "Cozy Puzzle In-Game 3",
+    "artist": "MintoDog",
+    "license": "CC0-1.0",
+    "sourceUrl": "https://opengameart.org/content/cozy-puzzle-in-game-3",
+    "file": "warm-cozy-acoustic.m4a",
+    "sha256": "28d50bac160c5f3ab86adcb5c97c7890fb4c34daba6fee52e988f4743da75e1a",
+    "durationSec": 60,
+    "moods": [
+      "따뜻한"
+    ]
+  },
+  {
+    "trackId": "calm-first-light",
+    "title": "First Light Particles",
+    "artist": "Yoiyami",
+    "license": "CC0-1.0",
+    "sourceUrl": "https://opengameart.org/content/first-light-particles-%E2%80%93-cc0-atmospheric-pianoambient-track",
+    "file": "calm-first-light.m4a",
+    "sha256": "61876e025fbdfd1f63704aabb6586afcb5b12f263ec1964b29c04bbfbb65b24f",
+    "durationSec": 60,
+    "moods": [
+      "고급스러운",
+      "깔끔한"
+    ]
+  }
+]

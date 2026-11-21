@@ -1,0 +1,122 @@
+{
+  "referenceId": "ref-3",
+  "lengthSec": 15,
+  "locale": "ko",
+  "promptVersion": "example-1",
+  "scenes": [
+    {
+      "sceneId": "s1",
+      "start": 0,
+      "duration": 1.5,
+      "photoIds": [
+        "store-exterior"
+      ],
+      "textIds": [],
+      "direction": "Opening on the storefront, slow zoom in, no caption."
+    },
+    {
+      "sceneId": "s2",
+      "start": 1.5,
+      "duration": 4.5,
+      "photoIds": [
+        "fin-09"
+      ],
+      "textIds": [
+        "t1"
+      ],
+      "direction": "Full-frame two-shelf display (madeleines above, financiers below), constant-speed pan left to right; small caption on a scrim fades in late."
+    },
+    {
+      "sceneId": "s3",
+      "start": 6,
+      "duration": 3.5,
+      "photoIds": [
+        "fin-05"
+      ],
+      "textIds": [
+        "t2"
+      ],
+      "direction": "Three financier flavours side by side, pan right to left."
+    },
+    {
+      "sceneId": "s4",
+      "start": 9.5,
+      "duration": 2.5,
+      "photoIds": [
+        "fin-03"
+      ],
+      "textIds": [
+        "t3"
+      ],
+      "direction": "Two coffees and a nut financier, pan left to right."
+    },
+    {
+      "sceneId": "s5",
+      "start": 12,
+      "duration": 3,
+      "photoIds": [
+        "store-exterior"
+      ],
+      "textIds": [
+        "store-name",
+        "t4",
+        "store-location"
+      ],
+      "direction": "Dark ending: blurred storefront, 55% dim, serif store name, thin rule, tagline, grey location."
+    }
+  ],
+  "texts": [
+    {
+      "textId": "t1",
+      "role": "sub",
+      "text": "휘낭시에와 마들렌, 두 칸 진열대",
+      "sceneIds": [
+        "s2"
+      ]
+    },
+    {
+      "textId": "t2",
+      "role": "sub",
+      "text": "휘낭시에 세 가지 맛",
+      "sceneIds": [
+        "s3"
+      ]
+    },
+    {
+      "textId": "t3",
+      "role": "sub",
+      "text": "휘낭시에와 커피 두 잔",
+      "sceneIds": [
+        "s4"
+      ]
+    },
+    {
+      "textId": "store-name",
+      "role": "title",
+      "text": "미학당",
+      "sceneIds": [
+        "s5"
+      ]
+    },
+    {
+      "textId": "t4",
+      "role": "sub",
+      "text": "천천히 들러 보세요",
+      "sceneIds": [
+        "s5"
+      ]
+    },
+    {
+      "textId": "store-location",
+      "role": "sub",
+      "text": "숭실대입구역 3번 출구 · 빨간 벽돌, 초록 문",
+      "sceneIds": [
+        "s5"
+      ]
+    }
+  ],
+  "ending": {
+    "taglineTextId": "t4"
+  },
+  "musicTrackId": "calm-first-light"
+}

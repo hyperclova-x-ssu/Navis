@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "frame": { "width": 1080, "height": 1920 },
+  "safe": { "left": 60, "right": 60, "top": 120, "bottom": 300 },
+  "safeRect": { "x0": 60, "x1": 1020, "y0": 120, "y1": 1620 },
+  "minFontPx": 36,
+  "roles": {
+    "title":  { "fontPx": 88, "perLine": { "cjk": 10, "en": 19 }, "maxLines": 2 },
+    "cap":    { "fontPx": 64, "perLine": { "cjk": 14, "en": 27 }, "maxLines": 2 },
+    "sub":    { "fontPx": 48, "perLine": { "cjk": 18, "en": 36 }, "maxLines": 2 },
+    "small":  { "fontPx": 36, "perLine": { "cjk": 24, "en": 48 }, "maxLines": 2 },
+    "bubble": { "fontPx": 40, "perLine": { "cjk": 16, "en": 30 }, "maxLines": 2 },
+    "number": { "fontPx": 64, "perLine": { "cjk": 4, "en": 8 }, "maxLines": 1 },
+    "label":  { "fontPx": 36, "perLine": { "cjk": 12, "en": 24 }, "maxLines": 1 }
+  },
+  "ending": { "storeNameMaxLines": 2, "locationMaxLines": 2, "checkAtFromEndSec": 1.0 },
+  "counting": { "fullWidthRanges": ["1100-11FF", "2E80-2FDF", "3000-303F", "3040-30FF", "3130-318F", "3400-4DBF", "4E00-9FFF", "AC00-D7AF", "F900-FAFF", "FF00-FF60"] },
+  "lengths": {
+    "10": { "sceneCount": { "min": 3, "max": 6 }, "minSceneSec": 1, "endingSec": 2.5 },
+    "15": { "sceneCount": { "min": 4, "max": 8 }, "minSceneSec": 1, "endingSec": 3 },
+    "30": { "sceneCount": { "min": 6, "max": 14 }, "minSceneSec": 1, "endingSec": 4 }
+  },
+  "minSceneSecByRef": { "ref-3": 2.5 },
+  "durationToleranceSec": 0.05,
+  "sceneTimingToleranceSec": 0.3,
+  "photo": { "maxUses": 2, "noAdjacent": true, "exteriorId": "store-exterior", "exteriorExempt": true, "useAllBeforeReuse": true },
+  "languages": { "en": { "forbidScripts": ["Hangul", "Han"] }, "zh-Hans": { "forbidScripts": ["Hangul"] }, "zh-Hant": { "forbidScripts": ["Hangul"] }, "ko": { "requireScripts": ["Hangul"] } },
+  "bannedWords": ["네이버", "naver", "카톡", "instagram"],
+  "bannedPatterns": ["[A-Z]{2,}[-_]?[0-9][A-Z0-9]{2,}", "https?://"],
+  "flash": { "maxPerSec": 3, "yavgDelta": 48 },
+  "check": { "sampleEverySec": 0.25, "boundaryOffsetsSec": [-0.05, 0.05], "visibleOpacityMin": 0.05 },
+  "html": { "maxBytes": 65536 }
+}
