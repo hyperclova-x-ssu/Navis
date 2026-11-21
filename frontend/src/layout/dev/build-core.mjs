@@ -1,0 +1,14 @@
+import { build } from 'vite';
+import { writeFile,mkdir } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { URL,fileURLToPath } from 'node:url';
+import console from 'node:console';
+import { Buffer } from 'node:buffer';
+const app=fileURLToPath(new URL('../../../',import.meta.url));
+const output=await build({root:app,configFile:fileURLToPath(new URL('../../../vite.config.ts',import.meta.url)),build:{write:false,rollupOptions:{input:fileURLToPath(new URL('../../catalog/dev/index.html',import.meta.url))}}});
+const bundles=(Array.isArray(output)?output:[output]).flatMap(result=>result.output.map(file=>({name:file.fileName,bytes:file.type==='chunk'?Buffer.byteLength(file.code):typeof file.source==='string'?Buffer.byteLength(file.source):file.source.length})));
+const folder=fileURLToPath(new URL('./evidence/v2/',import.meta.url));await mkdir(folder,{recursive:true});
+const {stdout:recordedAt}=await promisify(execFile)('date',['+%Y-%m-%d %H:%M %Z'],{encoding:'utf8'});
+const report={recordedAt:recordedAt.trim(),status:'passed',scope:'core diagnostic host plus real native Worker bundle (write:false)',bundles};
+await writeFile(folder+'build-core.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
