@@ -1,0 +1,41 @@
+.order-header { width:calc(100% - var(--rail-width) - var(--rail-gap)); }
+.order-header>div:first-child { min-width:0; display:flex; align-items:baseline; gap:var(--space-4); }
+.order-header h1 { margin:0; flex:none; }
+.order-header p { margin:0; min-width:0; font-size:var(--type-body); line-height:var(--leading-body); color:var(--muted-foreground); }
+.order-tab-body { flex:1; min-height:0; min-width:0; display:flex; }
+.order-tab-body>.order-composer { flex:1; }
+.order-closed-band { display:flex; align-items:center; gap:var(--space-4); flex:none; min-height:var(--pos-band-height); padding:var(--space-2) var(--space-4); border:var(--stroke-hairline) solid var(--border); border-radius:var(--radius-lg); background:var(--secondary); }
+.order-closed-band>strong { font-size:var(--type-control); line-height:var(--leading-control); }
+.order-closed-band>.ui-icon { color:var(--success); }
+.order-closed-band>span { color:var(--muted-foreground); flex:1; }
+.ui-pos-content:has(.order-closed-band) { gap:var(--space-4); }
+.ui-pos-content:has(.order-closed-band)>.ui-pos-tabs { margin-bottom:var(--space-2); }
+.order-payment { display:flex; flex-direction:column; gap:var(--space-6); }
+.order-payment__amount p { margin:0 0 var(--space-2); color:var(--muted-foreground); }
+.order-payment__summary { margin-top:var(--space-4); font-size:var(--type-caption); line-height:var(--leading-caption); overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.order-status { position:relative; flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; gap:var(--space-4); }
+.order-status__summary { display:flex; gap:var(--space-4); flex:none; }
+.order-status__summary>section { width:var(--pos-summary-cell-width); min-height:var(--pos-summary-cell-height); padding:var(--space-4); background:var(--card); border:var(--stroke-hairline) solid var(--border); border-radius:var(--radius-lg); }
+.order-status__summary h2 { margin:0; font-size:var(--type-caption); line-height:var(--leading-caption); font-weight:var(--weight-regular); }
+.order-status__summary strong { font-size:var(--type-metric); line-height:var(--leading-metric); font-weight:var(--weight-metric); font-variant-numeric:tabular-nums; }
+.order-status__tools { display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); flex:none; min-width:0; }
+.order-status__tools>span { font-size:var(--type-caption); line-height:var(--leading-caption); color:var(--muted-foreground); }
+.order-status__grid { flex:1; min-height:0; min-width:0; display:flex; }
+.order-status__grid>.ui-data-grid { flex:1; min-width:0; }
+.order-status .ui-detail-side-panel { top:0; bottom:0; }
+.order-status__detail { display:flex; flex-direction:column; gap:var(--space-6); overflow-wrap:anywhere; }
+.order-status__detail section+section { border-top:var(--stroke-hairline) solid var(--border); padding-top:var(--space-6); }
+.order-status__detail h4,.order-status__detail p { margin:0 0 var(--space-2); }
+.order-status__detail dl>div { display:flex; justify-content:space-between; gap:var(--space-4); }
+.order-status__detail dd { margin:0; }
+@starting-style { .order-tab-body { opacity:0; } }
+.order-tab-body { transition:opacity var(--motion-duration-tab-content) var(--motion-ease-out); }
+[data-reduced-motion="true"] .order-tab-body { transition:none; }
+
+/* D-298: the screen and summary cells share the board's surface recipe. */
+.order-screen { background:var(--surface-page); }
+.ui-root .order-closed-band { height:var(--pos-band-height); padding:var(--space-2) var(--surface-padding); }
+.ui-root .order-status__summary>section { height:var(--pos-summary-cell-height); padding:var(--surface-padding); display:flex; flex-direction:column; gap:var(--space-1); }
+.ui-root .order-status__summary h2 { order:1; color:var(--muted-foreground); }
+.ui-root .order-status__summary strong { order:0; min-width:0; }
+.ui-root[data-text-scale="125"] .order-status__summary>section { height:var(--pos-summary-cell-large-height); }

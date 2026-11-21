@@ -1,0 +1,4 @@
+.shared-settlement { display: grid; gap: var(--space-4); min-width: 0; overflow-wrap: anywhere; }
+.shared-settlement__mixed { display: grid; gap: var(--space-3); }
+.shared-settlement__selection { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: 0; border: 0; }
+.shared-settlement .order-payment__summary { overflow-wrap: anywhere; }

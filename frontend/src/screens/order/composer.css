@@ -1,0 +1,26 @@
+.order-composer { display:flex; gap:var(--pos-column-gap); min-height:0; }
+.order-composer__menu { min-width:0; min-height:0; flex:1; display:flex; flex-direction:column; gap:var(--space-4); position:relative; }
+.order-composer__tools { display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); }
+.order-composer__tools > :first-child { min-width:0; overflow-x:auto; }
+.order-composer__tools > :last-child { flex:none; width:var(--pos-search-width); }
+.order-composer > .ui-pos-cart { width:var(--pos-cart-width); flex:none; }
+.order-composer__header { display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); min-height:var(--pos-order-header-height); }
+.order-composer__empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--space-4); color:var(--muted-foreground); }
+.order-composer__dialog { display:flex; flex-direction:column; gap:var(--space-4); }
+.order-composer__dialog h3 { display:flex; align-items:center; gap:var(--space-2); }
+.order-composer__dialog-actions { display:flex; justify-content:flex-end; gap:var(--space-4); }
+.order-composer__dialog-actions > :last-child { flex:1; }
+.order-composer__dialog-price { margin:0; font-size:var(--type-section); line-height:var(--leading-section); font-variant-numeric:tabular-nums; }
+.order-composer__dialog-price strong { display:inline-block; white-space:nowrap; font-weight:var(--weight-metric); }
+.order-composer__dialog-price .ui-pos-money { font:inherit; }
+/* Motion retains exiting rows; only opacity changes, never layout or business state. */
+.order-composer__line { transition:none; }
+.order-composer__line .ui-pos-line-button > .ui-press-surface { overflow-wrap:anywhere; }
+.order-composer__line[data-exiting="true"] { pointer-events:none; }
+.order-composer__line[data-exiting="true"] ~ .order-composer__empty { display:none; }
+
+.order-composer__header { flex-wrap:wrap; }
+.order-composer__header>strong { min-width:0; overflow-wrap:anywhere; }
+
+.ui-root .order-composer__header { margin-bottom:var(--space-2); }
+.order-composer__header>strong { font-size:var(--type-panel-title); line-height:var(--leading-panel-title); }

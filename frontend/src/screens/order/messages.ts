@@ -1,0 +1,50 @@
+import type { MessageBundle } from '../../i18n';
+
+// D-209: new checkout copy falls back to Korean in all four existing locales.
+const ko = {
+  'pay.optionChanged':'옵션이 바뀌었어요', 'pay.optionChangedHelp':'주문 내역에서 이 줄의 옵션을 다시 골라 주세요',
+  'pay.memberSearch':'회원 찾기', 'pay.phoneSuffix':'연락처 끝 4자리', 'pay.memberEmpty':'찾는 회원이 없어요',
+  'pay.phoneInvalid':'연락처 끝 4자리를 넣어 주세요', 'pay.memberLinked':'{name} 회원 연결됨', 'pay.unlink':'연결 끊기',
+  'pay.regular':'단골', 'pay.frequent':'자주 방문', 'pay.occasional':'가끔 방문', 'pay.inactive':'오랜 기간 미방문',
+  'pay.back':'결제로', 'pay.direct':'직접 할인', 'pay.coupon':'쿠폰', 'pay.membership':'회원권', 'pay.won':'원',
+  'pay.memo':'할인 메모', 'pay.applyDiscount':'할인 넣기', 'pay.removeDiscount':'{name} 빼기',
+  'pay.noCoupons':'쓸 수 있는 쿠폰이 없어요', 'pay.noPasses':'이용 중인 회원권이 없어요',
+  'pay.remainingUses':'{name} · 남은 {n}회', 'pay.useOnce':'1회 쓰기', 'pay.memberRequired':'회원을 먼저 연결해 주세요',
+  'pay.hours':'{hours}에 쓸 수 있어요', 'pay.hourRange':'{day} {start}~{end}시',
+  'pay.sun':'일요일','pay.mon':'월요일','pay.tue':'화요일','pay.wed':'수요일','pay.thu':'목요일','pay.fri':'금요일','pay.sat':'토요일',
+  'pay.shotRequired':'샷 추가가 담긴 주문에 쓸 수 있어요', 'pay.menuRequired':'{name}이/가 담긴 주문에 쓸 수 있어요',
+  'pay.couponEnded':'끝난 쿠폰이에요', 'pay.passMenu':'이 회원권으로 쓸 수 있는 메뉴가 없어요',
+  'pay.morning':'오전(12시 전)에만 쓸 수 있어요', 'pay.usedToday':'오늘 이미 썼어요',
+  'pay.couponExhausted':'남은 쿠폰이 없어요', 'pay.couponMember':'이 쿠폰을 받은 회원을 연결해 주세요',
+  'pay.passInactive':'이용할 수 없는 회원권이에요', 'pay.couponInactive':'지금은 쓸 수 없는 쿠폰이에요',
+  'pay.exceeds':'할인이 주문 금액보다 커요', 'pay.amountInvalid':'1원 이상의 정수 또는 1~100%를 넣어 주세요',
+  'pay.zero':'0원으로 주문하기', 'pay.zeroDone':'주문했어요 · 주문 #{n}',
+  'pay.split':'나눠 내기', 'pay.equal':'N명이 똑같이', 'pay.items':'메뉴별로', 'pay.divide':'나누기',
+  'pay.people':'인원 수', 'pay.personUnit':'명', 'pay.share':'{n}번째 몫 {amount}', 'pay.shareNumber':'{n}번째 몫',
+  'pay.paid':'냄', 'pay.nextShare':'다음 몫', 'pay.remaining':'남은 금액 {amount}', 'pay.shareDone':'몫을 냈어요',
+  'pay.partial':'부분 결제 · 남은 {amount}', 'pay.paying':'결제 중 · 남은 {amount}',
+  'pay.splitLocked':'나눈 뒤에는 할인을 바꿀 수 없어요', 'pay.quantityInvalid':'모든 메뉴의 수량을 빠짐없이 나눠 주세요',
+  'pay.mixed':'여러 수단으로 내기', 'pay.fillRemaining':'남은 금액 넣기', 'pay.methodRemaining':'{method} 남은 금액 넣기',
+  'pay.mixedShort':'남은 금액 {amount}을 나눠 주세요', 'pay.mixedOver':'결제 금액보다 {amount} 많아요', 'pay.amountMatches':'금액이 맞아요',
+  'pay.cancelPartial':'결제 취소하기', 'pay.cancelTitle':'결제를 취소할까요?', 'pay.cancelAmount':'취소할 금액 {amount}',
+  'pay.cancelShares':'낸 몫 {n}개를 모두 취소해요', 'pay.unlockCart':'주문 내역은 다시 고칠 수 있어요',
+  'pay.cancelAction':'{amount} 취소하기', 'pay.canceling':'취소하는 중이에요', 'pay.canceled':'{amount} 취소했어요',
+  'pay.cancelError':'취소 승인이 안 됐어요. 다시 시도해 주세요',
+} as const;
+export const loyaltyBundle: MessageBundle<keyof typeof ko> = { id:'pos-payment-tools',ko,en:{},'zh-Hans':{},'zh-Hant':{} };
+
+export const receiptBundle = { id: 'pos-receipt', ko: {
+  'receipt.at': '결제 일시', 'receipt.orderNo': '주문 번호', 'receipt.transaction': '거래번호',
+  'receipt.amountPaid': '결제 금액', 'receipt.approval': '승인 번호(예시)', 'receipt.member': '회원',
+  'receipt.cashReceipt': '현금영수증', 'receipt.paymentMethod': '결제 수단',
+  'receipt.membership': '회원권', 'receipt.coupon': '쿠폰', 'receipt.direct': '직접 할인',
+  'receipt.cancelStatus': '취소', 'receipt.refundStatus': '환불',
+  'receipt.receipt': '영수증 보기', 'receipt.showAgain': '영수증 다시 보기', 'receipt.shown': '영수증을 다시 보여 드렸어요(예시)',
+  'receipt.issue': '현금영수증 발행하기', 'receipt.issueButton': '발행하기', 'receipt.issued': '현금영수증을 발행했어요(예시)',
+  'receipt.cancelIssue': '발행 취소(예시)', 'receipt.canceledIssue': '현금영수증 발행을 취소했어요(예시)',
+  'receipt.income': '소득공제', 'receipt.business': '지출증빙', 'receipt.phone': '휴대폰 번호', 'receipt.businessNumber': '사업자 번호',
+  'receipt.all': '전체', 'receipt.items': '품목 고르기', 'receipt.amount': '금액 넣기', 'receipt.restock': '재고로 돌려요(다시 팔 수 있어요)',
+  'receipt.restore': '판매량과 재고가 돌아가요', 'receipt.keep': '판매량과 재고는 그대로예요', 'receipt.benefits': '쓴 쿠폰과 회원권 1회가 돌아가요',
+  'receipt.method': '돌려줄 수단', 'receipt.cancel': '결제 취소하기', 'receipt.refund': '환불하기', 'receipt.close': '닫기',
+  'receipt.failure': '취소 승인이 안 됐어요. 다시 시도해 주세요', 'receipt.changed': '금액이 바뀌었어요',
+}, en: {}, 'zh-Hans': {}, 'zh-Hant': {} } as const satisfies MessageBundle<string>;

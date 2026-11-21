@@ -1,0 +1,24 @@
+.pay-tools__stack { display:flex; flex-direction:column; gap:var(--space-4); min-width:0; }
+.pay-tools__stack h3,.pay-tools__stack p { margin:0; }
+.pay-tools__stack section { display:flex; flex-direction:column; gap:var(--space-2); }
+.pay-tools__row { display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); flex-wrap:wrap; min-width:0; }
+.pay-tools__toolbar { justify-content:flex-start; }
+.pay-tools__list,.pay-tools__shares { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:var(--space-2); }
+.pay-tools__list>li,.pay-tools__shares>li { min-height:var(--space-16); padding:var(--space-2); border-radius:var(--radius-md); overflow-wrap:anywhere; }
+.pay-tools__list>li { display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; }
+.pay-tools__list>li[data-unavailable] { background:var(--secondary); color:var(--disabled-foreground); }
+.pay-tools__list>li>.pay-tools__reason { flex-basis:100%; }
+.pay-tools__shares>li { display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); }
+.pay-tools__shares>li[aria-current] { background:var(--selection); color:var(--selection-foreground); }
+.pay-tools__shares>li[data-paid="true"] { color:var(--success); }
+.pay-tools__shares>li[data-paid="true"] .ui-icon { width:var(--space-4); height:var(--space-4); }
+.pay-tools__reason { color:var(--muted-foreground); font-size:var(--type-caption); line-height:var(--leading-caption); }
+.pay-tools__error { color:var(--destructive); }
+.pay-tools__member { display:flex; align-items:center; gap:var(--space-2); min-height:var(--space-10); background:var(--selection); color:var(--selection-foreground); border-radius:var(--radius-md); padding-inline:var(--space-2); overflow-wrap:anywhere; }
+.pay-tools__member>span { flex:1; }
+.pay-tools__subview { animation:pay-subview var(--motion-duration-tab-content) var(--motion-ease-out); }
+.pay-tools__paying { display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); min-height:var(--pos-paying-band-height); background:var(--warning-bg); color:var(--warning); padding:var(--space-2); overflow-wrap:anywhere; }
+@keyframes pay-subview { from { opacity:0; } to { opacity:1; } }
+[data-reduced-motion="true"] .pay-tools__subview,[data-reduced-motion="true"] .pay-tools__shares .ui-icon { animation:none; }
+@media (prefers-reduced-motion:reduce) { .pay-tools__subview,.pay-tools__shares .ui-icon { animation:none; } }
+.pay-tools__member>.ui-icon { width:var(--space-4); height:var(--space-4); }
