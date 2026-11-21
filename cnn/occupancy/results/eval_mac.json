@@ -1,0 +1,2102 @@
+{
+ "measuredAt": "2026-11-10 04:36 KST",
+ "frames": 1718,
+ "split": {
+  "firstHalf": [
+   0,
+   858
+  ],
+  "secondHalf": [
+   859,
+   1717
+  ]
+ },
+ "input": "results/cafe17_raw_persons.json (YOLO11s imgsz 1280 mps, ByteTrack) + 확인된 추적 N=2",
+ "definition": {
+  "occupied": "정답 행동이 줄 서기·주문이 아닌 사람의 기준점(정답 상자 위에서 gtFoot)이 테이블 구역 안 = 사용 중. outlier 포함/제외",
+  "seatedOld": "T-046d 그대로: 식사·작업·셀카 + 80% 지점",
+  "occupants": "테이블에 머문 인원 오차 = 칼만(q=0.0001) 후 상대 오차, 같은 정답 정의",
+  "inStore": "손님 수(판정과 무관, 확인된 추적 수, 칼만 후)"
+ },
+ "gtFootCalibration": {
+  "gtFoot": 0.681,
+  "pairs": 3181
+ },
+ "definitionChanges": {
+  "activityRuleOnly": {
+   "emptyToOccupied": 533,
+   "occupiedToEmpty": 0,
+   "total": 533
+  },
+  "activityPlusGtFoot": {
+   "emptyToOccupied": 836,
+   "occupiedToEmpty": 66,
+   "total": 902
+  },
+  "cells": 6872
+ },
+ "objective": "앞쪽 절반 occupied 점유 정확도(outlier 포함·제외 평균), 머문 인원 오차(포함)가 기준선 앞쪽 절반 +3%p 이내",
+ "grid": {
+  "dwell_sec": [
+   0.0,
+   0.6,
+   1.0,
+   2.0,
+   3.0
+  ],
+  "move_thr": [
+   0.1,
+   0.2,
+   0.35,
+   null
+  ],
+  "hold_sec": [
+   0.0,
+   0.6,
+   1.0,
+   2.0,
+   3.0
+  ],
+  "inherit_dist": [
+   -1.0,
+   0.6
+  ],
+  "occluder_frac": [
+   0.0,
+   0.5,
+   0.7,
+   0.9
+  ]
+ },
+ "gridRuns": 720,
+ "chosen": {
+  "dwell_sec": 0.6,
+  "move_thr": 0.1,
+  "hold_sec": 2.0,
+  "inherit_dist": 0.6,
+  "occluder_frac": 0.7
+ },
+ "poseThighFirstHalf": [
+  [
+   0.45,
+   0.921
+  ],
+  [
+   0.6,
+   0.927
+  ],
+  [
+   0.8,
+   0.928
+  ],
+  [
+   1.0,
+   0.929
+  ]
+ ],
+ "methods": {
+  "baseline": {
+   "params": {
+    "dwell_sec": 0.0,
+    "move_thr": null,
+    "hold_sec": 0.0,
+    "inherit_dist": -1.0,
+    "occluder_frac": 0.0
+   },
+   "occupied": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.93,
+       "perTable": {
+        "t1": 0.976,
+        "t2": 0.92,
+        "t3": 0.838,
+        "t4": 0.985
+       }
+      },
+      "exclude": {
+       "all": 0.901,
+       "perTable": {
+        "t1": 0.98,
+        "t2": 0.825,
+        "t3": 0.843,
+        "t4": 0.859
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.249,
+       "raw": 0.219
+      },
+      "exclude": {
+       "smoothed": 0.291,
+       "raw": 0.274
+      }
+     },
+     "inStore": 0.053
+    },
+    "firstHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.918,
+       "perTable": {
+        "t1": 0.985,
+        "t2": 0.917,
+        "t3": 0.769,
+        "t4": 0.999
+       }
+      },
+      "exclude": {
+       "all": 0.885,
+       "perTable": {
+        "t1": 0.995,
+        "t2": 0.938,
+        "t3": 0.759,
+        "t4": null
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.25,
+       "raw": 0.261
+      },
+      "exclude": {
+       "smoothed": 0.305,
+       "raw": 0.318
+      }
+     },
+     "inStore": 0.057
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.942,
+       "perTable": {
+        "t1": 0.966,
+        "t2": 0.923,
+        "t3": 0.906,
+        "t4": 0.972
+       }
+      },
+      "exclude": {
+       "all": 0.915,
+       "perTable": {
+        "t1": 0.965,
+        "t2": 0.735,
+        "t3": 0.924,
+        "t4": 0.859
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.249,
+       "raw": 0.181
+      },
+      "exclude": {
+       "smoothed": 0.28,
+       "raw": 0.238
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "seatedOld": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.837,
+       "perTable": {
+        "t1": 0.755,
+        "t2": 0.919,
+        "t3": 0.831,
+        "t4": 0.843
+       }
+      },
+      "exclude": {
+       "all": 0.762,
+       "perTable": {
+        "t1": 0.75,
+        "t2": 0.874,
+        "t3": 0.83,
+        "t4": 0.332
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.343,
+       "raw": 0.261
+      },
+      "exclude": {
+       "smoothed": 0.595,
+       "raw": 0.531
+      }
+     },
+     "inStore": 0.053
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.87,
+       "perTable": {
+        "t1": 0.729,
+        "t2": 0.925,
+        "t3": 0.921,
+        "t4": 0.903
+       }
+      },
+      "exclude": {
+       "all": 0.809,
+       "perTable": {
+        "t1": 0.718,
+        "t2": 0.848,
+        "t3": 0.925,
+        "t4": 0.626
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.307,
+       "raw": 0.231
+      },
+      "exclude": {
+       "smoothed": 0.458,
+       "raw": 0.414
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "tablesToClearEvents": [
+    {
+     "table": "t1",
+     "fromT": 134.6,
+     "shownT": 137.6,
+     "toT": 174.0,
+     "hiddenT": 177.0
+    }
+   ],
+   "tableOccupiedSeconds": {
+    "t1": 278.6,
+    "t2": 269.0,
+    "t3": 221.6,
+    "t4": 316.2
+   },
+   "errorBreakdownOccupied": {
+    "t1": {
+     "FN": 16,
+     "FP_queueOrder": 25,
+     "FP_noGT": 1
+    },
+    "t2": {
+     "FN": 68,
+     "FP_queueOrder": 8,
+     "FP_noGT": 61
+    },
+    "t3": {
+     "FN": 103,
+     "FP_queueOrder": 27,
+     "FP_noGT": 149
+    },
+    "t4": {
+     "FN": 3,
+     "FP_queueOrder": 0,
+     "FP_noGT": 22
+    }
+   }
+  },
+  "still": {
+   "params": {
+    "dwell_sec": 0.0,
+    "move_thr": 0.1,
+    "hold_sec": 0.0,
+    "inherit_dist": -1.0,
+    "occluder_frac": 0.0
+   },
+   "occupied": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.93,
+       "perTable": {
+        "t1": 0.976,
+        "t2": 0.92,
+        "t3": 0.838,
+        "t4": 0.985
+       }
+      },
+      "exclude": {
+       "all": 0.901,
+       "perTable": {
+        "t1": 0.98,
+        "t2": 0.825,
+        "t3": 0.843,
+        "t4": 0.859
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.249,
+       "raw": 0.219
+      },
+      "exclude": {
+       "smoothed": 0.291,
+       "raw": 0.274
+      }
+     },
+     "inStore": 0.053
+    },
+    "firstHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.918,
+       "perTable": {
+        "t1": 0.985,
+        "t2": 0.917,
+        "t3": 0.769,
+        "t4": 0.999
+       }
+      },
+      "exclude": {
+       "all": 0.885,
+       "perTable": {
+        "t1": 0.995,
+        "t2": 0.938,
+        "t3": 0.759,
+        "t4": null
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.25,
+       "raw": 0.261
+      },
+      "exclude": {
+       "smoothed": 0.305,
+       "raw": 0.318
+      }
+     },
+     "inStore": 0.057
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.942,
+       "perTable": {
+        "t1": 0.966,
+        "t2": 0.923,
+        "t3": 0.906,
+        "t4": 0.972
+       }
+      },
+      "exclude": {
+       "all": 0.915,
+       "perTable": {
+        "t1": 0.965,
+        "t2": 0.735,
+        "t3": 0.924,
+        "t4": 0.859
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.249,
+       "raw": 0.181
+      },
+      "exclude": {
+       "smoothed": 0.28,
+       "raw": 0.238
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "seatedOld": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.837,
+       "perTable": {
+        "t1": 0.755,
+        "t2": 0.919,
+        "t3": 0.831,
+        "t4": 0.843
+       }
+      },
+      "exclude": {
+       "all": 0.762,
+       "perTable": {
+        "t1": 0.75,
+        "t2": 0.874,
+        "t3": 0.83,
+        "t4": 0.332
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.343,
+       "raw": 0.261
+      },
+      "exclude": {
+       "smoothed": 0.595,
+       "raw": 0.531
+      }
+     },
+     "inStore": 0.053
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.87,
+       "perTable": {
+        "t1": 0.729,
+        "t2": 0.925,
+        "t3": 0.921,
+        "t4": 0.903
+       }
+      },
+      "exclude": {
+       "all": 0.809,
+       "perTable": {
+        "t1": 0.718,
+        "t2": 0.848,
+        "t3": 0.925,
+        "t4": 0.626
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.307,
+       "raw": 0.231
+      },
+      "exclude": {
+       "smoothed": 0.458,
+       "raw": 0.414
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "tablesToClearEvents": [
+    {
+     "table": "t1",
+     "fromT": 134.6,
+     "shownT": 137.6,
+     "toT": 174.0,
+     "hiddenT": 177.0
+    }
+   ],
+   "tableOccupiedSeconds": {
+    "t1": 278.6,
+    "t2": 269.0,
+    "t3": 221.6,
+    "t4": 316.2
+   }
+  },
+  "hold": {
+   "params": {
+    "dwell_sec": 0.0,
+    "move_thr": null,
+    "hold_sec": 0.0,
+    "inherit_dist": -1.0,
+    "occluder_frac": 0.0
+   },
+   "occupied": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.93,
+       "perTable": {
+        "t1": 0.976,
+        "t2": 0.92,
+        "t3": 0.838,
+        "t4": 0.985
+       }
+      },
+      "exclude": {
+       "all": 0.901,
+       "perTable": {
+        "t1": 0.98,
+        "t2": 0.825,
+        "t3": 0.843,
+        "t4": 0.859
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.249,
+       "raw": 0.219
+      },
+      "exclude": {
+       "smoothed": 0.291,
+       "raw": 0.274
+      }
+     },
+     "inStore": 0.053
+    },
+    "firstHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.918,
+       "perTable": {
+        "t1": 0.985,
+        "t2": 0.917,
+        "t3": 0.769,
+        "t4": 0.999
+       }
+      },
+      "exclude": {
+       "all": 0.885,
+       "perTable": {
+        "t1": 0.995,
+        "t2": 0.938,
+        "t3": 0.759,
+        "t4": null
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.25,
+       "raw": 0.261
+      },
+      "exclude": {
+       "smoothed": 0.305,
+       "raw": 0.318
+      }
+     },
+     "inStore": 0.057
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.942,
+       "perTable": {
+        "t1": 0.966,
+        "t2": 0.923,
+        "t3": 0.906,
+        "t4": 0.972
+       }
+      },
+      "exclude": {
+       "all": 0.915,
+       "perTable": {
+        "t1": 0.965,
+        "t2": 0.735,
+        "t3": 0.924,
+        "t4": 0.859
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.249,
+       "raw": 0.181
+      },
+      "exclude": {
+       "smoothed": 0.28,
+       "raw": 0.238
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "seatedOld": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.837,
+       "perTable": {
+        "t1": 0.755,
+        "t2": 0.919,
+        "t3": 0.831,
+        "t4": 0.843
+       }
+      },
+      "exclude": {
+       "all": 0.762,
+       "perTable": {
+        "t1": 0.75,
+        "t2": 0.874,
+        "t3": 0.83,
+        "t4": 0.332
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.343,
+       "raw": 0.261
+      },
+      "exclude": {
+       "smoothed": 0.595,
+       "raw": 0.531
+      }
+     },
+     "inStore": 0.053
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.87,
+       "perTable": {
+        "t1": 0.729,
+        "t2": 0.925,
+        "t3": 0.921,
+        "t4": 0.903
+       }
+      },
+      "exclude": {
+       "all": 0.809,
+       "perTable": {
+        "t1": 0.718,
+        "t2": 0.848,
+        "t3": 0.925,
+        "t4": 0.626
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.307,
+       "raw": 0.231
+      },
+      "exclude": {
+       "smoothed": 0.458,
+       "raw": 0.414
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "tablesToClearEvents": [
+    {
+     "table": "t1",
+     "fromT": 134.6,
+     "shownT": 137.6,
+     "toT": 174.0,
+     "hiddenT": 177.0
+    }
+   ],
+   "tableOccupiedSeconds": {
+    "t1": 278.6,
+    "t2": 269.0,
+    "t3": 221.6,
+    "t4": 316.2
+   }
+  },
+  "stillPlusHold": {
+   "params": {
+    "dwell_sec": 0.0,
+    "move_thr": 0.1,
+    "hold_sec": 0.0,
+    "inherit_dist": -1.0,
+    "occluder_frac": 0.0
+   },
+   "occupied": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.93,
+       "perTable": {
+        "t1": 0.976,
+        "t2": 0.92,
+        "t3": 0.838,
+        "t4": 0.985
+       }
+      },
+      "exclude": {
+       "all": 0.901,
+       "perTable": {
+        "t1": 0.98,
+        "t2": 0.825,
+        "t3": 0.843,
+        "t4": 0.859
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.249,
+       "raw": 0.219
+      },
+      "exclude": {
+       "smoothed": 0.291,
+       "raw": 0.274
+      }
+     },
+     "inStore": 0.053
+    },
+    "firstHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.918,
+       "perTable": {
+        "t1": 0.985,
+        "t2": 0.917,
+        "t3": 0.769,
+        "t4": 0.999
+       }
+      },
+      "exclude": {
+       "all": 0.885,
+       "perTable": {
+        "t1": 0.995,
+        "t2": 0.938,
+        "t3": 0.759,
+        "t4": null
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.25,
+       "raw": 0.261
+      },
+      "exclude": {
+       "smoothed": 0.305,
+       "raw": 0.318
+      }
+     },
+     "inStore": 0.057
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.942,
+       "perTable": {
+        "t1": 0.966,
+        "t2": 0.923,
+        "t3": 0.906,
+        "t4": 0.972
+       }
+      },
+      "exclude": {
+       "all": 0.915,
+       "perTable": {
+        "t1": 0.965,
+        "t2": 0.735,
+        "t3": 0.924,
+        "t4": 0.859
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.249,
+       "raw": 0.181
+      },
+      "exclude": {
+       "smoothed": 0.28,
+       "raw": 0.238
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "seatedOld": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.837,
+       "perTable": {
+        "t1": 0.755,
+        "t2": 0.919,
+        "t3": 0.831,
+        "t4": 0.843
+       }
+      },
+      "exclude": {
+       "all": 0.762,
+       "perTable": {
+        "t1": 0.75,
+        "t2": 0.874,
+        "t3": 0.83,
+        "t4": 0.332
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.343,
+       "raw": 0.261
+      },
+      "exclude": {
+       "smoothed": 0.595,
+       "raw": 0.531
+      }
+     },
+     "inStore": 0.053
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.87,
+       "perTable": {
+        "t1": 0.729,
+        "t2": 0.925,
+        "t3": 0.921,
+        "t4": 0.903
+       }
+      },
+      "exclude": {
+       "all": 0.809,
+       "perTable": {
+        "t1": 0.718,
+        "t2": 0.848,
+        "t3": 0.925,
+        "t4": 0.626
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.307,
+       "raw": 0.231
+      },
+      "exclude": {
+       "smoothed": 0.458,
+       "raw": 0.414
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "tablesToClearEvents": [
+    {
+     "table": "t1",
+     "fromT": 134.6,
+     "shownT": 137.6,
+     "toT": 174.0,
+     "hiddenT": 177.0
+    }
+   ],
+   "tableOccupiedSeconds": {
+    "t1": 278.6,
+    "t2": 269.0,
+    "t3": 221.6,
+    "t4": 316.2
+   }
+  },
+  "occlusion": {
+   "params": {
+    "dwell_sec": 0.0,
+    "move_thr": null,
+    "hold_sec": 0.0,
+    "inherit_dist": -1.0,
+    "occluder_frac": 0.7
+   },
+   "occupied": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.939,
+       "perTable": {
+        "t1": 0.968,
+        "t2": 0.903,
+        "t3": 0.898,
+        "t4": 0.985
+       }
+      },
+      "exclude": {
+       "all": 0.931,
+       "perTable": {
+        "t1": 0.974,
+        "t2": 0.877,
+        "t3": 0.909,
+        "t4": 0.859
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.269,
+       "raw": 0.241
+      },
+      "exclude": {
+       "smoothed": 0.251,
+       "raw": 0.243
+      }
+     },
+     "inStore": 0.053
+    },
+    "firstHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.917,
+       "perTable": {
+        "t1": 0.974,
+        "t2": 0.861,
+        "t3": 0.835,
+        "t4": 0.999
+       }
+      },
+      "exclude": {
+       "all": 0.916,
+       "perTable": {
+        "t1": 0.987,
+        "t2": 0.955,
+        "t3": 0.834,
+        "t4": null
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.272,
+       "raw": 0.294
+      },
+      "exclude": {
+       "smoothed": 0.257,
+       "raw": 0.283
+      }
+     },
+     "inStore": 0.057
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.96,
+       "perTable": {
+        "t1": 0.962,
+        "t2": 0.944,
+        "t3": 0.962,
+        "t4": 0.972
+       }
+      },
+      "exclude": {
+       "all": 0.945,
+       "perTable": {
+        "t1": 0.96,
+        "t2": 0.816,
+        "t3": 0.981,
+        "t4": 0.859
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.267,
+       "raw": 0.193
+      },
+      "exclude": {
+       "smoothed": 0.247,
+       "raw": 0.21
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "seatedOld": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.85,
+       "perTable": {
+        "t1": 0.756,
+        "t2": 0.899,
+        "t3": 0.901,
+        "t4": 0.843
+       }
+      },
+      "exclude": {
+       "all": 0.793,
+       "perTable": {
+        "t1": 0.751,
+        "t2": 0.898,
+        "t3": 0.901,
+        "t4": 0.332
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.348,
+       "raw": 0.267
+      },
+      "exclude": {
+       "smoothed": 0.541,
+       "raw": 0.476
+      }
+     },
+     "inStore": 0.053
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.889,
+       "perTable": {
+        "t1": 0.736,
+        "t2": 0.939,
+        "t3": 0.977,
+        "t4": 0.903
+       }
+      },
+      "exclude": {
+       "all": 0.838,
+       "perTable": {
+        "t1": 0.725,
+        "t2": 0.881,
+        "t3": 0.981,
+        "t4": 0.626
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.326,
+       "raw": 0.232
+      },
+      "exclude": {
+       "smoothed": 0.418,
+       "raw": 0.371
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "tablesToClearEvents": [
+    {
+     "table": "t1",
+     "fromT": 134.6,
+     "shownT": 137.6,
+     "toT": 174.2,
+     "hiddenT": 177.2
+    }
+   ],
+   "tableOccupiedSeconds": {
+    "t1": 275.6,
+    "t2": 254.6,
+    "t3": 194.8,
+    "t4": 316.2
+   }
+  },
+  "previousRecommendation(seatedOld)": {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.35,
+    "hold_sec": 0.0,
+    "inherit_dist": -1.0,
+    "occluder_frac": 0.7,
+    "stand_h_px": 350
+   },
+   "occupied": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.925,
+       "perTable": {
+        "t1": 0.941,
+        "t2": 0.897,
+        "t3": 0.878,
+        "t4": 0.984
+       }
+      },
+      "exclude": {
+       "all": 0.915,
+       "perTable": {
+        "t1": 0.95,
+        "t2": 0.892,
+        "t3": 0.89,
+        "t4": 0.878
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.327,
+       "raw": 0.295
+      },
+      "exclude": {
+       "smoothed": 0.265,
+       "raw": 0.256
+      }
+     },
+     "inStore": 0.053
+    },
+    "firstHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.9,
+       "perTable": {
+        "t1": 0.956,
+        "t2": 0.846,
+        "t3": 0.801,
+        "t4": 0.995
+       }
+      },
+      "exclude": {
+       "all": 0.896,
+       "perTable": {
+        "t1": 0.972,
+        "t2": 0.972,
+        "t3": 0.802,
+        "t4": null
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.34,
+       "raw": 0.353
+      },
+      "exclude": {
+       "smoothed": 0.258,
+       "raw": 0.297
+      }
+     },
+     "inStore": 0.057
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.951,
+       "perTable": {
+        "t1": 0.927,
+        "t2": 0.948,
+        "t3": 0.956,
+        "t4": 0.972
+       }
+      },
+      "exclude": {
+       "all": 0.933,
+       "perTable": {
+        "t1": 0.927,
+        "t2": 0.83,
+        "t3": 0.975,
+        "t4": 0.878
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.316,
+       "raw": 0.244
+      },
+      "exclude": {
+       "smoothed": 0.27,
+       "raw": 0.222
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "seatedOld": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.846,
+       "perTable": {
+        "t1": 0.743,
+        "t2": 0.893,
+        "t3": 0.912,
+        "t4": 0.838
+       }
+      },
+      "exclude": {
+       "all": 0.794,
+       "perTable": {
+        "t1": 0.74,
+        "t2": 0.904,
+        "t3": 0.912,
+        "t4": 0.332
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.351,
+       "raw": 0.286
+      },
+      "exclude": {
+       "smoothed": 0.471,
+       "raw": 0.437
+      }
+     },
+     "inStore": 0.053
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.882,
+       "perTable": {
+        "t1": 0.717,
+        "t2": 0.943,
+        "t3": 0.971,
+        "t4": 0.896
+       }
+      },
+      "exclude": {
+       "all": 0.831,
+       "perTable": {
+        "t1": 0.709,
+        "t2": 0.889,
+        "t3": 0.975,
+        "t4": 0.626
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.349,
+       "raw": 0.262
+      },
+      "exclude": {
+       "smoothed": 0.4,
+       "raw": 0.359
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "tablesToClearEvents": [
+    {
+     "table": "t3",
+     "fromT": 126.4,
+     "shownT": 129.4,
+     "toT": 133.4,
+     "hiddenT": 136.4
+    },
+    {
+     "table": "t1",
+     "fromT": 134.6,
+     "shownT": 137.6,
+     "toT": 176.2,
+     "hiddenT": 179.2
+    }
+   ],
+   "tableOccupiedSeconds": {
+    "t1": 264.0,
+    "t2": 250.2,
+    "t3": 176.4,
+    "t4": 314.4
+   }
+  },
+  "best": {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "occupied": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.944,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.906,
+        "t3": 0.916,
+        "t4": 0.97
+       }
+      },
+      "exclude": {
+       "all": 0.937,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.848,
+        "t3": 0.929,
+        "t4": 0.744
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.236,
+       "raw": 0.172
+      },
+      "exclude": {
+       "smoothed": 0.3,
+       "raw": 0.268
+      }
+     },
+     "inStore": 0.053
+    },
+    "firstHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.929,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.86,
+        "t3": 0.875,
+        "t4": 0.995
+       }
+      },
+      "exclude": {
+       "all": 0.929,
+       "perTable": {
+        "t1": 0.983,
+        "t2": 0.887,
+        "t3": 0.881,
+        "t4": null
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.234,
+       "raw": 0.223
+      },
+      "exclude": {
+       "smoothed": 0.342,
+       "raw": 0.329
+      }
+     },
+     "inStore": 0.057
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.96,
+       "perTable": {
+        "t1": 0.985,
+        "t2": 0.952,
+        "t3": 0.957,
+        "t4": 0.944
+       }
+      },
+      "exclude": {
+       "all": 0.944,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.816,
+        "t3": 0.976,
+        "t4": 0.744
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.238,
+       "raw": 0.126
+      },
+      "exclude": {
+       "smoothed": 0.266,
+       "raw": 0.219
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "seatedOld": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.843,
+       "perTable": {
+        "t1": 0.758,
+        "t2": 0.907,
+        "t3": 0.884,
+        "t4": 0.824
+       }
+      },
+      "exclude": {
+       "all": 0.781,
+       "perTable": {
+        "t1": 0.753,
+        "t2": 0.886,
+        "t3": 0.884,
+        "t4": 0.28
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.37,
+       "raw": 0.284
+      },
+      "exclude": {
+       "smoothed": 0.643,
+       "raw": 0.572
+      }
+     },
+     "inStore": 0.053
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.884,
+       "perTable": {
+        "t1": 0.747,
+        "t2": 0.948,
+        "t3": 0.972,
+        "t4": 0.868
+       }
+      },
+      "exclude": {
+       "all": 0.831,
+       "perTable": {
+        "t1": 0.737,
+        "t2": 0.881,
+        "t3": 0.977,
+        "t4": 0.526
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.344,
+       "raw": 0.226
+      },
+      "exclude": {
+       "smoothed": 0.503,
+       "raw": 0.428
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "tablesToClearEvents": [
+    {
+     "table": "t1",
+     "fromT": 134.6,
+     "shownT": 137.6,
+     "toT": 176.4,
+     "hiddenT": 179.4
+    }
+   ],
+   "tableOccupiedSeconds": {
+    "t1": 280.4,
+    "t2": 260.6,
+    "t3": 211.0,
+    "t4": 318.0
+   },
+   "errorBreakdownOccupied": {
+    "t1": {
+     "FN": 4,
+     "FP_queueOrder": 13,
+     "FP_noGT": 10
+    },
+    "t2": {
+     "FN": 101,
+     "FP_queueOrder": 4,
+     "FP_noGT": 56
+    },
+    "t3": {
+     "FN": 62,
+     "FP_queueOrder": 43,
+     "FP_noGT": 39
+    },
+    "t4": {
+     "FN": 12,
+     "FP_queueOrder": 0,
+     "FP_noGT": 40
+    }
+   }
+  },
+  "best+pose": {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7,
+    "thigh_thr": 1.0
+   },
+   "occupied": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.944,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.906,
+        "t3": 0.916,
+        "t4": 0.97
+       }
+      },
+      "exclude": {
+       "all": 0.937,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.848,
+        "t3": 0.929,
+        "t4": 0.744
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.236,
+       "raw": 0.172
+      },
+      "exclude": {
+       "smoothed": 0.3,
+       "raw": 0.268
+      }
+     },
+     "inStore": 0.053
+    },
+    "firstHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.929,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.86,
+        "t3": 0.875,
+        "t4": 0.995
+       }
+      },
+      "exclude": {
+       "all": 0.929,
+       "perTable": {
+        "t1": 0.983,
+        "t2": 0.887,
+        "t3": 0.881,
+        "t4": null
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.234,
+       "raw": 0.223
+      },
+      "exclude": {
+       "smoothed": 0.342,
+       "raw": 0.329
+      }
+     },
+     "inStore": 0.057
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.96,
+       "perTable": {
+        "t1": 0.985,
+        "t2": 0.952,
+        "t3": 0.957,
+        "t4": 0.944
+       }
+      },
+      "exclude": {
+       "all": 0.944,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.816,
+        "t3": 0.976,
+        "t4": 0.744
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.238,
+       "raw": 0.126
+      },
+      "exclude": {
+       "smoothed": 0.266,
+       "raw": 0.219
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "seatedOld": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.843,
+       "perTable": {
+        "t1": 0.758,
+        "t2": 0.907,
+        "t3": 0.884,
+        "t4": 0.824
+       }
+      },
+      "exclude": {
+       "all": 0.781,
+       "perTable": {
+        "t1": 0.753,
+        "t2": 0.886,
+        "t3": 0.884,
+        "t4": 0.28
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.37,
+       "raw": 0.284
+      },
+      "exclude": {
+       "smoothed": 0.643,
+       "raw": 0.572
+      }
+     },
+     "inStore": 0.053
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.884,
+       "perTable": {
+        "t1": 0.747,
+        "t2": 0.948,
+        "t3": 0.972,
+        "t4": 0.868
+       }
+      },
+      "exclude": {
+       "all": 0.831,
+       "perTable": {
+        "t1": 0.737,
+        "t2": 0.881,
+        "t3": 0.977,
+        "t4": 0.526
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.344,
+       "raw": 0.226
+      },
+      "exclude": {
+       "smoothed": 0.503,
+       "raw": 0.428
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "tablesToClearEvents": [
+    {
+     "table": "t1",
+     "fromT": 134.6,
+     "shownT": 137.6,
+     "toT": 176.4,
+     "hiddenT": 179.4
+    }
+   ],
+   "tableOccupiedSeconds": {
+    "t1": 280.4,
+    "t2": 260.6,
+    "t3": 211.0,
+    "t4": 318.0
+   }
+  },
+  "best+pose/3장마다": {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7,
+    "thigh_thr": 1.0,
+    "pose_every": 3
+   },
+   "occupied": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.944,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.906,
+        "t3": 0.916,
+        "t4": 0.97
+       }
+      },
+      "exclude": {
+       "all": 0.937,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.848,
+        "t3": 0.929,
+        "t4": 0.744
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.237,
+       "raw": 0.171
+      },
+      "exclude": {
+       "smoothed": 0.295,
+       "raw": 0.266
+      }
+     },
+     "inStore": 0.053
+    },
+    "firstHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.929,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.86,
+        "t3": 0.875,
+        "t4": 0.995
+       }
+      },
+      "exclude": {
+       "all": 0.929,
+       "perTable": {
+        "t1": 0.983,
+        "t2": 0.887,
+        "t3": 0.881,
+        "t4": null
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.236,
+       "raw": 0.222
+      },
+      "exclude": {
+       "smoothed": 0.332,
+       "raw": 0.325
+      }
+     },
+     "inStore": 0.057
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.96,
+       "perTable": {
+        "t1": 0.985,
+        "t2": 0.952,
+        "t3": 0.957,
+        "t4": 0.944
+       }
+      },
+      "exclude": {
+       "all": 0.944,
+       "perTable": {
+        "t1": 0.984,
+        "t2": 0.816,
+        "t3": 0.976,
+        "t4": 0.744
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.238,
+       "raw": 0.126
+      },
+      "exclude": {
+       "smoothed": 0.266,
+       "raw": 0.219
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "seatedOld": {
+    "all": {
+     "occupancy": {
+      "include": {
+       "all": 0.843,
+       "perTable": {
+        "t1": 0.758,
+        "t2": 0.907,
+        "t3": 0.884,
+        "t4": 0.824
+       }
+      },
+      "exclude": {
+       "all": 0.781,
+       "perTable": {
+        "t1": 0.753,
+        "t2": 0.886,
+        "t3": 0.884,
+        "t4": 0.28
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.367,
+       "raw": 0.283
+      },
+      "exclude": {
+       "smoothed": 0.637,
+       "raw": 0.569
+      }
+     },
+     "inStore": 0.053
+    },
+    "secondHalf": {
+     "occupancy": {
+      "include": {
+       "all": 0.884,
+       "perTable": {
+        "t1": 0.747,
+        "t2": 0.948,
+        "t3": 0.972,
+        "t4": 0.868
+       }
+      },
+      "exclude": {
+       "all": 0.831,
+       "perTable": {
+        "t1": 0.737,
+        "t2": 0.881,
+        "t3": 0.977,
+        "t4": 0.526
+       }
+      }
+     },
+     "occupants": {
+      "include": {
+       "smoothed": 0.344,
+       "raw": 0.226
+      },
+      "exclude": {
+       "smoothed": 0.503,
+       "raw": 0.428
+      }
+     },
+     "inStore": 0.049
+    }
+   },
+   "tablesToClearEvents": [
+    {
+     "table": "t1",
+     "fromT": 134.6,
+     "shownT": 137.6,
+     "toT": 176.4,
+     "hiddenT": 179.4
+    }
+   ],
+   "tableOccupiedSeconds": {
+    "t1": 280.4,
+    "t2": 260.6,
+    "t3": 211.0,
+    "t4": 318.0
+   }
+  }
+ },
+ "sensitivity": [
+  {
+   "params": {
+    "dwell_sec": 0.0,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "occInclude": 0.938,
+   "occExclude": 0.916,
+   "occupantsInclude": 0.19
+  },
+  {
+   "params": {
+    "dwell_sec": 1.0,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "occInclude": 0.94,
+   "occExclude": 0.933,
+   "occupantsInclude": 0.279
+  },
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.2,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "occInclude": 0.942,
+   "occExclude": 0.932,
+   "occupantsInclude": 0.225
+  },
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 1.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "occInclude": 0.942,
+   "occExclude": 0.938,
+   "occupantsInclude": 0.27
+  },
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 3.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "occInclude": 0.94,
+   "occExclude": 0.928,
+   "occupantsInclude": 0.234
+  },
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": -1.0,
+    "occluder_frac": 0.7
+   },
+   "occInclude": 0.943,
+   "occExclude": 0.935,
+   "occupantsInclude": 0.244
+  },
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.5
+   },
+   "occInclude": 0.929,
+   "occExclude": 0.912,
+   "occupantsInclude": 0.277
+  },
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.9
+   },
+   "occInclude": 0.935,
+   "occExclude": 0.912,
+   "occupantsInclude": 0.23
+  }
+ ],
+ "topFirstHalf": [
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "firstHalf": 0.929,
+   "secondHalf": 0.952
+  },
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": -1.0,
+    "occluder_frac": 0.7
+   },
+   "firstHalf": 0.925,
+   "secondHalf": 0.952
+  },
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 3.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "firstHalf": 0.925,
+   "secondHalf": 0.942
+  },
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.2,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "firstHalf": 0.925,
+   "secondHalf": 0.949
+  },
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.35,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "firstHalf": 0.925,
+   "secondHalf": 0.949
+  },
+  {
+   "params": {
+    "dwell_sec": 0.6,
+    "move_thr": null,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "firstHalf": 0.925,
+   "secondHalf": 0.949
+  },
+  {
+   "params": {
+    "dwell_sec": 1.0,
+    "move_thr": 0.2,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "firstHalf": 0.9235,
+   "secondHalf": 0.952
+  },
+  {
+   "params": {
+    "dwell_sec": 1.0,
+    "move_thr": 0.35,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "firstHalf": 0.9235,
+   "secondHalf": 0.951
+  },
+  {
+   "params": {
+    "dwell_sec": 1.0,
+    "move_thr": null,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "firstHalf": 0.9235,
+   "secondHalf": 0.951
+  },
+  {
+   "params": {
+    "dwell_sec": 0.0,
+    "move_thr": 0.1,
+    "hold_sec": 3.0,
+    "inherit_dist": -1.0,
+    "occluder_frac": 0.5
+   },
+   "firstHalf": 0.923,
+   "secondHalf": 0.927
+  }
+ ],
+ "elapsedSec": 40.1
+}
