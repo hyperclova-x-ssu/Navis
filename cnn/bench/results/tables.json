@@ -1,0 +1,261 @@
+{
+ "measuredAt": "2026-11-10 03:36 KST",
+ "env": {
+  "host": "gpu-server",
+  "python": "3.10.20",
+  "torch": "2.5.1+cu121",
+  "cuda": "12.1",
+  "cudnn": 90100,
+  "ultralytics": "8.4.41",
+  "opencv": "4.13.0",
+  "numpy": "2.2.6",
+  "gpu": "NVIDIA GeForce RTX 3090",
+  "tensorrt": "없음 (ModuleNotFoundError)"
+ },
+ "input": "cafe17.mp4 960x540",
+ "sampleFrames": 60,
+ "device": "0",
+ "vote": 0.3,
+ "segModel": "yolo11s-seg.pt (COCO)",
+ "gtNote": "실제 테이블 다각형은 '테이블 윗면 + 앉는 자리'라 테이블 윗면만 덮는 마스크는 IoU 가 낮게 나온다. insideFrac 도 같이 본다.",
+ "A_seg": [
+  {
+   "imgsz": 640,
+   "precision": "fp16",
+   "time": {
+    "n": 60,
+    "mean_ms": 18.38,
+    "p50_ms": 18.23,
+    "p95_ms": 18.56,
+    "max_ms": 23.76,
+    "fps": 54.4
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 76,
+    "torch_peak_reserved_mib": 96,
+    "process_nvidia_smi_mib": 438
+   },
+   "singleFrame": {
+    "meanFound": 0.47,
+    "meanCandidates": 1.33,
+    "meanBestIoU": 0.068
+   },
+   "voted": {
+    "candidates": 1,
+    "found": 0,
+    "of": 4,
+    "meanBestIoU": 0.057,
+    "falseCandidates": 0,
+    "perTable": {
+     "t1": {
+      "iou": 0.0,
+      "insideFrac": 0.0,
+      "found": false
+     },
+     "t2": {
+      "iou": 0.0,
+      "insideFrac": 0.0,
+      "found": false
+     },
+     "t3": {
+      "iou": 0.001,
+      "insideFrac": 0.001,
+      "cand": 0,
+      "found": false
+     },
+     "t4": {
+      "iou": 0.227,
+      "insideFrac": 0.257,
+      "cand": 0,
+      "found": false
+     }
+    }
+   }
+  },
+  {
+   "imgsz": 960,
+   "precision": "fp16",
+   "time": {
+    "n": 60,
+    "mean_ms": 18.38,
+    "p50_ms": 18.37,
+    "p95_ms": 18.77,
+    "max_ms": 19.23,
+    "fps": 54.4
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 106,
+    "torch_peak_reserved_mib": 144,
+    "process_nvidia_smi_mib": 488
+   },
+   "singleFrame": {
+    "meanFound": 1.48,
+    "meanCandidates": 2.17,
+    "meanBestIoU": 0.109
+   },
+   "voted": {
+    "candidates": 3,
+    "found": 2,
+    "of": 4,
+    "meanBestIoU": 0.135,
+    "falseCandidates": 0,
+    "perTable": {
+     "t1": {
+      "iou": 0.016,
+      "insideFrac": 0.067,
+      "cand": 2,
+      "found": false
+     },
+     "t2": {
+      "iou": 0.148,
+      "insideFrac": 0.59,
+      "cand": 2,
+      "found": false
+     },
+     "t3": {
+      "iou": 0.116,
+      "insideFrac": 0.977,
+      "cand": 1,
+      "found": true
+     },
+     "t4": {
+      "iou": 0.261,
+      "insideFrac": 0.294,
+      "cand": 0,
+      "found": true
+     }
+    }
+   }
+  },
+  {
+   "imgsz": 1280,
+   "precision": "fp16",
+   "time": {
+    "n": 60,
+    "mean_ms": 22.16,
+    "p50_ms": 22.06,
+    "p95_ms": 23.35,
+    "max_ms": 24.73,
+    "fps": 45.1
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 152,
+    "torch_peak_reserved_mib": 186,
+    "process_nvidia_smi_mib": 530
+   },
+   "singleFrame": {
+    "meanFound": 1.3,
+    "meanCandidates": 2.38,
+    "meanBestIoU": 0.115
+   },
+   "voted": {
+    "candidates": 3,
+    "found": 2,
+    "of": 4,
+    "meanBestIoU": 0.138,
+    "falseCandidates": 0,
+    "perTable": {
+     "t1": {
+      "iou": 0.019,
+      "insideFrac": 0.075,
+      "cand": 2,
+      "found": false
+     },
+     "t2": {
+      "iou": 0.157,
+      "insideFrac": 0.594,
+      "cand": 2,
+      "found": false
+     },
+     "t3": {
+      "iou": 0.123,
+      "insideFrac": 0.98,
+      "cand": 1,
+      "found": true
+     },
+     "t4": {
+      "iou": 0.254,
+      "insideFrac": 0.289,
+      "cand": 0,
+      "found": true
+     }
+    }
+   }
+  }
+ ],
+ "B_detBoxes": {
+  "imgsz": 960,
+  "note": "탐지 모델이 이미 내는 상자라 추가 시간 없음",
+  "voted": {
+   "candidates": 2,
+   "found": 1,
+   "of": 4,
+   "meanBestIoU": 0.175,
+   "falseCandidates": 0,
+   "perTable": {
+    "t1": {
+     "iou": 0.045,
+     "insideFrac": 0.092,
+     "cand": 1,
+     "found": false
+    },
+    "t2": {
+     "iou": 0.308,
+     "insideFrac": 0.535,
+     "cand": 1,
+     "found": true
+    },
+    "t3": {
+     "iou": 0.136,
+     "insideFrac": 0.137,
+     "cand": 0,
+     "found": false
+    },
+    "t4": {
+     "iou": 0.211,
+     "insideFrac": 0.211,
+     "cand": 0,
+     "found": false
+    }
+   }
+  }
+ },
+ "C_seatedTrace": {
+  "frames": 1718,
+  "note": "영상을 오래 볼수록 정확(손님이 앉아야 생김). 임계값 3개 중 가장 좋은 것",
+  "voted": {
+   "candidates": 4,
+   "found": 3,
+   "of": 4,
+   "meanBestIoU": 0.452,
+   "falseCandidates": 1,
+   "perTable": {
+    "t1": {
+     "iou": 0.775,
+     "insideFrac": 0.813,
+     "cand": 0,
+     "found": true
+    },
+    "t2": {
+     "iou": 0.4,
+     "insideFrac": 0.783,
+     "cand": 2,
+     "found": true
+    },
+    "t3": {
+     "iou": 0.534,
+     "insideFrac": 0.554,
+     "cand": 1,
+     "found": true
+    },
+    "t4": {
+     "iou": 0.099,
+     "insideFrac": 0.165,
+     "cand": 1,
+     "found": false
+    }
+   },
+   "threshold": 0.1
+  }
+ }
+}

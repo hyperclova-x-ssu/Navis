@@ -1,0 +1,68 @@
+{
+ "measuredAt": "2026-11-10 03:32 KST",
+ "client": "macbook.local (Darwin arm64)",
+ "server": "gpu-server:18765",
+ "link": "Tailscale 직접 연결(Mac 유선/와이파이 -> gpu-server)",
+ "ping": "round-trip min/avg/max/stddev = 3.184/12.342/89.932/21.518 ms",
+ "jpeg": "1280x720, 품질 80",
+ "rows": [
+  {
+   "path": "/ack",
+   "keepAlive": true,
+   "requestBytes": 165650,
+   "responseBytes": 17,
+   "n": 200,
+   "mean_ms": 15.38,
+   "p50_ms": 12.72,
+   "p95_ms": 16.24,
+   "max_ms": 101.75
+  },
+  {
+   "path": "/ack",
+   "keepAlive": false,
+   "requestBytes": 165650,
+   "responseBytes": 17,
+   "n": 200,
+   "mean_ms": 44.35,
+   "p50_ms": 36.85,
+   "p95_ms": 124.59,
+   "max_ms": 131.56
+  },
+  {
+   "path": "/echo",
+   "keepAlive": true,
+   "requestBytes": 165650,
+   "responseBytes": 165650,
+   "n": 200,
+   "mean_ms": 22.02,
+   "p50_ms": 17.97,
+   "p95_ms": 22.08,
+   "max_ms": 106.87
+  },
+  {
+   "path": "/detect",
+   "keepAlive": true,
+   "requestBytes": 165650,
+   "responseBytes": 630,
+   "n": 200,
+   "mean_ms": 82.68,
+   "p50_ms": 70.75,
+   "p95_ms": 156.45,
+   "max_ms": 183.87,
+   "serverMs": {
+    "n": 200,
+    "mean_ms": 33.35,
+    "p50_ms": 33.24,
+    "p95_ms": 33.76,
+    "max_ms": 46.57
+   },
+   "serverBodyReadMs": {
+    "n": 200,
+    "mean_ms": 35.51,
+    "p50_ms": 31.04,
+    "p95_ms": 56.67,
+    "max_ms": 143.46
+   }
+  }
+ ]
+}

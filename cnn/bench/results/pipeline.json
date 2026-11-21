@@ -1,0 +1,518 @@
+{
+ "measuredAt": "2026-11-10 03:21 KST",
+ "env": {
+  "host": "gpu-server",
+  "python": "3.10.20",
+  "torch": "2.5.1+cu121",
+  "cuda": "12.1",
+  "cudnn": 90100,
+  "ultralytics": "8.4.41",
+  "opencv": "4.13.0",
+  "numpy": "2.2.6",
+  "gpu": "NVIDIA GeForce RTX 3090",
+  "tensorrt": "없음 (ModuleNotFoundError)"
+ },
+ "jpegQuality": 80,
+ "jpegMeanKB": {
+  "cafe17_960x540": 101.7,
+  "clip354_1280x720": 161.4
+ },
+ "stages": "decode=cv2.imdecode, track=model.track(ByteTrack 포함, cuda sync), post=확인 추적+앉음+칼만+컵 구역",
+ "rows": [
+  {
+   "config": "pt:640:fp16",
+   "source": "cafe17_960x540",
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.53,
+     "p50_ms": 2.49,
+     "p95_ms": 2.91,
+     "max_ms": 3.97,
+     "fps": 395.8
+    },
+    "track": {
+     "n": 1718,
+     "mean_ms": 15.11,
+     "p50_ms": 14.79,
+     "p95_ms": 17.64,
+     "max_ms": 26.47,
+     "fps": 66.2
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.24,
+     "p50_ms": 0.24,
+     "p95_ms": 0.3,
+     "max_ms": 0.43,
+     "fps": 4175.8
+    },
+    "total": {
+     "n": 1718,
+     "mean_ms": 17.87,
+     "p50_ms": 17.5,
+     "p95_ms": 20.86,
+     "max_ms": 30.69,
+     "fps": 55.9
+    }
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 65,
+    "torch_peak_reserved_mib": 74,
+    "process_nvidia_smi_mib": 414
+   },
+   "liveEqualsBatch": true,
+   "vsPlaybackJson": {
+    "frames": 1718,
+    "inStoreRaw_MAE": 1.276,
+    "inStore_MAE": 0.963,
+    "seated_MAE": 0.206,
+    "occupiedTables_sameRate": 0.774,
+    "meanInStore": {
+     "ref": 10.4,
+     "this": 9.44
+    }
+   }
+  },
+  {
+   "config": "pt:640:fp16",
+   "source": "clip354_1280x720",
+   "times": {
+    "decode": {
+     "n": 210,
+     "mean_ms": 4.28,
+     "p50_ms": 4.25,
+     "p95_ms": 4.44,
+     "max_ms": 6.26,
+     "fps": 233.8
+    },
+    "track": {
+     "n": 210,
+     "mean_ms": 15.32,
+     "p50_ms": 15.22,
+     "p95_ms": 15.97,
+     "max_ms": 23.95,
+     "fps": 65.3
+    },
+    "post": {
+     "n": 210,
+     "mean_ms": 0.27,
+     "p50_ms": 0.27,
+     "p95_ms": 0.29,
+     "max_ms": 0.52,
+     "fps": 3700.1
+    },
+    "total": {
+     "n": 210,
+     "mean_ms": 19.87,
+     "p50_ms": 19.72,
+     "p95_ms": 20.63,
+     "max_ms": 30.73,
+     "fps": 50.3
+    }
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 65,
+    "torch_peak_reserved_mib": 74,
+    "process_nvidia_smi_mib": 414
+   },
+   "liveEqualsBatch": true
+  },
+  {
+   "config": "pt:960:fp16",
+   "source": "cafe17_960x540",
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.53,
+     "p50_ms": 2.5,
+     "p95_ms": 2.69,
+     "max_ms": 3.82,
+     "fps": 395.7
+    },
+    "track": {
+     "n": 1718,
+     "mean_ms": 15.22,
+     "p50_ms": 15.14,
+     "p95_ms": 16.0,
+     "max_ms": 24.41,
+     "fps": 65.7
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.27,
+     "p50_ms": 0.27,
+     "p95_ms": 0.31,
+     "max_ms": 0.52,
+     "fps": 3752.0
+    },
+    "total": {
+     "n": 1718,
+     "mean_ms": 18.01,
+     "p50_ms": 17.93,
+     "p95_ms": 18.88,
+     "max_ms": 28.63,
+     "fps": 55.5
+    }
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 80,
+    "torch_peak_reserved_mib": 108,
+    "process_nvidia_smi_mib": 450
+   },
+   "liveEqualsBatch": true,
+   "vsPlaybackJson": {
+    "frames": 1718,
+    "inStoreRaw_MAE": 0.856,
+    "inStore_MAE": 0.402,
+    "seated_MAE": 0.31,
+    "occupiedTables_sameRate": 0.811,
+    "meanInStore": {
+     "ref": 10.4,
+     "this": 10.28
+    }
+   }
+  },
+  {
+   "config": "pt:960:fp16",
+   "source": "clip354_1280x720",
+   "times": {
+    "decode": {
+     "n": 210,
+     "mean_ms": 4.25,
+     "p50_ms": 4.22,
+     "p95_ms": 4.54,
+     "max_ms": 4.78,
+     "fps": 235.1
+    },
+    "track": {
+     "n": 210,
+     "mean_ms": 16.81,
+     "p50_ms": 16.7,
+     "p95_ms": 17.87,
+     "max_ms": 18.96,
+     "fps": 59.5
+    },
+    "post": {
+     "n": 210,
+     "mean_ms": 0.28,
+     "p50_ms": 0.28,
+     "p95_ms": 0.31,
+     "max_ms": 0.32,
+     "fps": 3598.4
+    },
+    "total": {
+     "n": 210,
+     "mean_ms": 21.35,
+     "p50_ms": 21.19,
+     "p95_ms": 22.7,
+     "max_ms": 24.06,
+     "fps": 46.8
+    }
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 80,
+    "torch_peak_reserved_mib": 108,
+    "process_nvidia_smi_mib": 450
+   },
+   "liveEqualsBatch": true
+  },
+  {
+   "config": "pt:960:fp32",
+   "source": "cafe17_960x540",
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.51,
+     "p50_ms": 2.49,
+     "p95_ms": 2.62,
+     "max_ms": 3.15,
+     "fps": 398.3
+    },
+    "track": {
+     "n": 1718,
+     "mean_ms": 14.69,
+     "p50_ms": 14.61,
+     "p95_ms": 15.29,
+     "max_ms": 19.54,
+     "fps": 68.1
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.26,
+     "p50_ms": 0.26,
+     "p95_ms": 0.31,
+     "max_ms": 0.45,
+     "fps": 3781.9
+    },
+    "total": {
+     "n": 1718,
+     "mean_ms": 17.46,
+     "p50_ms": 17.38,
+     "p95_ms": 18.15,
+     "max_ms": 23.1,
+     "fps": 57.3
+    }
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 122,
+    "torch_peak_reserved_mib": 160,
+    "process_nvidia_smi_mib": 504
+   },
+   "liveEqualsBatch": true,
+   "vsPlaybackJson": {
+    "frames": 1718,
+    "inStoreRaw_MAE": 0.859,
+    "inStore_MAE": 0.403,
+    "seated_MAE": 0.313,
+    "occupiedTables_sameRate": 0.812,
+    "meanInStore": {
+     "ref": 10.4,
+     "this": 10.28
+    }
+   }
+  },
+  {
+   "config": "pt:960:fp32",
+   "source": "clip354_1280x720",
+   "times": {
+    "decode": {
+     "n": 210,
+     "mean_ms": 4.29,
+     "p50_ms": 4.28,
+     "p95_ms": 4.45,
+     "max_ms": 4.79,
+     "fps": 233.1
+    },
+    "track": {
+     "n": 210,
+     "mean_ms": 16.36,
+     "p50_ms": 16.28,
+     "p95_ms": 17.03,
+     "max_ms": 18.34,
+     "fps": 61.1
+    },
+    "post": {
+     "n": 210,
+     "mean_ms": 0.28,
+     "p50_ms": 0.28,
+     "p95_ms": 0.31,
+     "max_ms": 0.34,
+     "fps": 3587.1
+    },
+    "total": {
+     "n": 210,
+     "mean_ms": 20.93,
+     "p50_ms": 20.84,
+     "p95_ms": 21.73,
+     "max_ms": 23.45,
+     "fps": 47.8
+    }
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 122,
+    "torch_peak_reserved_mib": 160,
+    "process_nvidia_smi_mib": 504
+   },
+   "liveEqualsBatch": true
+  },
+  {
+   "config": "pt:1280:fp16",
+   "source": "cafe17_960x540",
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.6,
+     "p50_ms": 2.59,
+     "p95_ms": 2.7,
+     "max_ms": 3.11,
+     "fps": 384.0
+    },
+    "track": {
+     "n": 1718,
+     "mean_ms": 19.02,
+     "p50_ms": 18.92,
+     "p95_ms": 19.8,
+     "max_ms": 25.28,
+     "fps": 52.6
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.33,
+     "p50_ms": 0.33,
+     "p95_ms": 0.38,
+     "max_ms": 0.48,
+     "fps": 3028.0
+    },
+    "total": {
+     "n": 1718,
+     "mean_ms": 21.96,
+     "p50_ms": 21.83,
+     "p95_ms": 22.81,
+     "max_ms": 28.8,
+     "fps": 45.5
+    }
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 99,
+    "torch_peak_reserved_mib": 130,
+    "process_nvidia_smi_mib": 474
+   },
+   "liveEqualsBatch": true,
+   "vsPlaybackJson": {
+    "frames": 1718,
+    "inStoreRaw_MAE": 0.637,
+    "inStore_MAE": 0.231,
+    "seated_MAE": 0.203,
+    "occupiedTables_sameRate": 0.854,
+    "meanInStore": {
+     "ref": 10.4,
+     "this": 10.38
+    }
+   }
+  },
+  {
+   "config": "pt:1280:fp16",
+   "source": "clip354_1280x720",
+   "times": {
+    "decode": {
+     "n": 210,
+     "mean_ms": 4.37,
+     "p50_ms": 4.32,
+     "p95_ms": 4.48,
+     "max_ms": 4.82,
+     "fps": 229.1
+    },
+    "track": {
+     "n": 210,
+     "mean_ms": 17.04,
+     "p50_ms": 16.94,
+     "p95_ms": 17.75,
+     "max_ms": 18.99,
+     "fps": 58.7
+    },
+    "post": {
+     "n": 210,
+     "mean_ms": 0.34,
+     "p50_ms": 0.34,
+     "p95_ms": 0.36,
+     "max_ms": 0.39,
+     "fps": 2950.3
+    },
+    "total": {
+     "n": 210,
+     "mean_ms": 21.75,
+     "p50_ms": 21.63,
+     "p95_ms": 22.55,
+     "max_ms": 24.16,
+     "fps": 46.0
+    }
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 99,
+    "torch_peak_reserved_mib": 130,
+    "process_nvidia_smi_mib": 474
+   },
+   "liveEqualsBatch": true
+  },
+  {
+   "config": "pt:1280:fp32",
+   "source": "cafe17_960x540",
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.58,
+     "p50_ms": 2.57,
+     "p95_ms": 2.82,
+     "max_ms": 2.97,
+     "fps": 387.2
+    },
+    "track": {
+     "n": 1718,
+     "mean_ms": 18.2,
+     "p50_ms": 18.02,
+     "p95_ms": 20.04,
+     "max_ms": 22.62,
+     "fps": 54.9
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.32,
+     "p50_ms": 0.32,
+     "p95_ms": 0.38,
+     "max_ms": 0.51,
+     "fps": 3081.7
+    },
+    "total": {
+     "n": 1718,
+     "mean_ms": 21.11,
+     "p50_ms": 20.89,
+     "p95_ms": 23.21,
+     "max_ms": 26.02,
+     "fps": 47.4
+    }
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 166,
+    "torch_peak_reserved_mib": 208,
+    "process_nvidia_smi_mib": 552
+   },
+   "liveEqualsBatch": true,
+   "vsPlaybackJson": {
+    "frames": 1718,
+    "inStoreRaw_MAE": 0.637,
+    "inStore_MAE": 0.229,
+    "seated_MAE": 0.203,
+    "occupiedTables_sameRate": 0.854,
+    "meanInStore": {
+     "ref": 10.4,
+     "this": 10.37
+    }
+   }
+  },
+  {
+   "config": "pt:1280:fp32",
+   "source": "clip354_1280x720",
+   "times": {
+    "decode": {
+     "n": 210,
+     "mean_ms": 4.43,
+     "p50_ms": 4.38,
+     "p95_ms": 4.62,
+     "max_ms": 4.98,
+     "fps": 225.7
+    },
+    "track": {
+     "n": 210,
+     "mean_ms": 16.67,
+     "p50_ms": 16.64,
+     "p95_ms": 17.3,
+     "max_ms": 18.73,
+     "fps": 60.0
+    },
+    "post": {
+     "n": 210,
+     "mean_ms": 0.34,
+     "p50_ms": 0.34,
+     "p95_ms": 0.36,
+     "max_ms": 0.42,
+     "fps": 2948.6
+    },
+    "total": {
+     "n": 210,
+     "mean_ms": 21.44,
+     "p50_ms": 21.4,
+     "p95_ms": 22.24,
+     "max_ms": 24.11,
+     "fps": 46.6
+    }
+   },
+   "gpuMem": {
+    "torch_peak_alloc_mib": 166,
+    "torch_peak_reserved_mib": 208,
+    "process_nvidia_smi_mib": 552
+   },
+   "liveEqualsBatch": true
+  }
+ ]
+}

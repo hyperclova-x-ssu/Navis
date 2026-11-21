@@ -1,0 +1,653 @@
+{
+ "measuredAt": "2026-11-10 04:52 KST",
+ "frames": 1718,
+ "gpuDefault": {
+  "dwell_sec": 0.6,
+  "move_thr": 0.1,
+  "hold_sec": 2.0,
+  "inherit_dist": 0.6,
+  "occluder_frac": 0.7,
+  "stand_h_px": 350
+ },
+ "grid": {
+  "dwell_sec": [
+   0.0,
+   0.6,
+   1.0
+  ],
+  "move_thr": [
+   0.1,
+   null
+  ],
+  "hold_sec": [
+   0.0,
+   1.0,
+   2.0,
+   3.0
+  ],
+  "inherit_dist": [
+   -1.0,
+   0.6
+  ],
+  "occluder_frac": [
+   0.0,
+   0.7,
+   0.9
+  ]
+ },
+ "reference": "허용선 기준 = rows[0].baseline (맥 YOLO11s 1280 + T-046d 판정), 정의별",
+ "rows": [
+  {
+   "config": "mac_yolo11s_mps_1280_N1",
+   "source": "1920x1080 원본 jpg (기준선 입력)",
+   "perConfigParams": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "baseline": {
+    "occupied": {
+     "occInclude": 0.93,
+     "occExclude": 0.901,
+     "perTableInclude": {
+      "t1": 0.976,
+      "t2": 0.92,
+      "t3": 0.838,
+      "t4": 0.985
+     },
+     "occupantsInclude": 0.249,
+     "occupantsExclude": 0.291,
+     "inStore": 0.053
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.942,
+     "occExclude": 0.915,
+     "perTableInclude": {
+      "t1": 0.966,
+      "t2": 0.923,
+      "t3": 0.906,
+      "t4": 0.972
+     },
+     "occupantsInclude": 0.249,
+     "occupantsExclude": 0.28,
+     "inStore": 0.049
+    },
+    "seatedOld": {
+     "occInclude": 0.837,
+     "occExclude": 0.762,
+     "perTableInclude": {
+      "t1": 0.755,
+      "t2": 0.919,
+      "t3": 0.831,
+      "t4": 0.843
+     },
+     "occupantsInclude": 0.343,
+     "occupantsExclude": 0.595,
+     "inStore": 0.053
+    }
+   },
+   "gpuDefault": {
+    "occupied": {
+     "occInclude": 0.944,
+     "occExclude": 0.937,
+     "perTableInclude": {
+      "t1": 0.984,
+      "t2": 0.906,
+      "t3": 0.916,
+      "t4": 0.97
+     },
+     "occupantsInclude": 0.236,
+     "occupantsExclude": 0.3,
+     "inStore": 0.053
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.96,
+     "occExclude": 0.944,
+     "perTableInclude": {
+      "t1": 0.985,
+      "t2": 0.952,
+      "t3": 0.957,
+      "t4": 0.944
+     },
+     "occupantsInclude": 0.238,
+     "occupantsExclude": 0.266,
+     "inStore": 0.049
+    },
+    "seatedOld": {
+     "occInclude": 0.843,
+     "occExclude": 0.781,
+     "perTableInclude": {
+      "t1": 0.758,
+      "t2": 0.907,
+      "t3": 0.884,
+      "t4": 0.824
+     },
+     "occupantsInclude": 0.37,
+     "occupantsExclude": 0.643,
+     "inStore": 0.053
+    }
+   },
+   "perConfig": {
+    "occupied": {
+     "occInclude": 0.944,
+     "occExclude": 0.937,
+     "perTableInclude": {
+      "t1": 0.984,
+      "t2": 0.906,
+      "t3": 0.916,
+      "t4": 0.97
+     },
+     "occupantsInclude": 0.236,
+     "occupantsExclude": 0.3,
+     "inStore": 0.053
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.96,
+     "occExclude": 0.944,
+     "perTableInclude": {
+      "t1": 0.985,
+      "t2": 0.952,
+      "t3": 0.957,
+      "t4": 0.944
+     },
+     "occupantsInclude": 0.238,
+     "occupantsExclude": 0.266,
+     "inStore": 0.049
+    },
+    "seatedOld": {
+     "occInclude": 0.843,
+     "occExclude": 0.781,
+     "perTableInclude": {
+      "t1": 0.758,
+      "t2": 0.907,
+      "t3": 0.884,
+      "t4": 0.824
+     },
+     "occupantsInclude": 0.37,
+     "occupantsExclude": 0.643,
+     "inStore": 0.053
+    }
+   },
+   "withinTolerance": {
+    "occupied": {
+     "inStore": true,
+     "occInclude": true,
+     "occExclude": true,
+     "occupantsInclude": true,
+     "all": true
+    },
+    "seatedOld": {
+     "inStore": true,
+     "occInclude": true,
+     "occExclude": true,
+     "occupantsInclude": true,
+     "all": true
+    }
+   }
+  },
+  {
+   "config": "yolo11s_ov_int8_1280_N1",
+   "model": "yolo11s",
+   "runtime": "ov_int8",
+   "imgsz": 1280,
+   "interval": 1,
+   "source": "cafe17.mp4 960x540 5fps, JPEG q80",
+   "perConfigParams": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "baseline": {
+    "occupied": {
+     "occInclude": 0.91,
+     "occExclude": 0.898,
+     "perTableInclude": {
+      "t1": 0.977,
+      "t2": 0.854,
+      "t3": 0.824,
+      "t4": 0.986
+     },
+     "occupantsInclude": 0.249,
+     "occupantsExclude": 0.292,
+     "inStore": 0.06
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.953,
+     "occExclude": 0.933,
+     "perTableInclude": {
+      "t1": 0.969,
+      "t2": 0.935,
+      "t3": 0.934,
+      "t4": 0.973
+     },
+     "occupantsInclude": 0.244,
+     "occupantsExclude": 0.259,
+     "inStore": 0.053
+    },
+    "seatedOld": {
+     "occInclude": 0.823,
+     "occExclude": 0.769,
+     "perTableInclude": {
+      "t1": 0.756,
+      "t2": 0.849,
+      "t3": 0.846,
+      "t4": 0.842
+     },
+     "occupantsInclude": 0.333,
+     "occupantsExclude": 0.579,
+     "inStore": 0.06
+    }
+   },
+   "gpuDefault": {
+    "occupied": {
+     "occInclude": 0.92,
+     "occExclude": 0.922,
+     "perTableInclude": {
+      "t1": 0.984,
+      "t2": 0.839,
+      "t3": 0.888,
+      "t4": 0.967
+     },
+     "occupantsInclude": 0.239,
+     "occupantsExclude": 0.335,
+     "inStore": 0.06
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.958,
+     "occExclude": 0.941,
+     "perTableInclude": {
+      "t1": 0.984,
+      "t2": 0.95,
+      "t3": 0.957,
+      "t4": 0.939
+     },
+     "occupantsInclude": 0.227,
+     "occupantsExclude": 0.304,
+     "inStore": 0.053
+    },
+    "seatedOld": {
+     "occInclude": 0.828,
+     "occExclude": 0.783,
+     "perTableInclude": {
+      "t1": 0.757,
+      "t2": 0.84,
+      "t3": 0.896,
+      "t4": 0.82
+     },
+     "occupantsInclude": 0.377,
+     "occupantsExclude": 0.675,
+     "inStore": 0.06
+    }
+   },
+   "perConfig": {
+    "occupied": {
+     "occInclude": 0.92,
+     "occExclude": 0.922,
+     "perTableInclude": {
+      "t1": 0.984,
+      "t2": 0.839,
+      "t3": 0.888,
+      "t4": 0.967
+     },
+     "occupantsInclude": 0.239,
+     "occupantsExclude": 0.335,
+     "inStore": 0.06
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.958,
+     "occExclude": 0.941,
+     "perTableInclude": {
+      "t1": 0.984,
+      "t2": 0.95,
+      "t3": 0.957,
+      "t4": 0.939
+     },
+     "occupantsInclude": 0.227,
+     "occupantsExclude": 0.304,
+     "inStore": 0.053
+    },
+    "seatedOld": {
+     "occInclude": 0.828,
+     "occExclude": 0.783,
+     "perTableInclude": {
+      "t1": 0.757,
+      "t2": 0.84,
+      "t3": 0.896,
+      "t4": 0.82
+     },
+     "occupantsInclude": 0.377,
+     "occupantsExclude": 0.675,
+     "inStore": 0.06
+    }
+   },
+   "withinTolerance": {
+    "occupied": {
+     "inStore": true,
+     "occInclude": true,
+     "occExclude": true,
+     "occupantsInclude": true,
+     "all": true
+    },
+    "seatedOld": {
+     "inStore": true,
+     "occInclude": true,
+     "occExclude": true,
+     "occupantsInclude": false,
+     "all": false
+    }
+   }
+  },
+  {
+   "config": "yolo11s_ov_int8_1280_N2",
+   "model": "yolo11s",
+   "runtime": "ov_int8",
+   "imgsz": 1280,
+   "interval": 2,
+   "source": "cafe17.mp4 960x540 5fps, JPEG q80",
+   "perConfigParams": {
+    "dwell_sec": 0.0,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": -1.0,
+    "occluder_frac": 0.7
+   },
+   "baseline": {
+    "occupied": {
+     "occInclude": 0.907,
+     "occExclude": 0.9,
+     "perTableInclude": {
+      "t1": 0.97,
+      "t2": 0.845,
+      "t3": 0.827,
+      "t4": 0.987
+     },
+     "occupantsInclude": 0.261,
+     "occupantsExclude": 0.295,
+     "inStore": 0.065
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.955,
+     "occExclude": 0.938,
+     "perTableInclude": {
+      "t1": 0.972,
+      "t2": 0.939,
+      "t3": 0.934,
+      "t4": 0.977
+     },
+     "occupantsInclude": 0.262,
+     "occupantsExclude": 0.275,
+     "inStore": 0.05
+    },
+    "seatedOld": {
+     "occInclude": 0.823,
+     "occExclude": 0.775,
+     "perTableInclude": {
+      "t1": 0.756,
+      "t2": 0.843,
+      "t3": 0.857,
+      "t4": 0.838
+     },
+     "occupantsInclude": 0.325,
+     "occupantsExclude": 0.557,
+     "inStore": 0.065
+    }
+   },
+   "gpuDefault": {
+    "occupied": {
+     "occInclude": 0.914,
+     "occExclude": 0.921,
+     "perTableInclude": {
+      "t1": 0.978,
+      "t2": 0.828,
+      "t3": 0.881,
+      "t4": 0.971
+     },
+     "occupantsInclude": 0.269,
+     "occupantsExclude": 0.32,
+     "inStore": 0.065
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.964,
+     "occExclude": 0.952,
+     "perTableInclude": {
+      "t1": 0.981,
+      "t2": 0.956,
+      "t3": 0.971,
+      "t4": 0.949
+     },
+     "occupantsInclude": 0.257,
+     "occupantsExclude": 0.281,
+     "inStore": 0.05
+    },
+    "seatedOld": {
+     "occInclude": 0.822,
+     "occExclude": 0.784,
+     "perTableInclude": {
+      "t1": 0.758,
+      "t2": 0.822,
+      "t3": 0.892,
+      "t4": 0.818
+     },
+     "occupantsInclude": 0.371,
+     "occupantsExclude": 0.611,
+     "inStore": 0.065
+    }
+   },
+   "perConfig": {
+    "occupied": {
+     "occInclude": 0.915,
+     "occExclude": 0.912,
+     "perTableInclude": {
+      "t1": 0.978,
+      "t2": 0.839,
+      "t3": 0.868,
+      "t4": 0.973
+     },
+     "occupantsInclude": 0.213,
+     "occupantsExclude": 0.323,
+     "inStore": 0.065
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.955,
+     "occExclude": 0.934,
+     "perTableInclude": {
+      "t1": 0.977,
+      "t2": 0.951,
+      "t3": 0.943,
+      "t4": 0.949
+     },
+     "occupantsInclude": 0.213,
+     "occupantsExclude": 0.293,
+     "inStore": 0.05
+    },
+    "seatedOld": {
+     "occInclude": 0.821,
+     "occExclude": 0.772,
+     "perTableInclude": {
+      "t1": 0.753,
+      "t2": 0.84,
+      "t3": 0.865,
+      "t4": 0.825
+     },
+     "occupantsInclude": 0.365,
+     "occupantsExclude": 0.702,
+     "inStore": 0.065
+    }
+   },
+   "withinTolerance": {
+    "occupied": {
+     "inStore": true,
+     "occInclude": true,
+     "occExclude": true,
+     "occupantsInclude": true,
+     "all": true
+    },
+    "seatedOld": {
+     "inStore": true,
+     "occInclude": true,
+     "occExclude": true,
+     "occupantsInclude": true,
+     "all": true
+    }
+   }
+  },
+  {
+   "config": "yolo11s_ov_int8_960_N1",
+   "model": "yolo11s",
+   "runtime": "ov_int8",
+   "imgsz": 960,
+   "interval": 1,
+   "source": "cafe17.mp4 960x540 5fps, JPEG q80",
+   "perConfigParams": {
+    "dwell_sec": 0.6,
+    "move_thr": 0.1,
+    "hold_sec": 2.0,
+    "inherit_dist": 0.6,
+    "occluder_frac": 0.7
+   },
+   "baseline": {
+    "occupied": {
+     "occInclude": 0.903,
+     "occExclude": 0.898,
+     "perTableInclude": {
+      "t1": 0.975,
+      "t2": 0.83,
+      "t3": 0.822,
+      "t4": 0.987
+     },
+     "occupantsInclude": 0.241,
+     "occupantsExclude": 0.27,
+     "inStore": 0.071
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.944,
+     "occExclude": 0.93,
+     "perTableInclude": {
+      "t1": 0.964,
+      "t2": 0.909,
+      "t3": 0.927,
+      "t4": 0.974
+     },
+     "occupantsInclude": 0.223,
+     "occupantsExclude": 0.253,
+     "inStore": 0.065
+    },
+    "seatedOld": {
+     "occInclude": 0.816,
+     "occExclude": 0.767,
+     "perTableInclude": {
+      "t1": 0.756,
+      "t2": 0.825,
+      "t3": 0.842,
+      "t4": 0.842
+     },
+     "occupantsInclude": 0.311,
+     "occupantsExclude": 0.549,
+     "inStore": 0.071
+    }
+   },
+   "gpuDefault": {
+    "occupied": {
+     "occInclude": 0.921,
+     "occExclude": 0.921,
+     "perTableInclude": {
+      "t1": 0.98,
+      "t2": 0.852,
+      "t3": 0.88,
+      "t4": 0.973
+     },
+     "occupantsInclude": 0.222,
+     "occupantsExclude": 0.333,
+     "inStore": 0.071
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.956,
+     "occExclude": 0.936,
+     "perTableInclude": {
+      "t1": 0.976,
+      "t2": 0.952,
+      "t3": 0.944,
+      "t4": 0.951
+     },
+     "occupantsInclude": 0.2,
+     "occupantsExclude": 0.328,
+     "inStore": 0.065
+    },
+    "seatedOld": {
+     "occInclude": 0.83,
+     "occExclude": 0.783,
+     "perTableInclude": {
+      "t1": 0.753,
+      "t2": 0.849,
+      "t3": 0.892,
+      "t4": 0.826
+     },
+     "occupantsInclude": 0.369,
+     "occupantsExclude": 0.693,
+     "inStore": 0.071
+    }
+   },
+   "perConfig": {
+    "occupied": {
+     "occInclude": 0.921,
+     "occExclude": 0.921,
+     "perTableInclude": {
+      "t1": 0.98,
+      "t2": 0.852,
+      "t3": 0.88,
+      "t4": 0.973
+     },
+     "occupantsInclude": 0.222,
+     "occupantsExclude": 0.333,
+     "inStore": 0.071
+    },
+    "occupiedSecondHalf": {
+     "occInclude": 0.956,
+     "occExclude": 0.936,
+     "perTableInclude": {
+      "t1": 0.976,
+      "t2": 0.952,
+      "t3": 0.944,
+      "t4": 0.951
+     },
+     "occupantsInclude": 0.2,
+     "occupantsExclude": 0.328,
+     "inStore": 0.065
+    },
+    "seatedOld": {
+     "occInclude": 0.83,
+     "occExclude": 0.783,
+     "perTableInclude": {
+      "t1": 0.753,
+      "t2": 0.849,
+      "t3": 0.892,
+      "t4": 0.826
+     },
+     "occupantsInclude": 0.369,
+     "occupantsExclude": 0.693,
+     "inStore": 0.071
+    }
+   },
+   "withinTolerance": {
+    "occupied": {
+     "inStore": true,
+     "occInclude": true,
+     "occExclude": true,
+     "occupantsInclude": true,
+     "all": true
+    },
+    "seatedOld": {
+     "inStore": true,
+     "occInclude": true,
+     "occExclude": true,
+     "occupantsInclude": true,
+     "all": true
+    }
+   }
+  }
+ ]
+}

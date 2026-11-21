@@ -1,0 +1,174 @@
+{
+ "measuredAt": "2026-11-10 04:33 KST",
+ "env": {
+  "host": "gpu-server",
+  "python": "3.10.20",
+  "torch": "2.5.1+cu121",
+  "cuda": "12.1",
+  "cudnn": 90100,
+  "ultralytics": "8.4.41",
+  "opencv": "4.13.0",
+  "numpy": "2.2.6",
+  "gpu": null,
+  "tensorrt": "없음 (ModuleNotFoundError)"
+ },
+ "input": "cafe17.mp4 960x540",
+ "sampleFrames": 20,
+ "device": "cpu",
+ "vote": 0.3,
+ "segModel": "yolo11s-seg.pt (COCO)",
+ "gtNote": "실제 테이블 다각형은 '테이블 윗면 + 앉는 자리'라 테이블 윗면만 덮는 마스크는 IoU 가 낮게 나온다. insideFrac 도 같이 본다.",
+ "A_seg": [
+  {
+   "imgsz": 640,
+   "precision": "fp32",
+   "time": {
+    "n": 20,
+    "mean_ms": 184.82,
+    "p50_ms": 185.06,
+    "p95_ms": 196.78,
+    "max_ms": 196.86,
+    "fps": 5.4
+   },
+   "gpuMem": null,
+   "singleFrame": {
+    "meanFound": 0.65,
+    "meanCandidates": 1.7,
+    "meanBestIoU": 0.076
+   },
+   "voted": {
+    "candidates": 2,
+    "found": 1,
+    "of": 4,
+    "meanBestIoU": 0.086,
+    "falseCandidates": 0,
+    "perTable": {
+     "t1": {
+      "iou": 0.0,
+      "insideFrac": 0.0,
+      "found": false
+     },
+     "t2": {
+      "iou": 0.0,
+      "insideFrac": 0.0,
+      "found": false
+     },
+     "t3": {
+      "iou": 0.122,
+      "insideFrac": 0.933,
+      "cand": 1,
+      "found": true
+     },
+     "t4": {
+      "iou": 0.222,
+      "insideFrac": 0.252,
+      "cand": 0,
+      "found": false
+     }
+    }
+   }
+  },
+  {
+   "imgsz": 960,
+   "precision": "fp32",
+   "time": {
+    "n": 20,
+    "mean_ms": 345.35,
+    "p50_ms": 343.03,
+    "p95_ms": 361.21,
+    "max_ms": 362.85,
+    "fps": 2.9
+   },
+   "gpuMem": null,
+   "singleFrame": {
+    "meanFound": 1.5,
+    "meanCandidates": 2.45,
+    "meanBestIoU": 0.116
+   },
+   "voted": {
+    "candidates": 3,
+    "found": 2,
+    "of": 4,
+    "meanBestIoU": 0.141,
+    "falseCandidates": 0,
+    "perTable": {
+     "t1": {
+      "iou": 0.018,
+      "insideFrac": 0.072,
+      "cand": 2,
+      "found": false
+     },
+     "t2": {
+      "iou": 0.154,
+      "insideFrac": 0.586,
+      "cand": 2,
+      "found": false
+     },
+     "t3": {
+      "iou": 0.13,
+      "insideFrac": 0.919,
+      "cand": 1,
+      "found": true
+     },
+     "t4": {
+      "iou": 0.26,
+      "insideFrac": 0.293,
+      "cand": 0,
+      "found": true
+     }
+    }
+   }
+  },
+  {
+   "imgsz": 1280,
+   "precision": "fp32",
+   "time": {
+    "n": 20,
+    "mean_ms": 659.87,
+    "p50_ms": 662.53,
+    "p95_ms": 684.24,
+    "max_ms": 696.73,
+    "fps": 1.5
+   },
+   "gpuMem": null,
+   "singleFrame": {
+    "meanFound": 1.35,
+    "meanCandidates": 2.7,
+    "meanBestIoU": 0.122
+   },
+   "voted": {
+    "candidates": 4,
+    "found": 3,
+    "of": 4,
+    "meanBestIoU": 0.151,
+    "falseCandidates": 0,
+    "perTable": {
+     "t1": {
+      "iou": 0.062,
+      "insideFrac": 0.981,
+      "cand": 2,
+      "found": true
+     },
+     "t2": {
+      "iou": 0.16,
+      "insideFrac": 0.597,
+      "cand": 3,
+      "found": false
+     },
+     "t3": {
+      "iou": 0.131,
+      "insideFrac": 0.892,
+      "cand": 1,
+      "found": true
+     },
+     "t4": {
+      "iou": 0.251,
+      "insideFrac": 0.287,
+      "cand": 0,
+      "found": true
+     }
+    }
+   }
+  }
+ ]
+}

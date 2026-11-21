@@ -1,0 +1,184 @@
+{
+ "measuredAt": "2026-11-10 03:18 KST",
+ "env": {
+  "host": "gpu-server",
+  "python": "3.10.20",
+  "torch": "2.5.1+cu121",
+  "cuda": "12.1",
+  "cudnn": 90100,
+  "ultralytics": "8.4.41",
+  "opencv": "4.13.0",
+  "numpy": "2.2.6",
+  "gpu": "NVIDIA GeForce RTX 3090",
+  "tensorrt": "없음 (ModuleNotFoundError)"
+ },
+ "input": "1280x720 BGR (Café 17-354 원본 35장 축소, 순환)",
+ "iters": 300,
+ "warmup": 30,
+ "classes": [
+  0,
+  40,
+  41,
+  45
+ ],
+ "conf": 0.25,
+ "timing": "model.predict 1회 wall time(전처리+추론+NMS, cuda synchronize). JPEG 디코딩 제외",
+ "rows": [
+  {
+   "backend": "pt",
+   "imgsz": 640,
+   "precision": "fp32",
+   "n": 300,
+   "mean_ms": 12.81,
+   "p50_ms": 12.5,
+   "p95_ms": 14.31,
+   "max_ms": 16.06,
+   "fps": 78.0,
+   "ultralyticsSpeed_mean_ms": {
+    "preprocess": 1.34,
+    "inference": 9.91,
+    "postprocess": 1.3
+   },
+   "boxesPerFrame_mean": 13.93,
+   "gpuMem": {
+    "torch_peak_alloc_mib": 94,
+    "torch_peak_reserved_mib": 120,
+    "process_nvidia_smi_mib": 454
+   },
+   "netInput_hw": [
+    384,
+    640
+   ]
+  },
+  {
+   "backend": "pt",
+   "imgsz": 640,
+   "precision": "fp16",
+   "n": 300,
+   "mean_ms": 12.69,
+   "p50_ms": 12.55,
+   "p95_ms": 13.27,
+   "max_ms": 14.67,
+   "fps": 78.8,
+   "ultralyticsSpeed_mean_ms": {
+    "preprocess": 1.29,
+    "inference": 9.88,
+    "postprocess": 1.27
+   },
+   "boxesPerFrame_mean": 13.96,
+   "gpuMem": {
+    "torch_peak_alloc_mib": 65,
+    "torch_peak_reserved_mib": 74,
+    "process_nvidia_smi_mib": 416
+   },
+   "netInput_hw": [
+    384,
+    640
+   ]
+  },
+  {
+   "backend": "pt",
+   "imgsz": 960,
+   "precision": "fp32",
+   "n": 300,
+   "mean_ms": 13.73,
+   "p50_ms": 13.63,
+   "p95_ms": 14.11,
+   "max_ms": 15.63,
+   "fps": 72.8,
+   "ultralyticsSpeed_mean_ms": {
+    "preprocess": 2.84,
+    "inference": 9.41,
+    "postprocess": 1.24
+   },
+   "boxesPerFrame_mean": 12.92,
+   "gpuMem": {
+    "torch_peak_alloc_mib": 122,
+    "torch_peak_reserved_mib": 160,
+    "process_nvidia_smi_mib": 504
+   },
+   "netInput_hw": [
+    544,
+    960
+   ]
+  },
+  {
+   "backend": "pt",
+   "imgsz": 960,
+   "precision": "fp16",
+   "n": 300,
+   "mean_ms": 14.11,
+   "p50_ms": 14.0,
+   "p95_ms": 14.62,
+   "max_ms": 16.23,
+   "fps": 70.9,
+   "ultralyticsSpeed_mean_ms": {
+    "preprocess": 2.83,
+    "inference": 9.79,
+    "postprocess": 1.26
+   },
+   "boxesPerFrame_mean": 12.92,
+   "gpuMem": {
+    "torch_peak_alloc_mib": 80,
+    "torch_peak_reserved_mib": 108,
+    "process_nvidia_smi_mib": 452
+   },
+   "netInput_hw": [
+    544,
+    960
+   ]
+  },
+  {
+   "backend": "pt",
+   "imgsz": 1280,
+   "precision": "fp32",
+   "n": 300,
+   "mean_ms": 13.76,
+   "p50_ms": 13.57,
+   "p95_ms": 14.3,
+   "max_ms": 18.4,
+   "fps": 72.7,
+   "ultralyticsSpeed_mean_ms": {
+    "preprocess": 2.44,
+    "inference": 9.78,
+    "postprocess": 1.29
+   },
+   "boxesPerFrame_mean": 16.1,
+   "gpuMem": {
+    "torch_peak_alloc_mib": 166,
+    "torch_peak_reserved_mib": 208,
+    "process_nvidia_smi_mib": 552
+   },
+   "netInput_hw": [
+    736,
+    1280
+   ]
+  },
+  {
+   "backend": "pt",
+   "imgsz": 1280,
+   "precision": "fp16",
+   "n": 300,
+   "mean_ms": 14.33,
+   "p50_ms": 14.01,
+   "p95_ms": 15.79,
+   "max_ms": 18.45,
+   "fps": 69.8,
+   "ultralyticsSpeed_mean_ms": {
+    "preprocess": 2.47,
+    "inference": 10.29,
+    "postprocess": 1.33
+   },
+   "boxesPerFrame_mean": 16.1,
+   "gpuMem": {
+    "torch_peak_alloc_mib": 99,
+    "torch_peak_reserved_mib": 130,
+    "process_nvidia_smi_mib": 476
+   },
+   "netInput_hw": [
+    736,
+    1280
+   ]
+  }
+ ]
+}

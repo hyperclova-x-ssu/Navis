@@ -1,0 +1,3254 @@
+{
+ "budgetMsPerFrame": 44.4,
+ "decode720ms": 4.43,
+ "limitsNewDef": {
+  "inStore": 0.073,
+  "occ": 0.914,
+  "occupants": 0.266
+ },
+ "baselineOldDef": {
+  "inStore": {
+   "mae": 0.566,
+   "relative": 0.053
+  },
+  "occupancy": {
+   "include": 0.837,
+   "exclude": 0.762
+  },
+  "seated": {
+   "include": {
+    "mae": 1.918,
+    "relative": 0.343
+   },
+   "exclude": {
+    "mae": 2.323,
+    "relative": 0.596
+   }
+  }
+ },
+ "latency": [
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "pt",
+   "imgsz": 320,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 49.14,
+   "p50_ms": 48.06,
+   "p95_ms": 56.56,
+   "max_ms": 60.17,
+   "fps": 20.4,
+   "peakRssMiB": 637,
+   "wallSec": 4.2,
+   "measuredAt": "2026-11-10 03:26 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "pt",
+   "imgsz": 416,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 46.4,
+   "p50_ms": 46.27,
+   "p95_ms": 47.35,
+   "max_ms": 47.72,
+   "fps": 21.6,
+   "peakRssMiB": 643,
+   "wallSec": 4.0,
+   "measuredAt": "2026-11-10 03:26 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "pt",
+   "imgsz": 512,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 53.18,
+   "p50_ms": 53.16,
+   "p95_ms": 54.37,
+   "max_ms": 55.23,
+   "fps": 18.8,
+   "peakRssMiB": 649,
+   "wallSec": 4.5,
+   "measuredAt": "2026-11-10 03:26 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "pt",
+   "imgsz": 640,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 71.72,
+   "p50_ms": 71.64,
+   "p95_ms": 73.14,
+   "max_ms": 73.91,
+   "fps": 13.9,
+   "peakRssMiB": 663,
+   "wallSec": 5.7,
+   "measuredAt": "2026-11-10 03:26 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "onnx",
+   "imgsz": 320,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 11.03,
+   "p50_ms": 11.04,
+   "p95_ms": 11.15,
+   "max_ms": 11.36,
+   "fps": 90.7,
+   "peakRssMiB": 729,
+   "wallSec": 2.7,
+   "measuredAt": "2026-11-10 03:26 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "onnx",
+   "imgsz": 416,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 16.81,
+   "p50_ms": 16.76,
+   "p95_ms": 17.1,
+   "max_ms": 20.89,
+   "fps": 59.5,
+   "peakRssMiB": 648,
+   "wallSec": 2.1,
+   "measuredAt": "2026-11-10 03:27 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "onnx",
+   "imgsz": 512,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 22.82,
+   "p50_ms": 22.77,
+   "p95_ms": 23.23,
+   "max_ms": 23.43,
+   "fps": 43.8,
+   "peakRssMiB": 732,
+   "wallSec": 3.5,
+   "measuredAt": "2026-11-10 03:27 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "onnx",
+   "imgsz": 640,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 33.86,
+   "p50_ms": 33.83,
+   "p95_ms": 34.45,
+   "max_ms": 34.51,
+   "fps": 29.5,
+   "peakRssMiB": 755,
+   "wallSec": 4.2,
+   "measuredAt": "2026-11-10 03:27 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 320,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 8.46,
+   "p50_ms": 8.46,
+   "p95_ms": 8.67,
+   "max_ms": 8.81,
+   "fps": 118.2,
+   "peakRssMiB": 818,
+   "wallSec": 8.4,
+   "measuredAt": "2026-11-10 03:27 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 416,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 12.57,
+   "p50_ms": 12.57,
+   "p95_ms": 12.75,
+   "max_ms": 12.82,
+   "fps": 79.6,
+   "peakRssMiB": 703,
+   "wallSec": 2.0,
+   "measuredAt": "2026-11-10 03:27 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 512,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 16.54,
+   "p50_ms": 16.52,
+   "p95_ms": 16.81,
+   "max_ms": 16.87,
+   "fps": 60.5,
+   "peakRssMiB": 838,
+   "wallSec": 8.9,
+   "measuredAt": "2026-11-10 03:27 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 640,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 25.61,
+   "p50_ms": 25.65,
+   "p95_ms": 25.98,
+   "max_ms": 26.78,
+   "fps": 39.0,
+   "peakRssMiB": 847,
+   "wallSec": 9.7,
+   "measuredAt": "2026-11-10 03:28 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "pt",
+   "imgsz": 320,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 104.65,
+   "p50_ms": 107.87,
+   "p95_ms": 127.24,
+   "max_ms": 141.59,
+   "fps": 9.6,
+   "peakRssMiB": 675,
+   "wallSec": 7.9,
+   "measuredAt": "2026-11-10 03:28 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "pt",
+   "imgsz": 416,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 128.72,
+   "p50_ms": 128.0,
+   "p95_ms": 152.13,
+   "max_ms": 175.16,
+   "fps": 7.8,
+   "peakRssMiB": 690,
+   "wallSec": 9.5,
+   "measuredAt": "2026-11-10 03:28 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "pt",
+   "imgsz": 512,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 101.48,
+   "p50_ms": 100.35,
+   "p95_ms": 111.93,
+   "max_ms": 121.73,
+   "fps": 9.9,
+   "peakRssMiB": 708,
+   "wallSec": 7.6,
+   "measuredAt": "2026-11-10 03:28 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "pt",
+   "imgsz": 640,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 145.57,
+   "p50_ms": 140.61,
+   "p95_ms": 177.5,
+   "max_ms": 194.87,
+   "fps": 6.9,
+   "peakRssMiB": 736,
+   "wallSec": 10.5,
+   "measuredAt": "2026-11-10 03:28 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "onnx",
+   "imgsz": 320,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 20.84,
+   "p50_ms": 20.9,
+   "p95_ms": 21.06,
+   "max_ms": 21.32,
+   "fps": 48.0,
+   "peakRssMiB": 954,
+   "wallSec": 4.1,
+   "measuredAt": "2026-11-10 03:28 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "onnx",
+   "imgsz": 416,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 34.42,
+   "p50_ms": 34.41,
+   "p95_ms": 35.59,
+   "max_ms": 36.31,
+   "fps": 29.1,
+   "peakRssMiB": 958,
+   "wallSec": 4.9,
+   "measuredAt": "2026-11-10 03:29 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "onnx",
+   "imgsz": 512,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 46.28,
+   "p50_ms": 46.48,
+   "p95_ms": 47.03,
+   "max_ms": 47.36,
+   "fps": 21.6,
+   "peakRssMiB": 958,
+   "wallSec": 5.6,
+   "measuredAt": "2026-11-10 03:29 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "onnx",
+   "imgsz": 640,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 76.09,
+   "p50_ms": 76.25,
+   "p95_ms": 78.04,
+   "max_ms": 78.52,
+   "fps": 13.1,
+   "peakRssMiB": 961,
+   "wallSec": 7.7,
+   "measuredAt": "2026-11-10 03:29 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 320,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 19.47,
+   "p50_ms": 19.13,
+   "p95_ms": 19.74,
+   "max_ms": 29.6,
+   "fps": 51.4,
+   "peakRssMiB": 953,
+   "wallSec": 10.1,
+   "measuredAt": "2026-11-10 03:29 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 416,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 30.44,
+   "p50_ms": 30.43,
+   "p95_ms": 30.78,
+   "max_ms": 31.25,
+   "fps": 32.9,
+   "peakRssMiB": 972,
+   "wallSec": 10.5,
+   "measuredAt": "2026-11-10 03:29 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 512,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 41.17,
+   "p50_ms": 41.07,
+   "p95_ms": 41.76,
+   "max_ms": 44.07,
+   "fps": 24.3,
+   "peakRssMiB": 984,
+   "wallSec": 11.5,
+   "measuredAt": "2026-11-10 03:30 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 640,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 60,
+   "mean_ms": 66.54,
+   "p50_ms": 66.28,
+   "p95_ms": 69.6,
+   "max_ms": 71.07,
+   "fps": 15.0,
+   "peakRssMiB": 1024,
+   "wallSec": 13.4,
+   "measuredAt": "2026-11-10 03:30 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 960,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 30,
+   "mean_ms": 51.37,
+   "p50_ms": 51.13,
+   "p95_ms": 51.65,
+   "max_ms": 57.27,
+   "fps": 19.5,
+   "peakRssMiB": 912,
+   "wallSec": 10.2,
+   "measuredAt": "2026-11-10 03:42 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 1280,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 30,
+   "mean_ms": 90.69,
+   "p50_ms": 90.18,
+   "p95_ms": 94.18,
+   "max_ms": 97.34,
+   "fps": 11.0,
+   "peakRssMiB": 1067,
+   "wallSec": 12.2,
+   "measuredAt": "2026-11-10 03:42 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 960,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 30,
+   "mean_ms": 135.16,
+   "p50_ms": 135.29,
+   "p95_ms": 136.53,
+   "max_ms": 136.58,
+   "fps": 7.4,
+   "peakRssMiB": 1143,
+   "wallSec": 13.9,
+   "measuredAt": "2026-11-10 03:42 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 1280,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 30,
+   "mean_ms": 251.35,
+   "p50_ms": 250.77,
+   "p95_ms": 256.84,
+   "max_ms": 269.14,
+   "fps": 4.0,
+   "peakRssMiB": 1362,
+   "wallSec": 19.6,
+   "measuredAt": "2026-11-10 03:43 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "ov_int8",
+   "imgsz": 960,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 30,
+   "mean_ms": 83.63,
+   "p50_ms": 83.97,
+   "p95_ms": 84.65,
+   "max_ms": 84.94,
+   "fps": 12.0,
+   "peakRssMiB": 753,
+   "wallSec": 4.4,
+   "measuredAt": "2026-11-10 04:40 KST"
+  },
+  {
+   "mode": "latency",
+   "model": "yolo11s",
+   "runtime": "ov_int8",
+   "imgsz": 1280,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "n": 30,
+   "mean_ms": 150.01,
+   "p50_ms": 149.34,
+   "p95_ms": 155.14,
+   "max_ms": 163.77,
+   "fps": 6.7,
+   "peakRssMiB": 812,
+   "wallSec": 6.8,
+   "measuredAt": "2026-11-10 04:40 KST"
+  }
+ ],
+ "pipeline": [
+  {
+   "mode": "pipeline",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 320,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.83,
+     "p50_ms": 2.81,
+     "p95_ms": 2.95,
+     "max_ms": 4.38,
+     "fps": 352.9
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 10.27,
+     "p50_ms": 10.23,
+     "p95_ms": 10.72,
+     "max_ms": 14.95,
+     "fps": 97.4
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.18,
+     "p50_ms": 0.18,
+     "p95_ms": 0.22,
+     "max_ms": 0.28,
+     "fps": 5412.9
+    }
+   },
+   "perFrameCost_ms": 13.39,
+   "accuracy": {
+    "inStore": {
+     "mae": 5.595,
+     "relative": 0.524
+    },
+    "occupancy": {
+     "include": 0.596,
+     "exclude": 0.627
+    },
+    "seated": {
+     "include": {
+      "mae": 3.691,
+      "relative": 0.661
+     },
+     "exclude": {
+      "mae": 2.436,
+      "relative": 0.625
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.946,
+     "hold_meanIoU": 0.947,
+     "pairs": 3818
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.926,
+     "hold_meanIoU": 0.933,
+     "pairs": 4902
+    }
+   },
+   "peakRssMiB": 850,
+   "wallSec": 29.4,
+   "measuredAt": "2026-11-10 04:02 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 416,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.88,
+     "p50_ms": 2.88,
+     "p95_ms": 2.95,
+     "max_ms": 6.78,
+     "fps": 347.4
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 15.13,
+     "p50_ms": 15.08,
+     "p95_ms": 15.62,
+     "max_ms": 31.25,
+     "fps": 66.1
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.23,
+     "p50_ms": 0.23,
+     "p95_ms": 0.29,
+     "max_ms": 0.39,
+     "fps": 4341.5
+    }
+   },
+   "perFrameCost_ms": 18.45,
+   "accuracy": {
+    "inStore": {
+     "mae": 2.477,
+     "relative": 0.232
+    },
+    "occupancy": {
+     "include": 0.712,
+     "exclude": 0.739
+    },
+    "seated": {
+     "include": {
+      "mae": 2.264,
+      "relative": 0.405
+     },
+     "exclude": {
+      "mae": 1.394,
+      "relative": 0.358
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.939,
+     "hold_meanIoU": 0.941,
+     "pairs": 5976
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.917,
+     "hold_meanIoU": 0.925,
+     "pairs": 7628
+    }
+   },
+   "peakRssMiB": 859,
+   "wallSec": 38.2,
+   "measuredAt": "2026-11-10 04:03 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 512,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.9,
+     "p50_ms": 2.9,
+     "p95_ms": 2.96,
+     "max_ms": 4.23,
+     "fps": 345.0
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 19.2,
+     "p50_ms": 19.14,
+     "p95_ms": 19.73,
+     "max_ms": 27.92,
+     "fps": 52.1
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.26,
+     "p50_ms": 0.26,
+     "p95_ms": 0.32,
+     "max_ms": 0.46,
+     "fps": 3777.8
+    }
+   },
+   "perFrameCost_ms": 22.8,
+   "accuracy": {
+    "inStore": {
+     "mae": 0.817,
+     "relative": 0.077
+    },
+    "occupancy": {
+     "include": 0.79,
+     "exclude": 0.762
+    },
+    "seated": {
+     "include": {
+      "mae": 1.897,
+      "relative": 0.34
+     },
+     "exclude": {
+      "mae": 1.556,
+      "relative": 0.399
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.947,
+     "hold_meanIoU": 0.949,
+     "pairs": 7465
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.928,
+     "hold_meanIoU": 0.935,
+     "pairs": 9645
+    }
+   },
+   "peakRssMiB": 869,
+   "wallSec": 45.4,
+   "measuredAt": "2026-11-10 04:03 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 640,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.97,
+     "p50_ms": 2.91,
+     "p95_ms": 3.87,
+     "max_ms": 4.43,
+     "fps": 336.5
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 30.98,
+     "p50_ms": 28.79,
+     "p95_ms": 43.1,
+     "max_ms": 120.94,
+     "fps": 32.3
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.31,
+     "p50_ms": 0.3,
+     "p95_ms": 0.4,
+     "max_ms": 0.52,
+     "fps": 3258.8
+    }
+   },
+   "perFrameCost_ms": 34.26,
+   "accuracy": {
+    "inStore": {
+     "mae": 0.842,
+     "relative": 0.079
+    },
+    "occupancy": {
+     "include": 0.81,
+     "exclude": 0.767
+    },
+    "seated": {
+     "include": {
+      "mae": 1.898,
+      "relative": 0.34
+     },
+     "exclude": {
+      "mae": 2.07,
+      "relative": 0.531
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.942,
+     "hold_meanIoU": 0.944,
+     "pairs": 7442
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.921,
+     "hold_meanIoU": 0.929,
+     "pairs": 9560
+    }
+   },
+   "peakRssMiB": 895,
+   "wallSec": 65.2,
+   "measuredAt": "2026-11-10 04:05 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 320,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.91,
+     "p50_ms": 2.91,
+     "p95_ms": 2.97,
+     "max_ms": 4.14,
+     "fps": 343.1
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 21.62,
+     "p50_ms": 21.51,
+     "p95_ms": 22.07,
+     "max_ms": 112.96,
+     "fps": 46.2
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.26,
+     "p50_ms": 0.26,
+     "p95_ms": 0.32,
+     "max_ms": 0.49,
+     "fps": 3794.8
+    }
+   },
+   "perFrameCost_ms": 24.8,
+   "accuracy": {
+    "inStore": {
+     "mae": 3.441,
+     "relative": 0.322
+    },
+    "occupancy": {
+     "include": 0.702,
+     "exclude": 0.726
+    },
+    "seated": {
+     "include": {
+      "mae": 2.637,
+      "relative": 0.472
+     },
+     "exclude": {
+      "mae": 1.547,
+      "relative": 0.397
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.935,
+     "hold_meanIoU": 0.938,
+     "pairs": 5183
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.914,
+     "hold_meanIoU": 0.923,
+     "pairs": 6566
+    }
+   },
+   "peakRssMiB": 910,
+   "wallSec": 48.8,
+   "measuredAt": "2026-11-10 04:13 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 416,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.91,
+     "p50_ms": 2.9,
+     "p95_ms": 2.96,
+     "max_ms": 4.19,
+     "fps": 344.0
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 32.86,
+     "p50_ms": 32.68,
+     "p95_ms": 33.37,
+     "max_ms": 123.45,
+     "fps": 30.4
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.28,
+     "p50_ms": 0.28,
+     "p95_ms": 0.33,
+     "max_ms": 0.45,
+     "fps": 3565.9
+    }
+   },
+   "perFrameCost_ms": 36.05,
+   "accuracy": {
+    "inStore": {
+     "mae": 2.569,
+     "relative": 0.241
+    },
+    "occupancy": {
+     "include": 0.779,
+     "exclude": 0.749
+    },
+    "seated": {
+     "include": {
+      "mae": 1.773,
+      "relative": 0.317
+     },
+     "exclude": {
+      "mae": 1.702,
+      "relative": 0.437
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.934,
+     "hold_meanIoU": 0.936,
+     "pairs": 6056
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.911,
+     "hold_meanIoU": 0.919,
+     "pairs": 7773
+    }
+   },
+   "peakRssMiB": 917,
+   "wallSec": 68.1,
+   "measuredAt": "2026-11-10 04:15 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 512,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.91,
+     "p50_ms": 2.91,
+     "p95_ms": 2.97,
+     "max_ms": 3.82,
+     "fps": 343.5
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 43.19,
+     "p50_ms": 43.12,
+     "p95_ms": 44.01,
+     "max_ms": 59.08,
+     "fps": 23.2
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.27,
+     "p50_ms": 0.27,
+     "p95_ms": 0.32,
+     "max_ms": 0.48,
+     "fps": 3681.9
+    }
+   },
+   "perFrameCost_ms": 46.65,
+   "accuracy": {
+    "inStore": {
+     "mae": 2.095,
+     "relative": 0.196
+    },
+    "occupancy": {
+     "include": 0.803,
+     "exclude": 0.77
+    },
+    "seated": {
+     "include": {
+      "mae": 1.778,
+      "relative": 0.318
+     },
+     "exclude": {
+      "mae": 1.815,
+      "relative": 0.466
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.94,
+     "hold_meanIoU": 0.942,
+     "pairs": 6468
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.916,
+     "hold_meanIoU": 0.925,
+     "pairs": 8339
+    }
+   },
+   "peakRssMiB": 924,
+   "wallSec": 86.9,
+   "measuredAt": "2026-11-10 04:16 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 640,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.9,
+     "p50_ms": 2.9,
+     "p95_ms": 2.98,
+     "max_ms": 3.39,
+     "fps": 344.6
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 68.29,
+     "p50_ms": 68.21,
+     "p95_ms": 69.52,
+     "max_ms": 76.54,
+     "fps": 14.6
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.29,
+     "p50_ms": 0.3,
+     "p95_ms": 0.34,
+     "max_ms": 0.57,
+     "fps": 3395.6
+    }
+   },
+   "perFrameCost_ms": 71.86,
+   "accuracy": {
+    "inStore": {
+     "mae": 1.271,
+     "relative": 0.119
+    },
+    "occupancy": {
+     "include": 0.809,
+     "exclude": 0.768
+    },
+    "seated": {
+     "include": {
+      "mae": 1.974,
+      "relative": 0.353
+     },
+     "exclude": {
+      "mae": 2.381,
+      "relative": 0.611
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.939,
+     "hold_meanIoU": 0.94,
+     "pairs": 7286
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.914,
+     "hold_meanIoU": 0.923,
+     "pairs": 9408
+    }
+   },
+   "peakRssMiB": 939,
+   "wallSec": 129.8,
+   "measuredAt": "2026-11-10 04:18 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 640,
+   "interval": 2,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.89,
+     "p50_ms": 2.89,
+     "p95_ms": 2.93,
+     "max_ms": 3.25,
+     "fps": 346.4
+    },
+    "detect_track": {
+     "n": 859,
+     "mean_ms": 28.77,
+     "p50_ms": 28.71,
+     "p95_ms": 29.23,
+     "max_ms": 47.47,
+     "fps": 34.8
+    },
+    "post": {
+     "n": 859,
+     "mean_ms": 0.26,
+     "p50_ms": 0.25,
+     "p95_ms": 0.31,
+     "max_ms": 0.39,
+     "fps": 3883.5
+    },
+    "extrapolate": {
+     "n": 859,
+     "mean_ms": 0.09,
+     "p50_ms": 0.09,
+     "p95_ms": 0.11,
+     "max_ms": 0.16,
+     "fps": 11466.3
+    }
+   },
+   "perFrameCost_ms": 17.54,
+   "accuracy": {
+    "inStore": {
+     "mae": 1.256,
+     "relative": 0.118
+    },
+    "occupancy": {
+     "include": 0.808,
+     "exclude": 0.77
+    },
+    "seated": {
+     "include": {
+      "mae": 2.031,
+      "relative": 0.364
+     },
+     "exclude": {
+      "mae": 2.269,
+      "relative": 0.582
+     }
+    }
+   },
+   "peakRssMiB": 891,
+   "wallSec": 36.6,
+   "measuredAt": "2026-11-10 04:31 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 640,
+   "interval": 3,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.87,
+     "p50_ms": 2.87,
+     "p95_ms": 2.93,
+     "max_ms": 3.85,
+     "fps": 348.8
+    },
+    "detect_track": {
+     "n": 573,
+     "mean_ms": 28.78,
+     "p50_ms": 28.71,
+     "p95_ms": 29.84,
+     "max_ms": 31.89,
+     "fps": 34.7
+    },
+    "post": {
+     "n": 573,
+     "mean_ms": 0.25,
+     "p50_ms": 0.25,
+     "p95_ms": 0.31,
+     "max_ms": 0.36,
+     "fps": 3954.2
+    },
+    "extrapolate": {
+     "n": 1145,
+     "mean_ms": 0.08,
+     "p50_ms": 0.08,
+     "p95_ms": 0.1,
+     "max_ms": 0.13,
+     "fps": 12797.3
+    }
+   },
+   "perFrameCost_ms": 12.61,
+   "accuracy": {
+    "inStore": {
+     "mae": 1.576,
+     "relative": 0.148
+    },
+    "occupancy": {
+     "include": 0.813,
+     "exclude": 0.773
+    },
+    "seated": {
+     "include": {
+      "mae": 2.046,
+      "relative": 0.366
+     },
+     "exclude": {
+      "mae": 2.254,
+      "relative": 0.578
+     }
+    }
+   },
+   "peakRssMiB": 890,
+   "wallSec": 27.7,
+   "measuredAt": "2026-11-10 04:31 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 640,
+   "interval": 3,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.86,
+     "p50_ms": 2.85,
+     "p95_ms": 2.93,
+     "max_ms": 4.04,
+     "fps": 349.9
+    },
+    "detect_track": {
+     "n": 573,
+     "mean_ms": 68.38,
+     "p50_ms": 68.28,
+     "p95_ms": 69.33,
+     "max_ms": 85.66,
+     "fps": 14.6
+    },
+    "post": {
+     "n": 573,
+     "mean_ms": 0.28,
+     "p50_ms": 0.28,
+     "p95_ms": 0.32,
+     "max_ms": 0.36,
+     "fps": 3598.3
+    },
+    "extrapolate": {
+     "n": 1145,
+     "mean_ms": 0.08,
+     "p50_ms": 0.08,
+     "p95_ms": 0.1,
+     "max_ms": 0.15,
+     "fps": 12649.8
+    }
+   },
+   "perFrameCost_ms": 25.84,
+   "accuracy": {
+    "inStore": {
+     "mae": 1.873,
+     "relative": 0.175
+    },
+    "occupancy": {
+     "include": 0.815,
+     "exclude": 0.783
+    },
+    "seated": {
+     "include": {
+      "mae": 2.03,
+      "relative": 0.363
+     },
+     "exclude": {
+      "mae": 2.456,
+      "relative": 0.63
+     }
+    }
+   },
+   "peakRssMiB": 934,
+   "wallSec": 50.8,
+   "measuredAt": "2026-11-10 04:32 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 960,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.91,
+     "p50_ms": 2.92,
+     "p95_ms": 2.97,
+     "max_ms": 4.16,
+     "fps": 343.1
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 52.05,
+     "p50_ms": 51.93,
+     "p95_ms": 52.77,
+     "max_ms": 68.25,
+     "fps": 19.2
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.31,
+     "p50_ms": 0.31,
+     "p95_ms": 0.37,
+     "max_ms": 0.49,
+     "fps": 3233.4
+    }
+   },
+   "perFrameCost_ms": 99.71,
+   "accuracy": {
+    "inStore": {
+     "mae": 1.268,
+     "relative": 0.119
+    },
+    "occupancy": {
+     "include": 0.806,
+     "exclude": 0.771
+    },
+    "seated": {
+     "include": {
+      "mae": 1.782,
+      "relative": 0.319
+     },
+     "exclude": {
+      "mae": 1.937,
+      "relative": 0.497
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.942,
+     "hold_meanIoU": 0.944,
+     "pairs": 7258
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.919,
+     "hold_meanIoU": 0.928,
+     "pairs": 9337
+    }
+   },
+   "peakRssMiB": 961,
+   "wallSec": 180.5,
+   "measuredAt": "2026-11-10 04:08 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11n",
+   "runtime": "openvino",
+   "imgsz": 1280,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.91,
+     "p50_ms": 2.92,
+     "p95_ms": 2.96,
+     "max_ms": 4.4,
+     "fps": 343.1
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 95.4,
+     "p50_ms": 95.28,
+     "p95_ms": 97.02,
+     "max_ms": 114.28,
+     "fps": 10.5
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.32,
+     "p50_ms": 0.32,
+     "p95_ms": 0.38,
+     "max_ms": 0.46,
+     "fps": 3157.8
+    }
+   },
+   "perFrameCost_ms": 163.74,
+   "accuracy": {
+    "inStore": {
+     "mae": 1.08,
+     "relative": 0.101
+    },
+    "occupancy": {
+     "include": 0.818,
+     "exclude": 0.768
+    },
+    "seated": {
+     "include": {
+      "mae": 1.834,
+      "relative": 0.328
+     },
+     "exclude": {
+      "mae": 2.091,
+      "relative": 0.537
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.942,
+     "hold_meanIoU": 0.943,
+     "pairs": 7503
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.918,
+     "hold_meanIoU": 0.927,
+     "pairs": 9724
+    }
+   },
+   "peakRssMiB": 1020,
+   "wallSec": 290.8,
+   "measuredAt": "2026-11-10 04:13 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 960,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.92,
+     "p50_ms": 2.92,
+     "p95_ms": 2.97,
+     "max_ms": 3.99,
+     "fps": 342.9
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 136.59,
+     "p50_ms": 136.58,
+     "p95_ms": 139.22,
+     "max_ms": 163.65,
+     "fps": 7.3
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.32,
+     "p50_ms": 0.32,
+     "p95_ms": 0.38,
+     "max_ms": 0.62,
+     "fps": 3115.1
+    }
+   },
+   "perFrameCost_ms": 140.65,
+   "accuracy": {
+    "inStore": {
+     "mae": 0.789,
+     "relative": 0.074
+    },
+    "occupancy": {
+     "include": 0.815,
+     "exclude": 0.767
+    },
+    "seated": {
+     "include": {
+      "mae": 1.73,
+      "relative": 0.31
+     },
+     "exclude": {
+      "mae": 2.156,
+      "relative": 0.553
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.946,
+     "hold_meanIoU": 0.946,
+     "pairs": 8127
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.924,
+     "hold_meanIoU": 0.931,
+     "pairs": 10551
+    }
+   },
+   "peakRssMiB": 995,
+   "wallSec": 248.7,
+   "measuredAt": "2026-11-10 04:23 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 1280,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.9,
+     "p50_ms": 2.9,
+     "p95_ms": 2.95,
+     "max_ms": 4.05,
+     "fps": 345.0
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 255.49,
+     "p50_ms": 255.21,
+     "p95_ms": 264.62,
+     "max_ms": 380.42,
+     "fps": 3.9
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.38,
+     "p50_ms": 0.37,
+     "p95_ms": 0.43,
+     "max_ms": 0.56,
+     "fps": 2656.4
+    }
+   },
+   "perFrameCost_ms": 260.1,
+   "accuracy": {
+    "inStore": {
+     "mae": 0.696,
+     "relative": 0.065
+    },
+    "occupancy": {
+     "include": 0.821,
+     "exclude": 0.767
+    },
+    "seated": {
+     "include": {
+      "mae": 1.848,
+      "relative": 0.331
+     },
+     "exclude": {
+      "mae": 2.271,
+      "relative": 0.583
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.945,
+     "hold_meanIoU": 0.945,
+     "pairs": 8341
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.922,
+     "hold_meanIoU": 0.929,
+     "pairs": 10859
+    }
+   },
+   "peakRssMiB": 1093,
+   "wallSec": 454.4,
+   "measuredAt": "2026-11-10 04:30 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 1280,
+   "interval": 2,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.9,
+     "p50_ms": 2.89,
+     "p95_ms": 2.96,
+     "max_ms": 4.25,
+     "fps": 344.9
+    },
+    "detect_track": {
+     "n": 859,
+     "mean_ms": 256.53,
+     "p50_ms": 256.14,
+     "p95_ms": 263.93,
+     "max_ms": 360.56,
+     "fps": 3.9
+    },
+    "post": {
+     "n": 859,
+     "mean_ms": 0.44,
+     "p50_ms": 0.43,
+     "p95_ms": 0.51,
+     "max_ms": 0.78,
+     "fps": 2280.1
+    },
+    "extrapolate": {
+     "n": 859,
+     "mean_ms": 0.09,
+     "p50_ms": 0.09,
+     "p95_ms": 0.11,
+     "max_ms": 0.18,
+     "fps": 11009.9
+    }
+   },
+   "perFrameCost_ms": 131.43,
+   "accuracy": {
+    "inStore": {
+     "mae": 0.76,
+     "relative": 0.071
+    },
+    "occupancy": {
+     "include": 0.823,
+     "exclude": 0.775
+    },
+    "seated": {
+     "include": {
+      "mae": 1.952,
+      "relative": 0.349
+     },
+     "exclude": {
+      "mae": 2.338,
+      "relative": 0.6
+     }
+    }
+   },
+   "peakRssMiB": 1068,
+   "wallSec": 233.2,
+   "measuredAt": "2026-11-10 04:37 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "openvino",
+   "imgsz": 1280,
+   "interval": 3,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.88,
+     "p50_ms": 2.88,
+     "p95_ms": 2.94,
+     "max_ms": 3.6,
+     "fps": 347.7
+    },
+    "detect_track": {
+     "n": 573,
+     "mean_ms": 255.1,
+     "p50_ms": 255.26,
+     "p95_ms": 260.8,
+     "max_ms": 274.17,
+     "fps": 3.9
+    },
+    "post": {
+     "n": 573,
+     "mean_ms": 0.43,
+     "p50_ms": 0.42,
+     "p95_ms": 0.49,
+     "max_ms": 0.54,
+     "fps": 2347.4
+    },
+    "extrapolate": {
+     "n": 1145,
+     "mean_ms": 0.08,
+     "p50_ms": 0.09,
+     "p95_ms": 0.1,
+     "max_ms": 0.16,
+     "fps": 11810.5
+    }
+   },
+   "perFrameCost_ms": 88.11,
+   "accuracy": {
+    "inStore": {
+     "mae": 0.949,
+     "relative": 0.089
+    },
+    "occupancy": {
+     "include": 0.819,
+     "exclude": 0.772
+    },
+    "seated": {
+     "include": {
+      "mae": 1.959,
+      "relative": 0.351
+     },
+     "exclude": {
+      "mae": 2.277,
+      "relative": 0.584
+     }
+    }
+   },
+   "peakRssMiB": 1093,
+   "wallSec": 158.8,
+   "measuredAt": "2026-11-10 04:40 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "ov_int8",
+   "imgsz": 960,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.91,
+     "p50_ms": 2.91,
+     "p95_ms": 2.96,
+     "max_ms": 4.07,
+     "fps": 343.3
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 85.44,
+     "p50_ms": 85.26,
+     "p95_ms": 86.79,
+     "max_ms": 191.08,
+     "fps": 11.7
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.37,
+     "p50_ms": 0.37,
+     "p95_ms": 0.43,
+     "max_ms": 0.59,
+     "fps": 2679.3
+    }
+   },
+   "perFrameCost_ms": 88.73,
+   "accuracy": {
+    "inStore": {
+     "mae": 0.761,
+     "relative": 0.071
+    },
+    "occupancy": {
+     "include": 0.816,
+     "exclude": 0.767
+    },
+    "seated": {
+     "include": {
+      "mae": 1.738,
+      "relative": 0.311
+     },
+     "exclude": {
+      "mae": 2.14,
+      "relative": 0.549
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.943,
+     "hold_meanIoU": 0.944,
+     "pairs": 8118
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.921,
+     "hold_meanIoU": 0.929,
+     "pairs": 10587
+    }
+   },
+   "peakRssMiB": 919,
+   "wallSec": 159.4,
+   "measuredAt": "2026-11-10 04:43 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "ov_int8",
+   "imgsz": 1280,
+   "interval": 1,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.92,
+     "p50_ms": 2.91,
+     "p95_ms": 3.0,
+     "max_ms": 4.35,
+     "fps": 342.2
+    },
+    "detect_track": {
+     "n": 1718,
+     "mean_ms": 156.94,
+     "p50_ms": 155.51,
+     "p95_ms": 163.95,
+     "max_ms": 259.55,
+     "fps": 6.4
+    },
+    "post": {
+     "n": 1718,
+     "mean_ms": 0.44,
+     "p50_ms": 0.44,
+     "p95_ms": 0.52,
+     "max_ms": 0.78,
+     "fps": 2253.7
+    }
+   },
+   "perFrameCost_ms": 160.3,
+   "accuracy": {
+    "inStore": {
+     "mae": 0.644,
+     "relative": 0.06
+    },
+    "occupancy": {
+     "include": 0.823,
+     "exclude": 0.769
+    },
+    "seated": {
+     "include": {
+      "mae": 1.862,
+      "relative": 0.333
+     },
+     "exclude": {
+      "mae": 2.256,
+      "relative": 0.579
+     }
+    }
+   },
+   "extrapolationIoU": {
+    "N2": {
+     "constantVelocity_meanIoU": 0.941,
+     "hold_meanIoU": 0.943,
+     "pairs": 8357
+    },
+    "N3": {
+     "constantVelocity_meanIoU": 0.918,
+     "hold_meanIoU": 0.927,
+     "pairs": 10909
+    }
+   },
+   "peakRssMiB": 1032,
+   "wallSec": 282.6,
+   "measuredAt": "2026-11-10 04:48 KST"
+  },
+  {
+   "mode": "pipeline",
+   "model": "yolo11s",
+   "runtime": "ov_int8",
+   "imgsz": 1280,
+   "interval": 2,
+   "threads": 4,
+   "affinity": [
+    0,
+    1,
+    2,
+    3
+   ],
+   "cudaVisible": false,
+   "times": {
+    "decode": {
+     "n": 1718,
+     "mean_ms": 2.92,
+     "p50_ms": 2.89,
+     "p95_ms": 3.03,
+     "max_ms": 4.3,
+     "fps": 342.4
+    },
+    "detect_track": {
+     "n": 859,
+     "mean_ms": 159.19,
+     "p50_ms": 154.81,
+     "p95_ms": 178.46,
+     "max_ms": 255.51,
+     "fps": 6.3
+    },
+    "post": {
+     "n": 859,
+     "mean_ms": 0.44,
+     "p50_ms": 0.43,
+     "p95_ms": 0.51,
+     "max_ms": 0.79,
+     "fps": 2294.1
+    },
+    "extrapolate": {
+     "n": 859,
+     "mean_ms": 0.09,
+     "p50_ms": 0.09,
+     "p95_ms": 0.12,
+     "max_ms": 0.2,
+     "fps": 10583.0
+    }
+   },
+   "perFrameCost_ms": 82.78,
+   "accuracy": {
+    "inStore": {
+     "mae": 0.721,
+     "relative": 0.068
+    },
+    "occupancy": {
+     "include": 0.823,
+     "exclude": 0.775
+    },
+    "seated": {
+     "include": {
+      "mae": 1.938,
+      "relative": 0.347
+     },
+     "exclude": {
+      "mae": 2.377,
+      "relative": 0.61
+     }
+    }
+   },
+   "peakRssMiB": 1001,
+   "wallSec": 150.0,
+   "measuredAt": "2026-11-10 04:52 KST"
+  }
+ ],
+ "verdict": [
+  {
+   "config": "yolo11n_openvino_320_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 7.9,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.704,
+    "occExclude": 0.787,
+    "perTableInclude": {
+     "t1": 0.892,
+     "t2": 0.264,
+     "t3": 0.685,
+     "t4": 0.974
+    },
+    "occupantsInclude": 0.547,
+    "occupantsExclude": 0.436,
+    "inStore": 0.524
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 5.595,
+     "relative": 0.524
+    },
+    "occupancy": {
+     "include": 0.596,
+     "exclude": 0.627
+    },
+    "seated": {
+     "include": {
+      "mae": 3.691,
+      "relative": 0.661
+     },
+     "exclude": {
+      "mae": 2.436,
+      "relative": 0.625
+     }
+    }
+   },
+   "peakRssMiB": 850,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 10.27,
+    "p50_ms": 10.23,
+    "p95_ms": 10.72,
+    "max_ms": 14.95,
+    "fps": 97.4
+   }
+  },
+  {
+   "config": "yolo11n_openvino_416_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 9.6,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.842,
+    "occExclude": 0.899,
+    "perTableInclude": {
+     "t1": 0.962,
+     "t2": 0.572,
+     "t3": 0.867,
+     "t4": 0.967
+    },
+    "occupantsInclude": 0.318,
+    "occupantsExclude": 0.275,
+    "inStore": 0.232
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 2.477,
+     "relative": 0.232
+    },
+    "occupancy": {
+     "include": 0.712,
+     "exclude": 0.739
+    },
+    "seated": {
+     "include": {
+      "mae": 2.264,
+      "relative": 0.405
+     },
+     "exclude": {
+      "mae": 1.394,
+      "relative": 0.358
+     }
+    }
+   },
+   "peakRssMiB": 859,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 15.13,
+    "p50_ms": 15.08,
+    "p95_ms": 15.62,
+    "max_ms": 31.25,
+    "fps": 66.1
+   }
+  },
+  {
+   "config": "yolo11n_openvino_512_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 10.9,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.907,
+    "occExclude": 0.926,
+    "perTableInclude": {
+     "t1": 0.951,
+     "t2": 0.798,
+     "t3": 0.913,
+     "t4": 0.967
+    },
+    "occupantsInclude": 0.324,
+    "occupantsExclude": 0.274,
+    "inStore": 0.077
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 0.817,
+     "relative": 0.077
+    },
+    "occupancy": {
+     "include": 0.79,
+     "exclude": 0.762
+    },
+    "seated": {
+     "include": {
+      "mae": 1.897,
+      "relative": 0.34
+     },
+     "exclude": {
+      "mae": 1.556,
+      "relative": 0.399
+     }
+    }
+   },
+   "peakRssMiB": 869,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 19.2,
+    "p50_ms": 19.14,
+    "p95_ms": 19.73,
+    "max_ms": 27.92,
+    "fps": 52.1
+   }
+  },
+  {
+   "config": "yolo11n_openvino_640_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 14.9,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.888,
+    "occExclude": 0.91,
+    "perTableInclude": {
+     "t1": 0.951,
+     "t2": 0.753,
+     "t3": 0.871,
+     "t4": 0.977
+    },
+    "occupantsInclude": 0.269,
+    "occupantsExclude": 0.3,
+    "inStore": 0.079
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 0.842,
+     "relative": 0.079
+    },
+    "occupancy": {
+     "include": 0.81,
+     "exclude": 0.767
+    },
+    "seated": {
+     "include": {
+      "mae": 1.898,
+      "relative": 0.34
+     },
+     "exclude": {
+      "mae": 2.07,
+      "relative": 0.531
+     }
+    }
+   },
+   "peakRssMiB": 895,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 30.98,
+    "p50_ms": 28.79,
+    "p95_ms": 43.1,
+    "max_ms": 120.94,
+    "fps": 32.3
+   }
+  },
+  {
+   "config": "yolo11n_openvino_640_N2",
+   "detectionsPerSec": 2.5,
+   "costMsAt15fps": 9.3,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.894,
+    "occExclude": 0.914,
+    "perTableInclude": {
+     "t1": 0.952,
+     "t2": 0.763,
+     "t3": 0.891,
+     "t4": 0.971
+    },
+    "occupantsInclude": 0.259,
+    "occupantsExclude": 0.304,
+    "inStore": 0.118
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 1.256,
+     "relative": 0.118
+    },
+    "occupancy": {
+     "include": 0.808,
+     "exclude": 0.77
+    },
+    "seated": {
+     "include": {
+      "mae": 2.031,
+      "relative": 0.364
+     },
+     "exclude": {
+      "mae": 2.269,
+      "relative": 0.582
+     }
+    }
+   },
+   "peakRssMiB": 891,
+   "detectTrack": {
+    "n": 859,
+    "mean_ms": 28.77,
+    "p50_ms": 28.71,
+    "p95_ms": 29.23,
+    "max_ms": 47.47,
+    "fps": 34.8
+   }
+  },
+  {
+   "config": "yolo11n_openvino_640_N3",
+   "detectionsPerSec": 1.67,
+   "costMsAt15fps": 7.7,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.903,
+    "occExclude": 0.914,
+    "perTableInclude": {
+     "t1": 0.97,
+     "t2": 0.789,
+     "t3": 0.887,
+     "t4": 0.967
+    },
+    "occupantsInclude": 0.237,
+    "occupantsExclude": 0.346,
+    "inStore": 0.158
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 1.576,
+     "relative": 0.148
+    },
+    "occupancy": {
+     "include": 0.813,
+     "exclude": 0.773
+    },
+    "seated": {
+     "include": {
+      "mae": 2.046,
+      "relative": 0.366
+     },
+     "exclude": {
+      "mae": 2.254,
+      "relative": 0.578
+     }
+    }
+   },
+   "peakRssMiB": 890,
+   "detectTrack": {
+    "n": 573,
+    "mean_ms": 28.78,
+    "p50_ms": 28.71,
+    "p95_ms": 29.84,
+    "max_ms": 31.89,
+    "fps": 34.7
+   }
+  },
+  {
+   "config": "yolo11n_openvino_960_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 21.9,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.918,
+    "occExclude": 0.921,
+    "perTableInclude": {
+     "t1": 0.968,
+     "t2": 0.851,
+     "t3": 0.886,
+     "t4": 0.969
+    },
+    "occupantsInclude": 0.255,
+    "occupantsExclude": 0.28,
+    "inStore": 0.119
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 1.268,
+     "relative": 0.119
+    },
+    "occupancy": {
+     "include": 0.806,
+     "exclude": 0.771
+    },
+    "seated": {
+     "include": {
+      "mae": 1.782,
+      "relative": 0.319
+     },
+     "exclude": {
+      "mae": 1.937,
+      "relative": 0.497
+     }
+    }
+   },
+   "peakRssMiB": 961,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 52.05,
+    "p50_ms": 51.93,
+    "p95_ms": 52.77,
+    "max_ms": 68.25,
+    "fps": 19.2
+   }
+  },
+  {
+   "config": "yolo11n_openvino_1280_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 36.3,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.922,
+    "occExclude": 0.931,
+    "perTableInclude": {
+     "t1": 0.974,
+     "t2": 0.838,
+     "t3": 0.904,
+     "t4": 0.972
+    },
+    "occupantsInclude": 0.272,
+    "occupantsExclude": 0.297,
+    "inStore": 0.101
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 1.08,
+     "relative": 0.101
+    },
+    "occupancy": {
+     "include": 0.818,
+     "exclude": 0.768
+    },
+    "seated": {
+     "include": {
+      "mae": 1.834,
+      "relative": 0.328
+     },
+     "exclude": {
+      "mae": 2.091,
+      "relative": 0.537
+     }
+    }
+   },
+   "peakRssMiB": 1020,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 95.4,
+    "p50_ms": 95.28,
+    "p95_ms": 97.02,
+    "max_ms": 114.28,
+    "fps": 10.5
+   }
+  },
+  {
+   "config": "yolo11s_openvino_320_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 11.7,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.824,
+    "occExclude": 0.876,
+    "perTableInclude": {
+     "t1": 0.977,
+     "t2": 0.494,
+     "t3": 0.854,
+     "t4": 0.971
+    },
+    "occupantsInclude": 0.311,
+    "occupantsExclude": 0.335,
+    "inStore": 0.322
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 3.441,
+     "relative": 0.322
+    },
+    "occupancy": {
+     "include": 0.702,
+     "exclude": 0.726
+    },
+    "seated": {
+     "include": {
+      "mae": 2.637,
+      "relative": 0.472
+     },
+     "exclude": {
+      "mae": 1.547,
+      "relative": 0.397
+     }
+    }
+   },
+   "peakRssMiB": 910,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 21.62,
+    "p50_ms": 21.51,
+    "p95_ms": 22.07,
+    "max_ms": 112.96,
+    "fps": 46.2
+   }
+  },
+  {
+   "config": "yolo11s_openvino_416_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 15.5,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.882,
+    "occExclude": 0.928,
+    "perTableInclude": {
+     "t1": 0.974,
+     "t2": 0.686,
+     "t3": 0.895,
+     "t4": 0.973
+    },
+    "occupantsInclude": 0.277,
+    "occupantsExclude": 0.285,
+    "inStore": 0.241
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 2.569,
+     "relative": 0.241
+    },
+    "occupancy": {
+     "include": 0.779,
+     "exclude": 0.749
+    },
+    "seated": {
+     "include": {
+      "mae": 1.773,
+      "relative": 0.317
+     },
+     "exclude": {
+      "mae": 1.702,
+      "relative": 0.437
+     }
+    }
+   },
+   "peakRssMiB": 917,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 32.86,
+    "p50_ms": 32.68,
+    "p95_ms": 33.37,
+    "max_ms": 123.45,
+    "fps": 30.4
+   }
+  },
+  {
+   "config": "yolo11s_openvino_512_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 18.9,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.923,
+    "occExclude": 0.923,
+    "perTableInclude": {
+     "t1": 0.984,
+     "t2": 0.861,
+     "t3": 0.88,
+     "t4": 0.967
+    },
+    "occupantsInclude": 0.256,
+    "occupantsExclude": 0.366,
+    "inStore": 0.196
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 2.095,
+     "relative": 0.196
+    },
+    "occupancy": {
+     "include": 0.803,
+     "exclude": 0.77
+    },
+    "seated": {
+     "include": {
+      "mae": 1.778,
+      "relative": 0.318
+     },
+     "exclude": {
+      "mae": 1.815,
+      "relative": 0.466
+     }
+    }
+   },
+   "peakRssMiB": 924,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 43.19,
+    "p50_ms": 43.12,
+    "p95_ms": 44.01,
+    "max_ms": 59.08,
+    "fps": 23.2
+   }
+  },
+  {
+   "config": "yolo11s_openvino_640_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 27.3,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.92,
+    "occExclude": 0.921,
+    "perTableInclude": {
+     "t1": 0.988,
+     "t2": 0.832,
+     "t3": 0.888,
+     "t4": 0.97
+    },
+    "occupantsInclude": 0.209,
+    "occupantsExclude": 0.358,
+    "inStore": 0.119
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 1.271,
+     "relative": 0.119
+    },
+    "occupancy": {
+     "include": 0.809,
+     "exclude": 0.768
+    },
+    "seated": {
+     "include": {
+      "mae": 1.974,
+      "relative": 0.353
+     },
+     "exclude": {
+      "mae": 2.381,
+      "relative": 0.611
+     }
+    }
+   },
+   "peakRssMiB": 939,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 68.29,
+    "p50_ms": 68.21,
+    "p95_ms": 69.52,
+    "max_ms": 76.54,
+    "fps": 14.6
+   }
+  },
+  {
+   "config": "yolo11s_openvino_640_N3",
+   "detectionsPerSec": 1.67,
+   "costMsAt15fps": 12.1,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.907,
+    "occExclude": 0.914,
+    "perTableInclude": {
+     "t1": 0.981,
+     "t2": 0.808,
+     "t3": 0.861,
+     "t4": 0.98
+    },
+    "occupantsInclude": 0.257,
+    "occupantsExclude": 0.271,
+    "inStore": 0.177
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 1.873,
+     "relative": 0.175
+    },
+    "occupancy": {
+     "include": 0.815,
+     "exclude": 0.783
+    },
+    "seated": {
+     "include": {
+      "mae": 2.03,
+      "relative": 0.363
+     },
+     "exclude": {
+      "mae": 2.456,
+      "relative": 0.63
+     }
+    }
+   },
+   "peakRssMiB": 934,
+   "detectTrack": {
+    "n": 573,
+    "mean_ms": 68.38,
+    "p50_ms": 68.28,
+    "p95_ms": 69.33,
+    "max_ms": 85.66,
+    "fps": 14.6
+   }
+  },
+  {
+   "config": "yolo11s_openvino_960_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 50.1,
+   "speedOK": false,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.92,
+    "occExclude": 0.921,
+    "perTableInclude": {
+     "t1": 0.976,
+     "t2": 0.846,
+     "t3": 0.885,
+     "t4": 0.971
+    },
+    "occupantsInclude": 0.223,
+    "occupantsExclude": 0.347,
+    "inStore": 0.074
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 0.789,
+     "relative": 0.074
+    },
+    "occupancy": {
+     "include": 0.815,
+     "exclude": 0.767
+    },
+    "seated": {
+     "include": {
+      "mae": 1.73,
+      "relative": 0.31
+     },
+     "exclude": {
+      "mae": 2.156,
+      "relative": 0.553
+     }
+    }
+   },
+   "peakRssMiB": 995,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 136.59,
+    "p50_ms": 136.58,
+    "p95_ms": 139.22,
+    "max_ms": 163.65,
+    "fps": 7.3
+   }
+  },
+  {
+   "config": "yolo11s_openvino_1280_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 89.7,
+   "speedOK": false,
+   "accuracyNewDefOK": true,
+   "newDef": {
+    "occInclude": 0.922,
+    "occExclude": 0.921,
+    "perTableInclude": {
+     "t1": 0.98,
+     "t2": 0.845,
+     "t3": 0.882,
+     "t4": 0.981
+    },
+    "occupantsInclude": 0.195,
+    "occupantsExclude": 0.322,
+    "inStore": 0.065
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 0.696,
+     "relative": 0.065
+    },
+    "occupancy": {
+     "include": 0.821,
+     "exclude": 0.767
+    },
+    "seated": {
+     "include": {
+      "mae": 1.848,
+      "relative": 0.331
+     },
+     "exclude": {
+      "mae": 2.271,
+      "relative": 0.583
+     }
+    }
+   },
+   "peakRssMiB": 1093,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 255.49,
+    "p50_ms": 255.21,
+    "p95_ms": 264.62,
+    "max_ms": 380.42,
+    "fps": 3.9
+   }
+  },
+  {
+   "config": "yolo11s_openvino_1280_N2",
+   "detectionsPerSec": 2.5,
+   "costMsAt15fps": 47.3,
+   "speedOK": false,
+   "accuracyNewDefOK": true,
+   "newDef": {
+    "occInclude": 0.917,
+    "occExclude": 0.914,
+    "perTableInclude": {
+     "t1": 0.978,
+     "t2": 0.843,
+     "t3": 0.874,
+     "t4": 0.973
+    },
+    "occupantsInclude": 0.212,
+    "occupantsExclude": 0.335,
+    "inStore": 0.068
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 0.76,
+     "relative": 0.071
+    },
+    "occupancy": {
+     "include": 0.823,
+     "exclude": 0.775
+    },
+    "seated": {
+     "include": {
+      "mae": 1.952,
+      "relative": 0.349
+     },
+     "exclude": {
+      "mae": 2.338,
+      "relative": 0.6
+     }
+    }
+   },
+   "peakRssMiB": 1068,
+   "detectTrack": {
+    "n": 859,
+    "mean_ms": 256.53,
+    "p50_ms": 256.14,
+    "p95_ms": 263.93,
+    "max_ms": 360.56,
+    "fps": 3.9
+   }
+  },
+  {
+   "config": "yolo11s_openvino_1280_N3",
+   "detectionsPerSec": 1.67,
+   "costMsAt15fps": 32.8,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.908,
+    "occExclude": 0.915,
+    "perTableInclude": {
+     "t1": 0.98,
+     "t2": 0.821,
+     "t3": 0.866,
+     "t4": 0.964
+    },
+    "occupantsInclude": 0.285,
+    "occupantsExclude": 0.34,
+    "inStore": 0.08
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 0.949,
+     "relative": 0.089
+    },
+    "occupancy": {
+     "include": 0.819,
+     "exclude": 0.772
+    },
+    "seated": {
+     "include": {
+      "mae": 1.959,
+      "relative": 0.351
+     },
+     "exclude": {
+      "mae": 2.277,
+      "relative": 0.584
+     }
+    }
+   },
+   "peakRssMiB": 1093,
+   "detectTrack": {
+    "n": 573,
+    "mean_ms": 255.1,
+    "p50_ms": 255.26,
+    "p95_ms": 260.8,
+    "max_ms": 274.17,
+    "fps": 3.9
+   }
+  },
+  {
+   "config": "yolo11s_ov_int8_960_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 33.0,
+   "speedOK": true,
+   "accuracyNewDefOK": true,
+   "newDef": {
+    "occInclude": 0.921,
+    "occExclude": 0.921,
+    "perTableInclude": {
+     "t1": 0.98,
+     "t2": 0.852,
+     "t3": 0.88,
+     "t4": 0.973
+    },
+    "occupantsInclude": 0.222,
+    "occupantsExclude": 0.333,
+    "inStore": 0.071
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 0.761,
+     "relative": 0.071
+    },
+    "occupancy": {
+     "include": 0.816,
+     "exclude": 0.767
+    },
+    "seated": {
+     "include": {
+      "mae": 1.738,
+      "relative": 0.311
+     },
+     "exclude": {
+      "mae": 2.14,
+      "relative": 0.549
+     }
+    }
+   },
+   "peakRssMiB": 919,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 85.44,
+    "p50_ms": 85.26,
+    "p95_ms": 86.79,
+    "max_ms": 191.08,
+    "fps": 11.7
+   }
+  },
+  {
+   "config": "yolo11s_ov_int8_1280_N1",
+   "detectionsPerSec": 5.0,
+   "costMsAt15fps": 56.9,
+   "speedOK": false,
+   "accuracyNewDefOK": true,
+   "newDef": {
+    "occInclude": 0.92,
+    "occExclude": 0.922,
+    "perTableInclude": {
+     "t1": 0.984,
+     "t2": 0.839,
+     "t3": 0.888,
+     "t4": 0.967
+    },
+    "occupantsInclude": 0.239,
+    "occupantsExclude": 0.335,
+    "inStore": 0.06
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 0.644,
+     "relative": 0.06
+    },
+    "occupancy": {
+     "include": 0.823,
+     "exclude": 0.769
+    },
+    "seated": {
+     "include": {
+      "mae": 1.862,
+      "relative": 0.333
+     },
+     "exclude": {
+      "mae": 2.256,
+      "relative": 0.579
+     }
+    }
+   },
+   "peakRssMiB": 1032,
+   "detectTrack": {
+    "n": 1718,
+    "mean_ms": 156.94,
+    "p50_ms": 155.51,
+    "p95_ms": 163.95,
+    "max_ms": 259.55,
+    "fps": 6.4
+   }
+  },
+  {
+   "config": "yolo11s_ov_int8_1280_N2",
+   "detectionsPerSec": 2.5,
+   "costMsAt15fps": 31.0,
+   "speedOK": true,
+   "accuracyNewDefOK": false,
+   "newDef": {
+    "occInclude": 0.915,
+    "occExclude": 0.912,
+    "perTableInclude": {
+     "t1": 0.978,
+     "t2": 0.839,
+     "t3": 0.868,
+     "t4": 0.973
+    },
+    "occupantsInclude": 0.213,
+    "occupantsExclude": 0.323,
+    "inStore": 0.065
+   },
+   "oldDef": {
+    "inStore": {
+     "mae": 0.721,
+     "relative": 0.068
+    },
+    "occupancy": {
+     "include": 0.823,
+     "exclude": 0.775
+    },
+    "seated": {
+     "include": {
+      "mae": 1.938,
+      "relative": 0.347
+     },
+     "exclude": {
+      "mae": 2.377,
+      "relative": 0.61
+     }
+    }
+   },
+   "peakRssMiB": 1001,
+   "detectTrack": {
+    "n": 859,
+    "mean_ms": 159.19,
+    "p50_ms": 154.81,
+    "p95_ms": 178.46,
+    "max_ms": 255.51,
+    "fps": 6.3
+   }
+  }
+ ],
+ "passBoth": [
+  "yolo11s_ov_int8_960_N1"
+ ]
+}
