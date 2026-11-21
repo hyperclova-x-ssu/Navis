@@ -1,0 +1,50 @@
+.onboarding-page { position: relative; width: var(--canvas-width); height: var(--canvas-height); padding: var(--layout-margin); background: var(--background); color: var(--foreground); }
+.onboarding-header { display: flex; justify-content: space-between; align-items: center; min-height: var(--layout-header); flex: none; gap: var(--space-6); }
+.onboarding-wordmark { display: block; width: calc(var(--space-16) + var(--space-8)); height: var(--space-8); object-fit: contain; }
+.onboarding-content { position: absolute; inset-inline-start: 50%; inset-block-start: 50%; translate: -50% -50%; width: var(--question-width); height: var(--question-height); display: flex; flex-direction: column; align-items: center; min-width: 0; min-height: 0; }
+.onboarding-heading { text-align: center; height: calc(var(--space-16)*2); flex: none; }
+.onboarding-heading h1 { margin: 0; font-size: var(--type-heading); line-height: var(--leading-heading); font-weight: var(--weight-heading); letter-spacing: var(--tracking-heading); text-wrap: balance; }
+.onboarding-heading p { margin: var(--space-4) 0 0; color: var(--muted-foreground); }
+.onboarding-skip { margin-block-start: var(--space-8); height: var(--target-default); flex: none; }
+.onboarding-skip>.ui-press-surface { padding-block: var(--space-1); }
+.onboarding-note { margin: var(--space-6) 0 0; color: var(--muted-foreground); }
+.business-options { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--space-4); width: calc(var(--business-width)*4 + var(--space-4)*3); max-width: 100%; flex: none; }
+.business-options--compact { width: calc(var(--business-compact-width)*4 + var(--space-4)*3); margin-inline: auto; }
+.t207-business {display:flex;flex-direction:column;align-items:center;gap:var(--space-4)}
+.t207-business .business-options .ui-business-card>.ui-press-surface {justify-items:center;text-align:center;}
+.t207-onboarding-host {position:absolute;inset:0;}
+.t207-onboarding-host:is([data-step="business"],[data-step="payment"]) .ui-onboarding-content {position:absolute;left:50%;top:50%;translate:-50% -50%;width:var(--question-width);height:var(--question-height);padding-top:0;}
+.t207-business {padding-top:var(--space-6);}
+.t207-business p {margin:0;color:var(--muted-foreground);}
+.t207-onboarding-host .ui-onboarding-content>p {margin:0;color:var(--muted-foreground);}
+.t207-onboarding-host .ui-onboarding-reason {position:absolute;inset-inline:var(--layout-margin);top:calc(var(--layout-margin) + var(--layout-header) + var(--space-2));}
+.t207-step-body {display:flex;flex-direction:column;gap:var(--space-4);}
+.t207-step-body--business,.t207-step-body--payment {width:calc(var(--business-width)*4 + var(--space-4)*3);}
+.t207-step-body--tables {width:calc(var(--tablegrid-cols)*var(--tablegrid-cell) + var(--table-settings-width) + var(--space-8));}
+.t207-step-body--start {width:calc(var(--template-card-width)*3 + var(--space-6)*2);}
+.t207-step-body h2 {margin:0;font-size:var(--type-control);line-height:var(--leading-control);}
+.t207-choices,.t207-templates,.t207-tables {display:flex;justify-content:center;gap:var(--space-6);align-items:stretch;}
+.t207-choices {gap:var(--space-4);margin-top:var(--space-6);}
+.t207-choices .ui-choice-card>.ui-press-surface>span {white-space:pre-line;}
+.t207-templates>* {flex:1;min-width:0;}
+/* U-C (owner feedback 2026-11-20): an unselected choice/template card is a plain card. The kit outline button paints the page
+   gray into the inner press surface, so that surface is never filled here; gray shows on the card itself only while hovering or
+   pressing, and green only on the selected card (kit rule). */
+.t207-onboarding-host .ui-button:is(.ui-choice-card,.ui-template-card)[role="radio"]:not(:disabled)>.ui-press-surface {background:transparent;}
+.t207-onboarding-host .ui-button:is(.ui-choice-card,.ui-template-card)[role="radio"]:not([aria-checked="true"])[data-pressed="true"] {background:var(--accent);}
+@media (hover:hover) and (pointer:fine) {
+  .t207-onboarding-host .ui-button:is(.ui-choice-card,.ui-template-card)[role="radio"]:not([aria-checked="true"]):not(:disabled):hover {background:var(--accent);}
+}
+/* The preview draws the panel blocks over faint grid lines (left/top edge of every cell, closed by the right/bottom border): no gray fill, no dashed empty cells. */
+.t207-onboarding-host .ui-template-preview {gap:0;border:0;border-right:var(--stroke-hairline) solid var(--border);border-bottom:var(--stroke-hairline) solid var(--border);background-color:transparent;background-image:linear-gradient(to right,var(--border) var(--stroke-hairline),transparent var(--stroke-hairline)),linear-gradient(to bottom,var(--border) var(--stroke-hairline),transparent var(--stroke-hairline));background-size:calc(100% / var(--template-preview-columns,1)) calc(100% / var(--template-preview-rows,1));}
+.t207-onboarding-host .ui-template-preview>span {margin:var(--stroke-hairline);}
+.t207-tables {align-items:flex-start;gap:var(--space-8);}
+.t207-tables .ui-table-editor {position:relative;flex:none;}
+.t207-tables .ui-table-settings {flex:none;}
+.t207-tables .ui-table-grid__notice {position:absolute;inset-inline:var(--space-6);bottom:var(--space-6);min-height:0;text-align:center;z-index:1;}
+.t207-tables .ui-table-grid__notice:not(:empty) {padding:var(--space-2);background:var(--popover);border-radius:var(--radius-md);}
+.t207-table-hint {margin:0;color:var(--muted-foreground);font-size:var(--type-caption);line-height:var(--leading-caption);}
+.t207-step-body--tables .ui-onboarding-footer__row>div:first-child {font-size:var(--type-section);line-height:var(--leading-section);font-variant-numeric:tabular-nums;}
+.t207-step-body--tables .ui-onboarding-footer__row button {min-width:calc(var(--space-16)*2 + var(--space-8));}
+.t207-step-body--start .ui-onboarding-footer__row {margin-top:var(--space-4);}
+.t207-step-body--start .ui-onboarding-footer__row .ui-button--primary {min-width:calc(var(--space-16)*5);}

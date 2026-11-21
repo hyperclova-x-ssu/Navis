@@ -1,0 +1,99 @@
+.detail-content { min-width: 0; overflow-wrap: anywhere; }
+.detail-content-focus:focus-visible { outline-offset: calc(-1*var(--stroke-focus)); }
+.detail-exit-close { display: grid; place-items: center; width: var(--target-default); height: var(--target-default); flex: none; }
+.ui-dialog--detail .ui-dialog-title::before,.ui-dialog--fullscreen .ui-dialog-title::before { content: ''; display: inline-block; width: var(--space-1); height: 1em; margin-inline-end: var(--space-3); border-radius: var(--radius-sm); background: var(--group-color); vertical-align: text-bottom; }
+.detail-content p { margin: 0; }
+.detail-section { min-width: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.detail-section-title { margin: 0; font-size: var(--type-panel-title); line-height: var(--leading-panel-title); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-panel-title); }
+.detail-date { color: var(--muted-foreground); }
+.detail-margin,.detail-generic { display: flex; flex-direction: column; gap: var(--space-8); }
+.detail-margin { gap: var(--space-6); }
+.detail-metrics { display: flex; flex-wrap: wrap; gap: var(--space-6) var(--space-12); }
+.detail-metrics>* { min-width: 0; flex: 1; }
+.detail-metrics--flat { padding-block: var(--space-4); border-block: var(--stroke-hairline) solid var(--border); }
+.detail-columns { display: grid; gap: var(--space-8); align-items: start; }
+.detail-columns--margin { grid-template-columns: minmax(0,3fr) minmax(0,2fr); }
+.detail-chart { padding-block: var(--space-4); min-width: 0; }
+.detail-chart .ui-chart-plot { height: calc(var(--space-16)*2 + var(--space-6)); }
+.detail-chart .ui-chart-labels { margin-block-start: var(--space-3); }
+.detail-chart--trend { padding-block: var(--space-0); }
+.detail-trend { margin: 0; color: var(--chart-1); min-width: 0; }
+.detail-trend-axis,.detail-trend-dates,.detail-trend-value { font-size: var(--type-caption); line-height: var(--leading-caption); font-variant-numeric: tabular-nums; }
+.detail-trend-axis { color: var(--muted-foreground); margin-block-end: var(--space-2); }
+.detail-trend-plot { position: relative; height: calc(var(--space-16)*2 + var(--space-6) + var(--space-8)); }
+.detail-trend-line,.detail-trend-points { position: absolute; inset: var(--space-8) var(--space-8) 0; width: calc(100% - var(--space-8)*2); height: calc(100% - var(--space-8)); }
+.detail-trend-line { overflow: visible; border-block: var(--stroke-hairline) solid var(--border); }
+.detail-trend-line polyline,.detail-trend-line line { stroke-width: var(--stroke-control); }
+.detail-trend-point { position: absolute; }
+.detail-trend-value { position: absolute; white-space: nowrap; transform: translate(-50%,calc(-100% - var(--space-2))); }
+.detail-trend-dot { position: absolute; width: var(--space-1); height: var(--space-1); border-radius: 50%; background: var(--chart-1); transform: translate(-50%,-50%); }
+.detail-trend-dates { display: flex; justify-content: space-between; color: var(--muted-foreground); margin-block-start: var(--space-2); }
+.detail-trend-dates>span { width: var(--space-16); min-width: 0; text-align: center; }
+.detail-generic { max-width: 100%; }
+.detail-copy { max-width: 60ch; }
+.detail-generic .detail-section+.detail-section { padding-block-start: var(--space-6); border-block-start: var(--stroke-hairline) solid var(--border); }
+.detail-generic--summary .ui-data-list>li { padding-block: var(--space-5); }
+.detail-generic--list .ui-data-list>li { padding-block: var(--space-5); }
+.detail-columns--calendar { grid-template-columns: minmax(0,62fr) minmax(0,38fr); }
+.detail-calendar { table-layout: fixed; }
+.detail-calendar caption { font-size: var(--type-section); line-height: var(--leading-section); font-weight: var(--weight-heading); text-align: start; padding-block-end: var(--space-6); }
+.detail-calendar th { color: var(--muted-foreground); }
+.detail-calendar td { height: calc(var(--space-16) + var(--space-6)); vertical-align: top; }
+.detail-calendar td[data-outside] { color: var(--muted-foreground); }
+.detail-calendar td[data-today] { color: var(--selection-foreground); background: var(--selection); }
+.detail-calendar td[data-today] .ui-badge { display: table; margin-block-start: var(--space-1); color: var(--selection-foreground); background: var(--selection); border-color: transparent; }
+.detail-day { font-weight: var(--weight-medium); }
+.detail-month-label { font-size: var(--type-caption); line-height: var(--leading-caption); }
+.detail-agenda { padding-block-start: var(--space-2); }
+.detail-workspace { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,calc(var(--space-16)*4 + var(--space-6))); gap: var(--space-6); align-items: start; }
+.detail-workspace-image { min-width: 0; flex: 1; min-height: 0; display: grid; place-items: center; }
+.detail-workspace-image>img { display: block; width: 100%; height: 100%; max-height: 100%; min-height: 0; object-fit: contain; }
+.detail-content-focus--workspace { height: 100%; overflow: hidden; }
+.detail-content-focus--workspace .detail-workspace { height: 100%; min-height: 0; }
+.detail-workspace>.detail-section { min-height: 0; height: 100%; }
+.detail-workspace>aside { overflow-y: auto; overscroll-behavior: contain; }
+.detail-materials { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--space-4); }
+.detail-material { min-width: 0; }
+.detail-material>span { display: block; height: var(--space-16); margin-block-end: var(--space-2); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-md); background: var(--secondary); }
+.detail-material[data-material="0"]>span { background: repeating-linear-gradient(0deg,var(--muted),var(--muted) var(--space-2),var(--border) var(--space-2),var(--border) calc(var(--space-2) + var(--stroke-hairline))); }
+.detail-seating-alternative { display: grid; gap: var(--space-6); padding: var(--space-6); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--muted); }
+.detail-seating-window-tables,.detail-seating-center,.detail-seating-bottom { display: flex; justify-content: space-around; align-items: center; gap: var(--space-6); }
+.detail-seat-table { display: inline-flex; align-items: center; justify-content: center; min-width: var(--space-16); min-height: var(--space-16); padding: var(--space-3); border: var(--stroke-hairline) solid var(--input); border-radius: var(--radius-md); background: var(--card); }
+.detail-seating-aisle { padding-block: var(--space-4); text-align: center; border-block: var(--stroke-hairline) dashed var(--input); color: var(--muted-foreground); }
+[data-text-scale="125"] .detail-metrics>* { flex-basis: calc(var(--space-16)*4); }
+/* Panel information reduction does not apply to the scrollable detail content. */
+[data-text-scale="125"] .detail-content .ui-metric-delta { display: block; }
+
+/* Only charts and the month grid grow; all reading rows keep their natural height. */
+.ui-overlay-body>.detail-content-focus:not(.detail-content-focus--workspace) { height: 100%; display: flex; flex-direction: column; }
+.ui-overlay-body>.detail-content-focus:not(.detail-content-focus--workspace)>.detail-content { flex: 1; min-height: 0; }
+.detail-content:not(.detail-workspace) .detail-section { min-height: 0; }
+.detail-content:not(.detail-workspace) .ui-data-list { flex: none; display: block; }
+.detail-content:not(.detail-workspace) .ui-data-list>li { flex: none; max-height: none; align-items: start; }
+.detail-margin { display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-rows: auto auto minmax(0,1fr); }
+.detail-margin>.detail-date { grid-column: 2; grid-row: 1; align-self: center; }
+.detail-margin>:nth-child(2) { grid-column: 1; grid-row: 1; }
+.detail-margin>.detail-metrics--flat { grid-column: 1 / -1; grid-row: 2; }
+.detail-margin>.detail-columns--margin { grid-column: 1 / -1; grid-row: 3; align-items: stretch; }
+.detail-chart--trend,.detail-trend,.detail-trend>[role="img"] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.detail-trend-plot { flex: 1; min-height: calc(var(--space-16)*2 + var(--space-6) + var(--space-8)); height: auto; }
+.detail-trend-axis,.detail-trend-dates { flex: none; }
+.detail-columns--calendar { align-items: stretch; }
+.detail-calendar { height: calc(100% - var(--leading-section) - var(--space-6)); align-self: start; }
+.detail-calendar td { vertical-align: middle; }
+.detail-generic>.detail-section:last-child { flex: 1; }
+.detail-generic:has(.detail-chart) { display: grid; grid-template-columns: minmax(0,3fr) minmax(0,2fr); align-items: stretch; }
+.detail-generic:has(.detail-chart)>.detail-section+.detail-section { padding-block-start: var(--space-0); padding-inline-start: var(--space-8); border-block-start: 0; border-inline-start: var(--stroke-hairline) solid var(--border); }
+.detail-generic .detail-chart,.detail-generic .ui-mini-chart,.detail-generic .ui-mini-chart>[role="img"] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.detail-generic .ui-mini-chart>[role="img"] { justify-content: end; }
+.detail-generic .detail-chart .ui-chart-plot { flex: 1; height: auto; min-height: calc(var(--space-16)*2 + var(--space-6)); max-height: calc(var(--space-16)*8); }
+.detail-generic .ui-chart-labels { flex: none; }
+/* R4 REQ-08: a content-sized text dialog; spare minimum-height space stays after the list. */
+.ui-dialog--detail:has(.detail-generic--text) .ui-overlay-header { gap: var(--space-4); }
+.ui-dialog--detail:has(.detail-generic--text) .detail-content-focus { height: auto; display: block; overflow: visible; padding: var(--space-0); }
+.ui-dialog--detail:has(.detail-generic--text) .detail-content-focus>.detail-content { flex: none; }
+.detail-generic--text>.detail-section,.detail-generic--text>.detail-section:last-child { flex: none; }
+
+/* D-231 detail plots keep their readable height while the outer body scrolls. */
+.detail-generic .detail-chart,.detail-chart--trend {flex-shrink:0;}
+.detail-generic .detail-chart .ui-chart-plot {min-height:var(--chart-plot-min-height);flex-shrink:0;}

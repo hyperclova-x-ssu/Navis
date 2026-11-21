@@ -1,0 +1,35 @@
+.settings-content:focus-visible { outline-offset: calc(-1*var(--stroke-focus)); }
+.settings-sections { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+.settings-business-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); min-height: var(--layout-header); padding-block-end: var(--space-6); border-block-end: var(--stroke-hairline) solid var(--border); }
+.settings-business-row>div { min-width: 0; }
+.settings-business-row>button { flex: none; }
+.settings-label { margin: 0; font-size: var(--type-panel-title); line-height: var(--leading-panel-title); font-weight: var(--weight-semibold); }
+.settings-value { margin: var(--space-2) 0 0; overflow-wrap: anywhere; }
+.settings-mode { display: flex; flex-direction: column; gap: var(--space-3); }
+.settings-description { margin: 0; color: var(--muted-foreground); }
+.settings-exit-close { display: grid; place-items: center; width: var(--target-default); height: var(--target-default); flex: none; }
+
+/* REQ-06: the note follows the cards; only actual body overflow scrolls. */
+.ui-dialog--settings:has(.business-options--compact)>.ui-overlay-body { flex: 0 1 auto; }
+
+/* Sub-views: the dialog header carries back, title and close (SCR-28); the kit's own sub-view header would repeat them. */
+.settings-content .ui-choice-subview__header { display: none; }
+.ui-dialog--settings .ui-overlay-header>.ui-overlay-actions { order: -1; margin-inline-start: 0; }
+.ui-dialog--settings .ui-overlay-header>.ui-overlay-heading { flex: 1 1 auto; }
+.settings-by-widget { display: flex; flex-direction: column; gap: var(--space-3); }
+.settings-by-widget__list { display: flex; flex-direction: column; gap: var(--space-2); }
+.settings-by-widget-row { margin-block-start: var(--space-3); }
+.t207-settings-tables {display:flex;flex-direction:column;align-items:center;gap:var(--space-4);}
+.ui-dialog--settings:has(.t207-settings-tables)>.ui-overlay-note {width:calc(var(--tablegrid-cols)*var(--tablegrid-cell) + var(--table-settings-width) + var(--space-8));margin-inline:auto;color:var(--foreground);}
+.ui-dialog--settings:has(.t207-settings-tables) .ui-onboarding-footer__row>div:first-child {font-size:var(--type-section);line-height:var(--leading-section);font-variant-numeric:tabular-nums;}
+
+.settings-sections>[role="group"] {display:flex;flex-direction:column;gap:var(--space-2);}
+.settings-sections {display:flex;flex-direction:column;gap:var(--space-6);}
+.settings-sections>[role="group"]>h3 {margin:0 0 var(--space-2);}
+.ui-theme-tabs-list [data-active]>.ui-press-surface {background:var(--selection);color:var(--selection-foreground);border:var(--stroke-control) solid var(--selection-foreground);font-weight:var(--weight-bold);}
+
+[data-business-highlight] .ui-list-select-row>.ui-press-surface {animation:settings-business-highlight 800ms ease-out;}
+@keyframes settings-business-highlight {0%,60% {box-shadow:inset 0 0 0 var(--stroke-control) var(--selection-foreground);background:var(--selection);}100% {box-shadow:none;background:var(--card);}}
+@media (prefers-reduced-motion:reduce) {[data-business-highlight] .ui-list-select-row>.ui-press-surface {animation:none;}}
+
+[data-reduced-motion="true"] [data-business-highlight] .ui-list-select-row>.ui-press-surface {animation:none;box-shadow:inset 0 0 0 var(--stroke-control) var(--selection-foreground);background:var(--selection);}

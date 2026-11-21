@@ -1,0 +1,24 @@
+.detail-module-body { min-width: 0; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.ui-overlay-actions .detail-back { min-height: var(--target-default); gap: var(--space-2); }
+.ui-overlay-actions .detail-back .ui-press-surface { gap: var(--space-2); }
+
+.detail-footer-slot { width: 100%; }
+.detail-footer-slot:empty { display: none; }
+/* Keep both portal targets mounted and reserve space only while the footer has content. */
+.ui-overlay-note:has(> .detail-footer-slot):not(:has(> :not(:empty))) { display: none; }
+
+/* D-228: carry the dialog body's bounded height through the portal and retained
+   view. Only the visible view participates; natural-height details still overflow
+   into the dialog body's existing scroller. */
+.detail-body-slot,
+.detail-body-slot>div,
+.detail-body-slot>div>div:not([hidden]) {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* U-D: the kit's width/height transition (iteration7.css) belongs to the fullscreen toggle only. Swapping a compact and a large
+   frame by a link or 돌아가기 must not animate the size: the FLIP already does, and the layout measurement needs the real size. */
+.ui-modal-viewport:has(.detail-fullscreen-toggle) .ui-dialog:not(.detail-frame-resize) { transition: none; }

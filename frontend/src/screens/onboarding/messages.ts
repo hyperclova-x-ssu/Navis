@@ -1,0 +1,27 @@
+import type { MessageBundle } from '../../i18n';
+const ko = {
+  'step.business':'업종', 'step.payment':'결제 방식', 'step.tables':'테이블 배치', 'step.start':'시작 화면',
+  'table.reason':'테이블 배치는 후불형 카페·음식점·주점에서 설정해요',
+  'payment.title':'손님이 언제 계산하나요?', 'payment.description':'계산 방식에 맞는 화면을 먼저 보여 드려요',
+  'payment.prepaid':'선불형', 'payment.prepaid.description':'먼저 계산하고 이용해요',
+  'payment.postpaid':'후불형', 'payment.postpaid.description':'이용한 뒤 계산해요',
+  'tables.title':'테이블을 놓아 주세요', 'tables.description':'예약을 받을 때 맞는 테이블을 골라 드려요',
+  'tables.hint':'테이블을 끌어 실제 자리처럼 옮겨 보세요. 오른쪽 목록에서 좌석 수를 바꿀 수 있어요',
+  'tables.total':'테이블 {n}개 · {m}석', 'tables.later':'테이블 배치는 설정에서 나중에 할 수 있어요',
+  'next':'다음', 'later':'다음에', 'save':'저장하기', 'start.title':'어떤 화면으로 시작할까요?',
+  'start.description':'가게에 맞춰 패널을 미리 놓아 드려요. 놓은 뒤에도 언제든 바꿀 수 있어요',
+  'start.group':'시작 화면 고르기', 'start.button':'이 화면으로 시작하기',
+  'onboarding.template.A.name':'하루 운영 중심', 'onboarding.template.B.name':'재고·발주 중심', 'onboarding.template.C.name':'손님·예약 중심',
+  'onboarding.template.prepaid.A.description':'매출·일정·재고를 한눈에 보며 하루를 운영해요',
+  'onboarding.template.prepaid.B.description':'재료가 떨어지지 않게 재고와 발주를 먼저 챙겨요',
+  'onboarding.template.prepaid.C.description':'회원과 예약을 먼저 챙기고 손님 흐름을 봐요',
+  'onboarding.template.postpaid.A.description':'오늘 예약과 매출·재고를 한눈에 보며 하루를 운영해요',
+  'onboarding.template.postpaid.B.description':'재료가 떨어지지 않게 재고와 발주를 먼저 챙겨요',
+  'onboarding.template.postpaid.C.description':'예약과 회원을 크게 보고 손님을 챙겨요',
+  'settings.store':'매장 설정', 'settings.display':'화면 설정', 'settings.editTables':'테이블 배치 고치기',
+  'settings.noTables':'아직 설정하지 않았어요', 'settings.changed':'{value}으로 바꿨어요',
+  'session.error':'변경을 적용하지 못했어요. 다시 시도해 주세요',
+  'settings.closing':'마감 정산 결제 내역', 'settings.empty':'비어 있음', 'settings.error':'불러오기 실패',
+  'dev.tables.default':'기본값 점검', 'dev.tables.maximum':'최댓값 점검',
+} as const;
+export const iteration5Bundle: MessageBundle<keyof typeof ko> = { id:'t207', ko, en:{}, 'zh-Hans':{}, 'zh-Hant':{} };
