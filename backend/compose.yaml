@@ -1,0 +1,297 @@
+name: navis-backend-local
+
+x-build: &build
+  context: ..
+  dockerfile: backend/Dockerfile
+
+x-db-env: &db-env
+  POSTGRES_USER: navis_bootstrap
+  POSTGRES_DB: postgres
+  POSTGRES_PASSWORD_FILE: /run/secrets/db_bootstrap_password
+  POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+
+x-db: &postgres
+  image: postgres:17.11-bookworm@sha256:665dc7b37ac52a17e298511414c21d23ffa4e6a6ef6225b3e5d59c7afb35e994
+  healthcheck:
+    test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "navis_bootstrap", "-d", "postgres"]
+    interval: 3s
+    timeout: 2s
+    retries: 15
+
+x-redis: &redis
+  image: redis:8.2.9-alpine@sha256:30abb90e62f14b737010746def3ba99cc79fe19dcdb3d37b41f21fc62e7da19d
+  command: ["redis-server", "--save", "", "--appendonly", "no", "--aclfile", "/run/secrets/redis_acl"]
+  secrets: [redis_acl]
+  tmpfs: [/data]
+  healthcheck:
+    test: ["CMD-SHELL", "redis-cli --raw ping | grep -qx PONG"]
+    interval: 5s
+    timeout: 3s
+    retries: 12
+
+x-node: &node
+  healthcheck:
+    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/readyz', {signal: AbortSignal.timeout(4000)}).then(r => { if (!r.ok) process.exitCode = 1 }, () => { process.exitCode = 1 })"]
+    interval: 5s
+    timeout: 5s
+    retries: 12
+
+x-provider: &provider
+  <<: *node
+  depends_on:
+    db: { condition: service_healthy }
+  environment: &runtime-db-env
+    NAVIS_DB_HOST: db
+  networks: [workloads, data]
+
+services:
+  edge:
+    build: { <<: *build, target: edge }
+    ports: ["127.0.0.1:18180:80"]
+    networks: [loopback, web, api]
+    depends_on:
+      frontend: { condition: service_healthy, restart: true }
+      api-gateway: { condition: service_healthy, restart: true }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/readyz && wget -q -O /dev/null http://127.0.0.1/"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+  frontend:
+    build:
+      <<: *build
+      target: frontend
+      args:
+        VITE_NAVIS_DATA_SOURCE: ${VITE_NAVIS_DATA_SOURCE:-placeholder}
+    networks: [web]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api-gateway:
+    <<: *node
+    build: { <<: *build, target: api-gateway }
+    networks: [api, workloads]
+    depends_on:
+      account: { condition: service_healthy }
+      inventory: { condition: service_healthy }
+    environment:
+      NAVIS_ACCOUNT_URL: http://account:3000
+      NAVIS_POS_URL: http://pos:3000
+      NAVIS_INVENTORY_URL: http://inventory:3000
+      NAVIS_GATEWAY_ACCOUNT_TOKEN_FILE: /run/secrets/gateway_account_token
+      NAVIS_GATEWAY_INVENTORY_TOKEN_FILE: /run/secrets/gateway_inventory_token
+      NAVIS_GATEWAY_POS_TOKEN_FILE: /run/secrets/gateway_pos_token
+      NAVIS_GATEWAY_CUSTOMER_TOKEN_FILE: /run/secrets/gateway_customer_token
+    secrets: [gateway_account_token, gateway_inventory_token, gateway_pos_token, gateway_customer_token]
+
+  account:
+    <<: *provider
+    build: { <<: *build, target: account }
+    environment:
+      <<: *runtime-db-env
+      NAVIS_BACKEND_DEMO_AUTH: ${NAVIS_BACKEND_DEMO_AUTH:-0}
+      NAVIS_ACCOUNT_SIGNING_KEY_FILE: /run/secrets/account_signing_key.pem
+      NAVIS_GATEWAY_ACCOUNT_TOKEN_FILE: /run/secrets/gateway_account_token
+    secrets:
+      - account_runtime_password
+      - source: account_signing_key
+        target: account_signing_key.pem
+      - gateway_account_token
+
+  pos:
+    <<: *provider
+    build: { <<: *build, target: pos }
+    networks: [workloads, data, cache]
+    environment:
+      <<: *runtime-db-env
+      NAVIS_REDIS_URL: redis://redis:6379
+      NAVIS_POS_FIXTURE_NOW: ${NAVIS_POS_FIXTURE_NOW:-}
+      NAVIS_GATEWAY_POS_TOKEN_FILE: ${NAVIS_GATEWAY_POS_TOKEN_FILE:-}
+      NAVIS_CUSTOMER_POS_TOKEN_FILE: ${NAVIS_CUSTOMER_POS_TOKEN_FILE:-}
+    secrets: [pos_runtime_password, gateway_pos_token, customer_pos_token, pos_redis_password]
+
+  inventory:
+    <<: *provider
+    build: { <<: *build, target: inventory }
+    environment:
+      <<: *runtime-db-env
+      NAVIS_GATEWAY_INVENTORY_TOKEN_FILE: /run/secrets/gateway_inventory_token
+      NAVIS_REDIS_URL: redis://redis:6379
+    networks: [workloads, data, cache]
+    secrets: [inventory_runtime_password, gateway_inventory_token, inventory_redis_password]
+
+  customer:
+    <<: *provider
+    build: { <<: *build, target: customer }
+    networks: [workloads, data, cache]
+    environment:
+      <<: *runtime-db-env
+      NAVIS_POS_URL: http://pos:3000
+      NAVIS_GATEWAY_CUSTOMER_TOKEN_FILE: /run/secrets/gateway_customer_token
+      NAVIS_CUSTOMER_POS_TOKEN_FILE: /run/secrets/customer_pos_token
+      NAVIS_REDIS_URL: redis://redis:6379
+    secrets: [customer_runtime_password, gateway_customer_token, customer_pos_token, customer_redis_password]
+
+  marketing:
+    <<: *provider
+    build: { <<: *build, target: marketing }
+    secrets: [marketing_runtime_password]
+
+  insight:
+    <<: *provider
+    build: { <<: *build, target: insight }
+    secrets: [insight_runtime_password]
+
+  db:
+    <<: *postgres
+    networks: [data]
+    environment: *db-env
+    secrets: [db_bootstrap_password]
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - type: bind
+        source: ./infra/postgres
+        target: /docker-entrypoint-initdb.d
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ./.secrets/local/db
+        target: /run/navis-db
+        read_only: true
+        bind: { create_host_path: false }
+
+  redis:
+    <<: *redis
+    networks: [cache]
+
+  relay:
+    profiles: [streams]
+    build: { <<: *build, target: relay }
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [data, cache]
+    environment:
+      <<: *runtime-db-env
+      NAVIS_REDIS_URL: redis://redis:6379
+    secrets: [pos_relay_password, inventory_relay_password, customer_relay_password, relay_redis_password]
+
+  tools:
+    profiles: [tools]
+    build: { <<: *build, target: tools }
+    networks: [data, test-data]
+    environment: *runtime-db-env
+    secrets: [account_migrate_password, inventory_migrate_password, pos_migrate_password, customer_migrate_password]
+    volumes:
+      - type: bind
+        source: ./.secrets/test/db
+        target: /run/navis-test-db
+        read_only: true
+        bind: { create_host_path: false }
+
+  test-db: &test-postgres
+    <<: *postgres
+    profiles: [test]
+    networks: [test-data]
+    environment: *db-env
+    secrets:
+      - source: test_db_bootstrap_password
+        target: db_bootstrap_password
+    tmpfs: [/var/lib/postgresql/data]
+    volumes:
+      - type: bind
+        source: ./infra/postgres
+        target: /docker-entrypoint-initdb.d
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ./.secrets/test/db
+        target: /run/navis-db
+        read_only: true
+        bind: { create_host_path: false }
+
+  streams-test-db:
+    <<: *test-postgres
+    profiles: [streams-test]
+    networks: [streams-test-data]
+
+  streams-test-redis:
+    <<: *redis
+    profiles: [streams-test]
+    networks: [streams-test-cache]
+
+  streams-tools:
+    profiles: [streams-test]
+    image: navis-backend-local-tools:latest
+    pull_policy: never
+    networks: [streams-test-data, streams-test-cache]
+    environment:
+      NAVIS_DB_HOST: streams-test-db
+      NAVIS_REDIS_URL: redis://streams-test-redis:6379
+    secrets:
+      - { source: test_pos_migrate_password, target: pos_migrate_password }
+      - { source: test_inventory_migrate_password, target: inventory_migrate_password }
+      - { source: test_pos_runtime_password, target: pos_runtime_password }
+      - { source: test_inventory_runtime_password, target: inventory_runtime_password }
+      - { source: test_customer_runtime_password, target: customer_runtime_password }
+      - { source: test_pos_relay_password, target: pos_relay_password }
+      - { source: test_inventory_relay_password, target: inventory_relay_password }
+      - { source: test_customer_relay_password, target: customer_relay_password }
+      - relay_redis_password
+      - inventory_redis_password
+      - customer_redis_password
+      - pos_redis_password
+
+volumes:
+  db-data:
+
+networks:
+  loopback: {}
+  web: { internal: true }
+  api: { internal: true }
+  workloads: { internal: true }
+  data: { internal: true }
+  cache: { internal: true }
+  test-data: { internal: true }
+  streams-test-data: { internal: true }
+  streams-test-cache: { internal: true }
+
+secrets:
+  db_bootstrap_password: { file: ./.secrets/local/db_bootstrap_password }
+  test_db_bootstrap_password: { file: ./.secrets/test/db_bootstrap_password }
+  account_runtime_password: { file: ./.secrets/local/db/account_runtime_password }
+  pos_runtime_password: { file: ./.secrets/local/db/pos_runtime_password }
+  inventory_runtime_password: { file: ./.secrets/local/db/inventory_runtime_password }
+  customer_runtime_password: { file: ./.secrets/local/db/customer_runtime_password }
+  marketing_runtime_password: { file: ./.secrets/local/db/marketing_runtime_password }
+  insight_runtime_password: { file: ./.secrets/local/db/insight_runtime_password }
+  account_migrate_password: { file: ./.secrets/local/db/account_migrate_password }
+  inventory_migrate_password: { file: ./.secrets/local/db/inventory_migrate_password }
+  account_signing_key: { file: ./.secrets/local/account_signing_key.pem }
+  gateway_account_token: { file: ./.secrets/local/gateway_account_token }
+  gateway_inventory_token: { file: ./.secrets/local/gateway_inventory_token }
+  pos_migrate_password: { file: ./.secrets/local/db/pos_migrate_password }
+  customer_migrate_password: { file: ./.secrets/local/db/customer_migrate_password }
+  gateway_pos_token: { file: ./.secrets/local/gateway_pos_token }
+  gateway_customer_token: { file: ./.secrets/local/gateway_customer_token }
+  customer_pos_token: { file: ./.secrets/local/customer_pos_token }
+  pos_relay_password: { file: ./.secrets/local/db/pos_relay_password }
+  inventory_relay_password: { file: ./.secrets/local/db/inventory_relay_password }
+  customer_relay_password: { file: ./.secrets/local/db/customer_relay_password }
+  redis_acl: { file: ./.secrets/local/redis_acl }
+  relay_redis_password: { file: ./.secrets/local/relay_redis_password }
+  pos_redis_password: { file: ./.secrets/local/pos_redis_password }
+  inventory_redis_password: { file: ./.secrets/local/inventory_redis_password }
+  customer_redis_password: { file: ./.secrets/local/customer_redis_password }
+  test_pos_migrate_password: { file: ./.secrets/test/db/pos_migrate_password }
+  test_inventory_migrate_password: { file: ./.secrets/test/db/inventory_migrate_password }
+  test_pos_runtime_password: { file: ./.secrets/test/db/pos_runtime_password }
+  test_inventory_runtime_password: { file: ./.secrets/test/db/inventory_runtime_password }
+  test_customer_runtime_password: { file: ./.secrets/test/db/customer_runtime_password }
+  test_pos_relay_password: { file: ./.secrets/test/db/pos_relay_password }
+  test_inventory_relay_password: { file: ./.secrets/test/db/inventory_relay_password }
+  test_customer_relay_password: { file: ./.secrets/test/db/customer_relay_password }
