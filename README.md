@@ -230,11 +230,15 @@ Navis/
 │   ├── infra/                 # nginx edge, PostgreSQL 초기화, 로컬 비밀값 생성
 │   ├── deploy/                # NKS 배포 샘플 (Helm 차트, GitHub Actions 예시)
 │   └── compose.yaml           # 로컬 실행 (Docker Compose)
+├── cnn/                       # CCTV 영상 분석 (YOLO11s + ByteTrack)
+│   ├── live/                  # 실시간 분석 서버 (FastAPI, WebSocket, 휴대폰 카메라 페이지)
+│   ├── occupancy/             # 자리 사용·앉음 판정
+│   └── bench/                 # GPU·CPU·INT8 속도와 정확도 측정
 ├── db/seed/                   # 가상 카페 '안숭잘부'의 90일 운영 시드 생성기
 └── docs/images/               # README 이미지
 ```
 
-> 폴더별 자세한 설명은 [`frontend/README.md`](frontend/README.md)와 [`backend/README.md`](backend/README.md)에 있습니다.
+> 폴더별 자세한 설명은 [`frontend/README.md`](frontend/README.md), [`backend/README.md`](backend/README.md), [`cnn/README.md`](cnn/README.md)에 있습니다.
 
 <br/>
 
