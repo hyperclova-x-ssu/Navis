@@ -1,0 +1,10 @@
+proxy_pass http://gateway_upstream;
+proxy_pass_request_headers off;
+proxy_set_header Host $http_host;
+proxy_set_header Origin $http_origin;
+proxy_set_header Accept $http_accept;
+proxy_set_header Content-Type $http_content_type;
+proxy_set_header Authorization $http_authorization;
+proxy_set_header Cookie $http_cookie;
+proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;
+proxy_buffering off;
