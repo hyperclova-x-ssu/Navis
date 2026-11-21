@@ -1,0 +1,1092 @@
+import { getRegistration } from '../../catalog';
+import type { CellSpan, DashboardLayerId, LayerId, Locale, QueryCondition, RunStore } from '../../contracts';
+import type { DataSnapshot } from '../../data/db/types';
+import { addDays, TODAY } from '../../data/db/time';
+import type { WidgetDataStore } from '../../data/widget-data';
+import { navisTranslator } from './messages';
+import { simpleReply } from './simple';
+import { has, isDrawerQuestion, isPosQuestion, isDemandQuestion, matchWidget, norm, PAST_WORDS } from './question';
+import {
+  AGENT_PRICE_CLARIFICATION, AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, agentCommandPolicy, agentCommandRefs, agentFieldChoices, agentMissingField, isAgentNavigationCommand,
+  validateAgentDraft, validateAgentFrame, validateAgentRequest, validateAgentToolArgs, type AgentFrameData, type AgentHandoff as WireHandoff, type AgentReadProjection, type AgentRefusal, type AgentRequest, type AgentWireArgs,
+} from '../../../shared/navis-agent-schema.mjs';
+import { createAgentActions, isMenuPrice, type AgentActionProposal, type LocalAgentProposal } from './agent-actions';
+import {
+  assistantDomains, buildAgentRequest, buildAssistantContext, buildMenuAgentRequest, conditionsOf, defaultStore, isMenuCreateRequest,
+  normalizeFor, parseMenuCreateInput, projectAgentSearch, projectAgentSource, projectAgentWidget, questionContext, readMenuCategory, readMenuName, readNavisCondition,
+  storeFactSource, widgetStatusQuery, type AgentReadEvidence, type LocalMenuDraft, type MenuCreateInput, type WidgetFactSource,
+} from './snapshot';
+import { normalizeNavisInput, parseNavisDate, parseNavisMoney, parseNavisNumber, parseNavisQuantity, parseNavisTime, readNavisNoticeDate } from './navis-input';
+import type { DomainLookup, DomainRegistry, DomainRoute, DomainTurnInput, LocalSlots, RecordTargets, ResolvedRecord, SlotValue } from './domains/registry';
+import { selectCommonNotice } from '../../state';
+import { timePolicy } from '../../ui/motion';
+import { conversationMemory, conversationPrice, createProposalSession, followupBoardQuestion, menuRequestText, prepareConversationText, readConversationControl, readOrdinal, salesRead, type ProposalSession } from './navis-conversation';
+import type { AgentSuggestion, AgentContinuation, AgentHandoff, AgentTurnInput, AskInput, AssistantProvider, AssistantReply, Candidate } from './types';
+
+export type { AskInput, AssistantProvider, AssistantReply, Candidate, CandidateSize, ReplyStatus } from './types';
+export { buildAssistantContext } from './snapshot';
+type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Pick<Response, 'ok' | 'status'> & Partial<Pick<Response, 'body' | 'headers'>>>;
+const MAX_PANELS = 22;
+// D-262: aligned with the server answer cap; data values still come only from facts.
+const MAX_ANSWER_LENGTH = 16384;
+function cancelled(signal: AbortSignal) { if (signal.aborted) throw new DOMException('Request stopped', 'AbortError'); }
+
+type RawOutput = { answer: string; panels: unknown[] };
+export function parseModelOutput(value: unknown): RawOutput {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid output');
+  const output = value as Record<string, unknown>;
+  if (typeof output.answer !== 'string' || !output.answer.trim() || output.answer.length > MAX_ANSWER_LENGTH || !Array.isArray(output.panels) || output.panels.length > MAX_PANELS) throw new Error('invalid output');
+  return { answer: output.answer, panels: output.panels };
+}
+
+/** Keeps each valid candidate independently. A widget of the other layer is kept as `other-layer`. */
+function validate(output: RawOutput, source: WidgetFactSource, layer: DashboardLayerId, signal: AbortSignal): Candidate[] {
+  const panels: Candidate[] = [];
+  for (const raw of output.panels) {
+    cancelled(signal);
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const item = raw as Record<string, unknown>;
+    const registration = typeof item.featureId === 'string' ? getRegistration(item.featureId) : undefined;
+    if (!registration || typeof item.reason !== 'string' || !item.reason.trim() || item.reason.length > 1000) continue;
+    const requested = (item.condition === undefined ? { kind: 'default' } : item.condition) as QueryCondition;
+    const condition = normalizeFor(registration.id, requested);
+    if (!condition) continue;
+    const view = source.view(registration.id, condition);
+    if (view.status !== 'ready' || !source.facts(view).length) continue;
+    const size = item.size as Record<string, unknown> | undefined;
+    const valid = (n: unknown): n is CellSpan => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 4;
+    if (!valid(size?.width) || !valid(size?.height)) continue;
+    panels.push({
+      featureId: registration.id, condition, size: { width: size.width, height: size.height },
+      reason: item.reason, preview: view, placement: registration.layer === layer ? 'current-layer' : 'other-layer',
+    });
+    if (panels.length === 3) break;
+  }
+  return panels;
+}
+
+export interface AssistantProviderOptions {
+  /** The run's data store (the app shell passes it). Default: a seeded store. */
+  readonly store?: WidgetDataStore;
+  readonly run?: RunStore;
+  readonly clock?: () => number;
+  /** Test seam: where views and facts come from. */
+  readonly source?: WidgetFactSource;
+  readonly fetcher?: Fetcher;
+  readonly timeoutMs?: number;
+  readonly domains?: DomainRegistry;
+}
+class SimpleRequested extends Error {}
+class OutOfScope extends Error {}
+
+export function agentStatusLabel(frame: AgentFrameData['status'], locale: Locale): string {
+  const t = navisTranslator(locale);
+  if (frame.step === 'accepted') return t.t('navis.wait.look');
+  if (frame.step === 'assembling') return t.t('navis.wait.compose');
+  if (frame.step === 'target_checked') return t.t('common.navis.agent.status.target_checked');
+  const feature = frame.featureId && getRegistration(frame.featureId);
+  return feature ? t.t('navis.wait.topic', { name: t.t(feature.nameKey) }) : t.t('navis.wait.find');
+}
+
+/** Parse SSE lines incrementally: byte boundaries, CR/LF and data lines are independent of frames. */
+async function readReplyStream(
+  body: ReadableStream<Uint8Array>, signal: AbortSignal, onDelta: (delta: string) => void,
+  onPanels: (panels: unknown[]) => void, agent?: Pick<AskInput, 'onStatus'>,
+): Promise<RawOutput & { done?: AgentFrameData['done']; proposal?: AgentFrameData['action_proposal'] }> {
+  const reader = body.getReader(), decoder = new TextDecoder('utf-8', { fatal: true });
+  let buffer = '', event = '', data: string[] = [], answer = '', panels: unknown[] | undefined, terminal = false, bytes = 0;
+  let done: AgentFrameData['done'] | undefined, proposal: AgentFrameData['action_proposal'] | undefined;
+  const statusSteps = new Set<AgentFrameData['status']['step']>();
+  const stop = () => { void reader.cancel().catch(() => {}); };
+  signal.addEventListener('abort', stop, { once: true });
+  function frame() {
+    if (!event && !data.length) return;
+    const kind = event, lines = data; event = ''; data = [];
+    const optionalAgentFrame = agent && ['status', 'action_proposal', 'action_result'].includes(kind);
+    let value: unknown;
+    try { value = JSON.parse(lines.join('\n')); }
+    catch (error) { if (optionalAgentFrame) return; throw error; }
+    cancelled(signal);
+    if (agent) {
+      if (!validateAgentFrame(kind, value)) {
+        if (optionalAgentFrame) return;
+        throw new Error('invalid agent frame');
+      }
+      if (kind === 'status') {
+        if (panels === undefined && validateAgentFrame('status', value) && !statusSteps.has(value.step)) {
+          statusSteps.add(value.step);
+          agent.onStatus?.(value);
+        }
+        return;
+      }
+      if (kind === 'action_proposal') {
+        if (panels !== undefined && !proposal && validateAgentFrame('action_proposal', value)) proposal = value;
+        return;
+      }
+      // Local confirmations own their receipts. A chat response has no pending confirmation to match.
+      if (kind === 'action_result') return;
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid frame');
+    const item = value as Record<string, unknown>;
+    if (kind === 'text_delta') {
+      if (panels !== undefined || typeof item.delta !== 'string' || answer.length + item.delta.length > MAX_ANSWER_LENGTH) throw new Error('invalid delta');
+      answer += item.delta; onDelta(item.delta);
+    } else if (kind === 'panels') {
+      if (panels !== undefined || !Array.isArray(item.panels) || item.panels.length > MAX_PANELS) throw new Error('invalid panels');
+      panels = item.panels; onPanels(panels);
+    } else if (kind === 'done') {
+      if (panels === undefined) throw new Error('incomplete answer');
+      if (agent) {
+        if (!validateAgentFrame('done', value)) throw new Error('invalid agent terminal');
+        done = value;
+      }
+      terminal = true;
+    } else if (kind === 'error') {
+      if (item.code === 'OUT_OF_SCOPE' && !answer.trim()) throw new OutOfScope();
+      throw new Error('stream failed');
+    } else throw new Error('invalid event');
+  }
+  function consume(eof = false) {
+    while (!terminal) {
+      const index = buffer.search(/[\r\n]/u);
+      if (index < 0 || !eof && buffer[index] === '\r' && index === buffer.length - 1) return;
+      const line = buffer.slice(0, index), end = buffer[index] === '\r' && buffer[index + 1] === '\n' ? 2 : 1;
+      buffer = buffer.slice(index + end);
+      if (!line) { frame(); continue; }
+      if (line.startsWith(':')) continue;
+      const colon = line.indexOf(':'), field = colon < 0 ? line : line.slice(0, colon);
+      const value = colon < 0 ? '' : line.slice(colon + 1).replace(/^ /u, '');
+      if (field === 'event') event = value;
+      if (field === 'data') data.push(value);
+    }
+  }
+  try {
+    cancelled(signal);
+    while (!terminal) {
+      const part = await reader.read(); cancelled(signal);
+      if (part.done) { buffer += decoder.decode(); consume(true); if (!terminal) throw new Error('incomplete stream'); break; }
+      bytes += part.value.byteLength;
+      if (bytes > 128 * 1024) throw new Error('large stream');
+      buffer += decoder.decode(part.value, { stream: true }); consume();
+    }
+    return { answer, panels: panels!, done, proposal };
+  } finally {
+    signal.removeEventListener('abort', stop);
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
+type WireProposal = AgentFrameData['action_proposal'];
+type CommandIntent = Extract<AgentRequest['intent'], { kind: 'command' }>;
+type ReadIntent = Extract<AgentRequest['intent'], { kind: 'read' }>;
+
+function commandTurn(text: string, businessDate: string): AgentTurnInput | undefined {
+  const normalized = normalizeNavisInput(text);
+  const quote = /["“'‘]([^"”'’]+)["”'’]/gu;
+  const quoted = [...normalized.matchAll(quote)][0]?.[1];
+  const value = normalized.replace(quote, ' ');
+  if (/(?:방법|어떻게|하지\s*마|말아)|\b(?:how|don't|do not)\b/u.test(value)) return undefined;
+  const deliver = /(?:보내|발송|돌려|쏴|전송|게시|올려)|\b(?:send|publish|post)\b/iu;
+  let command: CommandIntent['command'] | undefined;
+  if (/(?:마감(?:해|하자|실행|취소)|\bclose (?:the )?day\b)/iu.test(value)) command = 'closing.closeDay';
+  else if (/(?:결제|환불)\s*(?:해|처리|취소)|\b(?:refund|take payment)\b/iu.test(value)) command = /환불|refund/iu.test(value) ? 'pos.refund' : 'pos.payment';
+  else if (/(?:영상|동영상|비디오).*(?:만들|생성|제작|다시)|\b(?:make|generate|retry)\b.*\bvideo\b/iu.test(value)) command = 'video.make';
+  else if (deliver.test(value)) {
+    if (/(?:문자|공지|알림|SMS|notice|message)/iu.test(value)) command = 'notice.send';
+    else if (/(?:쿠폰|coupon)/iu.test(value)) command = 'coupon.sendReachOut';
+    else if (/(?:답글|리뷰|reply|review)/iu.test(value)) command = 'inquiry.post';
+  }
+  if (!command) return undefined;
+  const body = quoted && quoted.length <= 1000 ? quoted : undefined;
+  const date = parseNavisDate(value, businessDate);
+  const amount = parseNavisMoney(value);
+  const args: Record<string, AgentWireArgs[string]> = {};
+  const slots: Record<string, SlotValue> = {};
+  function add(field: string, literal: SlotValue | undefined) {
+    if (literal === undefined) return;
+    args[field] = { slot: field };
+    slots[field] = literal;
+  }
+  if (command === 'notice.send' || command === 'coupon.sendReachOut') add('body', body);
+  if (command === 'notice.send' || command === 'closing.closeDay') {
+    if (command === 'notice.send') {
+      const draftDate = readNavisNoticeDate(value, businessDate);
+      add('startDate', draftDate);
+      add('endDate', draftDate);
+    } else add('date', date);
+  }
+  if (command === 'pos.payment' || command === 'pos.refund') add('amount', isMenuPrice(amount) ? amount : undefined);
+  if (command === 'video.make') {
+    const seconds = /(?:^|\s)(10|15|20|30)\s*초/u.exec(value)?.[1];
+    if (seconds) args.lengthSec = Number(seconds);
+  }
+  return { intent: { kind: 'command', command, args }, slots };
+}
+
+function menuReadTurn(text: string): AgentTurnInput | undefined {
+  const value = normalizeNavisInput(text).replace(/[.!?。！？]+$/u, '');
+  if (/^(?:우리\s*가게\s*)?(?:메뉴\s*(?:총\s*)?몇\s*개|메뉴\s*수)(?:\s*(?:등록돼\s*있어|예요|야|알려\s*줘|알려\s*주세요))?$/u.test(value)) {
+    return { intent: { kind: 'read', featureId: 'menu', condition: { kind: 'default' } } };
+  }
+  const item = /^(.+?)\s*(?:얼마야|가격\s*(?:알려\s*(?:줘|주세요))?)$/u.exec(value)?.[1]?.trim();
+  if (!item || item.length > 80 || /(?:메뉴|매출|주문|세금|원가|이익|마진|수익|월세|시재|홍보|입고|지난|저번|이번|오늘|어제|내일|일주일|요금|지출)/u.test(item)) return undefined;
+  return { intent: { kind: 'read', recordKind: 'menu', querySlot: 'name' }, slots: { name: item } };
+}
+
+function widgetStatusRead(text: string, businessDate: string): DomainTurnInput | undefined {
+  const status = widgetStatusQuery(text);
+  if (!status) return undefined;
+  const { featureId, factKeys } = status;
+  const condition = readNavisCondition(featureId, text, businessDate);
+  return condition ? { intent: { kind: 'read', featureId, condition }, factKeys } : undefined;
+}
+
+function localDraft(args: Record<string, unknown>, slots: LocalSlots, targets: RecordTargets): AgentHandoff['draft'] {
+  const expand = (value: unknown): unknown => {
+    if (!value || typeof value !== 'object') return value;
+    if (Array.isArray(value)) return value.map(expand);
+    if ('slot' in value) return typeof value.slot === 'string' && Object.hasOwn(slots, value.slot) ? slots[value.slot] : undefined;
+    if ('handle' in value) return typeof value.handle === 'string' ? targets.get(value.handle)?.id : undefined;
+    return Object.fromEntries(Object.entries(value).map(([field, child]) => [field, expand(child)]).filter(([, child]) => child !== undefined));
+  };
+  return expand(args) as AgentHandoff['draft'];
+}
+
+function parseSlotValue(field: string, input: string, businessDate: string): SlotValue | undefined {
+  const value = normalizeNavisInput(input);
+  if (!value || value.length > 1000) return undefined;
+  if (/price|amount|wage/i.test(field)) return parseNavisMoney(value);
+  if (/date|dueOn|asOf/i.test(field)) return parseNavisDate(value, businessDate);
+  if (/time|^(start|end)$/i.test(field)) return parseNavisTime(value);
+  if (/^(qty|stock|quantity|threshold)$/i.test(field)) return parseNavisQuantity(value)?.value ?? parseNavisNumber(value);
+  return value;
+}
+
+type PendingClarification = {
+  readonly id: string;
+  readonly isCurrent: () => boolean;
+  readonly field: string;
+  readonly choices?: readonly AgentSuggestion[];
+  readonly rename?: (name: string, input: AskInput) => Promise<AssistantReply>;
+  readonly resume: (value: AgentContinuation, input: AskInput) => Promise<AssistantReply> | undefined;
+};
+
+export function createAssistantProvider(options: AssistantProviderOptions = {}): AssistantProvider {
+  const store = options.store ?? defaultStore();
+  const source = options.source ?? storeFactSource(store);
+  const fetcher = options.fetcher ?? ((input, init) => fetch(input, init));
+  const domains = options.domains ?? assistantDomains;
+  const run = options.run;
+  const actions = createAgentActions(store, domains, run);
+  const memory = conversationMemory();
+  const clock = options.clock ?? Date.now;
+  let activeAgent: AbortController | undefined;
+  let pending: PendingClarification | undefined;
+  let proposal: ProposalSession | undefined;
+  let generation = 0;
+  let scope: LayerId | undefined;
+  let undo: { token: string; runId: string; label: string; command: string; expiresAt: number } | undefined;
+
+  function replacePending() {
+    proposal?.cancel();
+    generation++;
+    proposal = undefined;
+    pending = undefined;
+  }
+
+  function discardAgentTurn() {
+    activeAgent?.abort();
+    activeAgent = undefined;
+    replacePending();
+  }
+
+  function registerProposal(reply: AssistantReply, local: LocalAgentProposal, menu?: AgentActionProposal): AssistantReply {
+    const session: ProposalSession = createProposalSession(local, menu, () => !run || run.getState().layer !== 'orders-payment' && run.getState().edit.mode === 'view', (receipt, label) => {
+      const after = session.getSnapshot().menu?.preview.after;
+      memory.rememberCommand(local.command, label, after ? { name: after.name, category: after.category, price: after.price } : undefined);
+      const runId = store.getSnapshot().runId;
+      if (receipt.undoToken && runId) undo = { token: receipt.undoToken, label, command: local.command, expiresAt: clock() + timePolicy.undoMs, runId };
+      else undo = undefined;
+    }, menu ? tLabel(reply.locale) : local.command);
+    proposal = session;
+    return { ...reply, ...(menu ? { proposal: menu } : {}), proposalSession: session, turn: { kind: 'proposal', proposal: local } };
+  }
+
+  function tLabel(locale: Locale = 'ko') {
+    return navisTranslator(locale).t('common.navis.agent.menuCreate');
+  }
+
+  function agentReply(locale: Locale): AssistantReply {
+    return { answer: '', panels: [], locale, protocol: AGENT_PROTOCOL };
+  }
+
+  function menuClarification(input: AskInput, draft: MenuCreateInput, field: 'name' | 'price' | 'category', isTurnCurrent = () => true): AssistantReply {
+    const locale = input.locale ?? 'ko';
+    const tr = navisTranslator(locale);
+    const id = crypto.randomUUID();
+    const snapshot = store.getSnapshot();
+    const isCurrent = () => pending?.id === id && isTurnCurrent()
+      && store.getSnapshot().runId === snapshot.runId && store.getSnapshot().revision === snapshot.revision;
+    pending = { id, field, isCurrent, rename(name, next) {
+      replacePending();
+      return askMenu(next, { ...draft, name, category: readMenuCategory(name) ?? draft.category });
+    }, resume(continuation, next) {
+      if (field === 'category') {
+        const value = 'choiceId' in continuation ? continuation.choiceId : 'value' in continuation ? continuation.value : undefined;
+        const category = typeof value === 'string' && /^(drink|음료|饮品|飲品)$/iu.test(value.trim()) ? 'drink'
+          : typeof value === 'string' && /^(dessert|디저트|甜点|甜點)$/iu.test(value.trim()) ? 'dessert' : undefined;
+        if (!category) return undefined;
+        replacePending();
+        return askMenu(next, { ...draft, category });
+      }
+      const selected = 'choiceId' in continuation && AGENT_PRICE_CLARIFICATION.choices.find(choice => choice.id === continuation.choiceId);
+      const value = 'price' in continuation ? continuation.price : 'value' in continuation ? continuation.value
+        : selected && 'value' in selected ? selected.value : undefined;
+      if (field === 'name') {
+        const name = typeof value === 'string' && readMenuName(value);
+        if (!name) return undefined;
+        replacePending();
+        return askMenu(next, { ...draft, name, category: draft.category ?? readMenuCategory(name) });
+      }
+      const price = typeof value === 'string' ? conversationPrice(value) : value;
+      if (!isMenuPrice(price)) return undefined;
+      replacePending();
+      return askMenu(next, { ...draft, price, invalidPrice: undefined });
+    } };
+    const priceChoices = AGENT_PRICE_CLARIFICATION.choices;
+    const choices = field === 'price' ? priceChoices.map(choice => ({
+      id: choice.id, label: 'value' in choice ? tr.format.money(choice.value, 'full') : tr.t('common.navis.agent.manualPrice'),
+    })) : field === 'category' ? ['drink', 'dessert'].map(id => ({ id, label: tr.t(`common.navis.agent.${id}`) })) : [];
+    return {
+      ...agentReply(locale),
+      answer: field === 'price' ? '' : tr.t(`common.navis.agent.${field}Question`),
+      turn: { kind: 'clarification', id, field, isCurrent, choices },
+      ...(field === 'price' ? { clarification: { ...AGENT_PRICE_CLARIFICATION, id, isCurrent } } : {}),
+    };
+  }
+
+  function askMenu(input: AskInput, draft: MenuCreateInput | null): Promise<AssistantReply> {
+    const { locale = 'ko', layer = 'management' } = input;
+    const manual = { ...agentReply(locale), answer: navisTranslator(locale).t('common.navis.agent.manualRoute') };
+    if (!draft || input.simpleSignal?.aborted) return Promise.resolve(manual);
+    if (!draft.name) return Promise.resolve(menuClarification(input, draft, 'name'));
+    if (draft.invalidPrice) return Promise.resolve(menuClarification(input, draft, 'price'));
+    if (!draft.category) return Promise.resolve(menuClarification(input, draft, 'category'));
+    const snapshot = store.getSnapshot();
+    const completeDraft: LocalMenuDraft = { ...draft, name: draft.name, category: draft.category };
+    const body = buildMenuAgentRequest(snapshot, completeDraft, locale, layer, domains);
+    return askAgent(input, snapshot, body, {}, { menu: completeDraft });
+  }
+
+  async function askAgent(
+    input: AskInput, snapshot: DataSnapshot, body: AgentRequest | null, slots: LocalSlots,
+    context: {
+      readonly menu?: LocalMenuDraft;
+      readonly evidence?: readonly AgentReadEvidence[];
+      readonly turn?: AgentTurnInput;
+      readonly targets?: RecordTargets;
+    } = {},
+  ): Promise<AssistantReply> {
+    const { locale = 'ko', layer = 'management', signal, simpleSignal, onTextDelta, onStatus } = input;
+    const tr = navisTranslator(locale);
+    const reply = agentReply(locale);
+    const draft = context.menu;
+    const evidence = context.evidence;
+    const manual = (): AssistantReply => ({ ...reply, answer: tr.t(draft ? 'common.navis.agent.manualRoute' : 'common.navis.agent.manualWidget') });
+    if (!body || !validateAgentRequest(body)) return manual();
+    if (simpleSignal?.aborted) return evidence ? groundedRead(reply, evidence, []) : manual();
+
+    const lifetime = new AbortController(), controller = new AbortController();
+    activeAgent = lifetime;
+    const startedAt = generation;
+    const capturedRun = run?.getState();
+    const hostLayer = capturedRun?.layer;
+    const page = context.turn?.page ?? (run ? run.getState().boards[layer].currentPage + 1 : undefined);
+    const isCurrent = () => startedAt === generation && !lifetime.signal.aborted && !signal.aborted
+      && store.getSnapshot().runId === snapshot.runId && (!run || run.getState().runId === snapshot.runId
+        && run.getState().activeBoard === layer && run.getState().layer === hostLayer
+        && (page === undefined || page === run.getState().boards[layer].currentPage + 1));
+    let partial = '', pendingText = '';
+    let interrupt!: (reason: Error) => void;
+    const interrupted = new Promise<never>((_, reject) => { interrupt = reject; });
+    const stop = () => { controller.abort(); interrupt(new DOMException('Request stopped', 'AbortError')); };
+    const limit = () => { controller.abort(); interrupt(new Error('Request unavailable')); };
+    const firstTimer = setTimeout(limit, 30000);
+    const totalTimer = setTimeout(limit, options.timeoutMs ?? 60000);
+    signal.addEventListener('abort', stop, { once: true });
+    lifetime.signal.addEventListener('abort', stop, { once: true });
+    simpleSignal?.addEventListener('abort', limit, { once: true });
+
+    try {
+      const request = fetcher('/api/navis/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', [AGENT_PROTOCOL_HEADER]: AGENT_PROTOCOL },
+        body: JSON.stringify(body), signal: controller.signal,
+      }).then(response => {
+        if (controller.signal.aborted || !response.ok || response.headers?.get(AGENT_PROTOCOL_HEADER) !== AGENT_PROTOCOL) {
+          void response.body?.cancel().catch(() => {});
+          cancelled(controller.signal);
+          return null;
+        }
+        if (!response.body) return null;
+        return readReplyStream(response.body, controller.signal, delta => {
+          pendingText += delta;
+          const endings = [...pendingText.matchAll(/[.!?。！？](?=\s|$)/gu)];
+          const last = endings.at(-1);
+          if (last?.index === undefined) return;
+          const end = last.index + 1;
+          const complete = pendingText.slice(0, end);
+          pendingText = pendingText.slice(end);
+          partial += complete;
+          clearTimeout(firstTimer);
+          if (draft) onTextDelta?.(complete);
+        }, () => {}, { onStatus });
+      });
+      const output = await Promise.race([request, interrupted]);
+      cancelled(lifetime.signal);
+      cancelled(signal);
+      if (!output?.done) return evidence ? groundedRead(reply, evidence, []) : manual();
+      const done = output.done;
+      if (done.outcome === 'navigate' && body.intent.kind === 'command' && isAgentNavigationCommand(body.intent.command)) {
+        const action = done.navigation;
+        if (action.command !== body.intent.command || action.runId !== body.runId || action.layer !== body.layer || action.page !== body.page ||
+          action.snapshotRevision !== body.snapshotRevision || store.getSnapshot().revision !== body.snapshotRevision || !isCurrent()) return manual();
+        input.onNavigation?.(action);
+        return reply;
+      }
+      if (done.outcome === 'clarify' && !output.proposal && draft?.price === undefined
+        && draft && done.clarification.field === 'price' && done.clarification.promptKey === 'menu.price') {
+        return menuClarification(input, draft, 'price', isCurrent);
+      }
+      if (done.outcome === 'clarify' && !output.proposal && body.intent.kind === 'command') {
+        return genericClarification(input, snapshot, { ...context.turn, intent: body.intent, slots }, done.clarification, isCurrent) ?? manual();
+      }
+      if (done.outcome === 'proposal' && output.proposal && proposalScope(output.proposal, body, context.turn?.page)) {
+        if (draft && output.proposal.command === 'menu.create' && isMenuPrice(draft.price)) {
+          if (body.searches.some(search => search.kind === 'menu' && search.matches.length > 0)) return refusedReply(reply, 'duplicate');
+          const proposal = actions.propose(output.proposal, { ...draft, price: draft.price }, snapshot, isCurrent);
+          if (proposal) return registerProposal({ ...reply, answer: output.answer.trim() }, proposal, proposal);
+        } else if (body.intent.kind === 'command' && output.proposal.command === body.intent.command
+          && sameArgs(output.proposal.args, body.intent.args ?? {})) {
+          const outcome = actions.prepare(output.proposal, { ...slots, navisLocale: locale }, snapshot, isCurrent, context.targets, capturedRun);
+          if (outcome.kind === 'proposal') return registerProposal(reply, outcome.proposal);
+          return { ...reply, answer: tr.t(outcome.messageKey && tr.has(outcome.messageKey) ? outcome.messageKey : `common.navis.agent.${outcome.kind}`) };
+        }
+      }
+      if (done.outcome === 'ambiguous' && evidence) return groundedRead(reply, evidence, [], input, isCurrent);
+      if (done.outcome === 'reply') {
+        const panels = validate(output, source, layer, signal).filter(panel => !evidence ||
+          store.getSnapshot().revision === snapshot.revision && evidence.some(record => record.tool === 'get_widget'
+            && record.status === 'ready' && record.args.featureId === panel.featureId && sameArgs(record.args.condition, panel.condition)));
+        if (evidence) return groundedRead(reply, evidence, panels, input, isCurrent);
+        if (draft && (panels.length || output.answer.trim())) return { ...reply, answer: output.answer.trim(), panels };
+      }
+      if (done.outcome === 'refused') {
+        if (evidence) return groundedRead(reply, evidence, [], input, isCurrent);
+        const alternative = done.refusal?.alternative;
+        return refusedReply(reply, done.refusal?.reason ?? 'unsupported',
+          body.intent.kind === 'command' && alternative && 'command' in alternative
+            ? checkedHandoff(alternative, body.intent, slots, snapshot, context.targets) : undefined);
+      }
+      if (done.outcome === 'handoff' && body.intent.kind === 'command') {
+        const destination = checkedHandoff(done.handoff, body.intent, slots, snapshot, context.targets);
+        if (destination) return { ...reply, answer: tr.t('common.navis.agent.manualWidget'), turn: { kind: 'handoff', destination } };
+      }
+      return manual();
+    } catch {
+      cancelled(lifetime.signal);
+      cancelled(signal);
+      return evidence ? groundedRead(reply, evidence, []) : draft && partial.trim()
+        ? { ...reply, answer: partial.trim(), status: 'stopped' } : manual();
+    } finally {
+      controller.abort();
+      clearTimeout(firstTimer);
+      clearTimeout(totalTimer);
+      signal.removeEventListener('abort', stop);
+      lifetime.signal.removeEventListener('abort', stop);
+      if (activeAgent === lifetime) activeAgent = undefined;
+      simpleSignal?.removeEventListener('abort', limit);
+    }
+  }
+
+  function proposalScope(frame: WireProposal, body: AgentRequest, page: number | undefined): boolean {
+    return (frame.runId === undefined || frame.runId === body.runId)
+      && (frame.layer === undefined || frame.layer === body.layer)
+      && (frame.page === undefined || frame.page === page);
+  }
+
+  function sameArgs(left: unknown, right: unknown): boolean {
+    if (left === right) return true;
+    if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+    const pairs = Object.entries(left), target = Object.entries(right);
+    return pairs.length === target.length && pairs.every(([key, value]) =>
+      target.some(([name, expected]) => name === key && sameArgs(value, expected)));
+  }
+
+  function checkedHandoff(route: WireHandoff, intent: CommandIntent, slots: LocalSlots, snapshot: DataSnapshot, targets: RecordTargets = new Map()): AgentHandoff | undefined {
+    if (route.command !== intent.command || route.featureId !== agentCommandPolicy(intent.command, intent.args).featureId
+      || route.runId !== undefined && route.runId !== snapshot.runId
+      || route.snapshotRevision !== undefined && route.snapshotRevision !== snapshot.revision
+      || !validateAgentDraft(route.command, route.draft)) return undefined;
+    if (!Object.entries(route.draft).every(([key, value]) => sameArgs(value, intent.args?.[key]))) return undefined;
+    if (agentCommandRefs(route.command, route.draft).some(ref => {
+      if (!('handle' in ref)) return false;
+      const target = targets.get(ref.handle);
+      return !target || !ref.kinds?.some(kind => kind === '*' || kind === target.kind);
+    })) return undefined;
+    return { featureId: route.featureId, command: route.command, draft: localDraft(route.draft, slots, targets) };
+  }
+
+  function refusedReply(reply: AssistantReply, reason: AgentRefusal['reason'], alternative?: AgentHandoff): AssistantReply {
+    const tr = navisTranslator(reply.locale ?? 'ko');
+    const copy = reason === 'duplicate' ? 'duplicateName' : reason === 'widget_only' ? 'widgetOnly'
+      : reason === 'unavailable' ? 'manualWidget' : 'unsupported';
+    return { ...reply, answer: tr.t(`common.navis.agent.${copy}`), turn: { kind: 'refusal', reason, ...(alternative ? { alternative } : {}) } };
+  }
+
+  function readProjection(snapshot: DataSnapshot, intent: ReadIntent, slots: LocalSlots, locale: Locale, turn: DomainTurnInput) {
+    const projection: Pick<AgentRequest, 'snapshot' | 'searches'> = { snapshot: [], searches: [] };
+    if (intent.recordKind && intent.querySlot) {
+      const query = slots[intent.querySlot];
+      const args = { kind: intent.recordKind, querySlot: intent.querySlot };
+      const search = typeof query === 'string' ? projectAgentSearch(domains, snapshot, args, query, locale) : { ...args, matches: [], status: 'missing' as const };
+      const status = search.status === 'unavailable' ? 'unavailable' : search.matches.length ? 'ready' : 'missing';
+      const reader = domains.reader(args.kind);
+      const display = new Map<string, string>();
+      if (typeof query === 'string' && reader?.describe) for (const match of search.matches) {
+        const label = reader.describe(match, locale, { snapshot, locale, query, privateLookup: false, querySlot: args.querySlot });
+        if (label) display.set(match.handle, label);
+      }
+      const evidence: AgentReadEvidence = { tool: 'search_records', args, status, matches: search.matches, display, browse: turn.browse };
+      return { projection: { ...projection, searches: [search] }, evidence: [evidence] };
+    }
+    const condition: QueryCondition = intent.condition ?? { kind: 'default' };
+    const feature = intent.featureId && getRegistration(intent.featureId);
+    const projected = feature ? projectAgentWidget(snapshot, feature.id, condition, locale, domains)
+      : intent.sourceId ? projectAgentSource(snapshot, intent.sourceId, condition, locale, domains, run?.getState()) : undefined;
+    if (!projected) return { projection, evidence: [] };
+    const facts = (turn.factKeys ? projected.facts.filter(fact => turn.factKeys!.includes(fact.key)) : projected.facts).slice(0, 128);
+    const read = { ...projected, facts, status: projected.status === 'ready' && !facts.length ? 'missing' as const : projected.status };
+    const entry = { ...read.args, ...(read.status === 'ready' ? { facts: read.facts } : { status: read.status }),
+      ...(read.tool === 'get_source' ? { candidateAllowed: false as const } : {}) };
+    return { projection: { ...projection, snapshot: [entry] }, evidence: [read] };
+  }
+
+  function groundedRead(
+    reply: AssistantReply, evidence: readonly AgentReadEvidence[], panels: readonly Candidate[],
+    input?: AskInput, isTurnCurrent = () => true, selectedId?: string,
+  ): AssistantReply {
+    const tr = navisTranslator(reply.locale ?? 'ko');
+    const answer = evidence.flatMap(record => {
+      if (record.tool === 'search_records') return record.matches.filter(match => !selectedId || match.handle === selectedId)
+        .flatMap(match => {
+          const display = record.display?.get(match.handle);
+          return display ? [display] : match.label && match.price !== undefined ? [`${match.label} ${tr.format.money(match.price, 'full')}`] : [];
+        });
+      return record.facts.map(fact => fact.key === 'menu.count' ? tr.t('common.navis.agent.menuCount', { count: typeof fact.value === 'number' ? tr.format.number(fact.value) : fact.display }) : `${fact.label} ${fact.display}`);
+    }).join('\n');
+    const search = evidence.find(record => record.tool === 'search_records');
+    const choices = search?.matches.filter(match => !selectedId || selectedId === match.handle).flatMap(match => match.label ? [{
+      id: match.handle, label: match.label,
+      ...(match.price !== undefined ? { detail: tr.format.money(match.price, 'full') } : {}),
+    }] : []) ?? [];
+    if (search) memory.rememberRecords(choices, store.getSnapshot().revision);
+    if (!selectedId && search && !search.browse && search.matches.length > 1 && !proposal?.isPending() && !pending?.isCurrent()) {
+      if (!choices.length) return { ...reply, answer: tr.t('common.navis.noData'), turn: { kind: 'read', evidence } };
+      const id = crypto.randomUUID();
+      const captured = store.getSnapshot();
+      const isCurrent = () => pending?.id === id && isTurnCurrent() && store.getSnapshot() === captured;
+      if (input) pending = { id, field: search.args.querySlot, choices, isCurrent, resume(continuation, next) {
+        if (!('choiceId' in continuation) || !choices.some(choice => choice.id === continuation.choiceId)) return undefined;
+        replacePending();
+        const picked = choices.find(choice => choice.id === continuation.choiceId)!;
+        const answer = groundedRead(agentReply(next.locale ?? reply.locale ?? 'ko'), evidence, [], undefined, undefined, picked.id);
+        memory.rememberRead(answer, { intent: { kind: 'read', recordKind: search.args.kind, querySlot: search.args.querySlot }, slots: { [search.args.querySlot]: picked.label } });
+        return Promise.resolve(answer);
+      } };
+      return { ...reply, answer: tr.t('common.navis.agent.chooseRecord'), turn: { kind: 'ambiguity', id, field: search.args.querySlot, choices, isCurrent } };
+    }
+    const unavailable = evidence.some(record => record.status === 'unsupported_period');
+    return { ...reply, answer: answer || tr.t(unavailable ? 'common.navis.agent.unsupportedPeriod' : 'common.navis.noData'),
+      panels, turn: { kind: 'read', evidence } };
+  }
+
+  function genericClarification(
+    input: AskInput, snapshot: DataSnapshot, turn: AgentTurnInput & { readonly intent: CommandIntent },
+    frame: Extract<AgentFrameData['done'], { outcome: 'clarify' }>['clarification'], isTurnCurrent: () => boolean,
+  ): AssistantReply | undefined {
+    const { intent, slots = {} } = turn;
+    const args = intent.args ?? {};
+    const field = agentMissingField(intent.command, args, Object.keys(slots));
+    if (!field || frame.field !== field || 'command' in frame && frame.command !== intent.command) return undefined;
+    const tr = navisTranslator(input.locale ?? 'ko');
+    const id = crypto.randomUUID();
+    const isCurrent = () => pending?.id === id && isTurnCurrent() && store.getSnapshot() === snapshot;
+    const allowed = agentFieldChoices(intent.command, field);
+    const choices = frame.choices.flatMap<{ id: string; label: string; value?: SlotValue }>(choice => 'value' in choice
+      ? allowed.some(value => value === choice.value) ? [{ id: choice.id, label: String(choice.value), value: choice.value }] : []
+      : [{ id: choice.id, label: tr.t('common.navis.agent.manualPrice'), value: undefined }]);
+    pending = { id, field, choices, isCurrent, resume(continuation, next) {
+      const value = 'value' in continuation ? continuation.value : 'price' in continuation ? continuation.price
+        : choices.find(choice => choice.id === continuation.choiceId)?.value;
+      if (value === undefined) return undefined;
+      const result = typeof value === 'string' ? parseSlotValue(field, value, snapshot.pos?.businessDate ?? TODAY) : value;
+      if (result === undefined) return undefined;
+      const prior = args[field];
+      const ref = prior && typeof prior === 'object' && 'slot' in prior && typeof prior.slot === 'string' ? prior.slot : field;
+      const updated = { ...args, [field]: allowed.length ? result : { slot: ref } };
+      if (!validateAgentDraft(intent.command, updated)) return undefined;
+      const validateSlot = domains.command(intent.command)?.slots[ref];
+      if (!allowed.length && validateSlot && !validateSlot(result)) return undefined;
+      replacePending();
+      return runAgentTurn(next, { ...turn, intent: { ...intent, args: updated }, slots: { ...slots, ...(allowed.length ? {} : { [ref]: result }) } });
+    } };
+    return { ...agentReply(input.locale ?? 'ko'), answer: tr.t('common.navis.agent.fieldQuestion', { field }),
+      turn: { kind: 'clarification', id, field, choices: choices.map(({ id, label }) => ({ id, label })), isCurrent } };
+  }
+
+  function bindReference(args: AgentWireArgs, [field, ...path]: readonly string[], handle: string): AgentWireArgs {
+    if (!field) return args;
+    const child = args[field];
+    return { ...args, [field]: path.length ? bindReference(
+      child && typeof child === 'object' ? child as AgentWireArgs : {}, path, handle,
+    ) : { handle } };
+  }
+
+  function chooseTarget(input: AskInput, snapshot: DataSnapshot, turn: DomainTurnInput, lookup: DomainLookup,
+    choices: readonly AgentSuggestion[]): AssistantReply {
+    const locale = input.locale ?? 'ko';
+    const id = crypto.randomUUID(), version = generation;
+    const isCurrent = () => pending?.id === id && version === generation && store.getSnapshot() === snapshot;
+    pending = { id, field: lookup.querySlot, choices, isCurrent, resume(continuation, next) {
+      if (!('choiceId' in continuation) || !choices.some(choice => choice.id === continuation.choiceId)) return undefined;
+      const selected = continuation.choiceId;
+      replacePending();
+      return runAgentTurn(next, { ...turn, lookups: turn.lookups?.map(item => item === lookup ? { ...item, selected } : item) });
+    } };
+    return { ...agentReply(locale), answer: navisTranslator(locale).t('common.navis.agent.chooseRecord'),
+      turn: { kind: 'ambiguity', id, field: lookup.querySlot, choices, isCurrent } };
+  }
+
+  function applyDomainRoute(input: AskInput, snapshot: DataSnapshot, route: DomainRoute): Promise<AssistantReply> {
+    const locale = input.locale ?? 'ko';
+    if ('intent' in route) {
+      if (route.intent.kind !== 'read' && !(route.intent.kind === 'command' && isAgentNavigationCommand(route.intent.command))) replacePending();
+      if (run?.getState().layer === 'orders-payment' && route.intent.kind === 'command' &&
+        !isAgentNavigationCommand(route.intent.command) && agentCommandPolicy(route.intent.command, route.intent.args).policy === 'propose') {
+        return Promise.resolve(localReply(input, 'manualWidget'));
+      }
+      return runAgentTurn(input, route);
+    }
+    const reply = agentReply(locale);
+    if (route.kind === 'answer') {
+      if (route.cancelPending) replacePending();
+      return Promise.resolve({ ...reply, answer: route.answer });
+    }
+    replacePending();
+    if (route.kind === 'refusal') {
+      const refusal = refusedReply(reply, route.reason, route.alternative);
+      return Promise.resolve({ ...refusal, answer: route.answer ?? refusal.answer });
+    }
+    const id = crypto.randomUUID(), version = generation;
+    const isCurrent = () => pending?.id === id && version === generation && store.getSnapshot() === snapshot;
+    const choices = route.choices;
+    pending = { id, field: route.field, isCurrent, resume(continuation, next) {
+      const value = choices
+        ? 'choiceId' in continuation && choices.find(choice => choice.id === continuation.choiceId)?.id
+        : 'value' in continuation && continuation.value;
+      if (typeof value !== 'string') return undefined;
+      const routed = route.resume?.(value, run?.getState());
+      return routed ? applyDomainRoute(next, snapshot, routed) : undefined;
+    } };
+    return Promise.resolve({ ...reply, answer: route.answer, turn: { kind: 'clarification', id, field: route.field, choices: choices ?? [], isCurrent } });
+  }
+
+  function runAgentTurn(input: AskInput, turn: DomainTurnInput): Promise<AssistantReply> {
+    const { locale = 'ko', layer = 'management' } = input;
+    const snapshot = store.getSnapshot();
+    let { intent } = turn;
+    const { slots = {}, page, lookup } = turn;
+    let { reading } = turn;
+    if (intent.kind === 'command' && isAgentNavigationCommand(intent.command)) {
+      const body = buildAgentRequest(snapshot, intent, locale, layer, Object.keys(slots),
+        { snapshot: [], searches: turn.navigationSearches ?? [] });
+      return askAgent(input, snapshot, body && { ...body, layer: run?.getState().layer === 'orders-payment' ? 'pos' : body.layer,
+        ...(page !== undefined ? { page } : {}),
+        ...(turn.navigationReadings || turn.additionalReadings ? { readings: [...turn.navigationReadings ?? [], ...turn.additionalReadings ?? []] } : {}) }, slots, { turn });
+    }
+    const targets = new Map<string, ResolvedRecord>();
+    const searches = [];
+    for (const targetLookup of turn.lookups ?? (lookup ? [lookup] : []) as readonly DomainLookup[]) {
+      const { kind, querySlot, bind, readingBind, selected } = targetLookup;
+      const query = slots[querySlot];
+      if (typeof query !== 'string') continue;
+      const command = intent.kind === 'command' ? intent.command : undefined;
+      const args = { kind, querySlot };
+      const projected = projectAgentSearch(domains, snapshot, args, query, locale, command !== undefined, command);
+      const matches = selected ? projected.matches.filter(match => match.handle === selected) : projected.matches;
+      if ((bind || readingBind) && !selected && (matches.length > 1 || matches.length === 1 && matches[0].match !== 'exact')) {
+        const visible = projectAgentSearch(domains, snapshot, args, query, locale, false, command);
+        const choices = matches.flatMap(match => {
+          const visibleMatch = visible.matches.find(item => item.handle === match.handle);
+          const detail = visibleMatch && domains.reader(kind)?.describe?.(visibleMatch, locale);
+          return visibleMatch?.label ? [{ id: match.handle, label: visibleMatch.label, ...(detail ? { detail } : {}) }] : [];
+        });
+        if (choices.length) return Promise.resolve(chooseTarget(input, snapshot, turn, targetLookup, choices));
+      }
+      const match = matches.length === 1 && (selected || matches[0].match === 'exact') ? matches[0] : undefined;
+      if (match) {
+        const id = domains.reader(kind)?.resolve?.({ snapshot, locale, query, privateLookup: command !== undefined, command, querySlot }, match.handle);
+        if (id) {
+          targets.set(match.handle, { kind, id });
+          if (bind && intent.kind === 'command') intent = { ...intent, args: bindReference(intent.args ?? {}, bind, match.handle) };
+          const readPath = readingBind ?? (intent.kind === 'read' ? bind : undefined);
+          if (readPath && reading) reading = { ...reading, args: bindReference(reading.args, readPath, match.handle) } as typeof reading;
+        }
+      }
+      searches.push({ ...projected, matches: selected && match ? [{ ...match, match: 'exact' as const }] : matches });
+    }
+    if (intent.kind === 'command') {
+      const policy = agentCommandPolicy(intent.command, intent.args);
+      if (policy.policy !== 'propose') {
+        const alternative = policy.featureId && validateAgentDraft(intent.command, intent.args ?? {})
+          ? checkedHandoff({ featureId: policy.featureId, command: intent.command, draft: intent.args ?? {} }, intent, slots, snapshot, targets)
+          : undefined;
+        if (policy.policy === 'handoff' && alternative) {
+          const reply = agentReply(locale);
+          return Promise.resolve({ ...reply, answer: navisTranslator(locale).t('common.navis.agent.manualWidget'), turn: { kind: 'handoff', destination: alternative } });
+        }
+        const refusal = refusedReply(agentReply(locale), 'widget_only', alternative);
+        if (intent.command === 'video.make' || intent.command === 'video.retry') {
+          const stats = simpleReply({ text: input.text, locale, layer, source });
+          if (stats.panels.some(panel => panel.featureId === 'promo-video')) {
+            return Promise.resolve({ ...refusal, answer: `${refusal.answer}\n${stats.answer}`, panels: stats.panels });
+          }
+        }
+        return Promise.resolve(refusal);
+      }
+      if (agentCommandRefs(intent.command, intent.args ?? {}).some(ref => 'handle' in ref && !targets.has(ref.handle))) {
+        return Promise.resolve(refusedReply(agentReply(locale), 'invalid_target'));
+      }
+    }
+    const read = intent.kind === 'read' ? readProjection(snapshot, intent, slots, locale, turn) : undefined;
+    const evidence: AgentReadEvidence[] = read?.evidence ?? [];
+    const projection = read
+      ? { ...read.projection, searches: [...read.projection.searches, ...searches] } : { snapshot: [], searches };
+    const body = buildAgentRequest(snapshot, intent, locale, layer, Object.keys(slots), projection, domains);
+    if (!body) return askAgent(input, snapshot, null, slots);
+    const readings: AgentReadProjection[] = [...turn.additionalReadings ?? []];
+    if (reading && (intent.kind === 'command' || intent.kind === 'read' && intent.tool === reading.tool) && validateAgentToolArgs(reading.tool, reading.args)) {
+      const projected = domains.tool(reading.tool)?.read(snapshot, reading.args, locale, slots, targets, run?.getState()) ?? { status: 'unavailable' as const };
+      const result = 'facts' in projected && turn.factKeys
+        ? { facts: projected.facts.filter(fact => turn.factKeys!.includes(fact.key)) } : projected;
+      readings.push({ ...reading, ...result });
+      evidence.push({ ...reading, status: 'status' in result ? result.status : 'ready', facts: 'facts' in result ? result.facts : [] });
+    }
+    return askAgent(input, snapshot, { ...body, ...(page !== undefined ? { page } : {}), ...(readings.length ? { readings } : {}) },
+      slots, { ...(read ? { evidence } : {}), turn: { ...turn, intent, reading }, targets }).then(reply => {
+      const fallback = turn.onMissing;
+      if (fallback && evidence.length > 0 && evidence.every(record => record.status === 'missing')) {
+        return { ...(fallback.reason ? refusedReply(reply, fallback.reason, fallback.alternative) : reply), answer: fallback.answer };
+      }
+      if (intent.kind === 'read') memory.rememberRead(reply, turn);
+      return reply;
+    });
+  }
+
+  function localReply(input: AskInput, key: string, params?: Readonly<Record<string, string | number>>): AssistantReply {
+    const locale = input.locale ?? 'ko';
+    return { ...agentReply(locale), answer: navisTranslator(locale).t(`common.navis.agent.${key}`, params) };
+  }
+
+  function clarificationReply(input: AskInput, key: string, field: string, choices: readonly AgentSuggestion[] = []): AssistantReply {
+    const id = crypto.randomUUID();
+    return { ...localReply(input, key, choices.length ? { names: choices.map(choice => [choice.label, choice.detail].filter(Boolean).join(' ')).join(' / ') } : undefined),
+      turn: { kind: 'clarification', id, field, choices: [], isCurrent: () => false } };
+  }
+
+  function undoInstruction(input: AskInput, command?: string, target?: string): AssistantReply {
+    const last = undo?.runId === store.getSnapshot().runId ? undo : undefined;
+    if (command && (last?.command !== command || target && !last.label.includes(target))) {
+      return localReply(input, 'nothingToUndo');
+    }
+    if (!run) return localReply(input, !last ? 'nothingToUndo'
+      : clock() < last.expiresAt ? 'boardUndoTarget' : 'undoExpired');
+
+    run.actions.tick();
+    const state = run.getState();
+    const notice = selectCommonNotice(state);
+    const visibleUndo = notice ? notice.undo : state.notice?.undoToken
+      ? { target: 'layout', token: state.notice.undoToken } : undefined;
+    if (visibleUndo && (!command || visibleUndo.target === 'data' && visibleUndo.token === last?.token)) {
+      return localReply(input, 'boardUndoTarget');
+    }
+    return localReply(input, last ? 'undoExpired' : 'nothingToUndo');
+  }
+
+  function localAction(input: AskInput, control: NonNullable<ReturnType<typeof readConversationControl>>): AssistantReply | Promise<AssistantReply> {
+    const session = proposal?.isPending() ? proposal : undefined;
+    const clarification = pending?.isCurrent() ? pending : undefined;
+    switch (control.kind) {
+      case 'confirm':
+        if (session) return localReply(input, session.getSnapshot().edit ? 'finishProposalEdit' : 'confirmOnCard');
+        return clarification ? localReply(input, clarification.field === 'price' ? 'priceQuestion' : 'pendingValue') : clarificationReply(input, 'nothingToConfirm', 'action');
+      case 'cancel':
+      case 'cancel-last': {
+        if (session) {
+          const receipt = session.cancel();
+          return { ...agentReply(input.locale ?? 'ko'), localAction: receipt?.frame };
+        }
+        if (clarification) {
+          replacePending();
+          return localReply(input, 'cancelled');
+        }
+        return control.kind === 'cancel-last' ? undoInstruction(input) : localReply(input, 'nothingToConfirm');
+      }
+      case 'edit':
+        if (session?.edit(control.field, control.price)) return agentReply(input.locale ?? 'ko');
+        if (clarification?.field === 'price' && control.price !== undefined) {
+          return clarification.resume({ clarificationId: clarification.id, price: control.price }, input) ?? localReply(input, 'priceQuestion');
+        }
+        return clarificationReply(input, 'nothingToEdit', 'action');
+      case 'retarget':
+        if (session) replacePending();
+        if (control.query) return runAgentTurn(input, { intent: { kind: 'read', recordKind: 'menu', querySlot: 'name' }, slots: { name: control.query } });
+        return clarificationReply(input, 'chooseMenu', 'name');
+      case 'undo': return undoInstruction(input, control.command, control.target);
+      case 'hold': return localReply(input, session ? 'stillPending' : 'pendingValue');
+      case 'repeat-answer': {
+        const remembered = memory.lastRead();
+        if (remembered?.turn) return runAgentTurn(input, remembered.turn);
+        if (remembered) return { ...agentReply(input.locale ?? 'ko'), answer: remembered.reply.answer, panels: remembered.reply.panels };
+        return localReply(input, 'noPreviousTurn');
+      }
+      case 'repeat-command': {
+        if (session || clarification) return localReply(input, session ? 'stillPending' : 'pendingValue');
+        const last = memory.confirmed();
+        if (last?.menu) {
+          replacePending();
+          return menuClarification(input, { category: last.menu.category, price: last.menu.price }, 'name');
+        }
+        return last ? clarificationReply(input, 'repeatTarget', 'name') : localReply(input, 'noPreviousTurn');
+      }
+    }
+  }
+
+  return {
+    discardAgentTurn,
+    async ask(input: AskInput): Promise<AssistantReply> {
+      const { text, history, signal, simpleSignal, onTextDelta, locale = 'ko', layer = 'management', continuation } = input;
+      cancelled(signal);
+      const snapshot = store.getSnapshot();
+      if (memory.scope(snapshot.runId)) { discardAgentTurn(); undo = undefined; }
+      const hostLayer = run?.getState().layer ?? layer;
+      if (scope !== undefined && scope !== hostLayer) discardAgentTurn();
+      scope = hostLayer;
+      activeAgent?.abort();
+      const prior = pending?.isCurrent() ? pending : undefined;
+      if (continuation) {
+        const conflict = localReply(input, 'conflict');
+        return prior?.id === continuation.clarificationId ? prior.resume(continuation, input) ?? conflict : conflict;
+      }
+      const prepared = prepareConversationText(text);
+      if (prepared.kind === 'tooLong') return { ...localReply(input, prepared.kind), turn: { kind: 'refusal', reason: 'input_limit' } };
+      const control = readConversationControl(text, proposal?.isPending());
+      if (!input.agentTurn && (control?.kind === 'undo' || control?.kind === 'cancel-last')) {
+        return localAction(input, control);
+      }
+      const domainRoute = !input.agentTurn && prepared.kind === 'text'
+        ? domains.route(prepared.text, snapshot, locale, matchWidget(prepared.text), run?.getState()) : undefined;
+      if (domainRoute) return applyDomainRoute(input, snapshot, domainRoute);
+      if (control && !input.agentTurn) return localAction(input, control);
+      if (prior?.field === 'price' && prepared.kind === 'unclear') {
+        const price = conversationPrice(text);
+        if (price !== undefined) return prior.resume({ clarificationId: prior.id, price }, input) ?? localReply(input, 'priceQuestion');
+      }
+      if (prepared.kind !== 'text') return { ...localReply(input, prepared.kind),
+        ...(prepared.kind === 'automation' ? { turn: { kind: 'refusal' as const, reason: 'unsupported' } } : {}) };
+
+      const value = prepared.text;
+      const agent = input.agentTurn ?? commandTurn(value, snapshot.pos?.businessDate ?? TODAY);
+      if (agent) {
+        if (agent.intent.kind !== 'read' && !(agent.intent.kind === 'command' && isAgentNavigationCommand(agent.intent.command))) replacePending();
+        if (hostLayer === 'orders-payment' && agent.intent.kind === 'command' && !isAgentNavigationCommand(agent.intent.command)
+          && agentCommandPolicy(agent.intent.command, agent.intent.args).policy === 'propose') return localReply(input, 'manualWidget');
+        return runAgentTurn(input, agent);
+      }
+      const menuText = menuRequestText(text);
+      if (isMenuCreateRequest(menuText)) {
+        replacePending();
+        if (hostLayer === 'orders-payment') return localReply(input, 'manualRoute');
+        return askMenu(input, parseMenuCreateInput(menuText));
+      }
+      if (followupBoardQuestion(value)) return clarificationReply(input, 'chooseWidget', 'feature');
+      if (/(?:위젯|패널).*(?:되돌려|취소)|(?:방금|아까).*(?:위젯|패널).*빼/u.test(value)) {
+        return localReply(input, run?.getState().undo ? 'boardUndoTarget' : 'boardEditTarget');
+      }
+      if (/(?:다크 모드|큰 글자|언어).*(?:되돌려|취소|원래대로)/u.test(value)) return clarificationReply(input, 'settingsUndo', 'setting');
+      if (/^(?:(?:아까\s*)?(?:그|저)\s*(?:거|메뉴))\s*(?:(?:가격|판매가)(?:은|는|을)?(?:\s*알려\s*(?:줘|주세요))?|얼마(?:야|예요)?)[.?!。？！]*$/u.test(value)) {
+        const choices = memory.records(snapshot);
+        if (choices.length !== 1) return clarificationReply(input, choices.length ? 'chooseNamedMenu' : 'chooseMenu', 'name', choices);
+        return runAgentTurn(input, { intent: { kind: 'read', recordKind: 'menu', querySlot: 'name' }, slots: { name: choices[0].label } });
+      }
+      const read = menuReadTurn(value);
+      if (read) {
+        const intent = read.intent;
+        const querySlot = intent.kind === 'read' ? intent.querySlot : undefined;
+        const query = querySlot ? read.slots?.[querySlot] : undefined;
+        if (typeof query !== 'string' || projectAgentSearch(domains, snapshot, { kind: 'menu', querySlot: 'name' }, query, locale).matches.length || /가격/u.test(value)) {
+          return runAgentTurn(input, read);
+        }
+      }
+      const status = widgetStatusRead(value, snapshot.pos?.businessDate ?? TODAY);
+      if (status) return runAgentTurn(input, status);
+      const lastRead = memory.lastRead()?.turn;
+      if (lastRead?.intent.kind === 'read' && lastRead.intent.featureId === 'ledger' && /^(?:그럼\s*)?(?:어제(?:는|\s*매출은)?|昨天呢)(?:\s*얼마였어)?[?？]?$/.test(value)) {
+        const date = addDays(snapshot.pos?.businessDate ?? TODAY, -1);
+        return runAgentTurn(input, { intent: { kind: 'read', featureId: 'ledger', condition: { kind: 'dateRange', start: date, end: date } } });
+      }
+      const ledger = salesRead(value);
+      if (ledger && !simpleSignal?.aborted && (proposal?.isPending() || prior || layer === 'management' && locale !== 'ko'
+        || /벌었수꽈|얼마우꽈|됐드래|^(?:어 |음 |저기요 )|^(?:how|what|show)|^今天|^매출 매출/iu.test(value))) {
+        return runAgentTurn(input, { intent: { kind: 'read', featureId: ledger, condition: { kind: 'default' } } });
+      }
+      const stock = /(?:재고는\s*어때|재고 부족한 거 알려줘)/u.test(value);
+      if (stock || lastRead?.intent.kind === 'read' && lastRead.intent.featureId === 'inventory-booking' && /^(?:더 있어|다른 건|또 뭐 있어|나머지는)[?？]?$/u.test(value)) {
+        return runAgentTurn(input, { intent: { kind: 'read', featureId: 'inventory-booking', condition: { kind: 'snapshot', asOf: snapshot.pos?.businessDate ?? TODAY } } });
+      }
+      if (prior) {
+        const ordinal = readOrdinal(value);
+        const choice = ordinal !== undefined ? prior.choices?.[ordinal]
+          : prior.choices?.find(item => item.label === value && item.id !== 'manual');
+        const renamed = /^(?:아\s+|아니\s+|이름\s*틀렸어\s+)(.+?)(?:로\s*해\s*줘|(?:이)?야)$/u.exec(value)?.[1];
+        if (renamed && prior.rename) {
+          const name = readMenuName(renamed);
+          if (name) return prior.rename(name, input);
+        }
+        if (choice) return prior.resume({ clarificationId: prior.id, choiceId: choice.id }, input) ?? localReply(input, 'pendingValue');
+        if (prior.field === 'price') {
+          const price = conversationPrice(value);
+          if (price !== undefined) return prior.resume({ clarificationId: prior.id, price }, input) ?? localReply(input, 'priceQuestion');
+          if (/^(?:공짜|몰라|ᄆᄅ|얼마가\s*좋을까)[?？]?$/u.test(value)) return localReply(input, 'priceQuestion');
+        } else if (!/[?？]|(?:알려|보여|몇|얼마|언제|어떻게|어때|무엇|어느|있어|없어|저장해|삭제해)/u.test(value)) {
+          const resumed = prior.resume({ clarificationId: prior.id, value }, input);
+          if (resumed) return resumed;
+        }
+      }
+      if (/(?:그|저)\s*(?:거|메뉴).*(?:품절|가격)|아까\s*(?:말한|그).*메뉴.*가격/u.test(value)) {
+        const choices = memory.records(snapshot);
+        return clarificationReply(input, choices.length ? 'chooseNamedMenu' : 'chooseMenu', 'name', choices);
+      }
+      if (/(?:품절|가격).*(?:바꿔|처리|해줘|으로)|^(?:ᄋᄆᄅᄏᄂ|ᄏᄑᄅᄐ|ᄇᄂᄅᄅᄐ|아아|뜨아).*(?:품절|ᄑᄌ)/u.test(value)) {
+        const alias = /^(?:아아|뜨아|아이스 아메리카노|ᄋᄆᄅᄏᄂ)/u.test(value) ? '아메리카노'
+          : /^(?:ᄏᄑᄅᄐ)/u.test(value) ? '카페라테' : /^ᄇᄂᄅᄅᄐ/u.test(value) ? '바닐라라테' : undefined;
+        if (alias) {
+          const resolved = await runAgentTurn(input, { intent: { kind: 'read', recordKind: 'menu', querySlot: 'name' }, slots: { name: alias } });
+          if (resolved.turn?.kind === 'read' && memory.records(snapshot).length) return clarificationReply(input, 'chooseNamedMenu', 'name', memory.records(snapshot));
+          return clarificationReply(input, 'chooseMenu', 'name');
+        }
+        replacePending();
+        return localReply(input, 'manualWidget');
+      }
+      if (/^(?:아까\s*(?:그|우리|말한)|방금 전 대화|맨 처음에 물어본)/u.test(value)) {
+        return memory.lastRead() ? clarificationReply(input, 'repeatTarget', 'reference') : localReply(input, 'noPreviousTurn');
+      }
+      if (proposal?.isPending() || prior) {
+        const readsLikeQuestion = /[?？]$|(?:알려|보여|얼마|어때|몇|어떻게|무엇|언제|있어|없어|매출|현황)/u.test(value);
+        if (!readsLikeQuestion) return localReply(input, proposal?.isPending() ? 'stillPending' : 'pendingValue');
+      }
+
+      cancelled(signal);
+      const fallback = (): AssistantReply => {
+        if (isDrawerQuestion(text)) {
+          const facts = source.readSource?.('pos') ?? [], value = (key: string) => facts.find(f => f.key === key)?.value;
+          const expected = value('pos.cash.expected'), difference = value('pos.cash.difference');
+          const tr = navisTranslator('ko'), amount = (n: number) => tr.format.money(n, 'full');
+          const diff = typeof difference !== 'number' ? tr.t('data.pos.drawer.unconfirmed') : difference === 0 ? tr.t('navis.drawer.equal')
+            : tr.t(difference < 0 ? 'navis.drawer.short' : 'navis.drawer.over', { amount: amount(Math.abs(difference)) });
+          return { mode: 'simple', answer: typeof expected === 'number' ? tr.t('navis.drawer.answer', { amount: amount(expected), difference: diff }) : tr.t('common.navis.noData'), panels: [], locale };
+        }
+        const reply = simpleReply({ text, locale, layer, source });
+        rememberLegacyRead(reply);
+        return reply;
+      };
+      const rememberLegacyRead = (reply: AssistantReply) => {
+        if (ledger && reply.panels.some(panel => panel.featureId === ledger)) memory.rememberRead({ ...reply, turn: { kind: 'read', evidence: [] } },
+          { intent: { kind: 'read', featureId: ledger, condition: { kind: 'default' } } });
+      };
+      const candidates = (output: RawOutput): Candidate[] => {
+        if (isPosQuestion(text) || isDrawerQuestion(text) || isDemandQuestion(text) && questionContext(text).topics.size === 0) return [];
+        const found = validate(output, source, layer, signal);
+        if (found.length || !output.answer.trim()) return found;
+        const local = simpleReply({ text, locale, layer, source }).panels;
+        if (local.length) return validate({ answer: output.answer, panels: [...local] }, source, layer, signal);
+        const menu = matchWidget(text) === 'menu' && !has(norm(text), PAST_WORDS) && !/\d{4}[-./]\d/u.test(text);
+        const topics = isDemandQuestion(text) ? [...questionContext(text).topics] : menu ? ['menu' as const] : [];
+        const tr = navisTranslator(locale);
+        const topicCards = topics.map(featureId => {
+          const registration = getRegistration(featureId)!;
+          return { featureId, condition: conditionsOf(featureId)[0], size: { width: 1, height: 1 }, reason: tr.t('navis.simple.reason', { name: tr.t(registration.nameKey) }) };
+        });
+        return validate({ answer: output.answer, panels: topicCards }, source, layer, signal);
+      };
+      if (simpleSignal?.aborted) return fallback();
+      const controller = new AbortController();
+      let answer = '', receivedPanels: unknown[] = [], firstTimer: ReturnType<typeof setTimeout> | undefined, totalTimer: ReturnType<typeof setTimeout> | undefined;
+      let interrupt!: (reason: Error) => void;
+      const interrupted = new Promise<never>((_, reject) => { interrupt = reject; });
+      const abort = () => { controller.abort(); interrupt(new DOMException('Request stopped', 'AbortError')); };
+      const simple = () => { controller.abort(); interrupt(new SimpleRequested()); };
+      signal.addEventListener('abort', abort, { once: true });
+      simpleSignal?.addEventListener('abort', simple, { once: true });
+      try {
+        const context = buildAssistantContext({ source, locale, text, layer });
+        let omit = false;
+        const legacyHistory = history?.filter(item => {
+          if (item.role === 'user') omit = isMenuCreateRequest(item.text) || Boolean(commandTurn(item.text, TODAY)) || Boolean(readConversationControl(item.text));
+          return !omit;
+        });
+        cancelled(signal);
+        const timeout = () => { controller.abort(); interrupt(new Error('timeout')); };
+        firstTimer = setTimeout(timeout, 30000);
+        totalTimer = setTimeout(timeout, options.timeoutMs ?? 60000);
+        const request = fetcher('/api/navis/chat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+          body: JSON.stringify({ text, locale, layer, ...context, ...(legacyHistory?.length ? { history: legacyHistory } : {}) }), signal: controller.signal,
+        }).then(async response => {
+          if (controller.signal.aborted) { void response.body?.cancel().catch(() => {}); cancelled(controller.signal); }
+          if (!response.ok || !response.body) throw new Error('request failed');
+          return readReplyStream(response.body, controller.signal, delta => {
+            cancelled(controller.signal);
+            answer += delta;
+            if (answer.trim()) clearTimeout(firstTimer);
+            onTextDelta?.(delta);
+          }, panels => { receivedPanels = panels; });
+        });
+        const output = await Promise.race([request, interrupted]);
+        cancelled(signal);
+        const hasAnswer = Boolean(output.answer.trim());
+        const panels = candidates(output);
+        if (!hasAnswer && panels.length === 0) return fallback();
+        const replyText = hasAnswer ? output.answer : navisTranslator(locale).t('common.navis.noData');
+        const reply = { answer: replyText, panels, locale };
+        rememberLegacyRead(reply);
+        return reply;
+      } catch (error) {
+        cancelled(signal);
+        if (error instanceof OutOfScope) {
+          const tr = navisTranslator(locale);
+          return { answer: tr.t('navis.outOfScope'), examples: [1, 2, 5].map(n => tr.t(`navis.example.${n}`)), panels: [], outOfScope: true, locale };
+        }
+        if (answer.trim()) return { answer, panels: candidates({ answer, panels: receivedPanels }), locale };
+        return fallback();
+      } finally {
+        controller.abort();
+        clearTimeout(firstTimer); clearTimeout(totalTimer);
+        signal.removeEventListener('abort', abort);
+        simpleSignal?.removeEventListener('abort', simple);
+      }
+    },
+  };
+}

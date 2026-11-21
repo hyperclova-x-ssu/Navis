@@ -1,0 +1,756 @@
+[
+  {
+    "id": "S1-021",
+    "slice": "N01",
+    "utterances": [
+      "메뉴에 카라멜마키아토 음료 5,500원에 추가해줘",
+      "메뉴에 카라멜마키아토 5,500원 넣어줘",
+      "카라멜마키아토 메뉴에 등록해줘 5500원"
+    ],
+    "checks": [
+      {
+        "category": "money",
+        "parser": "menuPrice",
+        "expected": 5500
+      }
+    ]
+  },
+  {
+    "id": "S1-023",
+    "slice": "N00",
+    "utterances": [
+      "메뉴에 마들렌 디저트 3,000원 추가해줘",
+      "메뉴에 마들렌 디저트를 3,000원에 넣어줘",
+      "마들렌 디저트 3,000원 메뉴에 등록"
+    ],
+    "checks": [
+      {
+        "category": "money",
+        "parser": "menuPrice",
+        "expected": 3000
+      }
+    ]
+  },
+  {
+    "id": "S1-025",
+    "slice": "N01",
+    "utterances": [
+      "메뉴에 흑임자라떼 6,000원 추가하는데 메모는 '여름 한정'으로 해줘",
+      "흑임자라떼 6천원 메뉴에 넣고 메모 여름 한정",
+      "메뉴에 흑임자라떼 6,000원 넣어줘 (메모: 여름 한정)"
+    ],
+    "checks": [
+      {
+        "category": "money",
+        "parser": "menuPrice",
+        "expected": 6000
+      }
+    ]
+  },
+  {
+    "id": "S1-031",
+    "slice": "N01",
+    "utterances": [
+      "메뉴에 쿠키 3.5천원에 추가해줘",
+      "메뉴에 쿠키 삼천오백 원에 넣어줘",
+      "메뉴에 쿠키 3천5백원 등록"
+    ],
+    "checks": [
+      {
+        "category": "money",
+        "parser": "menuPrice",
+        "expected": 3500
+      }
+    ]
+  },
+  {
+    "id": "S1-129",
+    "slice": "N01",
+    "utterances": [
+      "우유 얼마나 남았어?",
+      "우유 재고 알려주세요",
+      "우유 몇 리터 있어"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-130",
+    "slice": "N01",
+    "utterances": [
+      "원두 재고 몇 킬로야?",
+      "원두 얼마나 있지?",
+      "원두 남은 양"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-131",
+    "slice": "N01",
+    "utterances": [
+      "컵 몇 개 남았어?",
+      "컵 재고 알려줘",
+      "일회용컵 재고"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-132",
+    "slice": "N01",
+    "utterances": [
+      "바닐라 시럽 얼마나 있어?",
+      "시럽 재고 알려줘",
+      "바닐라시럽 몇 리터 남았냐"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-134",
+    "slice": "N01",
+    "utterances": [
+      "재고 부족한 거 뭐야?",
+      "보충해야 하는 재료 알려줘",
+      "뭐 사야 돼?"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-135",
+    "slice": "N01",
+    "utterances": [
+      "품절된 재료 있어?",
+      "다 떨어진 거 있나?",
+      "재고 0인 거"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-136",
+    "slice": "N01",
+    "utterances": [
+      "제일 급한 재료가 뭐야?",
+      "뭐부터 채워야 돼?",
+      "급한 재고 순서대로 알려줘"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-137",
+    "slice": "N01",
+    "utterances": [
+      "판매 상품 재고 몇 개야?",
+      "팔 물건 재고 총 몇 개?",
+      "원두랑 드립백 재고 합쳐서"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-140",
+    "slice": "N01",
+    "utterances": [
+      "우유 오늘 얼마나 썼어?",
+      "우유 오늘 사용량",
+      "오늘 우유 몇 리터 나갔어"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-147",
+    "slice": "N01",
+    "utterances": [
+      "재고에 문제 있어?",
+      "재고랑 입고 이상한 거 있나 봐줘",
+      "재고 괜찮아?"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-178",
+    "slice": "N01",
+    "utterances": [
+      "귀리우유 재고 얼마야?",
+      "방금 추가한 귀리우유 몇 리터 있어",
+      "귀리우유 재고 알려줘"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-204",
+    "slice": "N01",
+    "utterances": [
+      "우유 입고되면 재고 얼마가 돼?",
+      "우유 12리터 들어오면 얼마 남아?",
+      "우유 오면 재고 괜찮아져?"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-270",
+    "slice": "N01",
+    "utterances": [
+      "최근 7일 매출 합계 알려줘",
+      "일주일 매출 얼마야?",
+      "요 며칠 일주일 번 돈"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "ledger",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-10-20",
+          "end": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-271",
+    "slice": "N01",
+    "utterances": [
+      "최근 7일 중에 제일 많이 번 날이 언제야?",
+      "이번 주 최고 매출 날",
+      "일주일 중 매출 제일 높은 날"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "ledger",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-10-20",
+          "end": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-272",
+    "slice": "N01",
+    "utterances": [
+      "어제 매출 얼마였어?",
+      "어제 얼마 벌었지",
+      "10월 25일 매출"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "ledger",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-10-20",
+          "end": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-274",
+    "slice": "N01",
+    "utterances": [
+      "이번 달 매출이랑 지출 알려줘",
+      "이번 달 얼마 벌고 얼마 썼어?",
+      "이번달 순이익"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "ledger",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-10-01",
+          "end": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-275",
+    "slice": "N01",
+    "utterances": [
+      "최근 30일 매출 얼마야?",
+      "한 달 동안 얼마 벌었어?",
+      "30일 매출 합계"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "ledger",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-09-27",
+          "end": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-276",
+    "slice": "N01",
+    "utterances": [
+      "이번 달 임대료 얼마 나갔어?",
+      "이번 달 인건비 얼마야",
+      "이번 달 월세랑 알바비"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "ledger",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-10-01",
+          "end": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S1-330",
+    "slice": "N01",
+    "utterances": [
+      "재고랑 발주 정리해줘",
+      "재고하고 발주 좀 손봐줘",
+      "재고 발주 다 정리"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S2-007",
+    "slice": "N01",
+    "utterances": [
+      "최근 7일 마진율 알려줘",
+      "일주일 마진 어때?",
+      "7일치 마진 몇 퍼야"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "margin",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-10-20",
+          "end": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S2-008",
+    "slice": "N01",
+    "utterances": [
+      "최근 30일 마진은?",
+      "한 달치 마진율 알려줘 (30일)",
+      "30일 마진 비교도 해줘"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "margin",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-09-27",
+          "end": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S2-048",
+    "slice": "N01",
+    "utterances": [
+      "지난달 세무 자료 확인할 거 있어?",
+      "9월 세금 예상액 얼마야",
+      "저번 달 부가세 예상 알려줘"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "tax",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-09-01",
+          "end": "2026-09-30"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S4-160",
+    "slice": "N01",
+    "utterances": [
+      "행사 근처 손님들한테 행사 안내 문자 보내줘",
+      "이번 토요일 행사 때문에 단골한테 문자 돌려줘",
+      "동네 행사 공지 보내줘",
+      "행사 소식 고객들에게 발송해줘"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "date",
+        "field": "startDate",
+        "expected": "2026-10-31"
+      },
+      {
+        "category": "date",
+        "parser": "date",
+        "field": "endDate",
+        "expected": "2026-10-31"
+      }
+    ],
+    "errata": {
+      "1": "No event date is stated",
+      "3": "No event date is stated",
+      "4": "No event date is stated"
+    }
+  },
+  {
+    "id": "S4-210",
+    "slice": "N01",
+    "utterances": [
+      "디카페인 뜨니까 단골한테 홍보 문자 보내줘",
+      "트렌드 홍보 쿠폰 쏴줘",
+      "디카페인 신메뉴 공지 발송해줘",
+      "디카페인 나왔다고 손님들한테 알려줘"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "draftDate",
+        "field": "startDate",
+        "expected": "2026-10-26"
+      },
+      {
+        "category": "date",
+        "parser": "draftDate",
+        "field": "endDate",
+        "expected": "2026-10-26"
+      }
+    ]
+  },
+  {
+    "id": "S6-175",
+    "slice": "N01",
+    "utterances": [
+      "지난달 마케팅 성과 알려줘",
+      "저번 달 쿠폰 성과 어땠어",
+      "9월 쿠폰 사용률이랑 매출"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "marketing-performance",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-09-01",
+          "end": "2026-09-30"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S6-183",
+    "slice": "N01",
+    "utterances": [
+      "그럼 지난달은?",
+      "저번 달은 어땠는데",
+      "지난달 건 얼마였어"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "marketing-performance",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-09-01",
+          "end": "2026-09-30"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S6-185",
+    "slice": "N01",
+    "utterances": [
+      "이번 달 매출 중에 쿠폰 덕분인 게 몇 퍼센트야?",
+      "전체 매출 대비 홍보 매출 비중 알려줘",
+      "쿠폰 매출이 전체에서 얼마나 차지해"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "ledger",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-10-01",
+          "end": "2026-10-26"
+        }
+      }
+    ],
+    "errata": {
+      "2": "No reporting month is stated",
+      "3": "No reporting month is stated"
+    }
+  },
+  {
+    "id": "S8-016",
+    "slice": "N01",
+    "utterances": [
+      "이번 주 매출 알려줘",
+      "이번주 매출 얼마야?",
+      "이번 주 얼마 벌었어?",
+      "이번 주 장사 어때?"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "ledger",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-10-20",
+          "end": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S8-020",
+    "slice": "N01",
+    "utterances": [
+      "원두 재고 몇 개야?",
+      "원두 얼마나 남았어?",
+      "원두 남은 거 알려줘",
+      "원두 재고"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "inventory-booking",
+        "expected": {
+          "kind": "snapshot",
+          "asOf": "2026-10-26"
+        }
+      }
+    ]
+  },
+  {
+    "id": "S8-100",
+    "slice": "N01",
+    "utterances": [
+      "메뉴에 마들렌 삼천오백 원에 추가해줘",
+      "메뉴에 마들렌 삼천오백원 넣어줘",
+      "메뉴에 마들렌 3천5백원 등록해줘",
+      "메뉴에 마들렌 삼천 오백 원에 추가해줘"
+    ],
+    "checks": [
+      {
+        "category": "money",
+        "parser": "menuPrice",
+        "expected": 3500
+      }
+    ]
+  },
+  {
+    "id": "S8-102",
+    "slice": "N01",
+    "utterances": [
+      "메뉴에 브런치세트 만 이천원에 추가해줘",
+      "메뉴에 브런치세트 1만2천원에 추가해줘",
+      "메뉴에 브런치세트 일만 이천 원 등록해줘",
+      "메뉴에 브런치세트 12,000원에 넣어줘"
+    ],
+    "checks": [
+      {
+        "category": "money",
+        "parser": "menuPrice",
+        "expected": 12000
+      }
+    ]
+  },
+  {
+    "id": "S8-108",
+    "slice": "N01",
+    "utterances": [
+      "메뉴에 카라멜 마키아토 5,000원 추가해줘",
+      "메뉴에 카라멜 마키아토 5000원 추가해줘",
+      "메뉴에 카라멜 마키아토 ₩5,000 추가해줘",
+      "메뉴에 카라멜 마키아토 5000 추가해줘",
+      "메뉴에 카라멜 마키아토 5천원 추가해줘"
+    ],
+    "checks": [
+      {
+        "category": "money",
+        "parser": "menuPrice",
+        "expected": 5000
+      }
+    ]
+  },
+  {
+    "id": "S8-152",
+    "slice": "N01",
+    "utterances": [
+      "요즘 장사가 너무 안돼서 힘들다",
+      "가게 접고 싶다",
+      "손님이 없어서 우울해"
+    ],
+    "checks": [
+      {
+        "category": "date",
+        "parser": "readCondition",
+        "featureId": "ledger",
+        "expected": {
+          "kind": "dateRange",
+          "start": "2026-10-20",
+          "end": "2026-10-26"
+        }
+      }
+    ],
+    "errata": {
+      "1": "요즘 leaves the period unspecified",
+      "2": "No reporting period is stated",
+      "3": "No reporting period is stated"
+    }
+  }
+]
