@@ -1,0 +1,56 @@
+{
+  "name": "storesaas-mockup",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.20.1"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "build": "vite build",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "typecheck:core": "tsc --noEmit -p src/contracts/tsconfig.core.json",
+    "test:core": "vitest run src/catalog src/layout src/state",
+    "build:core": "node src/layout/dev/build-core.mjs",
+    "promo:smoke": "node server/promo/smoke.mjs",
+    "seed:generate": "node scripts/seed-from-content.mjs",
+    "seed:check": "node scripts/seed-from-content.mjs --check",
+    "test:server": "node scripts/test-server.mjs"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.9.0",
+    "@dnd-kit/core": "6.3.1",
+    "motion": "14.6.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-is": "19.3.1",
+    "recharts": "3.10.1",
+    "sonner": "2.0.8",
+    "zustand": "5.0.16"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.8",
+    "@types/node": "20.19.43",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.7",
+    "globals": "17.13.0",
+    "jsdom": "26.1.0",
+    "playwright-core": "1.64.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.0",
+    "vite": "8.3.5",
+    "vitest": "4.1.12"
+  }
+}
