@@ -1,0 +1,24 @@
+# CNN live server (T-066). Pinned to the T-065 measurement environment (cnn/bench/README.md) and
+# ARCHITECTURE 12.7 / D-80. Install into ~/navis-cnn-live/venv (Python 3.10) with scripts/setup.sh.
+--extra-index-url https://download.pytorch.org/whl/cu121
+# already in the venv (T-065)
+torch==2.5.1+cu121
+torchvision==0.20.1+cu121
+ultralytics==8.4.41
+lap==0.5.14
+opencv-python-headless==5.0.0.93
+numpy==2.2.6
+# weak-PC runtime: openvino==2024.6.0 + openvino-telemetry==2025.2.0 (moved from the pip --target extra_cpu
+# folder, same versions). Its metadata asks numpy<2.2 but T-065 measured it with numpy 2.2.6, so
+# scripts/setup.sh installs it with --no-deps (pip would refuse it in this file).
+# server
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+segno==1.6.1
+# tests
+pytest==8.3.4
+httpx==0.28.1
+# INT8 model build only (scripts/setup.sh installs these when the INT8 model is missing):
+#   nncf==2.14.1 scikit-learn==1.5.2 joblib==1.6.0 threadpoolctl==3.8.0 jstyleson==0.0.2 natsort==8.4.0
+#   pydot==4.0.1 pyparsing==3.3.3 tabulate==0.10.0 safetensors==0.8.0

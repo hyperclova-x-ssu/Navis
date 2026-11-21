@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Navis</title>
+<style>
+  :root { --bg: #171719; --fg: #F2F2F4; --muted: #A9A9B0; --line: #3A3A40; --accent: #F2F2F4; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+    font-size: 18px; line-height: 1.45;
+    -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  body { overflow-x: hidden; }
+  main { max-width: 560px; min-height: 100vh; min-height: 100dvh; margin: 0 auto; box-sizing: border-box;
+    padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); }
+  h1, p, button, .status { overflow-wrap: anywhere; }
+  h1 { font-size: 24px; margin: 0 0 12px; font-weight: 700; }
+  p { margin: 0 0 8px; }
+  .muted { color: var(--muted); font-size: 18px; }
+  .screen[hidden] { display: none; }
+  button { display: block; width: 100%; min-height: 56px; padding: 8px 16px; line-height: 1.3; margin: 16px 0 0; border: 0; border-radius: 12px;
+    background: var(--fg); color: var(--bg); font: inherit; font-weight: 700; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  button:focus-visible { outline: 3px solid #8AB4FF; outline-offset: 2px; }
+  video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 12px;
+    object-fit: contain; margin: 12px 0;
+    max-height: calc(100dvh - 300px); min-height: 120px; }
+  .status { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: #4CC38A; flex: none; }
+  .dot.off { background: var(--muted); }
+  ul { padding-left: 20px; margin: 8px 0; }
+  /* landscape phones: preview on the left, notes + button on the right; no page scroll */
+  @media (orientation: landscape) and (max-height: 600px) {
+    main { max-width: none; padding-top: calc(8px + env(safe-area-inset-top)); padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    button { margin-top: 12px; }
+    #s-sending { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 38%); column-gap: 16px; align-items: start; }
+    #s-sending[hidden] { display: none; }
+    #s-sending video { grid-column: 1; grid-row: 1 / span 4; margin: 4px 0 0; width: 100%; max-height: calc(100dvh - 90px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); min-height: 0; }
+    #s-sending > :not(video) { grid-column: 2; }
+    #s-sending p { margin-top: 4px; }
+    #s-sending button { margin-top: 8px; }
+    .screen p { margin-bottom: 4px; }
+    ul { margin: 4px 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 data-t="phone.title"></h1>
+  <div id="live" class="status" role="status" aria-live="polite"></div>
+
+  <section class="screen" id="s-intro" hidden>
+    <p data-t="phone.intro"></p>
+    <ul class="muted"><li data-t="phone.placing"></li><li data-t="phone.keepOn"></li></ul>
+    <p class="muted" data-t="phone.noSave"></p>
+    <button id="b-start" data-t="phone.start"></button>
+  </section>
+
+  <section class="screen" id="s-asking" hidden>
+    <p data-t="phone.asking"></p>
+  </section>
+
+  <section class="screen" id="s-denied" hidden>
+    <p data-t="phone.asking"></p>
+    <p class="muted" data-t="phone.denied.ios"></p>
+    <p class="muted" data-t="phone.denied.android"></p>
+    <button id="b-denied-retry" data-t="phone.retry"></button>
+  </section>
+
+  <section class="screen" id="s-sending" hidden>
+    <video id="preview" playsinline muted autoplay></video>
+    <p class="muted" data-t="phone.noSave"></p>
+    <p class="muted" id="sleep-warn" data-t="phone.sleepWarn" hidden></p>
+    <button id="b-stop" class="secondary" data-t="phone.stop"></button>
+  </section>
+
+  <section class="screen" id="s-stopped" hidden>
+    <p data-t="phone.stopped"></p>
+    <button id="b-resume" data-t="phone.resume"></button>
+  </section>
+
+  <section class="screen" id="s-lost" hidden>
+    <p data-t="phone.lost"></p>
+    <button id="b-reconnect" data-t="phone.reconnect"></button>
+  </section>
+
+  <section class="screen" id="s-server" hidden>
+    <p data-t="phone.server"></p>
+    <p class="muted" data-t="phone.serverHint"></p>
+    <button id="b-server-retry" data-t="phone.retry"></button>
+  </section>
+
+  <section class="screen" id="s-busy" hidden>
+    <p data-t="phone.busy"></p>
+    <p class="muted" data-t="phone.busyHint"></p>
+  </section>
+
+  <section class="screen" id="s-expired" hidden>
+    <p data-t="phone.expired"></p>
+  </section>
+
+  <section class="screen" id="s-replaced" hidden>
+    <p data-t="phone.replaced"></p>
+  </section>
+</main>
+<canvas id="canvas" hidden></canvas>
+<script src="/cam/i18n.js"></script>
+<script src="/cam/cam.js"></script>
+</body>
+</html>
