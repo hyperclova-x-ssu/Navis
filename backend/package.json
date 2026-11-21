@@ -1,0 +1,29 @@
+{
+  "name": "@navis/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --jsx react-jsx --types node,vite/client",
+    "test": "vitest run",
+    "migrate": "node packages/db/cli.ts migrate",
+    "seed": "node packages/db/cli.ts seed"
+  },
+  "dependencies": {
+    "fastify": "5.12.8",
+    "jose": "6.2.18",
+    "pg": "8.23.1",
+    "redis": "6.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "node-pg-migrate": "9.0.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12"
+  }
+}
