@@ -1,0 +1,119 @@
+{
+  "cctv": {
+    "visitsPerOrder": 1.18,
+    "dwellMinutes": [19, 25, 39, 53, 48, 37, 43, 51],
+    "occupancy": [
+      {"zone": "window", "seats": 8, "occupied": 5},
+      {"zone": "center", "seats": 16, "occupied": 8},
+      {"zone": "bar", "seats": 6, "occupied": 2}
+    ],
+    "cameras": [
+      {"cameraId": "sample-entrance", "name": "출입구", "operation": "recording"},
+      {"cameraId": "sample-window", "name": "창가 좌석", "operation": "recording"}
+    ]
+  },
+  "staff": [
+    {"staffId": "sample-staff-1", "name": "윤서진", "role": "manager"},
+    {"staffId": "sample-staff-2", "name": "박도현", "role": "hourly"},
+    {"staffId": "sample-staff-3", "name": "한소은", "role": "hourly"},
+    {"staffId": "sample-staff-4", "name": "김주원", "role": "hourly"},
+    {"staffId": "sample-staff-5", "name": "정하린", "role": "hourly"}
+  ],
+  "shifts": [
+    {"staffId": "sample-staff-1", "day": 0, "start": "08:00", "end": "16:30"},
+    {"staffId": "sample-staff-2", "day": 0, "start": "08:00", "end": "12:00"},
+    {"staffId": "sample-staff-3", "day": 0, "start": "12:00", "end": "17:00"},
+    {"staffId": "sample-staff-4", "day": 0, "start": "17:00", "end": "22:00"},
+    {"staffId": "sample-staff-5", "day": 0, "start": "18:00", "end": "22:00"},
+    {"staffId": "sample-staff-1", "day": 1, "start": "08:00", "end": "16:30"},
+    {"staffId": "sample-staff-2", "day": 1, "start": "10:00", "end": "15:00"},
+    {"staffId": "sample-staff-5", "day": 1, "start": "16:00", "end": "22:00"},
+    {"staffId": "sample-staff-3", "day": 2, "start": "08:00", "end": "13:00"},
+    {"staffId": "sample-staff-4", "day": 2, "start": "16:00", "end": "22:00"},
+    {"staffId": "sample-staff-1", "day": 3, "start": "08:00", "end": "16:30"},
+    {"staffId": "sample-staff-5", "day": 3, "start": "17:00", "end": "22:00"},
+    {"staffId": "sample-staff-2", "day": 4, "start": "09:30", "end": "15:00"},
+    {"staffId": "sample-staff-4", "day": 4, "start": "15:00", "end": "21:30"},
+    {"staffId": "sample-staff-3", "day": 5, "start": "10:00", "end": "15:00"},
+    {"staffId": "sample-staff-5", "day": 5, "start": "15:00", "end": "20:30"},
+    {"staffId": "sample-staff-1", "day": 6, "start": "08:00", "end": "16:30"},
+    {"staffId": "sample-staff-2", "day": 6, "start": "16:00", "end": "22:00"}
+  ],
+  "bookings": [
+    {"id": "sample-booking-1", "memberCode": "M-0008", "start": "17:30", "end": "18:30", "partySize": 3, "status": "confirmed", "request": "창가 쪽 자리"},
+    {"id": "sample-booking-2", "memberCode": "M-0024", "start": "18:00", "end": "19:30", "partySize": 4, "status": "confirmed", "request": "콘센트 가까운 자리"},
+    {"id": "sample-booking-3", "memberCode": "M-0052", "start": "19:30", "end": "20:30", "partySize": 2, "status": "needs-check", "request": "동아리 모임"}
+  ],
+  "activePasses": [
+    {"id": "sample-pass-1", "memberCode": "M-0012", "menuId": "m-americano", "daysAgo": 19, "usesLeft": 7},
+    {"id": "sample-pass-2", "memberCode": "M-0024", "menuId": "m-cafe-latte", "daysAgo": 56, "usesLeft": 2},
+    {"id": "sample-pass-3", "memberCode": "M-0052", "menuId": "m-americano", "daysAgo": 37, "usesLeft": 4}
+  ],
+  "balances": [
+    {"memberCode": "M-0012", "chargeBalance": 25000, "receivableBalance": 0},
+    {"memberCode": "M-0024", "chargeBalance": 0, "receivableBalance": 8800},
+    {"memberCode": "M-0052", "chargeBalance": 12000, "receivableBalance": 12600}
+  ],
+  "calendar": [
+    {"eventId": "sample-calendar-1", "day": 0, "time": "16:30", "category": "store-operations", "title": "쇼케이스 진열 수량 확인"},
+    {"eventId": "sample-calendar-2", "day": 1, "time": "09:00", "category": "store-operations", "title": "동아리 단체 주문 준비"},
+    {"eventId": "sample-calendar-3", "day": 3, "time": "14:00", "category": "store-operations", "title": "겨울 메뉴 사진 촬영"},
+    {"eventId": "sample-calendar-4", "day": 6, "time": "10:00", "category": "tax-admin", "title": "11월 급여·세무 증빙 확인"}
+  ],
+  "localChanges": [
+    {"id": "sample-local-1", "kind": "event", "title": "숭실대 동아리 겨울 정기 공연", "day": 3, "throughDay": 4, "distanceM": 280},
+    {"id": "sample-local-2", "kind": "construction", "title": "상도동 보행로 정비", "day": -2, "throughDay": 4, "distanceM": 350},
+    {"id": "sample-local-3", "kind": "opening", "title": "상도역 앞 독립 서점 개점", "day": 2, "throughDay": null, "distanceM": 490}
+  ],
+  "tradeArea": [
+    {"hour": 8, "estPeople": 180},
+    {"hour": 9, "estPeople": 310},
+    {"hour": 10, "estPeople": 255},
+    {"hour": 11, "estPeople": 280},
+    {"hour": 12, "estPeople": 365},
+    {"hour": 13, "estPeople": 310},
+    {"hour": 14, "estPeople": 278},
+    {"hour": 15, "estPeople": 250},
+    {"hour": 16, "estPeople": 289},
+    {"hour": 17, "estPeople": 340},
+    {"hour": 18, "estPeople": 395},
+    {"hour": 19, "estPeople": 300},
+    {"hour": 20, "estPeople": 210},
+    {"hour": 21, "estPeople": 115}
+  ],
+  "trends": [
+    {"id": "sample-trend-1", "keyword": "상도동 카공", "category": "카페", "mentions": 86, "previousMentions": 71},
+    {"id": "sample-trend-2", "keyword": "숭실대 디저트", "category": "디저트", "mentions": 64, "previousMentions": 52},
+    {"id": "sample-trend-3", "keyword": "보늬밤 라떼", "category": "시즌 메뉴", "mentions": 38, "previousMentions": 24}
+  ],
+  "taxPayments": [
+    {"id": "sample-tax-1", "type": "11월 원천세", "dueOn": "2026-12-10", "basisMonth": "2026-11", "basisCategory": "labor", "sampleRate": 0.03},
+    {"id": "sample-tax-2", "type": "하반기 부가세 준비", "dueOn": "2027-01-25", "basisMonth": "2026-10", "basisCategory": "ingredients", "sampleRate": 0.10}
+  ],
+  "grants": [
+    {"id": "sample-grant-1", "title": "동작구 소상공인 매장 개선 지원", "agency": "동작구", "region": "서울 동작구", "applyStart": "2026-11-09", "applyEnd": "2026-12-04", "summary": "카페 조명·안내판 개선 비용 일부 지원", "conditions": ["동작구 소재 소상공인", "사업자등록 확인"], "matchStatus": "matched"},
+    {"id": "sample-grant-2", "title": "서울 소상공인 에너지 절감 지원", "agency": "서울시", "region": "서울", "applyStart": "2026-11-16", "applyEnd": "2026-12-11", "summary": "고효율 냉장 설비 교체 보조", "conditions": ["서울 소재 영업장", "교체 대상 모델 확인"], "matchStatus": "needs-check"}
+  ],
+  "environment": [
+    {"id": "sample-sensors-1", "temperature": 22.4, "humidity": 47, "co2": 684, "pm25": 9, "noise": 54, "lighting": 340, "playlist": "오후의 재즈", "volume": 28}
+  ],
+  "notices": [
+    {"id": "sample-notice-1", "title": "저녁 좌석 예약 안내", "body": "오늘 저녁 방문하실 분은 4인석 예약 가능 시간을 매장에 문의해 주세요.", "audience": "all_contactable"},
+    {"id": "sample-notice-2", "title": "늦가을 시즌 음료 안내", "body": "공주 보늬밤 라떼와 고흥 유자 캐모마일 티를 주문하실 수 있어요.", "audience": "all_contactable"}
+  ],
+  "customOrders": [
+    {"id": "sample-custom-1", "memberCode": "M-0103", "menuId": "m-cafe-latte", "quantity": 12, "pickupDay": 1, "pickupTime": "10:30", "stage": "quote_pending"},
+    {"id": "sample-custom-2", "memberCode": "M-0240", "menuId": "m-saltbread", "quantity": 16, "pickupDay": 3, "pickupTime": "15:30", "stage": "received"}
+  ],
+  "expiryBatches": [
+    {"id": "sample-expiry-1", "itemId": "i-saltbread", "menuId": "m-saltbread", "quantityBase": 12},
+    {"id": "sample-expiry-2", "itemId": "i-basque-cake", "menuId": "m-basque-cake", "quantityBase": 8}
+  ],
+  "promos": [
+    {"id": "sample-promo-1", "menuId": "m-chestnut-latte", "concept": "new-item", "mood": "warm", "title": "가을 끝자락, 보늬밤 라떼", "caption": "상도동에서 따뜻하게 즐기는 고소한 밤 라떼", "durationSeconds": 15, "status": "draft"},
+    {"id": "sample-promo-2", "menuId": "m-saltbread", "concept": "todays-deal", "mood": "clean", "title": "오후에 구운 버터 소금빵", "caption": "커피와 곁들이기 좋은 오후 간식", "durationSeconds": 12, "status": "draft"}
+  ],
+  "community": [
+    {"id": "sample-community-1", "store": "상도 책마루", "title": "북클럽 모임 공동 안내", "category": "동네 서점", "startDay": 2, "endDay": 10}
+  ]
+}

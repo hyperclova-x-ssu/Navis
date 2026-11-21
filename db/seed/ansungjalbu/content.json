@@ -1,0 +1,1338 @@
+{
+  "store": {
+    "name": "안숭잘부 카페",
+    "area": "서울 동작구 상도동 999-12 (숭실대 정문 앞 골목, 가상 주소)",
+    "business_type": "cafe",
+    "payment_style": "prepaid",
+    "timezone": "Asia/Seoul",
+    "business_day_start": "05:00",
+    "hours": {
+      "mon": ["08:00", "22:00"],
+      "tue": ["08:00", "22:00"],
+      "wed": ["08:00", "22:00"],
+      "thu": ["08:00", "22:00"],
+      "fri": ["08:00", "22:00"],
+      "sat": ["09:30", "21:30"],
+      "sun": ["10:00", "20:30"]
+    },
+    "tables": [
+      {"number": 1, "seats": 2},
+      {"number": 2, "seats": 2},
+      {"number": 3, "seats": 2},
+      {"number": 4, "seats": 2},
+      {"number": 5, "seats": 2},
+      {"number": 6, "seats": 2},
+      {"number": 7, "seats": 2},
+      {"number": 8, "seats": 2},
+      {"number": 9, "seats": 4},
+      {"number": 10, "seats": 4},
+      {"number": 11, "seats": 6}
+    ]
+  },
+  "suppliers": [
+    {
+      "id": "s-roaster",
+      "name": "상도브루 로스터리",
+      "lead_days": 2,
+      "order_weekdays": ["mon", "thu"],
+      "min_order_krw": 60000
+    },
+    {
+      "id": "s-dairy",
+      "name": "한강목장 유업유통",
+      "lead_days": 1,
+      "order_weekdays": ["mon", "wed", "fri"],
+      "min_order_krw": 45000
+    },
+    {
+      "id": "s-bakery",
+      "name": "동작아티잔 베이커리공방",
+      "lead_days": 2,
+      "order_weekdays": ["tue", "fri"],
+      "min_order_krw": 50000
+    },
+    {
+      "id": "s-beverage",
+      "name": "베버리지랩 식자재",
+      "lead_days": 2,
+      "order_weekdays": ["tue", "thu"],
+      "min_order_krw": 70000
+    },
+    {
+      "id": "s-package",
+      "name": "푸른패키징 상사",
+      "lead_days": 3,
+      "order_weekdays": ["wed"],
+      "min_order_krw": 80000
+    }
+  ],
+  "ingredients": [
+    {
+      "id": "i-bean-house",
+      "name": "하우스 블렌드 원두",
+      "base_unit": "g",
+      "purchase_unit": "kg",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 23000,
+      "supplier": "s-roaster",
+      "reorder_threshold_base": 4000,
+      "track": true,
+      "opening_qty_base": 12000
+    },
+    {
+      "id": "i-bean-decaf",
+      "name": "디카페인 콜롬비아 원두",
+      "base_unit": "g",
+      "purchase_unit": "kg",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 28000,
+      "supplier": "s-roaster",
+      "reorder_threshold_base": 1500,
+      "track": true,
+      "opening_qty_base": 4000
+    },
+    {
+      "id": "i-coldbrew-base",
+      "name": "콜드브루 추출 원액",
+      "base_unit": "mL",
+      "purchase_unit": "L",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 14000,
+      "supplier": "s-roaster",
+      "reorder_threshold_base": 2000,
+      "track": true,
+      "opening_qty_base": 5000
+    },
+    {
+      "id": "i-milk",
+      "name": "목장 1등급 우유",
+      "base_unit": "mL",
+      "purchase_unit": "L",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 2900,
+      "supplier": "s-dairy",
+      "reorder_threshold_base": 12000,
+      "track": true,
+      "opening_qty_base": 30000
+    },
+    {
+      "id": "i-oat-milk",
+      "name": "바리스타 오트 귀리음료",
+      "base_unit": "mL",
+      "purchase_unit": "L",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 4600,
+      "supplier": "s-dairy",
+      "reorder_threshold_base": 3000,
+      "track": true,
+      "opening_qty_base": 8000
+    },
+    {
+      "id": "i-condensed-milk",
+      "name": "달콤 연유",
+      "base_unit": "g",
+      "purchase_unit": "kg",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 6500,
+      "supplier": "s-dairy",
+      "reorder_threshold_base": 1000,
+      "track": true,
+      "opening_qty_base": 3000
+    },
+    {
+      "id": "i-whipping-cream",
+      "name": "동물성 생크림",
+      "base_unit": "mL",
+      "purchase_unit": "L",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 6800,
+      "supplier": "s-dairy",
+      "reorder_threshold_base": 2000,
+      "track": true,
+      "opening_qty_base": 5000
+    },
+    {
+      "id": "i-vanilla-syrup",
+      "name": "바닐라 빈 시럽",
+      "base_unit": "mL",
+      "purchase_unit": "병(1L)",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 13500,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 2000,
+      "track": true,
+      "opening_qty_base": 5000
+    },
+    {
+      "id": "i-hazelnut-syrup",
+      "name": "헤이즐넛 시럽",
+      "base_unit": "mL",
+      "purchase_unit": "병(1L)",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 13000,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 1000,
+      "track": true,
+      "opening_qty_base": 3000
+    },
+    {
+      "id": "i-caramel-sauce",
+      "name": "솔티드 카라멜 소스",
+      "base_unit": "g",
+      "purchase_unit": "통(2kg)",
+      "purchase_qty_base": 2000,
+      "unit_price_krw_per_purchase_unit": 18000,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 1500,
+      "track": true,
+      "opening_qty_base": 4000
+    },
+    {
+      "id": "i-choco-powder",
+      "name": "벨기에 다크 초코 파우더",
+      "base_unit": "g",
+      "purchase_unit": "kg",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 15000,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 1500,
+      "track": true,
+      "opening_qty_base": 4000
+    },
+    {
+      "id": "i-matcha-powder",
+      "name": "제주 유기농 말차 파우더",
+      "base_unit": "g",
+      "purchase_unit": "봉(500g)",
+      "purchase_qty_base": 500,
+      "unit_price_krw_per_purchase_unit": 26000,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 500,
+      "track": true,
+      "opening_qty_base": 1500
+    },
+    {
+      "id": "i-earlgrey-tea",
+      "name": "얼그레이 잎차 티백",
+      "base_unit": "pcs",
+      "purchase_unit": "통(50입)",
+      "purchase_qty_base": 50,
+      "unit_price_krw_per_purchase_unit": 19000,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 30,
+      "track": true,
+      "opening_qty_base": 100
+    },
+    {
+      "id": "i-chamomile-tea",
+      "name": "캐모마일 허브 티백",
+      "base_unit": "pcs",
+      "purchase_unit": "통(50입)",
+      "purchase_qty_base": 50,
+      "unit_price_krw_per_purchase_unit": 17500,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 30,
+      "track": true,
+      "opening_qty_base": 100
+    },
+    {
+      "id": "i-grapefruit-base",
+      "name": "루비 자몽 과육 청",
+      "base_unit": "g",
+      "purchase_unit": "통(2kg)",
+      "purchase_qty_base": 2000,
+      "unit_price_krw_per_purchase_unit": 21000,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 2000,
+      "track": true,
+      "opening_qty_base": 6000
+    },
+    {
+      "id": "i-lemon-base",
+      "name": "유기농 레몬 청",
+      "base_unit": "g",
+      "purchase_unit": "통(2kg)",
+      "purchase_qty_base": 2000,
+      "unit_price_krw_per_purchase_unit": 19000,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 2000,
+      "track": true,
+      "opening_qty_base": 6000
+    },
+    {
+      "id": "i-yuja-base",
+      "name": "고흥 유자 청",
+      "base_unit": "g",
+      "purchase_unit": "통(2kg)",
+      "purchase_qty_base": 2000,
+      "unit_price_krw_per_purchase_unit": 18000,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 1500,
+      "track": true,
+      "opening_qty_base": 4000
+    },
+    {
+      "id": "i-sparkling-water",
+      "name": "플레인 탄산수",
+      "base_unit": "mL",
+      "purchase_unit": "박스(350mL×24)",
+      "purchase_qty_base": 8400,
+      "unit_price_krw_per_purchase_unit": 13200,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 8400,
+      "track": true,
+      "opening_qty_base": 25200
+    },
+    {
+      "id": "i-pumpkin-paste",
+      "name": "국내산 단호박 퓨레",
+      "base_unit": "g",
+      "purchase_unit": "팩(1kg)",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 11000,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 1000,
+      "track": true,
+      "opening_qty_base": 3000
+    },
+    {
+      "id": "i-chestnut-paste",
+      "name": "공주 보늬밤 페이스트",
+      "base_unit": "g",
+      "purchase_unit": "팩(1kg)",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 16000,
+      "supplier": "s-beverage",
+      "reorder_threshold_base": 1000,
+      "track": true,
+      "opening_qty_base": 3000
+    },
+    {
+      "id": "i-saltbread",
+      "name": "버터 소금빵(생지·완제품)",
+      "base_unit": "pcs",
+      "purchase_unit": "박스(20입)",
+      "purchase_qty_base": 20,
+      "unit_price_krw_per_purchase_unit": 28000,
+      "supplier": "s-bakery",
+      "reorder_threshold_base": 20,
+      "track": true,
+      "opening_qty_base": 45
+    },
+    {
+      "id": "i-basque-cake",
+      "name": "바스크 치즈케이크(조각)",
+      "base_unit": "pcs",
+      "purchase_unit": "판(10조각)",
+      "purchase_qty_base": 10,
+      "unit_price_krw_per_purchase_unit": 25000,
+      "supplier": "s-bakery",
+      "reorder_threshold_base": 10,
+      "track": true,
+      "opening_qty_base": 25
+    },
+    {
+      "id": "i-cookie-choco",
+      "name": "르뱅 초코칩 쿠키",
+      "base_unit": "pcs",
+      "purchase_unit": "박스(20입)",
+      "purchase_qty_base": 20,
+      "unit_price_krw_per_purchase_unit": 26000,
+      "supplier": "s-bakery",
+      "reorder_threshold_base": 15,
+      "track": true,
+      "opening_qty_base": 40
+    },
+    {
+      "id": "i-bagel-plain",
+      "name": "구운 플레인 베이글",
+      "base_unit": "pcs",
+      "purchase_unit": "박스(24입)",
+      "purchase_qty_base": 24,
+      "unit_price_krw_per_purchase_unit": 28800,
+      "supplier": "s-bakery",
+      "reorder_threshold_base": 20,
+      "track": true,
+      "opening_qty_base": 48
+    },
+    {
+      "id": "i-cup-takeout",
+      "name": "음료 컵·뚜껑·슬리브 세트",
+      "base_unit": "pcs",
+      "purchase_unit": "박스(500입)",
+      "purchase_qty_base": 500,
+      "unit_price_krw_per_purchase_unit": 55000,
+      "supplier": "s-package",
+      "reorder_threshold_base": 500,
+      "track": true,
+      "opening_qty_base": 1500
+    },
+    {
+      "id": "i-straw-napkin",
+      "name": "빨대·냅킨·베이커리 봉투 세트",
+      "base_unit": "pcs",
+      "purchase_unit": "박스(1000입)",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 18000,
+      "supplier": "s-package",
+      "reorder_threshold_base": 500,
+      "track": false,
+      "opening_qty_base": 2000
+    }
+  ],
+  "menu": [
+    {
+      "id": "m-americano",
+      "name": "아메리카노",
+      "category": "커피",
+      "price": 3000,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        },
+        {
+          "group": "사이즈",
+          "required": true,
+          "items": [
+            {"name": "레귤러", "price_delta": 0},
+            {"name": "라지(벤티)", "price_delta": 800}
+          ]
+        },
+        {
+          "group": "샷 추가",
+          "required": false,
+          "items": [
+            {"name": "에스프레소 1샷", "price_delta": 500}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-bean-house", "qty_base": 18},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.23,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-cafe-latte",
+      "name": "카페라떼",
+      "category": "커피",
+      "price": 3800,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        },
+        {
+          "group": "우유 변경",
+          "required": false,
+          "items": [
+            {"name": "오트 귀리우유", "price_delta": 600}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-bean-house", "qty_base": 18},
+        {"ingredient": "i-milk", "qty_base": 260},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.11,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-vanilla-latte",
+      "name": "바닐라빈 라떼",
+      "category": "커피",
+      "price": 4300,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        },
+        {
+          "group": "우유 변경",
+          "required": false,
+          "items": [
+            {"name": "오트 귀리우유", "price_delta": 600}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-bean-house", "qty_base": 18},
+        {"ingredient": "i-milk", "qty_base": 240},
+        {"ingredient": "i-vanilla-syrup", "qty_base": 25},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.08,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-dolce-latte",
+      "name": "연유 돌체라떼",
+      "category": "커피",
+      "price": 4500,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        },
+        {
+          "group": "샷 추가",
+          "required": false,
+          "items": [
+            {"name": "에스프레소 1샷", "price_delta": 500}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-bean-house", "qty_base": 18},
+        {"ingredient": "i-milk", "qty_base": 220},
+        {"ingredient": "i-condensed-milk", "qty_base": 35},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.05,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-caramel-macchiato",
+      "name": "솔티드 카라멜 마끼아또",
+      "category": "커피",
+      "price": 4600,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-bean-house", "qty_base": 18},
+        {"ingredient": "i-milk", "qty_base": 230},
+        {"ingredient": "i-caramel-sauce", "qty_base": 25},
+        {"ingredient": "i-vanilla-syrup", "qty_base": 10},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.03,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-hazelnut-americano",
+      "name": "헤이즐넛 아메리카노",
+      "category": "커피",
+      "price": 3500,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-bean-house", "qty_base": 18},
+        {"ingredient": "i-hazelnut-syrup", "qty_base": 20},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.03,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-coldbrew",
+      "name": "더치 콜드브루",
+      "category": "커피",
+      "price": 3900,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "ICE", "price_delta": 0}
+          ]
+        },
+        {
+          "group": "연하게",
+          "required": false,
+          "items": [
+            {"name": "물 추가(연하게)", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-coldbrew-base", "qty_base": 60},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.04,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-decaf-americano",
+      "name": "디카페인 아메리카노",
+      "category": "커피",
+      "price": 3500,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-bean-decaf", "qty_base": 18},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.03,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-deep-choco",
+      "name": "딥 초코 라떼",
+      "category": "논커피",
+      "price": 4300,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        },
+        {
+          "group": "토핑",
+          "required": false,
+          "items": [
+            {"name": "휘핑크림 추가", "price_delta": 500}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-choco-powder", "qty_base": 35},
+        {"ingredient": "i-milk", "qty_base": 260},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.04,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-jeju-matcha",
+      "name": "제주 말차 라떼",
+      "category": "논커피",
+      "price": 4600,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        },
+        {
+          "group": "샷 추가",
+          "required": false,
+          "items": [
+            {"name": "에스프레소 1샷(말차샷)", "price_delta": 500}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-matcha-powder", "qty_base": 12},
+        {"ingredient": "i-milk", "qty_base": 260},
+        {"ingredient": "i-vanilla-syrup", "qty_base": 10},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.04,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-oat-matcha",
+      "name": "오트 말차 라떼",
+      "category": "논커피",
+      "price": 5100,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-matcha-powder", "qty_base": 12},
+        {"ingredient": "i-oat-milk", "qty_base": 260},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.02,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-einspanner-choco",
+      "name": "크림 초코 아인슈페너",
+      "category": "논커피",
+      "price": 4900,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-choco-powder", "qty_base": 30},
+        {"ingredient": "i-milk", "qty_base": 200},
+        {"ingredient": "i-whipping-cream", "qty_base": 50},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.02,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-earlgrey-tea",
+      "name": "얼그레이 홍차",
+      "category": "티",
+      "price": 3800,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-earlgrey-tea", "qty_base": 1},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.02,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-chamomile-tea",
+      "name": "캐모마일 티",
+      "category": "티",
+      "price": 3800,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-chamomile-tea", "qty_base": 1},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.02,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-earlgrey-milktea",
+      "name": "얼그레이 밀크티",
+      "category": "티",
+      "price": 4600,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-earlgrey-tea", "qty_base": 2},
+        {"ingredient": "i-milk", "qty_base": 240},
+        {"ingredient": "i-vanilla-syrup", "qty_base": 15},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.03,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-grapefruit-ade",
+      "name": "자몽 에이드",
+      "category": "에이드",
+      "price": 4500,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-grapefruit-base", "qty_base": 60},
+        {"ingredient": "i-sparkling-water", "qty_base": 220},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.03,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-lemon-ade",
+      "name": "상큼 레몬 에이드",
+      "category": "에이드",
+      "price": 4300,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-lemon-base", "qty_base": 55},
+        {"ingredient": "i-sparkling-water", "qty_base": 220},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.03,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-saltbread",
+      "name": "겉바속촉 버터 소금빵",
+      "category": "디저트",
+      "price": 3200,
+      "options": [
+        {
+          "group": "제공 방식",
+          "required": true,
+          "items": [
+            {"name": "따뜻하게 데우기", "price_delta": 0},
+            {"name": "그대로 제공", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-saltbread", "qty_base": 1},
+        {"ingredient": "i-straw-napkin", "qty_base": 1}
+      ],
+      "popularity": 0.05,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-basque-cake",
+      "name": "바스크 치즈케이크",
+      "category": "디저트",
+      "price": 5200,
+      "options": [
+        {
+          "group": "포크·나이프",
+          "required": false,
+          "items": [
+            {"name": "포크 1개", "price_delta": 0},
+            {"name": "포크 2개", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-basque-cake", "qty_base": 1},
+        {"ingredient": "i-straw-napkin", "qty_base": 1}
+      ],
+      "popularity": 0.03,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-cookie-choco",
+      "name": "르뱅 초코칩 쿠키",
+      "category": "디저트",
+      "price": 3400,
+      "options": [
+        {
+          "group": "제공 방식",
+          "required": true,
+          "items": [
+            {"name": "따뜻하게 데우기", "price_delta": 0},
+            {"name": "그대로 제공", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-cookie-choco", "qty_base": 1},
+        {"ingredient": "i-straw-napkin", "qty_base": 1}
+      ],
+      "popularity": 0.02,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-bagel-plain",
+      "name": "구운 플레인 베이글",
+      "category": "디저트",
+      "price": 3300,
+      "options": [
+        {
+          "group": "커팅 여부",
+          "required": true,
+          "items": [
+            {"name": "반으로 커팅", "price_delta": 0},
+            {"name": "통으로 제공", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-bagel-plain", "qty_base": 1},
+        {"ingredient": "i-straw-napkin", "qty_base": 1}
+      ],
+      "popularity": 0.02,
+      "active_from": null,
+      "seasonal": null
+    },
+    {
+      "id": "m-chestnut-latte",
+      "name": "공주 보늬밤 라떼",
+      "category": "시즌",
+      "price": 4900,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        },
+        {
+          "group": "샷 추가",
+          "required": false,
+          "items": [
+            {"name": "에스프레소 1샷", "price_delta": 500}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-chestnut-paste", "qty_base": 45},
+        {"ingredient": "i-milk", "qty_base": 240},
+        {"ingredient": "i-whipping-cream", "qty_base": 30},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.01,
+      "active_from": "2026-09-15",
+      "seasonal": "autumn"
+    },
+    {
+      "id": "m-pumpkin-einspanner",
+      "name": "단호박 크림 라떼",
+      "category": "시즌",
+      "price": 5000,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-pumpkin-paste", "qty_base": 50},
+        {"ingredient": "i-bean-house", "qty_base": 18},
+        {"ingredient": "i-milk", "qty_base": 200},
+        {"ingredient": "i-whipping-cream", "qty_base": 30},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.01,
+      "active_from": "2026-09-15",
+      "seasonal": "autumn"
+    },
+    {
+      "id": "m-yuja-chamomile",
+      "name": "고흥 유자 캐모마일 티",
+      "category": "시즌",
+      "price": 4400,
+      "options": [
+        {
+          "group": "온도",
+          "required": true,
+          "items": [
+            {"name": "HOT", "price_delta": 0},
+            {"name": "ICE", "price_delta": 0}
+          ]
+        }
+      ],
+      "recipe": [
+        {"ingredient": "i-yuja-base", "qty_base": 50},
+        {"ingredient": "i-chamomile-tea", "qty_base": 1},
+        {"ingredient": "i-cup-takeout", "qty_base": 1}
+      ],
+      "popularity": 0.01,
+      "active_from": "2026-10-01",
+      "seasonal": "autumn"
+    }
+  ],
+  "demand": {
+    "base_orders_weekday": 195,
+    "base_orders_weekend": 135,
+    "hourly_profile": {
+      "08": 0.07,
+      "09": 0.10,
+      "10": 0.08,
+      "11": 0.08,
+      "12": 0.13,
+      "13": 0.14,
+      "14": 0.10,
+      "15": 0.08,
+      "16": 0.07,
+      "17": 0.05,
+      "18": 0.04,
+      "19": 0.03,
+      "20": 0.02,
+      "21": 0.01
+    },
+    "weekday_multipliers": {
+      "mon": 0.98,
+      "tue": 1.04,
+      "wed": 1.02,
+      "thu": 1.05,
+      "fri": 0.91,
+      "sat": 1.06,
+      "sun": 0.94
+    },
+    "academic_calendar": [
+      {"start": "2026-08-20", "end": "2026-08-31", "label": "하계 방학 말기", "multiplier": 0.72},
+      {"start": "2026-09-01", "end": "2026-09-06", "label": "2학기 개강 주간", "multiplier": 1.16},
+      {"start": "2026-09-16", "end": "2026-09-18", "label": "숭실대 대동제 축제", "multiplier": 1.28},
+      {"start": "2026-09-25", "end": "2026-09-27", "label": "추석 연휴", "multiplier": 0.62},
+      {"start": "2026-10-03", "end": "2026-10-05", "label": "개천절 연휴", "multiplier": 0.78},
+      {"start": "2026-10-09", "end": "2026-10-11", "label": "한글날 연휴", "multiplier": 0.80},
+      {"start": "2026-10-19", "end": "2026-10-25", "label": "2학기 중간고사 기간", "multiplier": 1.36},
+      {"start": "2026-11-30", "end": "2026-12-06", "label": "기말 과제·팀플 주간", "multiplier": 1.18},
+      {"start": "2026-12-14", "end": "2026-12-20", "label": "2학기 기말고사 기간", "multiplier": 1.38},
+      {"start": "2026-12-21", "end": "2026-12-31", "label": "동계 방학 시작", "multiplier": 0.70}
+    ],
+    "payment_mix": {
+      "card": 0.61,
+      "easy_pay": 0.32,
+      "cash": 0.07
+    },
+    "takeout_ratio": 0.58,
+    "items_per_order": {
+      "1": 0.60,
+      "2": 0.28,
+      "3": 0.12
+    },
+    "refund_rate": 0.004,
+    "cancel_rate": 0.006,
+    "discount_rate_member": 0.10
+  },
+  "customers": {
+    "members": 460,
+    "segments": [
+      {
+        "name": "재학생 단골",
+        "share": 0.42,
+        "visits_per_month": 10,
+        "favorite": ["m-americano", "m-vanilla-latte", "m-saltbread"]
+      },
+      {
+        "name": "카공족(시험·과제 집중)",
+        "share": 0.24,
+        "visits_per_month": 7,
+        "favorite": ["m-americano", "m-coldbrew", "m-basque-cake"]
+      },
+      {
+        "name": "교직원·대학원생",
+        "share": 0.14,
+        "visits_per_month": 8,
+        "favorite": ["m-cafe-latte", "m-decaf-americano", "m-earlgrey-tea"]
+      },
+      {
+        "name": "신입생·라이트 방문",
+        "share": 0.12,
+        "visits_per_month": 3,
+        "favorite": ["m-deep-choco", "m-grapefruit-ade", "m-cookie-choco"]
+      },
+      {
+        "name": "상도동 인근 주민",
+        "share": 0.08,
+        "visits_per_month": 4,
+        "favorite": ["m-cafe-latte", "m-bagel-plain", "m-chamomile-tea"]
+      }
+    ],
+    "walkin_member_ratio": 0.38
+  },
+  "memberships": [
+    {
+      "name": "아메리카노 10잔 정기권",
+      "price": 27000,
+      "uses": 10,
+      "menu": "m-americano"
+    },
+    {
+      "name": "카페라떼 10잔 정기권",
+      "price": 34200,
+      "uses": 10,
+      "menu": "m-cafe-latte"
+    },
+    {
+      "name": "시험기간 아메리카노 20잔권",
+      "price": 51000,
+      "uses": 20,
+      "menu": "m-americano"
+    }
+  ],
+  "coupons": [
+    {
+      "name": "개강 첫 주 아메리카노 할인",
+      "type": "amount",
+      "value": 500,
+      "start": "2026-09-01",
+      "end": "2026-09-10",
+      "channel": "네이버 플레이스"
+    },
+    {
+      "name": "대동제 방문객 15% 할인 쿠폰",
+      "type": "percent",
+      "value": 15,
+      "start": "2026-09-15",
+      "end": "2026-09-21",
+      "channel": "인스타그램"
+    },
+    {
+      "name": "중간고사 밤샘 응원 10% 쿠폰",
+      "type": "percent",
+      "value": 10,
+      "start": "2026-10-16",
+      "end": "2026-10-25",
+      "channel": "문자"
+    },
+    {
+      "name": "가을 신메뉴 800원 체험 쿠폰",
+      "type": "amount",
+      "value": 800,
+      "start": "2026-10-28",
+      "end": "2026-11-12",
+      "channel": "카카오톡 채널"
+    },
+    {
+      "name": "오후 한산시간 디저트 1,000원 할인",
+      "type": "amount",
+      "value": 1000,
+      "start": "2026-11-01",
+      "end": "2026-11-30",
+      "channel": "문자"
+    }
+  ],
+  "expenses": [
+    {"category": "임대료", "amount": 2450000, "schedule": "monthly:25"},
+    {"category": "인건비", "amount": 6100000, "schedule": "monthly:10"},
+    {"category": "공과금", "amount": 620000, "schedule": "monthly:15"},
+    {"category": "소모품·운영비", "amount": 450000, "schedule": "monthly:20"}
+  ],
+  "staff": [
+    {"role": "매니저", "count": 1},
+    {"role": "알바", "count": 4, "hourly_wage": 10500}
+  ],
+  "reviews": [
+    {"rating": 5, "text": "아침 1교시 전에 들러도 음료가 금방 나와서 지각 안 하고 잘 마셨습니다. 아메리카노 산미가 과하지 않고 고소해서 매일 마시기 좋아요.", "topic": "맛", "days_ago": 1},
+    {"rating": 5, "text": "겉바속촉 소금빵이랑 바닐라빈 라떼 조합이 최고예요. 학교 앞 카페 중에 디저트 퀄리티가 제일 괜찮은 편입니다.", "topic": "디저트", "days_ago": 2},
+    {"rating": 4, "text": "창가 자리마다 콘센트가 있어서 노트북으로 과제하기 정말 편합니다. 와이파이도 끊김 없이 잘 잡혀요.", "topic": "좌석·콘센트", "days_ago": 3},
+    {"rating": 3, "text": "점심시간 12시 반쯤 가면 주문이 밀려서 10분 넘게 기다릴 때가 있네요. 그래도 미리 말씀해 주셔서 괜찮았습니다.", "topic": "대기시간", "days_ago": 4},
+    {"rating": 5, "text": "사장님이랑 알바분들이 항상 웃으면서 응대해 주셔서 기분이 좋습니다. 텀블러 들고 가면 꼼꼼히 챙겨 주세요.", "topic": "응대", "days_ago": 5},
+    {"rating": 5, "text": "아메리카노 3천 원이라 가격 부담이 적고 양도 넉넉합니다. 공강 시간에 친구들이랑 자주 들러요.", "topic": "가성비", "days_ago": 7},
+    {"rating": 4, "text": "가을 신메뉴 공주 보늬밤 라떼 달달하고 부드럽네요. 밤 맛이 진해서 찬 바람 불 때 딱입니다.", "topic": "맛", "days_ago": 8},
+    {"rating": 2, "text": "오후에 4인 테이블에 혼자 짐 펴놓고 자리 비운 손님이 있었는데 매장 정리가 안 돼서 앉을 곳이 없었어요.", "topic": "좌석·콘센트", "days_ago": 10},
+    {"rating": 5, "text": "오트 말차 라떼 선택할 수 있어서 유당불내증 있는 사람한테 너무 고마운 카페입니다. 말차 가루도 뭉침 없이 잘 풀려 있어요.", "topic": "맛", "days_ago": 11},
+    {"rating": 4, "text": "매장 내부가 전반적으로 깔끔하고 화장실도 정돈이 잘 돼 있어서 오래 머물기 부담 없습니다.", "topic": "위생", "days_ago": 13},
+    {"rating": 5, "text": "정기권 끊어놓고 매일 아침 들르는 단골입니다. 디카페인 원두도 고소해서 오후 늦게 마시기 좋아요.", "topic": "가성비", "days_ago": 15},
+    {"rating": 3, "text": "바스크 치즈케이크는 진하고 맛있는데 오후 늦게 가면 품절일 때가 많아서 아쉽습니다.", "topic": "디저트", "days_ago": 17},
+    {"rating": 5, "text": "중간고사 기간에 밤늦게까지 공부하다가 당 떨어질 때 크림 초코 아인슈페너 마시면 딱입니다. 크림이 쫀쫀해요.", "topic": "맛", "days_ago": 19},
+    {"rating": 4, "text": "조명도 너무 어둡지 않고 음악 소리도 적당해서 팀플 회의하거나 책 읽기 좋은 분위기예요.", "topic": "분위기", "days_ago": 21},
+    {"rating": 1, "text": "바쁜 시간대라 그런지 아이스로 주문했는데 따뜻한 음료가 나왔어요. 다시 만들어 주시긴 했는데 수업 시간 때문에 급하게 나왔네요.", "topic": "응대", "days_ago": 23},
+    {"rating": 5, "text": "자몽 에이드에 과육이 넉넉히 들어있어서 상큼하고 덜 달아요. 탄산도 톡 쏘고 맛있습니다.", "topic": "맛", "days_ago": 25},
+    {"rating": 4, "text": "구운 플레인 베이글 따뜻하게 데워주셔서 출근길에 간단히 배 채우기 딱 좋았습니다.", "topic": "디저트", "days_ago": 27},
+    {"rating": 5, "text": "숭실대 정문 쪽 골목 안이라 번잡하지 않고 아늑해요. 조용히 과제하고 싶을 때 1순위로 옵니다.", "topic": "분위기", "days_ago": 29},
+    {"rating": 3, "text": "시험기간에는 2인석도 거의 만석이라 헛걸음할 때가 있어요. 그래도 회전은 나름 빠른 편입니다.", "topic": "좌석·콘센트", "days_ago": 31},
+    {"rating": 5, "text": "단호박 크림 라떼 궁금해서 마셔봤는데 생각보다 커피랑 너무 잘 어울려요. 시즌 끝나기 전에 또 마실래요.", "topic": "맛", "days_ago": 33},
+    {"rating": 4, "text": "문자 쿠폰 받아서 디저트랑 같이 주문했는데 할인 바로 적용돼서 알뜰하게 먹었습니다.", "topic": "가성비", "days_ago": 35},
+    {"rating": 5, "text": "얼그레이 밀크티 향이 진하고 너무 달지 않아서 제 취향에 딱 맞아요. 재주문 의사 100%입니다.", "topic": "맛", "days_ago": 38},
+    {"rating": 4, "text": "단체석 6인 테이블이 있어서 동아리 회의할 때 눈치 안 보고 앉을 수 있어 좋습니다.", "topic": "좌석·콘센트", "days_ago": 40},
+    {"rating": 2, "text": "르뱅 초코칩 쿠키가 예전보다 조금 퍽퍽한 느낌이었어요. 전자레인지 말고 오븐에 살짝 더 데워주시면 좋겠습니다.", "topic": "디저트", "days_ago": 42},
+    {"rating": 5, "text": "고흥 유자 캐모마일 티 환절기 목 아플 때 마시니까 몸이 확 풀리네요. 유자청 건더기도 넉넉해요.", "topic": "맛", "days_ago": 44},
+    {"rating": 4, "text": "픽업대 주변이 항상 물기 없이 닦여 있고 빨대나 냅킨 정리도 깔끔해서 위생적으로 보입니다.", "topic": "위생", "days_ago": 47},
+    {"rating": 5, "text": "더치 콜드브루 깔끔하고 끝맛이 텁텁하지 않아서 여름 끝물부터 계속 마시고 있어요.", "topic": "맛", "days_ago": 49},
+    {"rating": 3, "text": "라지 사이즈 업그레이드하면 얼음만 많은 느낌이 아니라 커피 양도 같이 늘어나서 괜찮은데 컵홀더가 살짝 헐거워요.", "topic": "가성비", "days_ago": 52},
+    {"rating": 5, "text": "연유 돌체라떼 단짠 느낌은 아니지만 우유랑 연유 비율이 딱 좋아서 피곤한 날 당 충전에 최고예요.", "topic": "맛", "days_ago": 55},
+    {"rating": 4, "text": "비 오는 날 우산 꽂이도 입구에 잘 정리해 두시고 바닥도 미끄럽지 않게 닦아두셔서 세심하다고 느꼈습니다.", "topic": "위생", "days_ago": 58},
+    {"rating": 5, "text": "교수님 심부름으로 아메리카노 8잔 갑자기 테이크아웃했는데 빠르게 포장해 주셔서 정말 감사했습니다.", "topic": "응대", "days_ago": 60},
+    {"rating": 4, "text": "상도동 동네 주민인데 주말 오전에 산책하다 들르기 좋아요. 주말엔 학생들이 적어서 한적합니다.", "topic": "분위기", "days_ago": 63},
+    {"rating": 2, "text": "13시 직후에 갔더니 소금빵이 다 나가서 다음 나오는 시간까지 기다려야 했어요. 수량을 조금 더 넉넉히 준비해 주셨으면 해요.", "topic": "디저트", "days_ago": 66},
+    {"rating": 5, "text": "헤이즐넛 아메리카노 향이 인위적이지 않고 은은해서 오후 수업 전에 늘 마십니다.", "topic": "맛", "days_ago": 69},
+    {"rating": 4, "text": "솔티드 카라멜 마끼아또 단짠 조합이 좋네요. 휘핑 없이도 풍미가 진합니다.", "topic": "맛", "days_ago": 72},
+    {"rating": 5, "text": "개강 첫 주 쿠폰 덕분에 처음 와봤는데 커피 맛이 괜찮아서 이번 학기 단골 예약입니다.", "topic": "가성비", "days_ago": 75},
+    {"rating": 3, "text": "저녁 마감 30분 전에 가면 일부 메뉴 재료 소진으로 주문이 안 될 수 있으니 참고하세요.", "topic": "대기시간", "days_ago": 78},
+    {"rating": 5, "text": "레몬 에이드가 시판 시럽 맛만 나는 게 아니라 직접 담은 청 느낌이라 상큼하고 맛있습니다.", "topic": "맛", "days_ago": 81},
+    {"rating": 4, "text": "소품이나 우드톤 인테리어가 차분해서 사진 찍기보다 편하게 쉬다 가기 좋은 공간이에요.", "topic": "분위기", "days_ago": 84},
+    {"rating": 5, "text": "방학 때 문 연 카페 찾기 어려웠는데 꾸준히 영업해 주셔서 논문 쓰면서 큰 도움 받았습니다.", "topic": "응대", "days_ago": 87}
+  ],
+  "inquiries": [
+    {"channel": "플레이스", "text": "혹시 11번 6인 테이블 이번 주 목요일 오후 3시에 동아리 회의용으로 미리 예약할 수 있을까요?", "status": "waiting"},
+    {"channel": "카카오톡", "text": "아메리카노 10잔 정기권 구매하면 디카페인 아메리카노로도 차감 사용이 가능한가요?", "status": "waiting"},
+    {"channel": "인스타DM", "text": "내일 학과 세미나 때문에 아메리카노 15잔, 라떼 5잔 단체 주문하려는데 오전 9시 30분까지 픽업 가능할까요? 연락처 010-0000-1842입니다.", "status": "draft-ready"},
+    {"channel": "전화", "text": "방금 매장 4번 테이블에 아이패드 펜슬을 두고 나온 것 같은데 혹시 보관 중인지 확인 부탁드립니다.", "status": "done"},
+    {"channel": "플레이스", "text": "개인 텀블러 지참 시 할인 혜택이 따로 있나요? 벤티 사이즈 텀블러도 들어가나요?", "status": "done"},
+    {"channel": "카카오톡", "text": "바스크 치즈케이크 홀케이크로도 사전 주문 판매하시나요? 다음 주 금요일에 필요해서요.", "status": "waiting"},
+    {"channel": "매장", "text": "소금빵이랑 베이글 알레르기 성분표(견과류 포함 여부) 확인해 주실 수 있나요?", "status": "done"},
+    {"channel": "인스타DM", "text": "공주 보늬밤 라떼 시즌 메뉴는 언제까지 판매하나요? 12월에도 마실 수 있는지 궁금합니다.", "status": "draft-ready"},
+    {"channel": "플레이스", "text": "주말 오픈 시간이 9시 30분으로 되어 있는데 혹시 시험기간에는 더 일찍 여시나요?", "status": "done"},
+    {"channel": "전화", "text": "오전 알바 구인 공고 보고 연락드렸습니다. 평일 오전 8시~12시 타임 아직 지원 가능할까요? (010-0000-3920)", "status": "waiting"},
+    {"channel": "카카오톡", "text": "어제 오후 2시쯤 결제한 영수증(카드 끝자리 4821) 지출증빙용으로 재발행 받을 수 있을까요?", "status": "draft-ready"},
+    {"channel": "플레이스", "text": "매장 앞 자전거 거치대나 근처 공영주차장 지원이 되는지 문의드립니다.", "status": "done"},
+    {"channel": "인스타DM", "text": "어제 먹었던 솔티드 카라멜 마끼아또에 들어가는 소스가 저당 제품인지 궁금합니다.", "status": "done"},
+    {"channel": "카카오톡", "text": "회원권 남은 횟수가 2잔인데 유효기간 만료 전에 연장 신청이 가능한가요?", "status": "waiting"},
+    {"channel": "매장", "text": "와이파이 비밀번호가 바뀌었는지 연결이 안 돼서 확인 요청드립니다.", "status": "done"}
+  ],
+  "manuals": [
+    {
+      "title": "오픈 체크리스트",
+      "steps": [
+        "07:30 출근 후 매장 조명·냉난방기 및 에스프레소 머신 예열 전원 켜기",
+        "전일 마감 시재금(200,000원) 확인 후 POS 영업일 개시 처리",
+        "에스프레소 18g 추출 26~28초 기준으로 그라인더 분쇄도 캘리브레이션 점검",
+        "유제품(우유·오트·생크림) 및 베이커리 입고분 유통기한·파손 여부 검수 후 선입선출 진열",
+        "얼음 제빙기 상태, 컵·뚜껑·슬리브·빨대 비치 수량 확인 후 08:00 오픈"
+      ]
+    },
+    {
+      "title": "피크타임 주문·제조 대응",
+      "steps": [
+        "평일 12:00~14:00 점심 러시 전 얼음·시럽·우유 보충 및 컵 2줄 이상 선세팅",
+        "5잔 이상 단체 주문 접수 시 예상 대기시간(10~15분)을 먼저 안내하고 캐리어 포장 여부 확인",
+        "HOT/ICE 혼동 방지를 위해 주문 라벨의 온도 표시를 제조 전·전달 직전 2회 확인",
+        "대기 인원이 5팀을 넘으면 1인은 포스·베이커리 데우기·픽업 호출, 1인은 음료 제조 전담으로 분업",
+        "주문 취소나 변경 요청 시 제조 착수 여부를 즉시 확인해 불필요한 폐기 최소화"
+      ]
+    },
+    {
+      "title": "원두·우유 재고 발주 기준",
+      "steps": [
+        "매주 월·목 오전 10시 전 상도브루 로스터리 원두·콜드브루 잔여량 확인 후 안전재고 미만 품목 발주(최소 60,000원)",
+        "매주 월·수·금 오후 4시 전 한강목장 유업유통 우유·오트밀크·생크림 재고 확인 후 익일 입고 발주",
+        "화·금 베이커리 및 베버리지랩 시럽·과일청은 시험기간 직전 주에 1.3배 수량으로 상향 발주",
+        "입고 즉시 POS 재고 관리에 입고 수량 입력 및 거래명세서 세무 증빙 폴더 보관"
+      ]
+    },
+    {
+      "title": "환불·결제 취소 및 영수증 재발행",
+      "steps": [
+        "당일 단순 변심·오주문 취소는 POS 거래 내역에서 해당 주문 선택 후 원결제 수단으로 즉시 취소",
+        "부분 환불이나 분할 결제 취소 시 남은 결제 건과 할인·회원권 차감 복구 여부를 반드시 확인",
+        "영수증 재발행 요청 시 거래 시각·금액·카드 끝 4자리 확인 후 재출력(개인정보 보호 위해 전체 번호 미기록)",
+        "정기권 잔여 횟수 오류나 쿠폰 미적용 문의는 매니저 확인 후 수동 보정 및 처리 메모 기록"
+      ]
+    },
+    {
+      "title": "마감 청소 및 시재 정산",
+      "steps": [
+        "마감 20분 전 에스프레소 머신 그룹헤드 브러싱 및 전용 세정제로 백플러싱 진행",
+        "당일 잔여 베이커리 폐기 수량 기록 및 냉장 쇼케이스·드립 트레이 세척",
+        "테이블·콘센트 주변 정리, 의자 정렬, 분리수거 및 음식물 쓰레기 배출",
+        "POS 일마감 실행 후 현금 시재 실사액(예비금 200,000원 제외 입금액) 대조 및 차액 발생 시 사유 메모",
+        "제빙기·오븐·냉난방·가스 밸브 차단 확인 후 보안 장치 작동 및 퇴근"
+      ]
+    }
+  ],
+  "calendar": [
+    {"title": "2학기 개강 대비 원두·우유 대량 입고", "date": "2026-08-31"},
+    {"title": "개강 첫 주 플레이스 쿠폰 캠페인 시작", "date": "2026-09-01"},
+    {"title": "푸른패키징 컵·슬리브 정기 입고", "date": "2026-09-09"},
+    {"title": "가을 시즌 메뉴 2종(보늬밤·단호박) 개시", "date": "2026-09-15"},
+    {"title": "대동제 기간 알바 교대 근무 확정", "date": "2026-09-14"},
+    {"title": "추석 연휴 단축 영업 안내 공지", "date": "2026-09-21"},
+    {"title": "에스프레소 머신 정수 필터 교체 점검", "date": "2026-09-30"},
+    {"title": "유자 캐모마일 티 시즌 메뉴 추가", "date": "2026-10-01"},
+    {"title": "9월 부가세·세무 증빙 자료 정리", "date": "2026-10-07"},
+    {"title": "중간고사 대비 원두·베이커리 1.3배 선발주", "date": "2026-10-15"},
+    {"title": "매장 전체 대청소 및 제빙기 살균", "date": "2026-10-27"},
+    {"title": "가을 신메뉴 체험 카톡 쿠폰 발송", "date": "2026-10-28"},
+    {"title": "알바 11월 근무표 확정 및 보건증 만료 확인", "date": "2026-10-30"},
+    {"title": "오후 한산시간 디저트 프로모션 시작", "date": "2026-11-01"},
+    {"title": "냉장 쇼케이스 온도·고무패킹 정기 점검", "date": "2026-11-12"}
+  ],
+  "local_events": [
+    {
+      "title": "숭실대 2학기 개강 및 동아리 박람회",
+      "start": "2026-09-01",
+      "end": "2026-09-04"
+    },
+    {
+      "title": "숭실대 대동제 가을 축제",
+      "start": "2026-09-16",
+      "end": "2026-09-18"
+    },
+    {
+      "title": "상도동 전통시장 가을 야시장",
+      "start": "2026-10-09",
+      "end": "2026-10-11"
+    },
+    {
+      "title": "숭실대 2학기 중간고사 집중 주간",
+      "start": "2026-10-19",
+      "end": "2026-10-25"
+    },
+    {
+      "title": "숭실대 총장배 체육대회 및 학과 행사",
+      "start": "2026-11-05",
+      "end": "2026-11-06"
+    }
+  ]
+}
