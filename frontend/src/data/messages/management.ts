@@ -1,0 +1,64 @@
+import type { MessageBundle } from '../../i18n';
+import { storeHoursSummary } from '../store-hours';
+export const managementKoreanOverrides: Readonly<Record<string, string>> = {
+  'data.item.vanilla': '바닐라 시럽', 'data.item.financier': '휘낭시에',
+  'data.supplier.c': 'C포장', 'data.supplier.d': 'D베이커리',
+  'data.fact.ledger.remaining': '순이익', 'data.fact.inventory.threshold': '안전 재고',
+  'data.action.registerSupplier': '발주사 추가하기', 'data.state.suppliers.no-suppliers': '아직 등록한 발주사가 없어요',
+  'data.state.inventory-booking.needs-review': '현재 재고와 안전 재고를 확인해 주세요', 'data.state.briefing.none': '오늘은 확인할 알림이 없어요',
+  'data.state.menu.no-menus': '아직 등록한 메뉴가 없어요', 'data.state.menu.error': '메뉴를 불러오지 못했어요',
+  'data.state.members.no-members': '아직 등록한 회원이 없어요', 'data.state.members.error': '회원 목록을 불러오지 못했어요',
+  'data.state.customer-analysis.camera-disconnected': '홀 카메라 확인 필요',
+  'data.state.inventory-booking.partial-data': '일부 자료를 불러오지 못했어요',
+  'data.state.ledger.error': '손익을 불러오지 못했어요', 'data.state.margin.error': '마진을 불러오지 못했어요', 'data.state.tax.error': '세무 자료를 불러오지 못했어요', 'data.state.grants.error': '지원사업을 불러오지 못했어요', 'data.state.manuals.error': '매뉴얼을 불러오지 못했어요', 'data.state.customer-analysis.error': 'CCTV 현황을 불러오지 못했어요', 'data.state.voice-booking.error': '예약을 불러오지 못했어요',
+};
+export const managementVariantLabels = {
+  'preview.variant.suppliers.no-suppliers': '발주사 없음', 'preview.variant.voice-booking.needs-confirmation': '예약 대기',
+  'preview.variant.menu.no-menus': '메뉴 없음', 'preview.variant.menu.error': '불러오기 실패',
+  'preview.variant.members.no-members': '회원 없음', 'preview.variant.members.error': '불러오기 실패',
+  'preview.variant.customer-analysis.camera-disconnected': '카메라 끊김', 'preview.variant.inventory-booking.partial-data': '일부 자료 없음',
+};
+const errors: Record<string, string> = {
+  NOT_FOUND: '기록을 찾을 수 없어요', MENU_NAME_REQUIRED: '메뉴 이름을 넣어 주세요', CATEGORY_INVALID: '분류를 골라 주세요', PRICE_INVALID: '판매가는 0원보다 커야 해요',
+  READ_ONLY_FIELD: '이 값은 직접 바꿀 수 없어요', DUPLICATE_INGREDIENT: '같은 재료는 한 번만 넣어 주세요', RECIPE_LINE_INVALID: '레시피 기록을 확인해 주세요', UNIT_PRECISION: '단위와 수량을 확인해 주세요',
+  SKU_INVALID: '품목 코드를 확인해 주세요', NAME_REQUIRED: '이름을 넣어 주세요', NUMBER_INVALID: '0 이상의 수량을 넣어 주세요', REFERENCED_ITEM: '레시피나 입고 대기 주문에서 쓰고 있어 지울 수 없어요', REFERENCED_SUPPLIER: '공급 품목이나 입고 대기 주문이 있어 지울 수 없어요',
+  PURCHASE_INVALID: '발주 조건을 확인해 주세요', PURCHASE_ITEM_EXISTS: '이미 발주 조건이 있는 품목이에요', SUPPLIER_INVALID: '발주사 정보를 확인해 주세요', STALE_SUGGESTION: '재고가 바뀌었어요. 제안을 다시 확인해 주세요', ORDER_QTY_INVALID: '최소 주문 수량과 주문 단위를 확인해 주세요', ORDER_CLOSED: '이미 끝난 발주예요',
+  MEMBER_INVALID: '이름과 숫자 10~11자리 연락처를 넣어 주세요', MEMBER_HAS_OPEN_BALANCE: '충전금·외상이나 이용 중인 회원권이 남아 있어서 지울 수 없어요. 먼저 정산해 주세요', GRADE_INVALID: '회원 등급을 골라 주세요', NOTE_REQUIRED: '메모 내용을 넣어 주세요',
+  GUEST_OR_MEMBER: '회원 또는 예약자 정보를 넣어 주세요', GUEST_INVALID: '예약자 정보를 확인해 주세요', DATE_INVALID: '날짜를 확인해 주세요', TIME_INVALID: '시각을 확인해 주세요', PARTY_INVALID: '인원을 1명 이상 넣어 주세요', TABLE_INVALID: '테이블을 확인해 주세요', BOOKING_TRANSITION: '지금은 이 상태로 바꿀 수 없어요',
+  TAX_TYPE_REQUIRED: '세금 종류를 넣어 주세요', AMOUNT_INVALID: '금액은 0원보다 커야 해요', EVIDENCE_INVALID: '증빙 상태를 확인해 주세요', AUTO_EVENT_READ_ONLY: '자동 일정은 출처에서 고쳐 주세요', APPLICATION_EXISTS: '이미 신청했거나 신청 기간이 아니에요', STATUS_INVALID: '진행 상태를 골라 주세요', TITLE_REQUIRED: '제목을 넣어 주세요', SECTION_INVALID: '문서 구분을 골라 주세요', STEPS_INVALID: '단계 내용을 넣어 주세요',
+  MEMBER_PHONE_EXISTS: '같은 연락처로 등록된 회원이 있어요. 회원 목록에서 확인해 주세요', NAME_EXISTS: '이미 같은 이름이 있어요', TAX_PAYMENT_EXISTS: '같은 세금 납부 일정이 있어요. 기존 일정을 확인해 주세요', CCTV_TODAY_ONLY: '오늘 시간대만 검토 표시할 수 있어요',
+  BOOKING_PAST: '지난 시간에는 새 예약을 넣을 수 없어요', BOOKING_DUPLICATE: '같은 시간에 비슷한 예약이 있어요', DUE_DATE_PAST: '예정일을 영업일 이후로 골라 주세요', EXPENSE_DATE_FUTURE: '앞으로 쓸 돈은 기록하지 않아요',
+  LIKELY_DUPLICATE_EXPENSE: '비슷한 지출이 이미 있어요. 같은 지출이 아니라면 그래도 기록해 주세요', LIKELY_DUPLICATE_ORDER: '비슷한 발주가 이미 있어요. 그래도 새로 넣을까요?', ORDER_QTY_MIN: '최소 주문 수량보다 적어요', ORDER_QTY_STEP: '주문 단위에 맞는 수량을 넣어 주세요',
+  MANUAL_TITLE_EXISTS: '같은 제목의 매뉴얼이 있어요. 그래도 새로 만들까요?', NOT_CHECKLIST: '이 문서는 체크리스트가 아니에요',
+  TRANSACTION_BUSY: '변경을 반영하고 있어요. 잠시 뒤 다시 해 주세요', COORDINATOR_REQUIRED: '가게 설정에서 저장해 주세요', KEY_REQUIRED: '다시 시도할 작업 정보를 확인해 주세요', IDEMPOTENCY_MISMATCH: '같은 작업의 내용이 달라졌어요. 다시 확인해 주세요', COMMAND_UNDONE: '되돌린 작업이에요. 새로 기록해 주세요', STALE_REVISION: '자료가 바뀌었어요. 다시 확인해 주세요', STALE_CLOSING: '새로 마감했어요. 현재 마감을 확인해 주세요', UNDO_UNAVAILABLE: '이 작업은 지금 되돌릴 수 없어요', PAYMENTS_UNAVAILABLE: '결제 내역을 불러오지 못했어요', GENERATION_INVALID: '현재 마감 정보를 확인해 주세요', BUSINESS_INVALID: '업종을 골라 주세요', PAYMENT_STYLE_INVALID: '결제 방식을 골라 주세요', TABLE_LAYOUT_INVALID: '테이블 배치를 확인해 주세요', SETTINGS_REQUIRED: '가게 설정을 확인해 주세요',
+};
+export const managementBundle: MessageBundle<string> = {
+  id: 'data.management', en: {}, 'zh-Hans': {}, 'zh-Hant': {}, ko: {
+    ...Object.fromEntries(Object.entries(errors).map(([key, value]) => [`data.management.error.${key}`, value])),
+    'data.management.error.EXPENSE_DAY_CLOSED': '마감한 날의 지출은 가계부에서 확인해 주세요', // D-326.
+    'data.management.notice.saved': '저장했어요', 'data.management.notice.deleted': '지웠어요', 'data.management.notice.orderCreated': '발주를 기록했어요(예시)', 'data.management.notice.closed': '오늘 매출을 마감했어요', 'data.management.notice.reopened': '마감을 되돌렸어요',
+    'data.management.notice.menuDeleted': '{name, particle, 을/를} 지웠어요',
+    'data.management.notice.visitCompleted': '방문 완료로 바꿨어요',
+    'data.management.notice.bookingCanceled': '예약을 취소했어요', 'data.management.notice.bookingNoShow': '오지 않음으로 바꿨어요', 'data.management.notice.bookingAdded': '예약을 추가했어요', 'data.management.notice.bookingEdited': '예약을 고쳤어요', 'data.management.notice.bookingConfirmed': '예약을 확정했어요',
+    'data.management.notice.stepCompleted': '{name, particle, 을/를} 완료로 표시했어요',
+    'data.management.notice.taxPaid': '{name, particle, 을/를} 납부 완료로 표시했어요',
+    'data.management.notice.grantApplied': '{name, particle, 을/를} 지원 현황에 더했어요',
+    'data.management.action.addMenu': '메뉴 추가하기', 'data.management.action.addMember': '회원 추가하기',
+    'data.management.customMenu': '새 메뉴', 'data.management.customItem': '새 품목', 'data.management.customSupplier': '새 발주사', 'data.management.contact': '담당자', 'data.management.guest': '예약자', 'data.management.exampleMember': '예시회원',
+    'data.management.category.drink': '음료', 'data.management.category.dessert': '디저트',
+    'data.management.history.opening': '오늘 시작 재고', 'data.management.history.usage': '사용 · {menu} {count}개', 'data.management.history.receive': '입고', 'data.management.history.receiveFrom': '입고 · {supplier}', 'data.management.history.initial': '처음 등록', 'data.management.history.adjust': '직접 고침 · 표에서 고침',
+    'data.management.paymentSummary': '결제 내역', 'data.management.refundSummary': '환불 내역', 'data.management.paymentLines': '결제 · {count}개', 'data.management.refundLines': '환불 · {count}개',
+    'data.management.menuMemo.americano': '연하게 요청이 많아요', 'data.management.menuMemo.latte': '우유는 매일 아침 A유통', 'data.management.menuMemo.croissant': '당일 소진',
+    'data.management.memberNote.shot': '샷 연하게', 'data.management.memberNote.parking': '주차를 자주 물어봐요', 'data.management.memberNote.pickup': '케이크 픽업 예약이 잦아요',
+    'data.management.supplier.contactA': '박○○',
+    'data.management.tax.income': '종합소득세(2025년 귀속)', 'data.management.tax.vat1': '부가가치세(2026년 1기 확정)', 'data.management.tax.vat2': '부가가치세(2026년 2기 예정 고지)', 'data.management.tax.withholding': '원천세(10월분)',
+    'data.management.grant.digital': '디지털 전환 지원', 'data.management.grant.awaiting': '결과 대기',
+    'data.management.info.hours': '영업시간 및 운영 정보', 'data.management.info.rules': '매장 운영 규칙', 'data.management.info.equipment': '시설 및 장비 이용 정보',
+    'data.management.info.hours.body': storeHoursSummary('ko'),'data.management.info.rules.body': '매장 안에서는 다회용 컵을 써요 · 마감 30분 전 주문을 마감해요', 'data.management.info.equipment.body': '에스프레소 머신은 마감 때 청소해요 · 와이파이 비밀번호는 가려서 보여요',
+    'data.management.camera.entrance': '입구', 'data.management.camera.counter': '계산대', 'data.management.camera.hall': '홀',
+    'data.management.grantTemplate': '신청서 예시예요. 사업자 정보와 신청 내용을 확인해 주세요', 'data.management.grantGuide': '준비 서류와 신청 기간을 확인해 주세요',
+    'data.management.alert.overdue': '입고가 늦어지고 있어요', 'data.management.alert.delivery': '오늘 입고 예정이 있어요', 'data.management.alert.tax': '납부할 세금이 있어요', 'data.management.alert.checklist': '오픈 체크리스트 {done}/{total}', 'data.management.alert.grant': '지원 마감을 확인해 주세요', 'data.management.alert.camera': '홀 카메라 확인 필요',
+    'data.manualCategory.hygiene': '위생', 'data.manualCategory.store-info': '매장 정보',
+    'data.fact.menu.count': '메뉴 수', 'data.fact.members.count': '회원 수', 'data.fact.stock.usedToday': '오늘 사용량', 'data.fact.inventory.usedToday': '오늘 사용량', 'data.fact.briefing.importantAlerts.count': '중요 알림',
+  },
+};

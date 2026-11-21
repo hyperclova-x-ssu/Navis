@@ -1,0 +1,130 @@
+/**
+ * Rows whose four languages come verbatim from the sources (D-63 ⑦):
+ * LOCALES 3·5·8 (L3/L5/L8), team/plan-1/widgets key tables (P1), DESIGN_SYSTEM 11.7 (DS).
+ * Shape: key → [ko, en, zh-Hans, zh-Hant].
+ */
+export type Row = readonly [ko: string, en: string, zhHans: string, zhHant: string];
+
+export const sourcedRows = {
+  // L8 가짜 데이터 이름
+  'data.item.milk': ['우유', 'Milk', '牛奶', '牛奶'],
+  'data.item.beans': ['원두', 'Coffee beans', '咖啡豆', '咖啡豆'],
+  'data.item.cups': ['컵', 'Cups', '杯子', '杯子'],
+  'data.item.croissant': ['크루아상', 'Croissant', '可颂', '可頌'],
+  'data.item.beans200': ['원두 200g', 'Coffee beans 200 g', '咖啡豆 200 克', '咖啡豆 200 克'],
+  'data.item.dripBagSet': ['드립백 세트', 'Drip bag set', '挂耳咖啡套装', '濾掛咖啡組'],
+  'data.supplier.a': ['A유통', 'A Distribution', 'A流通', 'A流通'],
+  'data.supplier.b': ['B로스터리', 'B Roastery', 'B烘焙坊', 'B烘焙坊'],
+  'data.menu.latte': ['카페라테', 'Café latte', '拿铁', '拿鐵'],
+  'data.menu.americano': ['아메리카노', 'Americano', '美式咖啡', '美式咖啡'],
+  'data.membership.americano10': ['아메리카노 10잔권', 'Americano 10-cup pass', '美式咖啡 10 杯券', '美式咖啡 10 杯券'],
+  'data.membership.morningDrinks': ['오전 음료 이용권', 'Morning drink pass', '上午饮品券', '上午飲品券'],
+  'data.membership.monthly': ['월 구독', 'Monthly subscription', '月度订阅', '月度訂閱'],
+  // L8 ‘우유 입고 · A유통’ as a template (milk + A gives the L8 row exactly)
+  'data.calendar.delivery': ['{item} 입고 · {supplier}', '{item} delivery · {supplier}', '{item}到货 · {supplier}', '{item}到貨 · {supplier}'],
+  'data.calendar.hygiene': ['위생 점검', 'Hygiene inspection', '卫生检查', '衛生檢查'],
+  'data.calendar.shiftChange': ['근무 교대', 'Shift change', '换班', '換班'],
+  'data.localChange.newCafe': ['골목 입구 새 카페', 'New café at the alley entrance', '巷口新开咖啡店', '巷口新開咖啡店'],
+  'data.localChange.streetEvent': ['주말 거리 행사', 'Weekend street event', '周末街头活动', '週末街頭活動'],
+  'data.offer.beanGroupBuy': ['원두 공동구매', 'Group bean purchase', '咖啡豆团购', '咖啡豆團購'],
+  'data.offer.stampExchange': ['스탬프 교차 적립', 'Cross-shop stamp rewards', '集章互通', '集章互通'],
+  'data.keyword.decaf': ['디카페인', 'Decaf', '低因咖啡', '低因咖啡'],
+  'data.keyword.takeout': ['테이크아웃', 'Takeout', '外带', '外帶'],
+  'data.manual.opening': ['오픈 준비', 'Opening prep', '开店准备', '開店準備'],
+  'data.manual.closing': ['마감 정리', 'Closing routine', '打烊整理', '打烊整理'],
+  'data.manual.newStaff': ['새 직원 안내', 'New staff guide', '新员工指南', '新員工指南'],
+  'data.zone.window': ['창가', 'Window', '靠窗', '靠窗'],
+  'data.zone.center': ['중앙', 'Center', '中央', '中央'],
+  'data.zone.bar': ['바', 'Bar', '吧台', '吧檯'],
+  'data.person.kim': ['김○○', 'Kim ○○', '金○○', '金○○'],
+  'data.grant.stability': ['소상공인 경영안정 지원', 'Small business stability support (sample)', '小微商户经营稳定扶持（示例）', '小微商家經營穩定扶持（範例）'],
+  'data.grant.smartStore': ['스마트 상점 도입 지원', 'Smart store adoption support (sample)', '智慧商店导入扶持（示例）', '智慧商店導入扶持（範例）'],
+  // L3 시간대
+  'data.band.morning': ['오전', 'Morning', '上午', '上午'],
+  'data.band.afternoon': ['오후', 'Afternoon', '下午', '下午'],
+  'data.band.evening': ['저녁', 'Evening', '晚上', '晚上'],
+  // L5 공통 동작·상태
+  'data.notice.exported': ['내보냈어요(예시)', 'Exported (sample)', '已导出（示例）', '已匯出（範例）'],
+  'data.notice.sent': ['보냈어요(예시)', 'Sent (sample)', '已发送（示例）', '已發送（範例）'],
+  'data.notice.undone': ['되돌렸어요', 'Undone', '已撤销', '已復原'],
+  'data.notice.copied': ['복사했어요', 'Copied', '已复制', '已複製'],
+  'data.action.retry': ['다시 시도하기', 'Try again', '重试', '重試'],
+  'data.action.addEvent': ['일정 추가하기', 'Add event', '添加日程', '新增行程'],
+  'data.action.createManual': ['매뉴얼 만들기', 'Create a manual', '创建手册', '建立手冊'],
+  'data.tax.connection.connected': ['연결됨(예시)', 'Connected (sample)', '已连接（示例）', '已連線（範例）'],
+  'data.state.briefing.none': ['오늘은 특별한 소식이 없어요', 'No special updates today', '今天没有特别的消息', '今天沒有特別的消息'],
+  // P1 위젯 문구 키 표
+  'data.action.registerItem': ['품목 추가하기', 'Add item', '添加商品', '新增商品'],
+  'data.action.registerSupplier': ['거래처 등록', 'Add supplier', '添加供应商', '新增供應商'],
+  'data.action.browseOffers': ['동네 제안 보기', 'Browse local offers', '查看附近的合作提议', '查看附近的合作提案'],
+  'data.state.inventory-booking.no-items': ['아직 등록한 품목이 없어요', 'No inventory items yet', '尚未添加库存商品', '尚未新增庫存商品'],
+  'data.state.inventory-booking.needs-review': ['현재고와 보충 기준을 확인해 주세요', 'Check stock levels and restock thresholds', '请检查库存和补货阈值', '請確認庫存與補貨門檻'],
+  'data.state.inventory-booking.partial-zero': ['확인된 품목 중 보충 필요 0개', 'No checked items need restocking', '已确认的商品中没有需要补货的商品', '已確認的商品中沒有需要補貨的商品'],
+  'data.state.inventory-booking.no-restock': ['보충이 필요한 품목이 없어요', 'No items need restocking', '没有需要补货的商品', '沒有需要補貨的商品'],
+  'data.state.inventory-booking.error': ['재고를 불러오지 못했어요', "Couldn't load inventory", '无法加载库存', '無法載入庫存'],
+  'data.state.suppliers.no-suppliers': ['아직 등록한 거래처가 없어요', 'No suppliers yet', '尚未添加供应商', '尚未新增供應商'],
+  'data.state.suppliers.no-upcoming': ['7일 내 입고 예정이 없어요', 'No deliveries due within 7 days', '未来 7 天没有预计到货', '未來 7 天沒有預計到貨'],
+  'data.state.suppliers.error': ['입고 일정을 불러오지 못했어요', "Couldn't load delivery schedules", '无法加载到货计划', '無法載入到貨計畫'],
+  'data.state.suppliers.overdue': ['입고 확인 필요 {count}건', '{count, plural, one {# delivery to check} other {# deliveries to check}}', '{count} 笔到货需确认', '{count} 筆到貨需確認'],
+  'data.briefing.overdue': ['입고 확인 필요 {count}건', '{count, plural, one {# delivery to check} other {# deliveries to check}}', '{count} 笔到货需确认', '{count} 筆到貨需確認'],
+  'data.fact.briefing.arrival.count': ['오늘 살펴볼 소식', 'Updates to check today', '今日待看消息', '今日待看消息'],
+  'data.fact.ledger.remaining': ['남은 돈', 'Left after expenses', '结余', '結餘'],
+  'data.fact.tax.review.count': ['확인할 세금 항목', 'Tax items to review', '待核对的税务事项', '待核對的稅務事項'],
+  'data.fact.grants.candidates.count': ['확인할 지원사업', 'Support programs to check', '待查看的扶持项目', '待查看的扶持項目'],
+  'data.fact.cctv.visits.total': ['오늘 방문', 'Visits today', '今日到店', '今日到店'],
+  'data.fact.memberships.active.count': ['이용 중인 회원권', 'Active memberships', '有效会员卡', '有效會員卡'],
+  'data.fact.booking.today.count': ["오늘 예약", "Today's reservations", '今日预约', '今日預約'],
+  'data.fact.booking.seats': ['좌석', 'Seats', '座位', '座位'],
+  'data.fact.floorPlan.seats': ['좌석', 'Seats', '座位', '座位'],
+  'data.fact.calendar.today.count': ['오늘 일정', "Today's schedule", '今日日程', '今日行程'],
+  'data.fact.calendar.week.count': ['이번 주 일정', 'This week', '本周日程', '本週行程'],
+  'data.fact.inventory.restock.count': ['보충 필요', 'Needs restocking', '需要补货', '需要補貨'],
+  'data.fact.suppliers.upcoming.count': ['7일 내 입고 예정', 'Deliveries due within 7 days', '未来 7 天预计到货', '未來 7 天預計到貨'],
+  'data.fact.suppliers.delivery': ['예정 입고', 'Upcoming deliveries', '预计到货', '預計到貨'],
+  'data.fact.manuals.published.count': ['인수인계', 'Store manuals', '店铺手册', '店鋪手冊'],
+  'data.fact.interior.mood': ['공간 분위기', 'Space mood', '空间氛围', '空間氛圍'],
+  'data.fact.localChanges.week.count': ['이번 주 동네 변화', 'Neighborhood changes this week', '本周周边动态', '本週周邊動態'],
+  'data.fact.tradeArea.peakAt': ['{hour}시 유동인구', 'Foot traffic at {hour}:00', '{hour}点人流量', '{hour}點人流量'],
+  'data.fact.localTrends.notable.count': ['주목할 키워드', 'Keywords to watch', '值得关注的关键词', '值得關注的關鍵字'],
+  'data.fact.inquiry.waiting.count': ['답변 대기', 'Awaiting reply', '待回复', '待回覆'],
+  'data.fact.community.pending.count': ['응답 대기 제안', 'Partnership offers awaiting a reply', '待回复的合作提议', '待回覆的合作提案'],
+  // DS 11.7
+  'data.action.connect': ['연결하기(예시)', 'Connect (sample)', '连接（示例）', '連線（範例）'],
+  'data.error.moveOverStock.store': ['매장 재고보다 많이 옮길 수 없어요', "You can't move more than the store stock", '移动数量不能超过门店库存', '移動數量不能超過門市庫存'],
+} as const satisfies Readonly<Record<string, Row>>;
+
+/** LOCALES 4 widget names (for the generated per-widget error messages). */
+export const widgetNames = {
+  'credit-receivable':['충전금·외상 관리','충전금·외상 관리','충전금·외상 관리','충전금·외상 관리'],
+  'notice-send': ['공지 발송','공지 발송','공지 발송','공지 발송'],
+  'store-environment': ['매장 환경','매장 환경','매장 환경','매장 환경'],
+  'custom-order': ['주문제작','주문제작','주문제작','주문제작'],
+  'staff-schedule': ['직원 스케줄표', '직원 스케줄표', '직원 스케줄표', '직원 스케줄표'],
+  briefing: ['브리핑', 'Briefing', '简报', '簡報'],
+  ledger: ['가계부', 'Ledger', '账本', '帳本'],
+  margin: ['마진·원가분석', 'Margin & costs', '毛利与成本', '毛利與成本'],
+  tax: ['세금계산', 'Taxes', '税务', '稅務'],
+  grants: ['정부지원', 'Government support', '政府扶持', '政府扶持'],
+  'customer-analysis': ['CCTV 손님분석', 'CCTV visitor analysis', 'CCTV 客流分析', 'CCTV 客流分析'],
+  demand: ['손님예측', 'Customer forecast', '客流预测', '客流預測'],
+  memberships: ['회원권 관리', 'Memberships', '会员卡管理', '會員卡管理'],
+  'voice-booking': ['음성 예약확정', 'Voice reservations', '语音预约确认', '語音預約確認'],
+  calendar: ['캘린더', 'Calendar', '日历', '行事曆'],
+  'inventory-booking': ['재고관리', 'Inventory', '库存管理', '庫存管理'],
+  hiring: ['알바모집', 'Part-time hiring', '兼职招聘', '兼職招募'],
+  suppliers: ['거래처', 'Suppliers', '供应商', '供應商'],
+  manuals: ['매뉴얼 작성', 'Manuals', '手册', '手冊'],
+  interior: ['매장 인테리어', 'Store interior', '店铺装修', '店鋪裝潢'],
+  'floor-plan': ['사진으로 자리 배치', 'Seating from photos', '照片生成座位布局', '照片產生座位配置'],
+  'local-changes': ['동네 변화 알림', 'Neighborhood alerts', '周边动态提醒', '周邊動態提醒'],
+  'trade-area': ['상권분석', 'Trade area', '商圈分析', '商圈分析'],
+  'local-trends': ['로컬 트렌드', 'Local trends', '本地趋势', '在地趨勢'],
+  'ai-response': ['메시지·리뷰 응대', 'Messages & reviews', '消息与评论回复', '訊息與評論回覆'],
+  community: ['커뮤니티', 'Community', '社区', '社群'],
+} as const satisfies Readonly<Record<string, Row>>;
+
+/** LOCALES 5 ‘상태: 불러오기 실패’ / ‘상태: 일부 자료 없음’ and plan-1 labels reused as variant names. */
+export const VARIANT_ERROR_LABEL: Row = ['불러오기 실패', 'Failed to load', '加载失败', '載入失敗'];
+export const VARIANT_PARTIAL_LABEL: Row = ['일부 자료 없음', 'Partial data', '部分数据缺失', '部分資料缺失'];
+export const VARIANT_NEEDS_REVIEW_LABEL: Row = ['확인 필요', 'Needs review', '需要确认', '需要確認'];
+export const VARIANT_MISSING_COST_EN = 'Cost missing';

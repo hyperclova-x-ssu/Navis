@@ -1,0 +1,431 @@
+{
+  "grants": [
+    {
+      "id": "sample-grant-1",
+      "title": "동작구 소상공인 매장 개선 지원",
+      "agency": "동작구",
+      "region": "서울 동작구",
+      "applyStart": "2026-11-09",
+      "applyEnd": "2026-12-04",
+      "summary": "카페 조명·안내판 개선 비용 일부 지원",
+      "conditions": [
+        "동작구 소재 소상공인",
+        "사업자등록 확인"
+      ],
+      "matchStatus": "matched",
+      "provenance": "sample"
+    },
+    {
+      "id": "sample-grant-2",
+      "title": "서울 소상공인 에너지 절감 지원",
+      "agency": "서울시",
+      "region": "서울",
+      "applyStart": "2026-11-16",
+      "applyEnd": "2026-12-11",
+      "summary": "고효율 냉장 설비 교체 보조",
+      "conditions": [
+        "서울 소재 영업장",
+        "교체 대상 모델 확인"
+      ],
+      "matchStatus": "needs-check",
+      "provenance": "sample"
+    }
+  ],
+  "manuals": [
+    {
+      "manualId": "12827ba2-566a-512c-af1f-ffbbff04a6ac",
+      "title": "마감 청소 및 시재 정산",
+      "category": "closing",
+      "cautions": "가상 교육용 매뉴얼",
+      "steps": [
+        "마감 20분 전 에스프레소 머신 그룹헤드 브러싱 및 전용 세정제로 백플러싱 진행",
+        "당일 잔여 베이커리 폐기 수량 기록 및 냉장 쇼케이스·드립 트레이 세척",
+        "테이블·콘센트 주변 정리, 의자 정렬, 분리수거 및 음식물 쓰레기 배출",
+        "POS 일마감 실행 후 현금 시재 실사액(예비금 200,000원 제외 입금액) 대조 및 차액 발생 시 사유 메모",
+        "제빙기·오븐·냉난방·가스 밸브 차단 확인 후 보안 장치 작동 및 퇴근"
+      ]
+    },
+    {
+      "manualId": "19977417-f714-570b-9673-a0f0386335c0",
+      "title": "피크타임 주문·제조 대응",
+      "category": "new-staff",
+      "cautions": "가상 교육용 매뉴얼",
+      "steps": [
+        "평일 12:00~14:00 점심 러시 전 얼음·시럽·우유 보충 및 컵 2줄 이상 선세팅",
+        "5잔 이상 단체 주문 접수 시 예상 대기시간(10~15분)을 먼저 안내하고 캐리어 포장 여부 확인",
+        "HOT/ICE 혼동 방지를 위해 주문 라벨의 온도 표시를 제조 전·전달 직전 2회 확인",
+        "대기 인원이 5팀을 넘으면 1인은 포스·베이커리 데우기·픽업 호출, 1인은 음료 제조 전담으로 분업",
+        "주문 취소나 변경 요청 시 제조 착수 여부를 즉시 확인해 불필요한 폐기 최소화"
+      ]
+    },
+    {
+      "manualId": "22f95bdd-43eb-5414-9d4a-41b0b09f6314",
+      "title": "환불·결제 취소 및 영수증 재발행",
+      "category": "new-staff",
+      "cautions": "가상 교육용 매뉴얼",
+      "steps": [
+        "당일 단순 변심·오주문 취소는 POS 거래 내역에서 해당 주문 선택 후 원결제 수단으로 즉시 취소",
+        "부분 환불이나 분할 결제 취소 시 남은 결제 건과 할인·회원권 차감 복구 여부를 반드시 확인",
+        "영수증 재발행 요청 시 거래 시각·금액·카드 끝 4자리 확인 후 재출력(개인정보 보호 위해 전체 번호 미기록)",
+        "정기권 잔여 횟수 오류나 쿠폰 미적용 문의는 매니저 확인 후 수동 보정 및 처리 메모 기록"
+      ]
+    },
+    {
+      "manualId": "36356fe9-8b47-507a-8245-cb6fd781bcbc",
+      "title": "오픈 체크리스트",
+      "category": "opening",
+      "cautions": "가상 교육용 매뉴얼",
+      "steps": [
+        "07:30 출근 후 매장 조명·냉난방기 및 에스프레소 머신 예열 전원 켜기",
+        "전일 마감 시재금(200,000원) 확인 후 POS 영업일 개시 처리",
+        "에스프레소 18g 추출 26~28초 기준으로 그라인더 분쇄도 캘리브레이션 점검",
+        "유제품(우유·오트·생크림) 및 베이커리 입고분 유통기한·파손 여부 검수 후 선입선출 진열",
+        "얼음 제빙기 상태, 컵·뚜껑·슬리브·빨대 비치 수량 확인 후 08:00 오픈"
+      ]
+    },
+    {
+      "manualId": "9ee8e083-56ee-5f0a-ac84-5218db684424",
+      "title": "원두·우유 재고 발주 기준",
+      "category": "new-staff",
+      "cautions": "가상 교육용 매뉴얼",
+      "steps": [
+        "매주 월·목 오전 10시 전 상도브루 로스터리 원두·콜드브루 잔여량 확인 후 안전재고 미만 품목 발주(최소 60,000원)",
+        "매주 월·수·금 오후 4시 전 한강목장 유업유통 우유·오트밀크·생크림 재고 확인 후 익일 입고 발주",
+        "화·금 베이커리 및 베버리지랩 시럽·과일청은 시험기간 직전 주에 1.3배 수량으로 상향 발주",
+        "입고 즉시 POS 재고 관리에 입고 수량 입력 및 거래명세서 세무 증빙 폴더 보관"
+      ]
+    }
+  ],
+  "threads": [
+    {
+      "threadId": "ca3a08f2-eda2-591a-bdbc-95bc836f1680",
+      "type": "review",
+      "body": "방학 때 문 연 카페 찾기 어려웠는데 꾸준히 영업해 주셔서 논문 쓰면서 큰 도움 받았습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "fe637634-4e1d-50c9-91d9-a9761df05a90",
+      "type": "review",
+      "body": "소품이나 우드톤 인테리어가 차분해서 사진 찍기보다 편하게 쉬다 가기 좋은 공간이에요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "348eb46d-a69f-5242-8fa1-bcbc3b7cb9e4",
+      "type": "review",
+      "body": "레몬 에이드가 시판 시럽 맛만 나는 게 아니라 직접 담은 청 느낌이라 상큼하고 맛있습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "c4032fad-c684-5166-8b2a-72eb9166c62e",
+      "type": "review",
+      "body": "저녁 마감 30분 전에 가면 일부 메뉴 재료 소진으로 주문이 안 될 수 있으니 참고하세요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "5792e71e-ef74-546b-839c-d1a7203dd58f",
+      "type": "review",
+      "body": "개강 첫 주 쿠폰 덕분에 처음 와봤는데 커피 맛이 괜찮아서 이번 학기 단골 예약입니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "0c8ad8b0-9c63-55d3-b2fb-b2c7eeaf1a0e",
+      "type": "review",
+      "body": "솔티드 카라멜 마끼아또 단짠 조합이 좋네요. 휘핑 없이도 풍미가 진합니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "8e8c750a-575c-5cf8-b117-2946c0a40c96",
+      "type": "review",
+      "body": "헤이즐넛 아메리카노 향이 인위적이지 않고 은은해서 오후 수업 전에 늘 마십니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "97d9735e-0001-5478-af3a-d1d0e6771c21",
+      "type": "review",
+      "body": "13시 직후에 갔더니 소금빵이 다 나가서 다음 나오는 시간까지 기다려야 했어요. 수량을 조금 더 넉넉히 준비해 주셨으면 해요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "45ed165e-9140-58ee-ab99-5d3e200b9091",
+      "type": "review",
+      "body": "상도동 동네 주민인데 주말 오전에 산책하다 들르기 좋아요. 주말엔 학생들이 적어서 한적합니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "384facd7-fbe8-5d78-8bde-7f1cc0b1944e",
+      "type": "review",
+      "body": "교수님 심부름으로 아메리카노 8잔 갑자기 테이크아웃했는데 빠르게 포장해 주셔서 정말 감사했습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "e01ee862-af5e-5f4f-8e85-2de8b2a0e9f7",
+      "type": "review",
+      "body": "비 오는 날 우산 꽂이도 입구에 잘 정리해 두시고 바닥도 미끄럽지 않게 닦아두셔서 세심하다고 느꼈습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "e0824b68-d8b2-5922-b3fc-0c10ab2a45fb",
+      "type": "review",
+      "body": "연유 돌체라떼 단짠 느낌은 아니지만 우유랑 연유 비율이 딱 좋아서 피곤한 날 당 충전에 최고예요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "841e0b5b-9ac1-5b0e-bf92-33e4d373fd4b",
+      "type": "review",
+      "body": "라지 사이즈 업그레이드하면 얼음만 많은 느낌이 아니라 커피 양도 같이 늘어나서 괜찮은데 컵홀더가 살짝 헐거워요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "5aa735d8-5072-5e7b-8519-b03a05a0ae4d",
+      "type": "review",
+      "body": "더치 콜드브루 깔끔하고 끝맛이 텁텁하지 않아서 여름 끝물부터 계속 마시고 있어요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "972215d7-f36d-5220-98d5-c3fa0c815741",
+      "type": "review",
+      "body": "픽업대 주변이 항상 물기 없이 닦여 있고 빨대나 냅킨 정리도 깔끔해서 위생적으로 보입니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "f638af02-5364-5b45-bca5-12a69c99add7",
+      "type": "review",
+      "body": "고흥 유자 캐모마일 티 환절기 목 아플 때 마시니까 몸이 확 풀리네요. 유자청 건더기도 넉넉해요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "2e178b3f-2101-55f2-aca1-5e88d8ff6c02",
+      "type": "review",
+      "body": "르뱅 초코칩 쿠키가 예전보다 조금 퍽퍽한 느낌이었어요. 전자레인지 말고 오븐에 살짝 더 데워주시면 좋겠습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "ce46e640-0a70-5aee-b7ce-4ab1d98aa931",
+      "type": "review",
+      "body": "단체석 6인 테이블이 있어서 동아리 회의할 때 눈치 안 보고 앉을 수 있어 좋습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "676096b3-9d78-56eb-97c0-db0d3370d380",
+      "type": "review",
+      "body": "얼그레이 밀크티 향이 진하고 너무 달지 않아서 제 취향에 딱 맞아요. 재주문 의사 100%입니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "05263ae4-ddfb-5904-8efa-a796467ec8ad",
+      "type": "review",
+      "body": "문자 쿠폰 받아서 디저트랑 같이 주문했는데 할인 바로 적용돼서 알뜰하게 먹었습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "4fdc7c6d-7e69-5c82-ab97-e1f466025595",
+      "type": "review",
+      "body": "단호박 크림 라떼 궁금해서 마셔봤는데 생각보다 커피랑 너무 잘 어울려요. 시즌 끝나기 전에 또 마실래요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "31f07b32-7346-58c0-a786-97e6d8235440",
+      "type": "review",
+      "body": "시험기간에는 2인석도 거의 만석이라 헛걸음할 때가 있어요. 그래도 회전은 나름 빠른 편입니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "a57a55c5-83eb-5a89-9106-a3384c8e0daf",
+      "type": "review",
+      "body": "숭실대 정문 쪽 골목 안이라 번잡하지 않고 아늑해요. 조용히 과제하고 싶을 때 1순위로 옵니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "4170d46b-7eaa-55f7-984e-91437f0e4730",
+      "type": "review",
+      "body": "구운 플레인 베이글 따뜻하게 데워주셔서 출근길에 간단히 배 채우기 딱 좋았습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "43801a08-2695-5c9a-b1d0-61cd07396edf",
+      "type": "review",
+      "body": "자몽 에이드에 과육이 넉넉히 들어있어서 상큼하고 덜 달아요. 탄산도 톡 쏘고 맛있습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "73b5ceef-f0ec-56d6-b982-646a2b40efb6",
+      "type": "review",
+      "body": "바쁜 시간대라 그런지 아이스로 주문했는데 따뜻한 음료가 나왔어요. 다시 만들어 주시긴 했는데 수업 시간 때문에 급하게 나왔네요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "b6d4fd43-b00b-533c-8e7c-2cc9d16a1d31",
+      "type": "review",
+      "body": "조명도 너무 어둡지 않고 음악 소리도 적당해서 팀플 회의하거나 책 읽기 좋은 분위기예요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "92805532-1925-59f8-80d7-2caeeb745557",
+      "type": "review",
+      "body": "중간고사 기간에 밤늦게까지 공부하다가 당 떨어질 때 크림 초코 아인슈페너 마시면 딱입니다. 크림이 쫀쫀해요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "edcc0c22-6f0b-587c-ba76-e2d1ef458139",
+      "type": "review",
+      "body": "바스크 치즈케이크는 진하고 맛있는데 오후 늦게 가면 품절일 때가 많아서 아쉽습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "5b187f87-5ffc-5c5a-be67-b520434d72e7",
+      "type": "review",
+      "body": "정기권 끊어놓고 매일 아침 들르는 단골입니다. 디카페인 원두도 고소해서 오후 늦게 마시기 좋아요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "4472bbee-0e20-528b-8329-a8acbe946b2a",
+      "type": "message",
+      "body": "회원권 남은 횟수가 2잔인데 유효기간 만료 전에 연장 신청이 가능한가요?",
+      "sentiment": null
+    },
+    {
+      "threadId": "e342e96b-d5f3-5946-8b5c-62d9eb890450",
+      "type": "review",
+      "body": "매장 내부가 전반적으로 깔끔하고 화장실도 정돈이 잘 돼 있어서 오래 머물기 부담 없습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "9e0f3bef-1b12-5032-8d8a-bbe3e1af343f",
+      "type": "message",
+      "body": "어제 먹었던 솔티드 카라멜 마끼아또에 들어가는 소스가 저당 제품인지 궁금합니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "2dc8435b-e811-5cd7-8ac5-8691f5bf1eca",
+      "type": "message",
+      "body": "매장 앞 자전거 거치대나 근처 공영주차장 지원이 되는지 문의드립니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "e072133c-4953-54e9-9d28-2146084a3b7f",
+      "type": "review",
+      "body": "오트 말차 라떼 선택할 수 있어서 유당불내증 있는 사람한테 너무 고마운 카페입니다. 말차 가루도 뭉침 없이 잘 풀려 있어요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "c32f4505-f921-5b46-b257-884f07da5aff",
+      "type": "message",
+      "body": "어제 오후 2시쯤 결제한 영수증(카드 끝자리 4821) 지출증빙용으로 재발행 받을 수 있을까요?",
+      "sentiment": null
+    },
+    {
+      "threadId": "f03322af-a273-5d6f-a7a5-d96594e98173",
+      "type": "review",
+      "body": "오후에 4인 테이블에 혼자 짐 펴놓고 자리 비운 손님이 있었는데 매장 정리가 안 돼서 앉을 곳이 없었어요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "96968a28-454a-5852-b7a1-340d385d4ad7",
+      "type": "call",
+      "body": "오전 알바 구인 공고 보고 연락드렸습니다. 평일 오전 8시~12시 타임 아직 지원 가능할까요? (010-0000-3920)",
+      "sentiment": null
+    },
+    {
+      "threadId": "cfb9cde1-ac64-5a8d-b578-3185898608d0",
+      "type": "message",
+      "body": "주말 오픈 시간이 9시 30분으로 되어 있는데 혹시 시험기간에는 더 일찍 여시나요?",
+      "sentiment": null
+    },
+    {
+      "threadId": "d02a9836-fb35-5986-a6d2-b65700f799d8",
+      "type": "review",
+      "body": "가을 신메뉴 공주 보늬밤 라떼 달달하고 부드럽네요. 밤 맛이 진해서 찬 바람 불 때 딱입니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "9e14ec6b-ee59-58a1-8b91-26d296271fc6",
+      "type": "message",
+      "body": "공주 보늬밤 라떼 시즌 메뉴는 언제까지 판매하나요? 12월에도 마실 수 있는지 궁금합니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "96afc366-9b30-576e-bba2-d75aebd4bdd6",
+      "type": "review",
+      "body": "아메리카노 3천 원이라 가격 부담이 적고 양도 넉넉합니다. 공강 시간에 친구들이랑 자주 들러요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "e7a2fe4b-6146-59cb-9244-e2acae215d65",
+      "type": "message",
+      "body": "소금빵이랑 베이글 알레르기 성분표(견과류 포함 여부) 확인해 주실 수 있나요?",
+      "sentiment": null
+    },
+    {
+      "threadId": "b0edbc58-56e1-5419-9885-5a8b7d5d2670",
+      "type": "message",
+      "body": "바스크 치즈케이크 홀케이크로도 사전 주문 판매하시나요? 다음 주 금요일에 필요해서요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "c5b1c3c7-b88e-5f02-9788-20d2c03c5808",
+      "type": "review",
+      "body": "사장님이랑 알바분들이 항상 웃으면서 응대해 주셔서 기분이 좋습니다. 텀블러 들고 가면 꼼꼼히 챙겨 주세요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "4fca5089-db87-56e0-afa7-184abd32f0aa",
+      "type": "message",
+      "body": "개인 텀블러 지참 시 할인 혜택이 따로 있나요? 벤티 사이즈 텀블러도 들어가나요?",
+      "sentiment": null
+    },
+    {
+      "threadId": "faf633b5-2a26-5c50-b573-7bf1cc64b332",
+      "type": "review",
+      "body": "점심시간 12시 반쯤 가면 주문이 밀려서 10분 넘게 기다릴 때가 있네요. 그래도 미리 말씀해 주셔서 괜찮았습니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "303696f6-a052-5efa-a606-80e0a6dceeb7",
+      "type": "call",
+      "body": "방금 매장 4번 테이블에 아이패드 펜슬을 두고 나온 것 같은데 혹시 보관 중인지 확인 부탁드립니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "dee9b6b2-9bce-5e50-a10c-047c8baba4b1",
+      "type": "review",
+      "body": "창가 자리마다 콘센트가 있어서 노트북으로 과제하기 정말 편합니다. 와이파이도 끊김 없이 잘 잡혀요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "2a0c7051-baa8-549c-bbad-627c89e6d50d",
+      "type": "message",
+      "body": "내일 학과 세미나 때문에 아메리카노 15잔, 라떼 5잔 단체 주문하려는데 오전 9시 30분까지 픽업 가능할까요? 연락처 010-0000-1842입니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "97b28981-89d9-5061-bcf0-47f35aee9822",
+      "type": "review",
+      "body": "겉바속촉 소금빵이랑 바닐라빈 라떼 조합이 최고예요. 학교 앞 카페 중에 디저트 퀄리티가 제일 괜찮은 편입니다.",
+      "sentiment": null
+    },
+    {
+      "threadId": "fef28503-3969-5b69-8d66-eb29c6858006",
+      "type": "message",
+      "body": "아메리카노 10잔 정기권 구매하면 디카페인 아메리카노로도 차감 사용이 가능한가요?",
+      "sentiment": null
+    },
+    {
+      "threadId": "2ffbbb17-ddf9-50ad-900e-f96ca30a9e33",
+      "type": "review",
+      "body": "아침 1교시 전에 들러도 음료가 금방 나와서 지각 안 하고 잘 마셨습니다. 아메리카노 산미가 과하지 않고 고소해서 매일 마시기 좋아요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "b4798246-bfbb-566d-9bba-dfc15f6d5f04",
+      "type": "message",
+      "body": "혹시 11번 6인 테이블 이번 주 목요일 오후 3시에 동아리 회의용으로 미리 예약할 수 있을까요?",
+      "sentiment": null
+    },
+    {
+      "threadId": "d9d1817d-f3c1-5403-aeb9-c88f434a848f",
+      "type": "message",
+      "body": "와이파이 비밀번호가 바뀌었는지 연결이 안 돼서 확인 요청드립니다.",
+      "sentiment": null
+    }
+  ]
+}

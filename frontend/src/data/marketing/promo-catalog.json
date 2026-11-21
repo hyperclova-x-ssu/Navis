@@ -1,0 +1,765 @@
+{
+  "version": 1,
+  "store": {
+    "name": "미학당",
+    "location": "숭실대입구역 3번 출구 · 빨간 벽돌, 초록 문",
+    "exteriorPhotoId": "store-exterior"
+  },
+  "menus": [
+    {
+      "menuId": "financier",
+      "names": {
+        "ko": "휘낭시에",
+        "en": "Financier",
+        "zh-Hans": "费南雪",
+        "zh-Hant": "費南雪"
+      },
+      "photoIds": [
+        "fin-01",
+        "fin-02",
+        "fin-03",
+        "fin-04",
+        "fin-05",
+        "fin-06",
+        "fin-07",
+        "fin-08",
+        "fin-09",
+        "fin-10"
+      ]
+    },
+    {
+      "menuId": "croissant",
+      "names": {
+        "ko": "크루아상",
+        "en": "Croissant",
+        "zh-Hans": "牛角包",
+        "zh-Hant": "牛角麵包"
+      },
+      "photoIds": []
+    },
+    {
+      "menuId": "americano",
+      "names": {
+        "ko": "아메리카노",
+        "en": "Americano",
+        "zh-Hans": "美式咖啡",
+        "zh-Hant": "美式咖啡"
+      },
+      "photoIds": []
+    }
+  ],
+  "photos": [
+    {
+      "photoId": "fin-01",
+      "menuId": "financier",
+      "file": "common.jpeg",
+      "width": 900,
+      "height": 1200
+    },
+    {
+      "photoId": "fin-02",
+      "menuId": "financier",
+      "file": "common-2.jpeg",
+      "width": 900,
+      "height": 676
+    },
+    {
+      "photoId": "fin-03",
+      "menuId": "financier",
+      "file": "common-3.jpeg",
+      "width": 1023,
+      "height": 1280
+    },
+    {
+      "photoId": "fin-04",
+      "menuId": "financier",
+      "file": "common-4.jpeg",
+      "width": 900,
+      "height": 676
+    },
+    {
+      "photoId": "fin-05",
+      "menuId": "financier",
+      "file": "common-5.jpeg",
+      "width": 900,
+      "height": 676
+    },
+    {
+      "photoId": "fin-06",
+      "menuId": "financier",
+      "file": "common-6.jpeg",
+      "width": 900,
+      "height": 1200
+    },
+    {
+      "photoId": "fin-07",
+      "menuId": "financier",
+      "file": "common-7.jpeg",
+      "width": 900,
+      "height": 1200
+    },
+    {
+      "photoId": "fin-08",
+      "menuId": "financier",
+      "file": "common-8.jpeg",
+      "width": 900,
+      "height": 1200
+    },
+    {
+      "photoId": "fin-09",
+      "menuId": "financier",
+      "file": "common-9.jpeg",
+      "width": 960,
+      "height": 1280
+    },
+    {
+      "photoId": "fin-10",
+      "menuId": "financier",
+      "file": "common-10.jpeg",
+      "width": 900,
+      "height": 1200
+    },
+    {
+      "photoId": "store-exterior",
+      "menuId": null,
+      "file": "storefront.jpeg",
+      "width": 830,
+      "height": 536
+    }
+  ],
+  "sources": {
+    "example": [
+      "fin-01",
+      "fin-02",
+      "fin-03",
+      "fin-04",
+      "fin-05",
+      "fin-06",
+      "fin-07",
+      "fin-08",
+      "fin-09",
+      "fin-10"
+    ],
+    "example-7": [
+      "fin-01",
+      "fin-02",
+      "fin-03",
+      "fin-04",
+      "fin-05",
+      "fin-06",
+      "fin-07"
+    ],
+    "example-4": [
+      "fin-01",
+      "fin-02",
+      "fin-03",
+      "fin-04"
+    ],
+    "cafe": [
+      "cafe-americano-01",
+      "cafe-americano-02",
+      "cafe-americano-03",
+      "cafe-americano-04",
+      "cafe-americano-05",
+      "cafe-americano-06",
+      "cafe-cafe-latte-01",
+      "cafe-cafe-latte-02",
+      "cafe-cafe-latte-03",
+      "cafe-cafe-latte-04",
+      "cafe-cafe-latte-05",
+      "cafe-cafe-latte-06",
+      "cafe-vanilla-latte-01",
+      "cafe-vanilla-latte-02",
+      "cafe-vanilla-latte-03",
+      "cafe-vanilla-latte-04",
+      "cafe-vanilla-latte-05",
+      "cafe-vanilla-latte-06",
+      "cafe-saltbread-01",
+      "cafe-saltbread-02",
+      "cafe-saltbread-03",
+      "cafe-saltbread-04",
+      "cafe-saltbread-05",
+      "cafe-saltbread-06",
+      "cafe-dolce-latte-01",
+      "cafe-dolce-latte-02",
+      "cafe-dolce-latte-03",
+      "cafe-dolce-latte-04",
+      "cafe-dolce-latte-05",
+      "cafe-dolce-latte-06",
+      "cafe-deep-choco-01",
+      "cafe-deep-choco-02",
+      "cafe-deep-choco-03",
+      "cafe-deep-choco-04",
+      "cafe-deep-choco-05",
+      "cafe-deep-choco-06"
+    ]
+  },
+  "sourceCatalogs": {
+    "cafe": {
+      "store": {
+        "name": "안숭잘부 카페",
+        "location": "서울 동작구 상도동 999-12 (숭실대 정문 앞 골목, 가상 주소)",
+        "exteriorPhotoId": "cafe-storefront"
+      },
+      "menus": [
+        {
+          "menuId": "m-americano",
+          "names": {
+            "ko": "아메리카노",
+            "en": "Americano",
+            "zh-Hans": "美式咖啡",
+            "zh-Hant": "美式咖啡"
+          },
+          "photoIds": [
+            "cafe-americano-01",
+            "cafe-americano-02",
+            "cafe-americano-03",
+            "cafe-americano-04",
+            "cafe-americano-05",
+            "cafe-americano-06"
+          ]
+        },
+        {
+          "menuId": "m-cafe-latte",
+          "names": {
+            "ko": "카페라떼",
+            "en": "Café Latte",
+            "zh-Hans": "拿铁",
+            "zh-Hant": "拿鐵"
+          },
+          "photoIds": [
+            "cafe-cafe-latte-01",
+            "cafe-cafe-latte-02",
+            "cafe-cafe-latte-03",
+            "cafe-cafe-latte-04",
+            "cafe-cafe-latte-05",
+            "cafe-cafe-latte-06"
+          ]
+        },
+        {
+          "menuId": "m-vanilla-latte",
+          "names": {
+            "ko": "바닐라빈 라떼",
+            "en": "Vanilla Bean Latte",
+            "zh-Hans": "香草荚拿铁",
+            "zh-Hant": "香草莢拿鐵"
+          },
+          "photoIds": [
+            "cafe-vanilla-latte-01",
+            "cafe-vanilla-latte-02",
+            "cafe-vanilla-latte-03",
+            "cafe-vanilla-latte-04",
+            "cafe-vanilla-latte-05",
+            "cafe-vanilla-latte-06"
+          ]
+        },
+        {
+          "menuId": "m-dolce-latte",
+          "names": {
+            "ko": "연유 돌체라떼",
+            "en": "Condensed Milk Dolce Latte",
+            "zh-Hans": "炼乳拿铁",
+            "zh-Hant": "煉乳拿鐵"
+          },
+          "photoIds": [
+            "cafe-dolce-latte-01",
+            "cafe-dolce-latte-02",
+            "cafe-dolce-latte-03",
+            "cafe-dolce-latte-04",
+            "cafe-dolce-latte-05",
+            "cafe-dolce-latte-06"
+          ]
+        },
+        {
+          "menuId": "m-caramel-macchiato",
+          "names": {
+            "ko": "솔티드 카라멜 마끼아또",
+            "en": "Salted Caramel Macchiato",
+            "zh-Hans": "海盐焦糖玛奇朵",
+            "zh-Hant": "海鹽焦糖瑪奇朵"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-hazelnut-americano",
+          "names": {
+            "ko": "헤이즐넛 아메리카노",
+            "en": "Hazelnut Americano",
+            "zh-Hans": "榛果美式咖啡",
+            "zh-Hant": "榛果美式咖啡"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-coldbrew",
+          "names": {
+            "ko": "더치 콜드브루",
+            "en": "Dutch Cold Brew",
+            "zh-Hans": "荷式冷萃咖啡",
+            "zh-Hant": "荷式冷萃咖啡"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-decaf-americano",
+          "names": {
+            "ko": "디카페인 아메리카노",
+            "en": "Decaf Americano",
+            "zh-Hans": "低咖啡因美式咖啡",
+            "zh-Hant": "低咖啡因美式咖啡"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-deep-choco",
+          "names": {
+            "ko": "딥 초코 라떼",
+            "en": "Deep Chocolate Latte",
+            "zh-Hans": "浓郁巧克力拿铁",
+            "zh-Hant": "濃郁巧克力拿鐵"
+          },
+          "photoIds": [
+            "cafe-deep-choco-01",
+            "cafe-deep-choco-02",
+            "cafe-deep-choco-03",
+            "cafe-deep-choco-04",
+            "cafe-deep-choco-05",
+            "cafe-deep-choco-06"
+          ]
+        },
+        {
+          "menuId": "m-jeju-matcha",
+          "names": {
+            "ko": "제주 말차 라떼",
+            "en": "Jeju Matcha Latte",
+            "zh-Hans": "济州抹茶拿铁",
+            "zh-Hant": "濟州抹茶拿鐵"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-oat-matcha",
+          "names": {
+            "ko": "오트 말차 라떼",
+            "en": "Oat Matcha Latte",
+            "zh-Hans": "燕麦抹茶拿铁",
+            "zh-Hant": "燕麥抹茶拿鐵"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-einspanner-choco",
+          "names": {
+            "ko": "크림 초코 아인슈페너",
+            "en": "Chocolate Cream Einspänner",
+            "zh-Hans": "奶油巧克力维也纳饮品",
+            "zh-Hant": "鮮奶油巧克力維也納飲品"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-earlgrey-tea",
+          "names": {
+            "ko": "얼그레이 홍차",
+            "en": "Earl Grey Black Tea",
+            "zh-Hans": "伯爵红茶",
+            "zh-Hant": "伯爵紅茶"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-chamomile-tea",
+          "names": {
+            "ko": "캐모마일 티",
+            "en": "Chamomile Tea",
+            "zh-Hans": "洋甘菊茶",
+            "zh-Hant": "洋甘菊茶"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-earlgrey-milktea",
+          "names": {
+            "ko": "얼그레이 밀크티",
+            "en": "Earl Grey Milk Tea",
+            "zh-Hans": "伯爵奶茶",
+            "zh-Hant": "伯爵奶茶"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-grapefruit-ade",
+          "names": {
+            "ko": "자몽 에이드",
+            "en": "Sparkling Grapefruit Ade",
+            "zh-Hans": "葡萄柚气泡饮",
+            "zh-Hant": "葡萄柚氣泡飲"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-lemon-ade",
+          "names": {
+            "ko": "상큼 레몬 에이드",
+            "en": "Sparkling Lemon Ade",
+            "zh-Hans": "柠檬气泡饮",
+            "zh-Hant": "檸檬氣泡飲"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-saltbread",
+          "names": {
+            "ko": "겉바속촉 버터 소금빵",
+            "en": "Crispy Butter Salt Roll",
+            "zh-Hans": "酥皮黄油盐面包",
+            "zh-Hant": "酥皮奶油鹽麵包"
+          },
+          "photoIds": [
+            "cafe-saltbread-01",
+            "cafe-saltbread-02",
+            "cafe-saltbread-03",
+            "cafe-saltbread-04",
+            "cafe-saltbread-05",
+            "cafe-saltbread-06"
+          ]
+        },
+        {
+          "menuId": "m-basque-cake",
+          "names": {
+            "ko": "바스크 치즈케이크",
+            "en": "Basque Cheesecake",
+            "zh-Hans": "巴斯克芝士蛋糕",
+            "zh-Hant": "巴斯克乳酪蛋糕"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-cookie-choco",
+          "names": {
+            "ko": "르뱅 초코칩 쿠키",
+            "en": "Levain-Style Chocolate Chip Cookie",
+            "zh-Hans": "勒万风巧克力豆曲奇",
+            "zh-Hant": "勒萬風巧克力豆餅乾"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-bagel-plain",
+          "names": {
+            "ko": "구운 플레인 베이글",
+            "en": "Toasted Plain Bagel",
+            "zh-Hans": "烤原味贝果",
+            "zh-Hant": "烤原味貝果"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-chestnut-latte",
+          "names": {
+            "ko": "공주 보늬밤 라떼",
+            "en": "Gongju Candied Chestnut Latte",
+            "zh-Hans": "公州糖渍栗子拿铁",
+            "zh-Hant": "公州糖漬栗子拿鐵"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-pumpkin-einspanner",
+          "names": {
+            "ko": "단호박 크림 라떼",
+            "en": "Kabocha Cream Latte",
+            "zh-Hans": "南瓜奶油拿铁",
+            "zh-Hant": "南瓜鮮奶油拿鐵"
+          },
+          "photoIds": []
+        },
+        {
+          "menuId": "m-yuja-chamomile",
+          "names": {
+            "ko": "고흥 유자 캐모마일 티",
+            "en": "Goheung Yuja Chamomile Tea",
+            "zh-Hans": "高兴柚子洋甘菊茶",
+            "zh-Hant": "高興柚子洋甘菊茶"
+          },
+          "photoIds": []
+        }
+      ],
+      "photos": [
+        {
+          "photoId": "cafe-americano-01",
+          "menuId": "m-americano",
+          "file": "cafe-americano-01.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-americano-02",
+          "menuId": "m-americano",
+          "file": "cafe-americano-02.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-americano-03",
+          "menuId": "m-americano",
+          "file": "cafe-americano-03.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-americano-04",
+          "menuId": "m-americano",
+          "file": "cafe-americano-04.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-americano-05",
+          "menuId": "m-americano",
+          "file": "cafe-americano-05.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-americano-06",
+          "menuId": "m-americano",
+          "file": "cafe-americano-06.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-cafe-latte-01",
+          "menuId": "m-cafe-latte",
+          "file": "cafe-cafe-latte-01.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-cafe-latte-02",
+          "menuId": "m-cafe-latte",
+          "file": "cafe-cafe-latte-02.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-cafe-latte-03",
+          "menuId": "m-cafe-latte",
+          "file": "cafe-cafe-latte-03.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-cafe-latte-04",
+          "menuId": "m-cafe-latte",
+          "file": "cafe-cafe-latte-04.jpeg",
+          "width": 1280,
+          "height": 720
+        },
+        {
+          "photoId": "cafe-cafe-latte-05",
+          "menuId": "m-cafe-latte",
+          "file": "cafe-cafe-latte-05.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-cafe-latte-06",
+          "menuId": "m-cafe-latte",
+          "file": "cafe-cafe-latte-06.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-vanilla-latte-01",
+          "menuId": "m-vanilla-latte",
+          "file": "cafe-vanilla-latte-01.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-vanilla-latte-02",
+          "menuId": "m-vanilla-latte",
+          "file": "cafe-vanilla-latte-02.jpeg",
+          "width": 1280,
+          "height": 720
+        },
+        {
+          "photoId": "cafe-vanilla-latte-03",
+          "menuId": "m-vanilla-latte",
+          "file": "cafe-vanilla-latte-03.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-vanilla-latte-04",
+          "menuId": "m-vanilla-latte",
+          "file": "cafe-vanilla-latte-04.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-vanilla-latte-05",
+          "menuId": "m-vanilla-latte",
+          "file": "cafe-vanilla-latte-05.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-vanilla-latte-06",
+          "menuId": "m-vanilla-latte",
+          "file": "cafe-vanilla-latte-06.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-saltbread-01",
+          "menuId": "m-saltbread",
+          "file": "cafe-saltbread-01.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-saltbread-02",
+          "menuId": "m-saltbread",
+          "file": "cafe-saltbread-02.jpeg",
+          "width": 1280,
+          "height": 720
+        },
+        {
+          "photoId": "cafe-saltbread-03",
+          "menuId": "m-saltbread",
+          "file": "cafe-saltbread-03.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-saltbread-04",
+          "menuId": "m-saltbread",
+          "file": "cafe-saltbread-04.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-saltbread-05",
+          "menuId": "m-saltbread",
+          "file": "cafe-saltbread-05.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-saltbread-06",
+          "menuId": "m-saltbread",
+          "file": "cafe-saltbread-06.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-dolce-latte-01",
+          "menuId": "m-dolce-latte",
+          "file": "cafe-dolce-latte-01.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-dolce-latte-02",
+          "menuId": "m-dolce-latte",
+          "file": "cafe-dolce-latte-02.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-dolce-latte-03",
+          "menuId": "m-dolce-latte",
+          "file": "cafe-dolce-latte-03.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-dolce-latte-04",
+          "menuId": "m-dolce-latte",
+          "file": "cafe-dolce-latte-04.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-dolce-latte-05",
+          "menuId": "m-dolce-latte",
+          "file": "cafe-dolce-latte-05.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-dolce-latte-06",
+          "menuId": "m-dolce-latte",
+          "file": "cafe-dolce-latte-06.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-deep-choco-01",
+          "menuId": "m-deep-choco",
+          "file": "cafe-deep-choco-01.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-deep-choco-02",
+          "menuId": "m-deep-choco",
+          "file": "cafe-deep-choco-02.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-deep-choco-03",
+          "menuId": "m-deep-choco",
+          "file": "cafe-deep-choco-03.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-deep-choco-04",
+          "menuId": "m-deep-choco",
+          "file": "cafe-deep-choco-04.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-deep-choco-05",
+          "menuId": "m-deep-choco",
+          "file": "cafe-deep-choco-05.jpeg",
+          "width": 960,
+          "height": 1280
+        },
+        {
+          "photoId": "cafe-deep-choco-06",
+          "menuId": "m-deep-choco",
+          "file": "cafe-deep-choco-06.jpeg",
+          "width": 1280,
+          "height": 960
+        },
+        {
+          "photoId": "cafe-storefront",
+          "menuId": null,
+          "file": "cafe-storefront.jpeg",
+          "width": 1280,
+          "height": 720
+        },
+        {
+          "photoId": "cafe-interior-01",
+          "menuId": null,
+          "file": "cafe-interior-01.jpeg",
+          "width": 1280,
+          "height": 720
+        },
+        {
+          "photoId": "cafe-interior-02",
+          "menuId": null,
+          "file": "cafe-interior-02.jpeg",
+          "width": 960,
+          "height": 1280
+        }
+      ]
+    }
+  }
+}

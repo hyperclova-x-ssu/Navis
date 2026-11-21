@@ -1,0 +1,26 @@
+export const NOTICE_MESSAGES: Readonly<Record<string, string>> = {
+  // D-326 scheduled notice copy.
+  'data.notices.notice.scheduled': '발송을 예약했어요',
+  'data.notices.error.SCHEDULE_IN_FUTURE': '지금보다 늦은 시간을 골라 주세요',
+  'data.notices.error.SCHEDULE_NIGHT_RESTRICTED': '오전 8시부터 밤 9시 전까지 골라 주세요',
+  // End D-326.
+  'data.notices.notice.saved': '임시 저장했어요',
+  'data.notices.notice.sent': '보냈어요(예시)',
+  'data.notices.error.TITLE_REQUIRED': '공지 제목을 넣어 주세요',
+  'data.notices.error.BODY_REQUIRED': '공지 내용을 넣어 주세요',
+  'data.notices.error.NO_RECIPIENTS': '보낼 수 있는 손님이 없어요',
+  'data.notices.error.AD_NIGHT_RESTRICTED': '밤 9시부터 아침 8시까지는 광고 문자를 보낼 수 없어요',
+  'data.notices.error.PREVIEW_STALE': '미리보기',
+  'data.notices.error.PAST_DATE': '지난 날짜에는 공지를 만들 수 없어요. 오늘 이후로 골라 주세요',
+  'data.notices.error.CLOSURE_CHANGED': '휴무 일정이 바뀌었어요. 공지 초안에 다시 가져와 주세요',
+  'data.notices.error.CLOSURE_REMOVED': '연결된 휴무 일정이 없어요. 캘린더에서 다른 휴무를 불러와 주세요',
+  'data.notices.error.CLOSURE_DATES_DIFFER': '공지 기간이 캘린더 휴무와 달라요. 공지 초안에 다시 가져와 주세요',
+  'data.notices.error.INVALID_DATE_RANGE': '해당 일자·기간',
+  'data.notices.error.UNKNOWN_CLOSURE': '공지 내역을 불러오지 못했어요',
+  'data.notices.error.NOT_FOUND': '공지 내역을 불러오지 못했어요',
+  'data.notices.error.INVALID_KIND': '공지 종류',
+  'data.notices.error.INVALID_AUDIENCE': '받는 사람',
+  'data.notices.error.INVALID_GROUP': '손님 그룹 선택',
+  'data.notices.error.KEY_REQUIRED': '공지 내역을 불러오지 못했어요',
+  'data.notices.error.STALE_REVISION': '공지 내역을 불러오지 못했어요',
+};

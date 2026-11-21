@@ -1,0 +1,127 @@
+{
+  "formatVersion": 1,
+  "snapshotSha256": "9cdf01ef0c7a7eb2c01d87b2061e6abb9bb97743dceb62d6887468692b68b987",
+  "sha256": {
+    "content": "986a24e7672cc2d276add5a442576111bada26d29925a315c1c4f9566ef55a2b",
+    "supplement": "5a63b8966d2124a134eff7803b4189a37794952084d686f83550b4d401ca808b",
+    "config": "028fe0edc4509eff87c51bc7b708f475855d4f88e1797ec51977db1a7ea764c3",
+    "dbGenerator": "e438a4180bf84d13d3f157e20477f02ce9f2d115b341e9bb43a5ce5f24ab84cd",
+    "appGenerator": "133d0885aa72a7902e82925c940cbf50065e1a475d4628f8acb0cf172d879835"
+  },
+  "generator": {
+    "name": "ansungjalbu-erd-v1.1",
+    "start": "2026-08-20",
+    "end": "2026-11-17",
+    "days": 90,
+    "seed": 42
+  },
+  "cutoff": {
+    "businessDate": "2026-11-17",
+    "localTime": "15:45:00",
+    "utc": "2026-11-17T06:45:00.000Z"
+  },
+  "comparison": {
+    "businessDate": "2026-11-10",
+    "localTime": "15:45:00"
+  },
+  "store": {
+    "storeId": "c05409a6-f082-5964-a787-c1ed3184988b",
+    "name": "안숭잘부 카페",
+    "address": "서울 동작구 상도동 999-12 (숭실대 정문 앞 골목, 가상 주소)",
+    "timezone": "Asia/Seoul",
+    "businessDayStart": "05:00",
+    "businessType": "cafe",
+    "paymentStyle": "prepaid",
+    "posStartTab": "order",
+    "hours": {
+      "mon": [
+        "08:00",
+        "22:00"
+      ],
+      "tue": [
+        "08:00",
+        "22:00"
+      ],
+      "wed": [
+        "08:00",
+        "22:00"
+      ],
+      "thu": [
+        "08:00",
+        "22:00"
+      ],
+      "fri": [
+        "08:00",
+        "22:00"
+      ],
+      "sat": [
+        "09:30",
+        "21:30"
+      ],
+      "sun": [
+        "10:00",
+        "20:30"
+      ]
+    },
+    "seats": 30
+  },
+  "latteRecipe": [
+    {
+      "itemId": "i-bean-house",
+      "quantityBase": 18,
+      "unitDimension": "g"
+    },
+    {
+      "itemId": "i-milk",
+      "quantityBase": 260,
+      "unitDimension": "mL"
+    },
+    {
+      "itemId": "i-cup-takeout",
+      "quantityBase": 1,
+      "unitDimension": "pcs"
+    }
+  ],
+  "counts": {
+    "dbRows": 184431,
+    "historicalDays": 89,
+    "payments": 153,
+    "menu": 24,
+    "members": 460,
+    "closings": 89
+  },
+  "files": {
+    "catalog.ts": {
+      "sha256": "6817b3f1bb65e37e61564a8ba0e8b6b58e82ac21ed0be3551c538c531802395f",
+      "bytes": 40914
+    },
+    "today.ts": {
+      "sha256": "7597de38326b489fedf031b5d3d73938e82ecb918bfbe62ebf47b3b3048fafbc",
+      "bytes": 160175
+    },
+    "history.ts": {
+      "sha256": "1fbfb97e57e35fed3b044a0e1d22ba7560c1742dcedb564c8bb961a79ecd6cb8",
+      "bytes": 88937
+    },
+    "members.ts": {
+      "sha256": "ff68228142aac61a3904009c443fa65aca71ea0ac1a5ff9e09b51db41bd915cd",
+      "bytes": 92866
+    },
+    "closing-history.ts": {
+      "sha256": "745a69c7fcd317e4290c0407f651f692afcfca3e70aaf1e3d385af9f7721770b",
+      "bytes": 58880
+    },
+    "operations.ts": {
+      "sha256": "d9d51b7a8ff6f692fc44b5cbedae415c90f1af943290217a53a6352264f64e5d",
+      "bytes": 240664
+    },
+    "supplement.ts": {
+      "sha256": "8d45746240a61fd53c8a466c784e2f4fb80f1a5e32f4694d39f3e5ee47e4d730",
+      "bytes": 15459
+    },
+    "widget-drafts.json": {
+      "sha256": "f32a52f19e6978dec0fd074b821828c9e462feaddf0065a663ffaa667b2c7ef5",
+      "bytes": 19602
+    }
+  }
+}
