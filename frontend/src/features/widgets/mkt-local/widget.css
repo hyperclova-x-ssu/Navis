@@ -1,0 +1,128 @@
+/* T-051 mkt-local widgets. Tokens only (no raw colors or sizes except 0/1px hairlines via tokens). */
+.mkt-primary { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.mkt-label, .mkt-secondary { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mkt-label { color: var(--foreground); font-weight: var(--weight-medium); }
+.mkt-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; min-width: 0; flex-shrink: 0; }
+.mkt-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; flex-shrink: 0; padding-block: var(--space-1); border-block-end: var(--stroke-hairline) solid var(--border); }
+.mkt-row:last-child { border-block-end: 0; }
+.mkt-row__text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 8rem; }
+.mkt-row__title { font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); overflow-wrap: anywhere; flex-shrink: 0; }
+.mkt-row__sub { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mkt-row__value { flex: none; white-space: nowrap; font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-bold); }
+/* Only mkt-promo's `어울려요` reference badge (promo-gallery.tsx) still uses this shape; delete with its move to StatusBadge semantic="recommend" (K-C A9). */
+.mkt-badge { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; min-height: 32px; padding: 0 var(--space-2); border-radius: var(--radius-sm); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-bold); white-space: nowrap; background: var(--secondary); color: var(--secondary-foreground); }
+.mkt-state { min-width: 0; }
+.mkt-panel-note { display: flex; align-items: flex-start; gap: var(--space-1); margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mkt-panel-note .ui-icon { width: 16px; height: 16px; flex: none; }
+.mkt-bars { display: flex; align-items: flex-end; gap: var(--space-1); height: 64px; }
+.mkt-bars__bar { flex: 1 1 0; min-width: 0; max-width: 56px; background: var(--chart-1); border-radius: var(--radius-sm) var(--radius-sm) 0 0; min-height: var(--space-1); }
+.mkt-bars__bar[data-peak="true"] { background: var(--chart-2); outline: var(--stroke-hairline) solid var(--foreground); outline-offset: 0; }
+
+/* detail */
+.mkt-detail { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.mkt-meta { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mkt-section { margin: 0; font-size: var(--type-control); line-height: var(--leading-control); font-weight: var(--weight-bold); }
+.mkt-section:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
+.mkt-cards, .mkt-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.mkt-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--card); color: var(--card-foreground); min-width: 0; }
+.mkt-card__badges { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.mkt-card__title { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.mkt-card__line { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.mkt-card__meta { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mkt-detail-state { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); min-width: 0; }
+.mkt-detail-state__message { display: flex; align-items: flex-start; gap: var(--space-2); margin: 0; font-size: var(--type-body); line-height: var(--leading-body); }
+.mkt-detail-state__message .ui-icon { width: 20px; height: 20px; flex: none; }
+.mkt-detail-state[data-tone="error"] .mkt-detail-state__message { color: var(--destructive); }
+.mkt-alert { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--warning-bg); color: var(--warning); }
+.mkt-alert p { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); }
+.mkt-alert .mkt-alert__title { display: flex; align-items: center; gap: var(--space-1); font-weight: var(--weight-bold); }
+.mkt-alert .ui-icon { width: 20px; height: 20px; flex: none; }
+.mkt-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+
+/* selectable rows (list side of MasterDetail, keyword and hour pickers) */
+.mkt-pick { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-1); width: 100%; min-height: 64px; padding: var(--space-3) var(--space-4); text-align: start; border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-md); background: var(--card); color: var(--card-foreground); font: inherit; cursor: pointer; }
+.mkt-pick[aria-pressed="true"], .mkt-pick[aria-current="true"] { background: var(--selection); color: var(--selection-foreground); border-color: var(--selection-foreground); }
+.mkt-pick:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
+.mkt-pick__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.mkt-pick__title { font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.mkt-pick__sub { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mkt-pick[aria-pressed="true"] .mkt-pick__sub, .mkt-pick[aria-current="true"] .mkt-pick__sub { color: var(--selection-foreground); }
+.mkt-pick__badges { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.mkt-trend-keyword > .mkt-pick[aria-expanded="true"] {
+  background: var(--selection);
+  color: var(--selection-foreground);
+  border-color: var(--selection-foreground);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+.mkt-trend-keyword > .mkt-pick[aria-expanded="true"] .mkt-pick__sub { color: var(--selection-foreground); }
+.mkt-trend-keyword .mkt-card {
+  border-color: var(--selection-foreground);
+  border-block-start: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+.mkt-hours { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(44px, 1fr); gap: var(--space-2); overflow-x: auto; padding-block-end: var(--space-1); }
+/* The chart owns a horizontal scroller, so it must also have a bounded height
+   in the dialog; otherwise vertical overflow is trapped beyond the body. */
+.mkt-detail[data-slot="trade-area.card"] { display: flex; flex-direction: column; min-height: 0; }
+.mkt-detail[data-slot="trade-area.card"] > .mkt-hours { flex: 0 0 auto; overflow-y: visible; }
+/* Detail plot: chart.plot.min-height 240 / 125 % 260, bars at most 64 wide (chart.bar.max-width, detail), the hour always with its unit. */
+.mkt-hour { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-1); min-width: 44px; padding: var(--space-1); border: var(--stroke-hairline) solid transparent; border-radius: var(--radius-md); background: transparent; color: var(--foreground); font: inherit; cursor: pointer; }
+.mkt-hour__num, .mkt-hour__label { text-align: center; font-size: var(--type-caption); line-height: var(--leading-caption); }
+.mkt-hour__num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mkt-hour__track { display: flex; align-items: flex-end; justify-content: center; height: calc(var(--chart-plot-min-height, 240px) + var(--space-8)); flex-shrink: 0; }
+.mkt-hour__bar { width: min(100%, var(--space-16)); background: var(--chart-1); border-radius: var(--radius-sm) var(--radius-sm) 0 0; min-height: var(--space-1); }
+.mkt-hour[data-peak="true"] .mkt-hour__bar { background: var(--chart-2); outline: var(--stroke-hairline) solid var(--foreground); }
+.mkt-hour__label { color: var(--muted-foreground); }
+.mkt-hour[aria-pressed="true"] { background: var(--selection); border-color: var(--selection-foreground); color: var(--selection-foreground); }
+.mkt-hour[aria-pressed="true"] .mkt-hour__label { color: var(--selection-foreground); }
+.mkt-hour:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
+.mkt-split { display: grid; gap: var(--space-4); min-width: 0; }
+.mkt-quote { margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--muted); font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; white-space: pre-wrap; }
+.mkt-reply-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.mkt-ok { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--type-body); line-height: var(--leading-body); color: var(--success); font-weight: var(--weight-bold); }
+.mkt-ok .ui-icon { width: 20px; height: 20px; flex: none; }
+.mkt-rule { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); padding-block: var(--space-2); border-block-end: var(--stroke-hairline) solid var(--border); font-size: var(--type-body); line-height: var(--leading-body); }
+
+/* T-063 large panels (SCR-30 expanded form): the bar chart grows with the panel height instead of leaving the lower half empty. No new data. */
+.ui-feature-panel[data-height="3"] .ui-panel-body[data-shape="L"] .mkt-bars { height: 128px; }
+.ui-feature-panel[data-height="4"] .ui-panel-body[data-shape="L"] .mkt-bars { height: 224px; }
+
+/* The state sentence keeps its natural height (DS 12.14.1). */
+.ui-root:not([data-text-scale="125"]) .mkt-state { padding-top: var(--space-2); }
+.mkt-state .ui-panel-state__message { flex: 1 0 0; min-width: 0; }
+.mkt-state .ui-panel-state__text { flex-shrink: 0; }
+
+/* Keep Korean state messages together at word boundaries. */
+.mkt-state .ui-panel-state__message:lang(ko) { word-break: keep-all; overflow-wrap: normal; }
+
+/* DS 19.3: preserve the accepted 16px subtitle; W support starts at K's top edge. */
+.dashboard-screen .mkt-primary { display:flex; flex-direction:column; gap:var(--space-1); }
+.dashboard-screen .mkt-primary>.mkt-label { margin:0; font-size:var(--type-caption); line-height:var(--leading-caption); }
+.dashboard-screen [data-feature-id="ai-response"] .ui-panel-body[data-shape="W"] { column-gap:var(--space-6); }
+.dashboard-screen [data-feature-id="ai-response"] .ui-panel-body[data-shape="W"] .mkt-rows { gap:0; }
+.dashboard-screen [data-feature-id="ai-response"][data-height="1"] .mkt-primary>.mkt-secondary { display:none; }
+.dashboard-screen [data-feature-id="ai-response"] .ui-panel-body[data-shape="W"] .mkt-row { padding-block:0; border:0; }
+.dashboard-screen .mkt-primary>.mkt-label { color:var(--muted-foreground); }
+
+.mkt-reply-detail .ui-pinned-column__body { overflow: visible; }
+.mkt-reply-detail .ui-pinned-column__footer { position: sticky; bottom: 0; padding-block: var(--space-3); }
+.mkt-reply-footer { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+.mkt-reply-editor { padding-block-end: var(--space-4); }
+.mkt-reply-editor textarea { background: var(--card); }
+.mkt-reply-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.mkt-reply-confirmation { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-6); }
+.mkt-reply-confirmation > div { flex-direction: column; }
+
+/* 메시지·리뷰 응대: the customer's excerpt keeps the row-name size (DS 12.14.2), never cut. */
+.mkt-pick__excerpt { font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.mkt-meta--lines { white-space: pre-line; }
+
+/* Compact (text) details size their window to the content (DS 4.2: h = clamp(min, H, max), H = the content's own height): the module body must not
+   shrink to the minimum frame, or the shell never measures the real content height and the window scrolls although it could grow. */
+.detail-module-body:has(> .mkt-detail--natural) { flex: 0 0 auto; }
+
+/* An empty or failed state in a large window sits in the middle of the window's minimum height, not on its top edge (C2). */
+.mkt-detail-state[data-frame="large"] { align-items: center; justify-content: center; min-height: var(--dialog-compact-min); text-align: center; }
+
+/* 125% text: the 1×1 title "메시지·리뷰 응대" wraps to two lines; keep the key number clear of the second line (G3). */
+.ui-root[data-text-scale="125"] .ui-feature-panel[data-feature-id="ai-response"] .ui-panel-body[data-shape="Q"] .mkt-primary { padding-top: var(--space-4); }

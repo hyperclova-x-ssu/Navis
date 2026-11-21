@@ -1,0 +1,170 @@
+/**
+ * T-051 message bundle for the five 마케팅 · 동네/손님 widgets (prefix `widget.{id}.*`, ARCHITECTURE 11.6).
+ * Row shape: key → [ko, en, zh-Hans, zh-Hant]. `title`/`coach`/`aliases` live in the shared widget-name bundle.
+ * `PLAN1_KEYS` are the plan-1 key-table rows (team/plan-1/widgets/*.md); the rest is this worker's own writing (R2 review).
+ */
+import type { MessageBundle } from '../../../i18n';
+
+type Row = readonly [string, string, string, string];
+
+const rows = {
+  // 동네 변화 알림
+  'widget.local-changes.thisWeek': ['이번 주 동네 변화', 'Neighborhood changes this week', '本周周边动态', '本週周邊動態'],
+  'widget.local-changes.sameCategory': ['같은 업종', 'Same category', '同行业', '同行業'],
+  'widget.local-changes.unit': ['개', '{n, plural, one {change} other {changes}}', '条', '則'],
+  // D-327: counts the changes still to check (not yet acknowledged), the same number as the list and the chat.
+  'widget.local-changes.summary': ['새 변화 {n}개', '{n, plural, one {# new neighborhood change} other {# new neighborhood changes}}', '待确认的周边动态 {n} 条', '待確認的周邊動態 {n} 則'],
+  'widget.local-changes.folded': ['접어 둔 변화 {n}개', '{n, plural, one {# folded change} other {# folded changes}}', '已收起 {n} 项动态', '已收合 {n} 項動態'],
+  'widget.local-changes.distance': ['매장에서 {m}m', '{m} m from your shop', '距门店 {m} 米', '距店鋪 {m} 公尺'],
+  'widget.local-changes.updated': ['{at} 갱신', 'Updated {at}', '{at} 更新', '{at} 更新'],
+  'widget.local-changes.source': ['출처: {source}', 'Source: {source}', '来源：{source}', '來源：{source}'],
+  'widget.local-changes.reflected': ['손님예측에 반영했어요', 'Included in the customer forecast', '已计入客流预测', '已計入客流預測'],
+  'widget.local-changes.openList': ['새로 확인할 변화', 'Changes to check', '待确认的动态', '待確認的動態'],
+  'widget.local-changes.allChecked': ['새 변화를 모두 확인했어요', "You've checked every change", '待确认的动态已全部确认', '待確認的動態已全部確認'],
+  // 상권분석
+  'widget.trade-area.peakFootfall': ['{hour}시 유동인구', 'Foot traffic at {hour}:00', '{hour}点人流量', '{hour}點人流量'],
+  'widget.trade-area.hourlyAverage': ['시간대별 일평균', 'Daily average by hour', '分时段日均', '分時段日均'],
+  'widget.trade-area.unit': ['명', '{n, plural, one {person} other {people}}', '人', '人'],
+  'widget.trade-area.summary': ['{hour}시 유동인구 {people}명', 'Foot traffic at {hour}:00: {people}', '{hour}点人流量 {people} 人', '{hour}點人流量 {people} 人'],
+  'widget.trade-area.peakNote': ['가장 붐비는 시간대예요', 'The busiest hour', '人流最多的时段', '人流最多的時段'],
+  'widget.trade-area.peakSentence': ['가장 붐비는 시간대예요', 'This is the busiest hour', '人流最多的时段', '人流最多的時段'],
+  'widget.trade-area.hourTick': ['{hour}시', '{hour}:00', '{hour}点', '{hour}點'],
+  'widget.trade-area.nearShop': ['매장 주변', 'Near your shop', '门店周边', '店鋪周邊'],
+  'widget.trade-area.chartLabel': ['시간대별 유동인구', 'Foot traffic by hour', '分时段人流量', '分時段人流量'],
+  'widget.trade-area.slotDetail': ['{hours}에 지나가는 사람은 약 {people, particle, 이에요/예요}', 'About {people} pass by during {hours}', '{hours}约有 {people} 人经过', '{hours}約有 {people} 人經過'],
+  'widget.trade-area.ofPeak': ['가장 붐비는 시간의 {pct}%예요', '{pct}% of the busiest hour', '为最高时段的 {pct}%', '為最高時段的 {pct}%'],
+  'widget.trade-area.estimate': ['추정 통행 인원이에요', 'Estimated passers-by', '估算的经过人数', '估算的經過人數'],
+  'widget.trade-area.viewTrends': ['이 지역 트렌드 보기', 'View trends for this area', '查看该区域趋势', '查看該區域趨勢'],
+  'widget.trade-area.updated': ['{at} 갱신', 'Updated {at}', '{at} 更新', '{at} 更新'],
+  'widget.trade-area.source': ['출처: {source}', 'Source: {source}', '来源：{source}', '來源：{source}'],
+  // 로컬 트렌드
+  'widget.local-trends.notableKeywords': ['주목할 키워드', 'Keywords to watch', '值得关注的关键词', '值得關注的關鍵字'],
+  'widget.local-trends.mentionsUp': ['언급 증가', 'More mentions', '提及增加', '提及增加'],
+  'widget.local-trends.unit': ['개', '{n, plural, one {keyword} other {keywords}}', '个', '個'],
+  'widget.local-trends.summary': ['주목할 키워드 {n}개', '{n, plural, one {# keyword} other {# keywords}} to watch', '值得关注的关键词 {n} 个', '值得關注的關鍵字 {n} 個'],
+  'widget.local-trends.mentions': ['언급 {n}회', '{n, plural, one {# mention} other {# mentions}}', '提及 {n} 次', '提及 {n} 次'],
+  'widget.local-trends.previous': ['이전 {n}회', 'Before: {n}', '此前 {n} 次', '此前 {n} 次'],
+  'widget.local-trends.rose': ['{pct}% 늘었어요', 'Up {pct}%', '增加 {pct}%', '增加 {pct}%'],
+  'widget.local-trends.fell': ['{pct}% 줄었어요', 'Down {pct}%', '减少 {pct}%', '減少 {pct}%'],
+  'widget.local-trends.noComparison': ['비교 자료 없음', 'No comparison data', '暂无对比数据', '暫無比較資料'],
+  'widget.local-trends.definition': ['관심 지표는 이 지역 게시글·리뷰에서 키워드가 언급된 횟수예요', 'The interest metric is how many times the keyword is mentioned in posts and reviews in this area.', '关注指标是该关键词在本区域帖子和评论中被提及的次数。', '關注指標是該關鍵字在本區域貼文與評論中被提及的次數。'],
+  'widget.local-trends.comparePeriod': ['{current} · 지난주({previous})와 비교했어요', '{current} vs. {previous}', '{current}（对比 {previous}）', '{current}（比較 {previous}）'],
+  'widget.local-trends.category': ['연관 카테고리: {category}', 'Related category: {category}', '相关类别：{category}', '相關類別：{category}'],
+  'widget.local-trends.periodNote': ['최근 7일 · 이전 7일 대비', 'Last 7 days vs. the 7 days before', '最近 7 天 · 对比此前 7 天', '最近 7 天 · 比較此前 7 天'],
+  'widget.local-trends.region': ['지역: {region}', 'Area: {region}', '区域：{region}', '區域：{region}'],
+  'widget.local-trends.source': ['출처: {source}', 'Source: {source}', '来源：{source}', '來源：{source}'],
+  'widget.local-trends.updated': ['{at} 갱신', 'Updated {at}', '{at} 更新', '{at} 更新'],
+  'widget.local-trends.pick': ['키워드를 누르면 비교 근거를 볼 수 있어요', 'Tap a keyword to see what it is compared with', '点按关键词可查看对比依据', '點按關鍵字可查看比較依據'],
+  // 메시지·리뷰 응대
+  'widget.ai-response.waiting': ['답변 대기', 'Awaiting reply', '待回复', '待回覆'],
+  'widget.ai-response.draft': ['답변 초안', 'Reply draft', '回复草稿', '回覆草稿'],
+  'widget.ai-response.publishReview': ['답글', 'Post review reply', '发布评论回复', '發布評論回覆'],
+  'widget.ai-response.unit': ['건', '{n, plural, one {item} other {items}}', '条', '則'],
+  'widget.ai-response.summary': ['답변 대기 {n}건', '{n, plural, one {# item} other {# items}} awaiting reply', '待回复 {n} 条', '待回覆 {n} 則'],
+  'widget.ai-response.countText': ['{n}건', '{n, plural, one {# item} other {# items}}', '{n} 条', '{n} 則'],
+  'widget.ai-response.byType': ['메시지 {m}\u00A0· 리뷰 {r}', 'Messages {m}\u00A0· Reviews {r}', '消息 {m}\u00A0· 评论 {r}', '訊息 {m}\u00A0· 評論 {r}'],
+  'widget.ai-response.praise': ['칭찬 리뷰 {n}개', '{n, plural, one {# praise review} other {# praise reviews}}', '好评 {n} 条', '好評 {n} 則'],
+  'widget.ai-response.tabLabel': ['응대 종류', 'Reply type', '回复类型', '回覆類型'],
+  'widget.ai-response.tabMessages': ['메시지', 'Messages', '消息', '訊息'],
+  'widget.ai-response.tabReviews': ['리뷰', 'Reviews', '评论', '評論'],
+  'widget.ai-response.positive': ['긍정', 'Positive', '正面', '正面'],
+  'widget.ai-response.negative': ['부정', 'Negative', '负面', '負面'],
+  'widget.ai-response.neutral': ['보통', 'Neutral', '一般', '一般'],
+  'widget.ai-response.public': ['공개 리뷰', 'Public review', '公开评论', '公開評論'],
+  'widget.ai-response.private': ['비공개 메시지', 'Private message', '私信', '私訊'],
+  'widget.ai-response.statusDraft': ['초안 준비됨', 'Draft ready', '草稿已备好', '草稿已備妥'],
+  'widget.ai-response.statusDone': ['답변함', 'Replied', '已回复', '已回覆'],
+  'widget.ai-response.needsPerson': ['사람이 직접 확인해 주세요({reason})', 'Please check this yourself ({reason})', '请您亲自确认（{reason}）', '請您親自確認（{reason}）'],
+  'widget.ai-response.writeReply': ['확인한 뒤 답변을 적어 주세요', 'Check it, then write your reply', '确认后请填写回复', '確認後請填寫回覆'],
+  'widget.ai-response.original': ['원문', 'Original', '原文', '原文'],
+  'widget.ai-response.groundTitle': ['초안에 쓴 매장 안내', 'Shop info used in the draft', '草稿使用的店铺信息', '草稿使用的店鋪資訊'],
+  'widget.ai-response.noGround': ['사용한 매장 안내가 없어요', 'No shop info was used', '没有使用店铺信息', '沒有使用店鋪資訊'],
+  'widget.ai-response.sendFailed': ['보내지 못했어요', "Couldn't send", '发送失败', '傳送失敗'],
+  'widget.ai-response.receivedAt': ['{at} 받음', 'Received {at}', '{at} 收到', '{at} 收到'],
+  'widget.ai-response.rating': ['별점 {n}점', '{n, plural, one {# star} other {# stars}}', '{n} 星', '{n} 星'],
+  'widget.ai-response.autoTitle': ['자동 답변 설정', 'Auto-reply settings', '自动回复设置', '自動回覆設定'],
+  'widget.ai-response.autoOn': ['켜짐', 'On', '已开启', '已開啟'],
+  'widget.ai-response.autoOff': ['꺼짐', 'Off', '已关闭', '已關閉'],
+  'widget.ai-response.autoNote': ['처음에는 직접 확인해서 보내요. 환불·불만·개인정보는 자동으로 보내지 않아요.', 'At first you check each reply. Refunds, complaints and personal info are never sent automatically.', '起初由您确认后发送。退款、投诉和个人信息不会自动发送。', '起初由您確認後傳送。退款、客訴和個人資料不會自動傳送。'],
+  'widget.ai-response.channelConnected': ['채널 연결됨(예시)', 'Channel connected (sample)', '渠道已连接（示例）', '渠道已連線（範例）'],
+  'widget.ai-response.noItems': ['이 목록에 항목이 없어요', 'Nothing in this list', '此列表暂无内容', '此列表暫無內容'],
+  'widget.ai-response.pickItem': ['목록에서 항목을 골라 주세요', 'Pick an item from the list', '请从列表中选择一项', '請從列表中選擇一項'],
+  'widget.ai-response.channelCount': ['{channel} {count}', '{channel}\u00A0· {count}', '{channel} {count}', '{channel} {count}'],
+  'widget.ai-response.recent': ['먼저 볼 항목', 'Check these first', '优先查看', '優先查看'],
+  // 커뮤니티
+  'widget.community.pendingOffers': ['답할 제안', 'Partnership offers awaiting a reply', '待回复的合作提议', '待回覆的合作提案'],
+  'widget.community.browseOffers': ['동네 제안 보기', 'Browse local offers', '查看附近的合作提议', '查看附近的合作提案'],
+  'widget.community.unit': ['건', '{n, plural, one {offer} other {offers}}', '条', '則'],
+  'widget.community.summary': ['답할 제안 {n}건', '{n, plural, one {# offer} other {# offers}} awaiting a reply', '待回复的合作提议 {n} 条', '待回覆的合作提案 {n} 則'],
+  'widget.community.awaiting': ['응답 대기', 'Awaiting reply', '待回复', '待回覆'],
+  'widget.community.tabLabel': ['제안 종류', 'Offer type', '提议类型', '提案類型'],
+  'widget.community.tabReceived': ['받은 제안', 'Received offers', '收到的提议', '收到的提案'],
+  'widget.community.tabBrowse': ['동네 둘러보기', 'Browse the neighborhood', '逛逛附近', '逛逛附近'],
+  'widget.community.accepted': ['진행 중', 'In progress', '进行中', '進行中'],
+  'widget.community.declined': ['거절함', 'Declined', '已拒绝', '已拒絕'],
+  'widget.community.expired': ['기한 지남', 'Expired', '已过期', '已過期'],
+  'widget.community.from': ['{store}의 제안', 'Offer from {store}', '{store}的提议', '{store}的提案'],
+  'widget.community.termsLabel': ['협업 방식', 'How you would work together', '合作方式', '合作方式'],
+  'widget.community.period': ['기간 {period}', 'Period: {period}', '期间：{period}', '期間：{period}'],
+  'widget.community.respondBy': ['{at}까지 응답', 'Reply by {at}', '请于 {at} 前回复', '請於 {at} 前回覆'],
+  'widget.community.contact': ['연락 수단: {contact}', 'Contact: {contact}', '联系方式：{contact}', '聯絡方式：{contact}'],
+  'widget.community.directHint': ['직접 받은 제안이에요. 수락하거나 거절해 주세요', 'This offer was sent to you. Accept or decline it', '这是直接发给您的提议，请接受或拒绝', '這是直接寄給您的提案，請接受或拒絕'],
+  'widget.community.publicHint': ['공개 제안이에요. 관심을 보내면 상대 가게에 알려요', 'This is a public offer. Showing interest lets the shop know (sample)', '这是公开提议，表示关注后对方店铺会收到通知（示例）', '這是公開提案，表示關注後對方店鋪會收到通知（範例）'],
+  'widget.community.noPublic': ['둘러볼 공개 제안이 없어요', 'No public offers to browse', '暂无可浏览的公开提议', '暫無可瀏覽的公開提案'],
+  'widget.community.pickItem': ['목록에서 제안을 골라 주세요', 'Pick an offer from the list', '请从列表中选择一项提议', '請從列表中選擇一項提案'],
+  'widget.community.noReceived': ['받은 제안이 없어요', 'No offers received', '暂无收到的提议', '暫無收到的提案'],
+  'widget.ai-response.generateMessage': ['답변 초안 만들기', 'Create message reply draft', '生成消息回复草稿', '產生訊息回覆草稿'],
+  'widget.ai-response.generateReview': ['답글 초안 만들기', 'Create review reply draft', '生成评论回复草稿', '產生評論回覆草稿'],
+  'widget.ai-response.reviewDraft': ['답글 초안', 'Review reply draft', '评论回复草稿', '評論回覆草稿'],
+  'widget.ai-response.preview': ['보낼 내용 확인하기', 'Review before sending', '确认发送内容', '確認發送內容'],
+  'widget.ai-response.previewBody': ['보낼 글', 'Text to send', '发送内容', '發送內容'],
+  'widget.ai-response.testTarget': ['테스트 받는 곳', 'Test destination', '测试接收方', '測試接收方'],
+  'widget.ai-response.sendTest': ['테스트 문자 보내기', 'Send test text', '发送测试短信', '發送測試簡訊'],
+  'widget.ai-response.sendingTest': ['테스트 문자를 보내고 있어요', 'Sending test text', '正在发送测试短信', '正在發送測試簡訊'],
+  'widget.ai-response.testOff': ['테스트 발송이 꺼져 있어요', 'Test sending is off', '测试发送已关闭', '測試發送已關閉'],
+  'widget.ai-response.targetError': ['테스트 받는 곳을 불러오지 못했어요', 'Could not load test destinations', '无法加载测试接收方', '無法載入測試接收方'],
+  'widget.ai-response.accepted': ['테스트 문자 발송을 요청했어요', 'Test text send requested', '已请求发送测试短信', '已要求發送測試簡訊'],
+  'widget.ai-response.sendUnknown': ['발송 결과를 확인해 주세요', 'Check the send result', '请确认发送结果', '請確認發送結果'],
+  'widget.ai-response.sentHeading': ['보낸 답변', 'Sent reply', '已发回复', '已發回覆'],
+  'widget.ai-response.invalidReply': ['허용된 문장을 두 문장까지, 80바이트 이하로 적어 주세요', 'Use up to two approved sentences within 80 bytes', '请使用允许的回复，最多两条，80 字节以内', '請使用允許的回覆，最多兩條，80 位元組以內'],
+  'widget.ai-response.replyLimit': ['허용된 문장 두 문장 이하 · 80바이트 이하', 'Up to two approved sentences · 80 bytes max', '最多两条允许的回复 · 80 字节以内', '最多兩條允許的回覆 · 80 位元組以內'],
+  'widget.ai-response.sendConflict': ['이 예시는 이미 보냈거나 발송을 확인하는 중이에요', 'This sample was already sent or is being checked', '此示例已发送或正在确认', '此範例已發送或正在確認'],
+  'widget.ai-response.draftExpired': ['초안 시간이 지났어요. 새 초안을 만들어 주세요', 'The draft expired. Create a new draft.', '草稿已过期，请生成新草稿', '草稿已過期，請產生新草稿'],
+  'widget.ai-response.confirmOnly': ['자동 발송 없음 · 항상 미리보기 확인 후 테스트 발송', 'Automatic sending is off · Always review before a test send', '自动发送已关闭 · 测试发送前请确认内容', '自動發送已關閉 · 測試發送前請確認內容'],
+} as const satisfies Readonly<Record<string, Row>>;
+
+const koOnly = {
+  'widget.ai-response.sent': '보낸 답변',
+  'widget.ai-response.send': '답변 보내기',
+  'widget.ai-response.post': '답글 올리기',
+  'widget.ai-response.autoSummary': '자동 답변이 꺼져 있어요',
+  'widget.ai-response.autoEnabled': '자동 답변 {n}개가 켜져 있어요',
+  'widget.community.accept': '수락하기',
+  'widget.community.decline': '거절하기',
+  'widget.local.state.error.short': '불러오지 못했어요',
+  'widget.ai-response.state.disconnected.short': '연결된 채널이 없어요',
+  'widget.community.state.none': '답할 제안이 없어요',
+} as const;
+export type MktLocalKey = keyof typeof rows | keyof typeof koOnly;
+
+/** Plan-1 key-table rows and DS/LOCALES wording; every other row is the worker's own writing and goes to the R2 review. */
+const PLAN1_KEYS: ReadonlySet<string> = new Set([
+  'widget.local-changes.thisWeek', 'widget.local-changes.sameCategory', 'widget.trade-area.peakFootfall', 'widget.trade-area.hourlyAverage',
+  'widget.local-trends.notableKeywords', 'widget.local-trends.mentionsUp', 'widget.ai-response.waiting', 'widget.ai-response.draft', 'widget.ai-response.publishReview',
+  'widget.community.pendingOffers', 'widget.community.browseOffers',
+]);
+
+function build(index: 0 | 1 | 2 | 3): Record<keyof typeof rows, string> {
+  return Object.fromEntries(Object.entries(rows).map(([key, row]) => [key, (row as Row)[index]])) as Record<keyof typeof rows, string>;
+}
+
+export const mktLocalBundle: MessageBundle<MktLocalKey> = {
+  id: 'widget-mkt-local',
+  ko: { ...build(0), ...koOnly },
+  en: build(1),
+  'zh-Hans': build(2),
+  'zh-Hant': build(3),
+};
+
+/** Keys the R2 reviewer should look at (en / zh written by T-051). */
+export const mktLocalReviewKeys: readonly MktLocalKey[] = (Object.keys(rows) as MktLocalKey[]).filter((key) => !PLAN1_KEYS.has(key));

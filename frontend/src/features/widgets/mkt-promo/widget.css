@@ -1,0 +1,214 @@
+/* T-060 mkt-promo: layout only, existing tokens only (no raw colours or sizes outside the documented 1px rule and 9:16 art). */
+.mp-root { display: flex; flex-direction: column; gap: var(--space-1); height: 100%; min-height: 0; min-width: 0; container-type: inline-size; }
+.mp-root > * { min-width: 0; }
+.mp-key { display: block; min-width: 0; }
+.mp-desc { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.ui-root[data-text-scale="125"] .mp-q > .mp-desc, .ui-root[data-text-scale="125"] .mp-q .mp-block > .mp-desc { display: none; }
+.mp-q > .ui-panel-action-slot, .mp-w__right > .ui-panel-action-slot, .mp-list > .ui-panel-action-slot, .mp-wblocks > .ui-panel-action-slot, .mp-trows > .ui-panel-action-slot, .mp-grid > .ui-panel-action-slot { margin-top: auto; align-self: flex-start; }
+.mp-note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mp-hint { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mp-hint--error { color: var(--destructive); }
+.mp-hint .ui-icon, .mp-posted .ui-icon { width: 16px; height: 16px; vertical-align: -3px; }
+.mp-h { margin: 0; font-size: var(--type-control); line-height: var(--leading-control); font-weight: var(--weight-bold); }
+
+/* delta (arrow icon + size of the change; colour never says good or bad) */
+.mp-delta { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mp-delta .ui-icon { width: 12px; height: 12px; flex: none; }
+
+/* M-27 changed-value highlight: an opacity-only overlay for 800ms */
+.mp-flash { position: relative; display: block; min-width: 0; }
+.mp-flash[data-flash="true"]::after { content: ""; position: absolute; inset: calc(var(--space-1) * -1); border-radius: var(--radius-md); background: var(--selection); opacity: 0; pointer-events: none; animation: mp-flash 800ms var(--motion-ease-out) forwards; }
+[data-reduced-motion="true"] .mp-flash[data-flash="true"]::after { animation: none; opacity: .6; }
+@keyframes mp-flash { 0% { opacity: .9; } 100% { opacity: 0; } }
+
+/* ───── 오늘 할 홍보 ───── */
+.mp-today__slots { display: grid; flex: 1 0 auto; min-height: 0; gap: var(--space-2); }
+.mp-today[data-layout="columns"] .mp-today__slots { grid-template-columns: repeat(var(--mp-slots, 3), minmax(0, 1fr)); gap: 0; }
+.mp-today[data-slots="1"] { --mp-slots: 1; }
+.mp-today[data-slots="2"] { --mp-slots: 2; }
+.mp-today[data-slots="3"] { --mp-slots: 3; }
+.mp-slot { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.mp-today[data-layout="columns"] .mp-slot { padding-inline: var(--space-3); border-inline-start: var(--stroke-hairline) solid var(--border); }
+.mp-today[data-layout="columns"] .mp-slot[data-first="true"] { padding-inline-start: 0; border-inline-start: 0; }
+.mp-today[data-layout="columns"] .mp-slot:last-child { padding-inline-end: 0; }
+.mp-slot__tag { font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-bold); }
+/* The fit drops tags one by one; once the first is gone every slot loses its tag so the columns stay level (the section's aria-label keeps the tag). */
+.mp-today:has(.mp-slot__tag[data-fit-hidden]) .mp-slot__tag { display: none; }
+.mp-today [data-fit-hidden] { display: none !important; }
+.mp-slot__text { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.mp-today[data-slots="1"][data-w="1"][data-h="1"] .mp-slot:has(> .mp-slot__big:not([data-fit-hidden])) .mp-slot__text { font-size: var(--type-section); line-height: var(--leading-section); font-weight: var(--weight-heading); letter-spacing: var(--tracking-section); }
+.mp-slot .ui-panel-action-slot { margin-top: auto; align-self: flex-start; }
+.mp-today[data-layout="rows"] .mp-slot { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "tag action" "text action"; column-gap: var(--space-4); align-items: center; padding-block: var(--space-2); border-block-start: var(--stroke-hairline) solid var(--border); }
+.mp-today[data-layout="rows"] .mp-slot[data-first="true"] { border-block-start: 0; padding-block-start: 0; }
+.mp-today[data-layout="rows"] .mp-slot__tag { grid-area: tag; }
+.mp-today[data-layout="rows"] .mp-slot__text { grid-area: text; }
+.mp-today[data-layout="rows"] .mp-slot .ui-panel-action-slot { grid-area: action; margin: 0; max-width: 280px; }
+.mp-today[data-layout="stack"] .mp-slot { padding-block: var(--space-2); border-block-start: var(--stroke-hairline) solid var(--border); }
+.mp-today[data-layout="stack"] .mp-slot[data-first="true"] { border-block-start: 0; padding-block-start: 0; }
+
+/* ───── AI 홍보 영상 panel ───── */
+.mp-w { display: grid; grid-template-columns: minmax(0, 42fr) minmax(0, 58fr); column-gap: var(--space-4); }
+.mp-w__left, .mp-w__right { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.mp-w__line { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.mp-list { gap: var(--space-2); }
+.mp-list__head { display: flex; flex-direction: column; gap: var(--space-1); }
+.mp-rows { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-1); border-block-start: var(--stroke-hairline) solid var(--border); padding-block-start: var(--space-2); }
+.mp-rows li { font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
+
+/* ───── 마케팅 성과 panel ───── */
+.mp-block__inner { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.mp-block__label { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mp-block__value { display: block; min-width: 0; }
+.mp-block__delta, .mp-block__note, .mp-block__sub { font-size: var(--type-caption); line-height: var(--leading-caption); }
+.mp-block__note, .mp-block__sub { color: var(--muted-foreground); }
+.mp-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 200fr)) minmax(0, 269fr); column-gap: var(--space-4); align-items: start; }
+.mp-strip__blocks { display: contents; }
+.mp-strip__best { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; height: 100%; }
+.mp-strip__best .ui-panel-action-slot { margin-top: auto; }
+.mp-best__label { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mp-best__value { font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.mp-wblocks__blocks { display: grid; grid-template-columns: repeat(var(--mp-count, 2), minmax(0, 1fr)); gap: var(--space-4); }
+.mp-wblocks[data-count="1"] { --mp-count: 1; }
+.mp-wblocks[data-count="2"] { --mp-count: 2; }
+.mp-wblocks[data-count="3"] { --mp-count: 3; }
+.mp-metric-rows { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-1); }
+.mp-metric-rows li { display: flex; flex-direction: column; gap: 0; font-size: var(--type-body); line-height: var(--leading-body); border-block-end: var(--stroke-hairline) solid var(--border); padding-block-end: var(--space-1); }
+.mp-metric-rows li > span { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mp-grid__blocks { display: grid; grid-template-columns: repeat(var(--mp-cols, 2), minmax(0, 1fr)); gap: var(--space-3) var(--space-4); }
+.mp-grid[data-cols="4"] { --mp-cols: 4; }
+.mp-grid[data-cols="2"] { --mp-cols: 2; }
+.mp-routes { margin: 0; padding: var(--space-2) 0 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-1); border-block-start: var(--stroke-hairline) solid var(--border); }
+.mp-routes li { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.mp-routes__num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mp-best-line { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+
+/* ───── details ───── */
+.mp-detail { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.mp-perf__top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); outline: none; }
+.mp-perf__range { font-size: var(--type-control); line-height: var(--leading-control); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.mp-perf__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-4); }
+.mp-perf .ui-table tbody > tr { height: var(--table-row-min); }
+.mp-tablewrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+.mp-tablewrap__main { min-width: 0; max-width: 72rem; }
+/* DS 12.2 flow layout: the side panel is the second column of the route tab, 560 wide (large text too), and scrolls only its own body. */
+.mp-tablewrap:has(> .ui-detail-side-panel) { grid-template-columns: minmax(0, 1fr) var(--sidepanel-width); }
+.mp-tablewrap > .ui-detail-side-panel { position: relative; inset: auto; width: 100%; max-width: 100%; z-index: auto; }
+.mp-perf .ui-table col.mp-col--num { width: 9rem; }
+.mp-perf .ui-table col.mp-col--rate { width: 15rem; }
+.mp-perf .ui-table td[data-numeric="true"], .mp-perf .ui-table th[data-numeric="true"] { text-align: end; }
+.mp-perf .ui-table td[data-numeric="true"] .ui-rate-bar { justify-content: flex-end; }
+.mp-row--link { cursor: pointer; }
+.mp-perf .ui-table tbody th:has(> .mp-rowbtn) { padding: 0; }
+.mp-rowbtn { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); width: 100%; min-height: var(--table-row-min); border: 0; background: transparent; color: inherit; font: inherit; font-weight: var(--weight-semibold); padding: 0 var(--space-3); text-align: start; cursor: pointer; }
+.mp-rowbtn .ui-icon { width: 16px; height: 16px; flex: none; color: var(--muted-foreground); }
+.mp-rowbtn:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: calc(-1 * var(--stroke-focus)); }
+.mp-rowbtn[aria-expanded="true"] { color: var(--selection-foreground); }
+tr[data-selected="true"] { background: var(--selection); }
+.mp-total th, .mp-total td { font-weight: var(--weight-bold); }
+.mp-routelines ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-2); }
+.mp-routelines li { display: flex; flex-direction: column; gap: var(--space-1); min-height: 64px; }
+.mp-routelines__name { font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.mp-routelines__use { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+/* The kit UsageBar writes `3/10`; the direct label is the sentence beside it (`10장 중 3장 사용`). */
+.mp-routelines .ui-usage-bar__label { display: none; }
+.mp-routelines__count { font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-bold); white-space: nowrap; }
+
+/* the 영상 만들기 window: settings 36% | 9:16 preview | scenes and posting */
+.mp-win { display: grid; grid-template-columns: minmax(0, 36fr) auto minmax(0, 40fr); gap: var(--space-6); align-items: start; }
+@media (max-width: 1400px) { .mp-win { grid-template-columns: minmax(0, 1fr) auto; } .mp-win__right { grid-column: 1 / -1; } }
+.mp-win__left, .mp-win__center, .mp-win__right { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.mp-win__center { align-items: flex-start; }
+.mp-materials { display: flex; flex-direction: column; gap: var(--space-1); }
+.mp-photos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--space-3); }
+.mp-photo { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; }
+.mp-photo > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.mp-photo__why { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mp-thumb { flex: none; width: 48px; height: 48px; border-radius: var(--radius-md); overflow: hidden; border: var(--stroke-hairline) solid var(--border); background: var(--secondary); }
+.mp-thumb .mp-illustration { width: 100%; height: 100%; display: block; }
+.mp-summary { display: flex; flex-direction: column; gap: var(--space-2); }
+.mp-summary p { margin: 0; }
+.mp-frame-empty { display: flex; align-items: center; justify-content: center; max-width: 100%; padding: var(--space-4); text-align: center; border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--secondary); color: var(--muted-foreground); }
+.mp-frame-empty p { margin: 0; }
+.mp-player { display: flex; flex-direction: column; gap: var(--space-4); }
+.mp-player__scenes { max-width: 100%; }
+.mp-posted { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-weight: var(--weight-bold); color: var(--selection-foreground); }
+.mp-postedlist ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-1); }
+
+/* video template art: the picture sits above the opaque caption band; review cards are opaque */
+.mp-scene { position: absolute; inset: 0; }
+.mp-illustration { display: block; width: 100%; height: auto; }
+.mp-scene > .mp-illustration { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mp-scene__reviews { position: absolute; inset-inline: var(--space-3); top: 56px; display: flex; flex-direction: column; gap: var(--space-2); }
+.mp-scene__review { margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); border: var(--stroke-hairline) solid var(--border); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.mp-scene__tag { display: block; font-weight: var(--weight-bold); color: var(--mp-accent, var(--foreground)); }
+.mp-scene[data-template="warm-reviews"] { --mp-accent: var(--group-customers); }
+.mp-scene[data-template="lively-deal"] { --mp-accent: var(--group-recommend); }
+.mp-scene__ticket { position: absolute; left: 50%; top: 16%; width: 120px; height: 72px; margin-left: -60px; display: flex; align-items: center; justify-content: center; border: var(--stroke-control) dashed var(--mp-accent); border-radius: var(--radius-lg); background: var(--popover); color: var(--mp-accent); }
+.mp-scene__ticket .ui-icon { width: 32px; height: 32px; }
+.mp-scene__code { position: absolute; left: 50%; top: 68%; transform: translateX(-50%); margin: 0; padding: var(--space-1) var(--space-3); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); border: var(--stroke-control) solid var(--mp-accent); font-weight: var(--weight-bold); white-space: nowrap; }
+
+/* Whole rows are fitted by the panel's single transaction, at their natural height. */
+.mp-rows, .mp-metric-rows { flex: 0 0 auto; }
+.mp-rows[hidden], .mp-rows li[hidden], .mp-metric-rows li[hidden], .mp-routes li[hidden] { display: none; }
+.mp-trows, .mp-list { gap: var(--space-2); }
+.mp-trows > .ui-panel-action-slot, .mp-list > .ui-panel-action-slot { margin-top: 0; }
+/* 125%: the one-line sentence of a 1x1 slot uses body text so more content fits. */
+.ui-root[data-text-scale="125"] .mp-today[data-slots="1"][data-w="1"][data-h="1"] .mp-slot__text { font-size: var(--type-body); line-height: var(--leading-body); }
+.mp-wblocks { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-4); align-items: end; }
+.mp-wblocks > .ui-panel-action-slot { margin-top: 0; align-self: end; }
+.mp-wblocks > .mp-note { grid-column: 1 / -1; }
+.mp-wblocks:not([data-large="true"]) > .mp-wblocks__blocks { align-self: start; }
+/* 125% worst case (English, two-line title): a tighter line step keeps the button inside the panel; the font size never shrinks below body */
+.ui-root[data-text-scale="125"] .mp-today[data-h="1"] .mp-slot__text { line-height: 1.3; }
+.ui-root[data-text-scale="125"] .mp-today[data-h="1"] .mp-slot { gap: 0; }
+
+.mp-strip__top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
+.mp-strip__top .mp-note { display: contents; }
+
+/* T-063: key numbers keep 8px from their neighbours */
+.mp-q .mp-desc, .mp-trows .mp-desc, .mp-key + .mp-desc { margin-top: var(--space-1); }
+
+/* T-063: when the content box starts under the 48px help button (fit guard sets data-help-pad) the first line starts 8px lower. In edit mode the remove button ends at y 56 too, so key numbers get 16px. */
+.ui-panel-content[data-help-pad] .mp-root { padding-top: var(--space-2); }
+.ui-feature-panel[data-editing="true"] :is(.mp-q, .mp-trows, .mp-list) { padding-top: var(--space-4); }
+.ui-feature-panel[data-editing="true"] .mp-w { padding-top: var(--space-2); }
+
+/* State sentences keep their natural height (DS 12.14.1). */
+.mp-root .ui-panel-state__message { flex: 1 0 0; min-width: 0; }
+.mp-root .ui-panel-state__text { flex-shrink: 0; }
+.ui-root:not([data-text-scale="125"]) .mp-root[data-state="empty"], .ui-root:not([data-text-scale="125"]) .mp-root[data-state="error"] { padding-top: var(--space-2); }
+/* T-063: the last slot has no trailing padding (it only separates slots), so 1x1 at 125 % ends with the button, not 8px below it */
+.mp-today[data-layout="stack"] .mp-slot:last-child, .mp-today[data-layout="rows"] .mp-slot:last-child { padding-block-end: 0; }
+/* 100 %: the content box starts at y 49, so a key number in a W panel needs 16px to clear the remove button */
+.ui-root:not([data-text-scale="125"]) .ui-feature-panel[data-editing="true"] .mp-w { padding-top: var(--space-4); }
+
+/* The video flow panel shares the DS 4.4 edit body origin, even with a one-line title. */
+.ui-feature-panel[data-editing="true"] .ui-panel-content[data-help-pad] .pv-panel { padding-top: 0; }
+
+/* A single fit marker drops or restores every strip change together. */
+.mp-strip:has(.mp-strip__deltas[data-fit-hidden]) .mp-block__delta { display: none; }
+
+/* Keep Korean state messages together at word boundaries. */
+.mp-root[data-state] .ui-panel-state__message:lang(ko) { word-break: keep-all; overflow-wrap: normal; }
+
+/* DS 19.3 overrides the pre-handoff flow offsets. */
+.dashboard-screen .ui-panel-content .mp-root { padding-top:0; }
+.dashboard-screen .mp-block__label { margin:0; }
+.dashboard-screen .mp-strip .mp-block__inner { gap:0; }
+.dashboard-screen .mp-strip .mp-block__label { margin-top:var(--space-1); }
+.dashboard-screen .mp-strip .mp-block__delta { margin-top:calc(var(--space-1) / 2); }
+.dashboard-screen .mp-strip .mp-block__note { display:none; }
+.dashboard-screen .mp-strip .mp-best__value { font-size:var(--type-panel-title); line-height:var(--leading-panel-title); }
+.dashboard-screen .mp-q { display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-rows:auto auto; column-gap:var(--space-3); row-gap:var(--space-1); align-content:start; }
+.dashboard-screen .mp-q>.mp-block { display:contents; }
+.dashboard-screen .mp-q .mp-key { grid-column:1; grid-row:1; }
+.dashboard-screen .mp-q .mp-block__label { grid-column:1 / -1; grid-row:2; }
+.dashboard-screen .mp-q>.ui-panel-action-slot { grid-column:2; grid-row:1; align-self:center; margin:0; }
+.dashboard-screen .mp-today[data-h="1"] .mp-slot__second { display:none; }
+.dashboard-screen .mp-today[data-h="1"][data-w="4"] .mp-slot { gap:var(--space-1); }
+.dashboard-screen .mp-today[data-h="1"][data-w="4"] .mp-slot>.ui-panel-action-slot { margin-top:var(--space-2); }
+
+/* 오늘 할 홍보, one row (DS 12.15·19.3 "제목 아래 16"): the slots start 16 under the title instead of 40, so tag + sentence + button stay inside the card
+   at 100 % (title ends 56, slots start 72, the 48px help button ends 68) and at 125 % (title ends 63, slots start 71). Edit mode keeps the kit's own origin. */
+.dashboard-screen .ui-feature-panel:not([data-editing="true"]) .mp-today[data-h="1"] { margin-block-start: calc(var(--space-6) * -1); height: calc(100% + var(--space-6)); }
+.ui-root[data-text-scale="125"] .dashboard-screen .ui-feature-panel:not([data-editing="true"]) .mp-today[data-h="1"] { margin-block-start: calc(var(--space-4) * -1); height: calc(100% + var(--space-4)); }

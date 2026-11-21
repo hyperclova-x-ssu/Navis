@@ -1,0 +1,129 @@
+/* mkt-coupon (T-059): layout of the four coupon widgets. Tokens only; kit components keep their own styles. */
+.mkt-panel { min-width: 0; display: contents; }
+/* W: the left column (K + description) spans both rows so the action in the right column does not shorten it (DS 11.9.1) */
+.mkt-panel .ui-panel-body[data-shape="W"] .ui-panel-primary { grid-row: 1 / span 2; }
+.mkt-kpi { display: block; max-width: 100%; }
+.mkt-desc { margin: var(--space-1) 0 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mkt-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--foreground); }
+.mkt-rows li { min-width: 0; overflow-wrap: anywhere; }
+.mkt-rows li[data-paused="true"] { color: var(--muted-foreground); }
+.mkt-note { display: grid; gap: var(--space-1); font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mkt-note p { margin: 0; }
+
+/* M-27 highlight: the changed value's fill is on for 800 ms (120 ms fade, none under reduced motion). */
+.mkt-live { display: block; min-width: 0; }
+.mkt-live > *, .mkt-live-inline { border-radius: var(--radius-sm); transition: background-color var(--motion-duration-form) var(--motion-ease-out); }
+.mkt-live[data-changed="true"] > *, .mkt-live-inline[data-changed="true"] { background-color: var(--selection); }
+[data-reduced-motion="true"] .mkt-live > *, [data-reduced-motion="true"] .mkt-live-inline { transition: none; }
+@media (prefers-reduced-motion: reduce) { .mkt-live > *, .mkt-live-inline { transition: none; } }
+
+/* detail: 54 / 46 two columns that stay two columns at the large frame width; the body scrolls, not the page */
+.mkt-detail { display: block; min-width: 0; color: var(--foreground); }
+.mkt-detail h2, .mkt-detail .mkt-h2 { margin: 0 0 var(--space-2); font-size: var(--type-control); line-height: var(--leading-control); font-weight: var(--weight-bold); }
+.mkt-detail h3 { margin: 0 0 var(--space-2); font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-bold); }
+.mkt-detail section { margin: 0 0 var(--space-6); }
+.mkt-detail p { margin: 0; overflow-wrap: anywhere; }
+.mkt-columns { display: grid; grid-template-columns: minmax(0, 54fr) minmax(0, 46fr); gap: var(--space-6); align-items: start; }
+.mkt-col-main, .mkt-col-side { min-width: 0; display: grid; gap: var(--space-2); align-content: start; }
+.mkt-col-side > * { min-width: 0; }
+.mkt-col-side .ui-button, .mkt-col-main .ui-button { justify-self: start; max-width: 100%; }
+.mkt-summary dl, .mkt-confirm dl { margin: 0; display: grid; gap: var(--space-1); }
+.mkt-summary dl > div, .mkt-confirm dl > div { display: flex; gap: var(--space-4); justify-content: space-between; border-bottom: var(--stroke-hairline) solid var(--border); padding-block: var(--space-1); }
+.mkt-summary dt, .mkt-confirm dt { color: var(--muted-foreground); }
+.mkt-summary dd, .mkt-confirm dd { margin: 0; font-weight: var(--weight-bold); text-align: end; overflow-wrap: anywhere; }
+.mkt-slot-send-options { display: grid; gap: var(--space-6); }
+.mkt-slot-send-options .mkt-summary dl { gap: 0; }
+.mkt-slot-send-options .mkt-summary dl > div { min-height: var(--table-row-min); align-items: center; border-bottom: 0; }
+.mkt-slot-send-options .mkt-summary dl > div + div { border-block-start: var(--stroke-hairline) solid var(--border); }
+/* 당일 소진 쿠폰: one benefit = a segmented choice, one value field, then the money summary and the limit line. */
+.mkt-benefit { display: grid; gap: var(--space-3); }
+.mkt-benefit .ui-field__control { max-width: 24em; }
+.mkt-benefit .ui-discount-summary { display: grid; gap: var(--space-1); }
+.mkt-reason { display: flex; gap: var(--space-2); align-items: flex-start; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mkt-reason[role="alert"] { color: var(--destructive); }
+.mkt-hint, .mkt-limit, .mkt-formula, .mkt-recommend, .mkt-basis { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mkt-limit { display: flex; gap: var(--space-2); color: var(--foreground); }
+.mkt-recommend { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-top: var(--space-2); }
+.mkt-all-done { display: flex; gap: var(--space-2); align-items: center; font-weight: var(--weight-bold); }
+.mkt-items { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.mkt-sent ul, .mkt-ended ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.mkt-sms-fixed__body { padding-block: var(--space-2); font-size: var(--type-body); line-height: var(--leading-body); }
+.mkt-sms-help {
+  display: block;
+  margin-block-start: var(--space-1);
+  font-size: var(--type-caption);
+  line-height: var(--leading-caption);
+  color: var(--muted-foreground);
+}
+.mkt-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.mkt-post .ui-copy-posted { max-width: 100%; }
+.mkt-confirm h3:focus { outline: none; }
+.mkt-detail-state { display: grid; gap: var(--space-4); justify-items: start; }
+.mkt-detail-state p { display: flex; gap: var(--space-2); align-items: flex-start; }
+.mkt-detail-state[data-tone="error"] p { color: var(--destructive); }
+
+/* 진행 중인 쿠폰 */
+.mkt-status-head { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: center; margin-bottom: var(--space-4); }
+.mkt-status-count { font-size: var(--type-heading); line-height: var(--leading-heading); font-weight: var(--weight-heading); }
+.mkt-status-ending { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+.mkt-status-spacer { flex: 1 1 0; }
+.mkt-notify { border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4); display: grid; gap: var(--space-2); max-width: 640px; }
+.mkt-table { width: 100%; border-collapse: collapse; }
+.mkt-table th, .mkt-table td { text-align: start; vertical-align: middle; padding: var(--space-2) var(--space-2); border-bottom: var(--stroke-hairline) solid var(--border); min-height: 64px; }
+.mkt-table tbody tr { height: 64px; }
+/* A2·A11: the coupon name takes the free width; usage, days left and the buttons hug their content, numbers and their headers on the right. */
+.mkt-table th:not(:first-child), .mkt-table td:not(:first-child) { width: 1%; white-space: nowrap; }
+.mkt-table :is(th, td):is(:nth-child(2), :nth-child(3)) { text-align: end; font-variant-numeric: tabular-nums; }
+.mkt-table td:last-child .mkt-actions { flex-wrap: nowrap; justify-content: flex-end; }
+.mkt-detail .mkt-no-ending { margin-bottom: var(--space-4); }
+.mkt-table tr[data-paused="true"] { color: var(--muted-foreground); background: var(--muted); }
+.mkt-coupon-name { display: block; font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.mkt-ended { margin-top: var(--space-4); }
+.mkt-ended summary::before { content: '▸'; display: inline-block; width: 1.25em; }
+.mkt-ended[open] summary::before { content: '▾'; }
+.mkt-ended summary { min-height: var(--target-default); display: flex; align-items: center; cursor: pointer; font-weight: var(--weight-bold); }
+.mkt-identity { margin-top: var(--space-4) !important; font-weight: var(--weight-bold); }
+
+/* 손님 그룹 */
+.mkt-group-panel { display: grid; gap: var(--space-2); padding-top: var(--space-4); }
+.mkt-reach-out-form { display: grid; gap: var(--space-6); }
+.mkt-reach-out-actions { display: grid; gap: var(--space-4); }
+/* A11: name | last visit and cycle | consent hug each other with the same widths in every row (subgrid); the free width ends up at the end of the row, not in the middle. */
+.mkt-customers { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: max-content minmax(0, max-content) max-content minmax(0, 1fr); column-gap: var(--space-6); }
+.mkt-customers li { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; min-height: 64px; border-bottom: var(--stroke-hairline) solid var(--border); }
+.mkt-customers__name { font-weight: var(--weight-bold); min-width: 5em; }
+.mkt-customers__meta { color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.mkt-none { display: grid; gap: var(--space-4); justify-items: start; }
+.mkt-detail-state .mkt-detail-state__next { color: var(--muted-foreground); }
+
+/* T-063: in edit mode the remove button ends 8px above the content box; the key number keeps 8px clearance from it */
+.ui-feature-panel[data-editing="true"] .mkt-kpi { margin-top: var(--space-4); }
+
+/* State sentences keep their natural height (DS 12.14.1). */
+.ui-root:not([data-text-scale="125"]) .mkt-state { padding-top: var(--space-2); }
+.mkt-state .ui-panel-state__message { flex: 1 0 0; min-width: 0; }
+.mkt-state .ui-panel-state__text { flex-shrink: 0; }
+.mkt-panel [data-fit-hidden] { display: none !important; }
+.ui-root[data-text-scale="125"] .mkt-panel .ui-panel-body[data-shape="Q"] > .ui-panel-action-area { margin-top: 0; }
+
+/* Keep Korean state messages together at word boundaries. */
+.mkt-state .ui-panel-state__message:lang(ko) { word-break: keep-all; overflow-wrap: normal; }
+
+.mkt-panel > .ui-panel-body .mkt-label { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+:lang(ko) .mkt-sms-preview .ui-sms-preview__line { display: none; }
+
+/* DS 19.3: K + unit, then L; Q shares the number line with the opaque action. */
+.dashboard-screen .mkt-number-row { display:flex; align-items:center; gap:var(--space-3); min-width:0; }
+.dashboard-screen .mkt-number-row>.mkt-live { flex:1; min-width:0; }
+.dashboard-screen .mkt-number-row>.ui-panel-action-slot { flex:none; margin:0; }
+.dashboard-screen .mkt-panel .ui-panel-primary { display:flex; flex-direction:column; gap:var(--space-1); }
+.dashboard-screen .mkt-panel .mkt-desc { margin:0; }
+.dashboard-screen .mkt-panel .ui-panel-body[data-shape="Q"] { display:block; }
+.dashboard-screen .mkt-panel .ui-panel-body[data-shape="W"] { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:minmax(0,1fr) var(--panel-action-height); gap:var(--space-3) var(--space-6); }
+.dashboard-screen .mkt-panel .ui-panel-body[data-shape="W"]>.ui-panel-primary { grid-column:1; grid-row:1 / 3; }
+.dashboard-screen .mkt-panel .ui-panel-body[data-shape="W"]>.ui-panel-secondary { grid-column:2; grid-row:1; }
+.dashboard-screen .mkt-panel .ui-panel-body[data-shape="W"]>.ui-panel-action-area { grid-column:2; grid-row:2; justify-self:start; }
+.dashboard-screen .mkt-panel:is([data-width="3"],[data-width="4"]) .ui-panel-body[data-shape="W"] { grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; grid-template-rows:minmax(0,1fr); }
+.dashboard-screen .mkt-panel:is([data-width="3"],[data-width="4"]) .ui-panel-body[data-shape="W"]>.ui-panel-primary { grid-row:1; }
+.dashboard-screen .mkt-panel:is([data-width="3"],[data-width="4"]) .ui-panel-body[data-shape="W"]>.ui-panel-action-area { grid-column:3; grid-row:1; }
+.dashboard-screen .ui-feature-panel[data-editing="true"] .mkt-kpi { margin-top:0; }
