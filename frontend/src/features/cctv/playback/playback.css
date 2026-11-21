@@ -1,0 +1,97 @@
+.cctv-playback {
+  --det-person:#A9C5EF; --det-cup:#F1D17E; --det-seated:#9CE3B5; --det-empty:#B9BABE; --det-clear:#F19CA3; --det-halo:#000;
+  --det-chip-bg:#171719; --det-chip-fg:#F2F2F4;
+  display:flex; flex-direction:column; gap:var(--space-4); color:var(--foreground); font-family:var(--font-system); min-width:0;
+}
+.cctv-playback h3 { margin:0; font-size:var(--type-panel-title); line-height:var(--leading-panel-title); }
+.cctv-estimate, .cctv-caption, .cctv-fake { margin:0; color:var(--muted-foreground); font-size:var(--type-body); line-height:var(--leading-body); }
+.cctv-tag { color:var(--muted-foreground); font-size:var(--type-caption); font-weight:var(--weight-regular); }
+/* T-079 (D-391, round 2): the picture is as tall as the detail body allows with the controls row still in view (height cap = canvas height − --cctv-chrome: dialog inset, header, padding, one controls row), width = height × 16/9; the numbers column takes ALL the width that is left (at least 320px), so no empty strip at the right. The app draws on a fixed canvas scaled to the window, so the canvas height is the unit. Same rule for mock, live, setup and the zone editor (SCREENS 9.3). */
+.cctv-stage-row, .cc-detail { --cctv-chrome:408px; --cctv-now-w:320px; --cctv-cap:calc((var(--canvas-height, 100dvh) - var(--cctv-chrome)) * 16 / 9); }
+.cctv-stage-row { display:grid; grid-template-columns:minmax(0, min(calc(100% - var(--cctv-now-w) - var(--space-8)), max(var(--cctv-cap), 480px))) minmax(var(--cctv-now-w), 1fr); gap:var(--space-8); align-items:start; }
+.cctv-side { display:flex; flex-direction:column; gap:var(--space-3); min-width:0; }
+@media (max-width: 900px) { .cctv-stage-row { grid-template-columns:minmax(0,1fr); } .cctv-stage-col { max-width:max(var(--cctv-cap), 480px); } }
+.ui-root[data-text-scale="125"] .cctv-stage-row, .ui-root[data-text-scale="125"] .cc-detail { --cctv-chrome:390px; }
+.ui-root[data-screen-preset="B"] .cctv-stage-row, .ui-root[data-screen-preset="B"] .cc-detail { --cctv-chrome:422px; }
+.ui-root[data-screen-preset="B"][data-text-scale="125"] .cctv-stage-row, .ui-root[data-screen-preset="B"][data-text-scale="125"] .cc-detail { --cctv-chrome:404px; }
+.cctv-stage-col { min-width:0; position:relative; }
+.cctv-stage, .cctv-fallback { position:relative; width:100%; aspect-ratio:16/9; border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; background:#171719; }
+.cctv-stage:focus-visible { outline:var(--stroke-focus) solid var(--ring); outline-offset:var(--focus-offset); }
+.cctv-video { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+.cctv-overlay { position:absolute; pointer-events:none; }
+.cctv-overlay svg { position:absolute; inset:0; width:100%; height:100%; }
+.cctv-box, .cctv-box-halo, .cctv-zone, .cctv-zone-halo { vector-effect:non-scaling-stroke; }
+.cctv-box { fill:none; stroke-width:2; }
+.cctv-box-halo { fill:none; stroke:var(--det-halo); stroke-width:4; }
+.cctv-box--person { stroke:var(--det-person); }
+.cctv-box--cup { stroke:var(--det-cup); }
+.cctv-zone-halo { fill:none; stroke:var(--det-halo); stroke-width:4; }
+.cctv-zone { stroke-width:2; }
+.cctv-zone--occupied { stroke:var(--det-seated); fill:color-mix(in srgb, var(--det-seated) 16%, transparent); }
+.cctv-zone--empty { stroke:var(--det-empty); fill:color-mix(in srgb, var(--det-empty) 16%, transparent); stroke-dasharray:6 4; }
+.cctv-zone--clear { stroke:var(--det-clear); fill:color-mix(in srgb, var(--det-clear) 16%, transparent); stroke-width:3; stroke-dasharray:8 4; }
+.cctv-zone-label { position:absolute; padding:2px 6px; border-radius:4px; background:var(--det-chip-bg); color:var(--det-chip-fg); font-size:14px; line-height:18px; font-weight:700; white-space:nowrap; }
+.cctv-skeleton, .cctv-box-error { position:absolute; left:0; right:0; bottom:0; padding:var(--space-3) var(--space-4); background:var(--det-chip-bg); color:var(--det-chip-fg); font-size:var(--type-body); }
+.cctv-skeleton { inset:0; display:flex; align-items:center; justify-content:center; bottom:auto; height:100%; }
+.cctv-box-error { display:flex; gap:var(--space-3); align-items:center; flex-wrap:wrap; }
+.cctv-fallback { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--space-2); background:var(--muted); text-align:center; padding:var(--space-4); }
+.cctv-fallback p { margin:0; font-size:var(--type-body); }
+.cctv-fallback .cctv-fallback__title { font-size:var(--type-panel-title); font-weight:var(--weight-bold); }
+.cctv-now { background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:var(--space-4); display:flex; flex-direction:column; gap:var(--space-2); min-width:0; }
+.cctv-now p { margin:0; font-variant-numeric:tabular-nums; }
+.cctv-now__main strong { font-size:var(--type-metric); line-height:var(--leading-metric); font-weight:var(--weight-metric); margin-right:4px; }
+.cctv-now__label, .cctv-now__row span { color:var(--muted-foreground); margin-right:var(--space-3); font-size:var(--type-body); }
+.cctv-now__row strong { font-size:var(--type-section); line-height:var(--leading-section); }
+.cctv-now__time { color:var(--muted-foreground); font-size:var(--type-caption); }
+.cctv-now__states summary { min-height:48px; display:flex; align-items:center; cursor:pointer; font-size:var(--type-body); }
+.cctv-now__states ul { margin:0; padding-left:var(--space-5); font-size:var(--type-body); }
+.cctv-controls { display:flex; flex-wrap:wrap; gap:var(--space-3); align-items:center; }
+.cctv-btn { min-height:48px; min-width:48px; padding:0 var(--space-4); border:1px solid var(--input); border-radius:var(--radius-md); background:var(--secondary); color:var(--secondary-foreground); font:inherit; font-size:var(--type-control); cursor:pointer; }
+.cctv-btn:active:not(:disabled) { background:var(--accent); }
+.cctv-btn--small { min-height:40px; }
+.cctv-clock { font-variant-numeric:tabular-nums; font-size:var(--type-caption); color:var(--muted-foreground); }
+.cctv-switch { min-height:48px; display:inline-flex; align-items:center; gap:var(--space-2); padding:0 var(--space-2); border:0; background:none; color:inherit; font:inherit; font-size:var(--type-control); cursor:pointer; }
+.cctv-switch__box { width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; border:2px solid var(--input); border-radius:var(--radius-sm); }
+.cctv-switch[aria-checked="true"] .cctv-switch__box { background:var(--selection); color:var(--selection-foreground); border-color:var(--selection-foreground); }
+.cctv-why { color:var(--disabled-foreground); font-size:var(--type-caption); }
+.cctv-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+.cctv-legend { list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:var(--space-2) var(--space-4); font-size:var(--type-caption); }
+.cctv-legend li { display:inline-flex; align-items:center; gap:var(--space-2); }
+.cctv-swatch { width:24px; height:16px; border-radius:4px; background:#171719; border:2px solid; box-sizing:border-box; }
+.cctv-swatch--person { border-color:var(--det-person); } .cctv-swatch--cup { border-color:var(--det-cup); }
+.cctv-swatch--occupied { border-color:var(--det-seated); } .cctv-swatch--empty { border-color:var(--det-empty); border-style:dashed; }
+.cctv-swatch--clear { border-color:var(--det-clear); border-width:3px; border-style:dashed; }
+
+/* Panel video (DESIGN_SYSTEM 11.6, API-13 v4.1). Filter only on the video, never on the boxes. */
+.panel-video { --det-person:#A9C5EF; --det-cup:#F1D17E; --det-empty:#B9BABE; --det-halo:#000; position:relative; width:100%; height:100%; overflow:hidden; background:#171719; pointer-events:none; }
+.panel-video__media { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; filter:brightness(0.88) contrast(0.92); }
+[data-theme="dark"] .panel-video__media { filter:brightness(0.92) contrast(0.95); }
+
+.panel-video .cctv-box { stroke-width:1; } .panel-video .cctv-box-halo { stroke-width:2; }
+.cctv-btn:disabled, .cctv-switch:disabled { color:var(--disabled-foreground); cursor:not-allowed; }
+.cctv-btn:focus-visible, .cctv-switch:focus-visible { outline:var(--stroke-focus) solid var(--ring); outline-offset:var(--focus-offset); }
+.panel-video__media { pointer-events:none; }
+
+/* Controls: position slider, repeat, disabled reason */
+.cctv-slider { flex:1 1 160px; min-width:120px; min-height:48px; margin:0; accent-color:var(--selection-foreground); cursor:pointer; }
+.cctv-slider:disabled { cursor:not-allowed; }
+.cctv-slider:focus-visible { outline:var(--stroke-focus) solid var(--ring); outline-offset:var(--focus-offset); }
+.cctv-fallback__icon { font-size:var(--type-metric); line-height:1; color:var(--muted-foreground); }
+
+/* Stay charts (SCR-346 mock): direct labels, bar colour is not the only cue */
+.cctv-charts { display:grid; grid-template-columns:minmax(0,60fr) minmax(0,40fr); gap:var(--space-8); }
+@media (max-width: 900px) { .cctv-charts { grid-template-columns:minmax(0,1fr); } }
+.cctv-chart { display:flex; flex-direction:column; gap:var(--space-2); min-width:0; }
+.cctv-bars { list-style:none; margin:0; padding:0; font-variant-numeric:tabular-nums; font-size:var(--type-caption); }
+.cctv-bars--col { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:var(--space-3); align-items:end; }
+.cctv-bars--col li { display:flex; flex-direction:column; align-items:center; gap:var(--space-1); }
+.cctv-bars--col .cctv-bar__track { width:100%; height:120px; display:flex; align-items:flex-end; }
+.cctv-bars--col .cctv-bar__fill { width:100%; border-radius:4px 4px 0 0; }
+.cctv-bars--row { display:flex; flex-direction:column; gap:var(--space-3); }
+.cctv-bars--row li { display:grid; grid-template-columns:minmax(0,auto) minmax(40px,1fr) auto; gap:var(--space-3); align-items:center; }
+.cctv-bars--row .cctv-bar__track { height:16px; }
+.cctv-bar__track { background:var(--muted); border-radius:4px; overflow:hidden; }
+.cctv-bars--col .cctv-bar__track { background:none; }
+.cctv-bar__fill { display:block; background:var(--chart-4); height:100%; min-height:2px; }
+.cctv-bars--row .cctv-bar__fill { height:100%; border-radius:4px; }
+.cctv-bar__name { color:var(--muted-foreground); }

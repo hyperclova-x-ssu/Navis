@@ -1,0 +1,31 @@
+.cs-stage { display: block; width: 100%; }
+.cs-picture { position: relative; width: 100%; background: var(--muted, #000); border-radius: var(--radius-lg, 8px); overflow: hidden; }
+.cs-canvas { display: block; width: 100%; height: auto; }
+.cs-empty { width: 100%; }
+.cs-chip { position: absolute; left: 50%; top: var(--space-3, 12px); transform: translateX(-50%); padding: var(--space-2, 8px) var(--space-3, 12px); border-radius: var(--radius-md, 6px); background: rgba(0, 0, 0, .72); color: #fff; font-weight: 700; pointer-events: none; }
+.cs-stats { margin: var(--space-2, 8px) 0 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground, inherit); }
+/* T-079: in the detail the latency line is a chip on the picture, so it takes no height from it. */
+
+.cs-stage--detail .cs-stats { position: absolute; left: var(--space-2, 8px); bottom: var(--space-2, 8px); margin: 0; padding: 2px 8px; border-radius: 4px; background: rgba(0, 0, 0, .7); color: #fff; pointer-events: none; }
+
+.cs-setup { display: flex; flex-direction: column; gap: var(--space-3, 12px); width: 100%; }
+.cs-steps { display: flex; gap: var(--space-4, 16px); list-style: none; margin: 0; padding: 0; min-height: 48px; align-items: center; }
+.cs-step { font-size: 16px; color: var(--muted-foreground, inherit); display: inline-flex; gap: var(--space-2, 8px); align-items: center; }
+.cs-step[aria-current="step"] { font-weight: 700; color: var(--foreground); text-decoration: underline; text-underline-offset: 6px; }
+.cs-step[data-done="true"]::before { content: "✓"; font-weight: 700; }
+.cs-card { display: flex; flex-wrap: wrap; gap: var(--space-6, 32px); align-items: center; padding: var(--space-6, 32px); background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg, 8px); min-height: 280px; }
+.cs-qr { flex: none; width: 280px; height: 280px; padding: 16px; background: #fff; border-radius: var(--radius-md, 6px); box-sizing: content-box; }
+.cs-qr img { display: block; width: 280px; height: 280px; }
+.cs-qr--skeleton { background: var(--muted); animation: cs-pulse 1.2s ease-in-out infinite; }
+.cs-qr--expired { display: flex; align-items: center; justify-content: center; background: var(--muted); color: var(--foreground); text-align: center; font-weight: 700; width: 280px; }
+.cs-qr--gone { opacity: 0; transition: opacity 80ms linear; }
+.cs-side { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: var(--space-3, 12px); }
+.cs-guide { margin: 0; font-size: 20px; font-weight: 700; }
+.cs-guide:focus { outline: none; }
+.cs-line { margin: 0; }
+.cs-small { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3, 12px); font-size: var(--type-body); line-height: var(--leading-body); color: var(--muted-foreground, inherit); }
+.cs-code { font-family: ui-monospace, monospace; letter-spacing: .2em; font-weight: 700; font-size: 18px; color: var(--foreground); }
+.cs-verify { position: relative; }
+.cs-ok { margin: var(--space-2, 8px) 0 0; font-weight: 700; }
+@keyframes cs-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .cs-qr--skeleton { animation: none; } .cs-qr--gone { transition: none; } }

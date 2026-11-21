@@ -1,0 +1,76 @@
+/* T-073 SCR-349 zone editor. DS 13.1 detection tokens are declared here (not in the kit) with the cnn values; a kit token wins if one is defined later. */
+.cz-editor {
+  --cz-suggest: var(--det-suggest, #F1D17E);
+  --cz-zone: var(--det-zone, #9CE3B5);
+  --cz-eraser: var(--det-eraser, #FFFFFF);
+  --cz-halo: var(--det-halo, #000);
+  --cz-chip-bg: var(--det-chip-bg, #171719);
+  --cz-chip-fg: var(--det-chip-fg, #F2F2F4);
+  display: flex; flex-direction: column; gap: var(--space-3); min-width: 0;
+}
+.cz-guide { display: grid; gap: var(--space-2); padding: var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--card); color: var(--card-foreground); }
+.cz-guide__title { margin: 0; font-weight: var(--weight-bold); }
+.cz-guide__row { display: flex; gap: var(--space-2); align-items: center; margin: 0; }
+.cz-guide__actions { display: flex; justify-content: flex-end; }
+
+.cz-stage { position: relative; width: 100%; overflow: hidden; border-radius: var(--radius-lg); background: #000; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: crosshair; outline-offset: 2px; }
+.cz-stage[data-tool="erase"] { cursor: none; }
+.cz-stage__bg { position: absolute; inset: 0; pointer-events: none; }
+.cz-stage__bg > * { width: 100%; height: 100%; object-fit: contain; display: block; }
+.cz-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.cz-layer--suggest { animation: cz-fade-in 120ms linear; }
+
+.cz-zone__halo { fill: none; stroke: var(--cz-halo); stroke-width: 4px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.cz-zone__line { fill: none; stroke-width: 2px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.cz-zone[data-adopted="false"] .cz-zone__line { stroke: var(--cz-suggest); stroke-dasharray: 8 6; }
+.cz-zone[data-adopted="false"] .cz-zone__halo { stroke-dasharray: 8 6; }
+.cz-zone[data-adopted="true"] .cz-zone__line { stroke: var(--cz-zone); }
+.cz-zone__fill { fill: transparent; stroke: none; }
+.cz-zone[data-adopted="true"] .cz-zone__fill { fill: var(--cz-zone); fill-opacity: .16; animation: cz-fill-in 80ms linear; }
+.cz-zone[data-selected="true"] .cz-zone__line, .cz-zone[data-pressed="true"] .cz-zone__line { stroke-width: 3px; }
+.cz-zone[data-selected="true"] .cz-zone__halo, .cz-zone[data-pressed="true"] .cz-zone__halo { stroke-width: 5px; }
+.cz-path { fill: none; stroke: var(--cz-zone); stroke-width: 2px; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+.cz-path--halo { stroke: var(--cz-halo); stroke-width: 4px; }
+
+.cz-chip { position: absolute; transform: translateY(calc(-100% - 2px)); padding: 0 var(--space-1); border-radius: 4px; background: var(--cz-chip-bg); color: var(--cz-chip-fg); font-size: 14px; line-height: 20px; font-weight: 700; white-space: nowrap; pointer-events: none; }
+.cz-delete { position: absolute; transform: translate(-50%, -50%); z-index: 1; }
+.cz-status-chip { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--cz-chip-bg); color: var(--cz-chip-fg); font-weight: 700; pointer-events: none; }
+.cz-status-chip--top { top: var(--space-3); transform: translate(-50%, 0); }
+.cz-spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; }
+
+.cz-ring { position: absolute; width: 56px; height: 56px; transform: translate(-50%, -50%); pointer-events: none; }
+.cz-ring circle { fill: none; stroke-width: 4px; }
+.cz-ring__halo { stroke: var(--cz-halo); stroke-width: 6px !important; }
+.cz-ring__fill { stroke: var(--cz-zone); stroke-dasharray: 151 151; stroke-dashoffset: 151; transform: rotate(-90deg); transform-origin: 50% 50%; animation: cz-ring 500ms linear forwards; }
+.cz-ring[data-suggest="true"] .cz-ring__fill { stroke: var(--cz-suggest); }
+.cz-hold-caption { position: absolute; transform: translate(-50%, 36px); padding: 0 var(--space-2); border-radius: 4px; background: var(--cz-chip-bg); color: var(--cz-chip-fg); font-size: 14px; font-weight: 700; pointer-events: none; white-space: nowrap; }
+
+.cz-eraser { position: absolute; width: 36px; height: 36px; transform: translate(-50%, calc(-50% - 24px)); border-radius: 50%; border: 2px solid var(--cz-eraser); box-shadow: 0 0 0 1px var(--cz-halo), inset 0 0 0 1px var(--cz-halo); pointer-events: none; }
+
+.cz-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.cz-toolbar .ui-button { min-height: 56px; }
+.cz-toolbar__spacer { flex: 1; }
+.cz-summary { margin: 0; font-size: var(--type-caption, 14px); color: var(--muted-foreground); }
+.cz-notice { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--popover); color: var(--popover-foreground); border: var(--stroke-hairline) solid var(--border); box-shadow: var(--shadow-floating); animation: cz-fade-in 160ms var(--motion-ease-out, ease-out); }
+.cz-error { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-md); border: var(--stroke-hairline) solid var(--destructive, #B3261E); color: var(--foreground); }
+.cz-list summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; }
+.cz-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.cz-list li { display: flex; align-items: center; gap: var(--space-2); min-height: 48px; }
+.cz-list li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cz-icon { width: 20px; height: 20px; flex: none; }
+
+@keyframes cz-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cz-fill-in { from { fill-opacity: 0; } to { fill-opacity: .16; } }
+@keyframes cz-ring { to { stroke-dashoffset: 0; } }
+
+.cz-editor[data-reduced="true"] *, .cz-editor[data-reduced="true"] *::before { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) { .cz-editor * { animation: none !important; transition: none !important; } }
+/* T-079 (D-391): the drawing picture is as big as fits with the toolbar still in view. --cz-chrome = everything else in the detail (dialog, steps, toolbar, hints); the first-time guide card (+~190px) and 125% text (+~60px) add to it. Canvas height is the unit (the app draws on a scaled fixed canvas). */
+.cz-editor { --cz-chrome: 515px; }
+.cz-editor:has(.cz-guide) { --cz-chrome: 705px; }
+.ui-root[data-text-scale="125"] .cz-editor { --cz-chrome: 600px; }
+.ui-root[data-text-scale="125"] .cz-editor:has(.cz-guide) { --cz-chrome: 820px; }
+.cz-stage { max-width: max(calc((var(--canvas-height, 100dvh) - var(--cz-chrome)) * 16 / 9), 480px); margin-inline: auto; }
+/* preset B (2368×1248 detail) has a taller dialog frame around the same content */
+.ui-root[data-screen-preset="B"] .cz-editor { --cz-chrome: 525px; }
+.ui-root[data-screen-preset="B"] .cz-editor:has(.cz-guide) { --cz-chrome: 770px; }
