@@ -1,0 +1,167 @@
+/* T-050 mgmt-store widgets: tokens only (DS 11), no raw colors outside the drawn art. */
+.mgmt-primary { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.mgmt-label { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mgmt-value { min-width: 0; }
+.mgmt-sub { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mgmt-primary[data-text-value="true"] { gap: var(--space-2); }
+.mgmt-primary[data-text-value="true"] .ui-metric-fit { white-space: normal; max-width: 100%; }
+.mgmt-primary[data-text-value="true"] .ui-metric-fit__value { white-space: normal; overflow-wrap: anywhere; }
+
+.mgmt-list { min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.mgmt-list__title { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mgmt-rows { list-style: none; margin: 0; padding: 0; }
+.mgmt-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); min-height: var(--space-8); border-top: var(--stroke-hairline) solid var(--border); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.mgmt-row:first-child { border-top: 0; }
+.mgmt-row__name { min-width: 0; overflow-wrap: anywhere; }
+.mgmt-row__sub { display: block; color: var(--muted-foreground); }
+.mgmt-row__value { flex: none; white-space: nowrap; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+
+.mgmt-bars { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); align-items: end; gap: var(--space-1); height: 96px; max-height: 100%; }
+.mgmt-bar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: var(--space-1); height: 100%; min-width: 0; font-size: var(--type-caption); line-height: var(--leading-caption); }
+.mgmt-bar__fill { display: block; width: 100%; border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--chart-2); min-height: 4px; }
+.mgmt-bar[data-help="true"] .mgmt-bar__fill { background: var(--chart-1); }
+.mgmt-bar__num { font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.mgmt-bar__label { color: var(--muted-foreground); }
+
+.mgmt-state { min-width: 0; flex: none; }
+.mgmt-status { margin: 0; min-height: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mgmt-status:empty { display: none; }
+
+.mgmt-scene { width: 100%; min-height: 0; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-md); border: var(--stroke-hairline) solid var(--border); background: var(--card); overflow: hidden; }
+.mgmt-scene .mgmt-art { width: 100%; height: auto; max-height: 100%; display: block; }
+.ui-panel-workspace { min-height: 0; }
+.ui-panel-workspace .mgmt-scene { height: 100%; max-height: 100%; }
+.ui-panel-workspace .mgmt-art { width: 100%; height: 100%; max-height: 100%; }
+.mgmt-scene--large { flex: 1 1 auto; }
+.mgmt-photos { display: flex; gap: var(--space-3); }
+.mgmt-photo { width: 120px; height: auto; border-radius: var(--radius-md); border: var(--stroke-hairline) solid var(--border); }
+
+.mgmt-plan__room { fill: var(--card); stroke: var(--muted-foreground); stroke-width: 2; }
+.mgmt-plan__window { stroke: var(--chart-1); stroke-width: 8; fill: none; }
+.mgmt-plan__aisle { fill: var(--muted); }
+.mgmt-plan__aisle[data-warning="true"] { fill: var(--warning-bg); stroke: var(--warning); stroke-width: 3; stroke-dasharray: 10 6; }
+.mgmt-plan__table { fill: var(--background); stroke: var(--muted-foreground); stroke-width: 2; }
+.mgmt-plan__text { font-size: 24px; fill: var(--foreground); }
+.mgmt-plan__aisle-text { fill: var(--muted-foreground); }
+
+/* detail bodies */
+.mgmt-detail { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.mgmt-kpis { display: flex; flex-wrap: wrap; gap: var(--space-6); }
+.mgmt-kpi { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-1) var(--space-2); border-radius: var(--radius-md); }
+.mgmt-kpi__label { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mgmt-kpi__value { margin: 0; font-size: var(--type-display); line-height: var(--leading-display); font-weight: var(--weight-metric); letter-spacing: var(--tracking-display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mgmt-kpi__value--text { font-size: var(--type-heading); line-height: var(--leading-heading); }
+.mgmt-workspace__side .mgmt-kpi__value { font-size: var(--type-heading); line-height: var(--leading-heading); }
+.mgmt-lead { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); }
+.mgmt-two-col { display: grid; grid-template-columns: minmax(0, 58fr) minmax(0, 42fr); gap: var(--space-6); align-items: start; }
+.mgmt-section { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.mgmt-h3 { margin: 0; font-size: var(--type-control); line-height: var(--leading-control); font-weight: var(--weight-bold); }
+.mgmt-note { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mgmt-facts { margin: 0; padding-inline-start: var(--space-5); font-size: var(--type-body); line-height: var(--leading-body); }
+.mgmt-error, .mgmt-warning { display: flex; align-items: flex-start; gap: var(--space-1); margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); }
+.mgmt-error { color: var(--destructive); }
+.mgmt-warning { padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--warning-bg); color: var(--warning); font-weight: var(--weight-bold); }
+.mgmt-error .ui-icon, .mgmt-warning .ui-icon { width: 20px; height: 20px; flex: none; }
+.mgmt-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.mgmt-reference { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mgmt-reference .ui-icon { width: 20px; height: 20px; flex: none; }
+.mgmt-detail-state { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.mgmt-detail-state__message { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); }
+.mgmt-detail-state .ui-panel-state__message { font-size: var(--type-body); line-height: var(--leading-body); color: var(--foreground); }
+.mgmt-detail-state .ui-panel-state__icon { margin-top: var(--space-1); }
+
+.mgmt-table-wrap { overflow-x: auto; }
+.mgmt-load { width: 100%; border-collapse: separate; border-spacing: 2px; font-variant-numeric: tabular-nums; font-size: var(--type-caption); line-height: var(--leading-caption); }
+.mgmt-load th { font-weight: var(--weight-medium); color: var(--muted-foreground); text-align: center; }
+.mgmt-load td { height: 28px; text-align: center; border-radius: var(--radius-sm); font-weight: var(--weight-bold); background: var(--secondary); }
+.mgmt-load td[data-level="2"] { background: color-mix(in srgb, var(--chart-2) 25%, var(--card)); }
+.mgmt-load td[data-level="3"] { background: color-mix(in srgb, var(--chart-2) 50%, var(--card)); }
+.mgmt-load td[data-level="4"] { background: color-mix(in srgb, var(--chart-1) 55%, var(--card)); }
+.mgmt-load td[data-level="5"] { background: color-mix(in srgb, var(--chart-1) 85%, var(--card)); color: var(--primary-foreground); }
+.mgmt-load td[data-help="true"] { outline: var(--stroke-control) solid var(--foreground); outline-offset: -2px; }
+
+.mgmt-manual-list { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-rows: 1fr; gap: var(--space-1); }
+.mgmt-manual-list > li { display: grid; min-width: 0; }
+.mgmt-manual-item { width: 100%; min-height: 64px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-md); background: var(--card); color: var(--foreground); text-align: start; font: inherit; cursor: pointer; }
+.mgmt-manual-item[aria-current="true"] { background: var(--selection); color: var(--selection-foreground); border-color: var(--selection-foreground); }
+.mgmt-manual-item:active { transform: scale(var(--motion-scale-press)); }
+.mgmt-manual-item:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
+.mgmt-manual-item__title { font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.mgmt-manual-item__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-height: var(--space-8); font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mgmt-manual-pane { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.mgmt-manual { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+.mgmt-manual__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.mgmt-manual__heading { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.mgmt-manual__title { margin: 0; font-size: var(--type-heading); line-height: var(--leading-heading); font-weight: var(--weight-heading); overflow-wrap: anywhere; }
+.mgmt-manual__head > .mgmt-progress { min-width: 0; max-width: 50%; overflow-wrap: anywhere; text-align: end; }
+.mgmt-manual__procedure, .mgmt-manual-steps { display: flex; flex-direction: column; gap: var(--space-4); }
+.mgmt-manual__section-title { margin: 0; font-size: var(--type-panel-title); line-height: var(--leading-panel-title); font-weight: var(--weight-bold); }
+.mgmt-steps { margin: 0; padding-inline-start: var(--space-6); font-size: var(--type-body); line-height: var(--leading-body); }
+.mgmt-manual__actions { justify-content: flex-end; }
+.mgmt-manual-checklist .mgmt-row { min-height: var(--table-row-min); padding-block: var(--space-2); align-items: center; }
+.mgmt-block { display: flex; flex-direction: column; gap: var(--space-3); }
+.mgmt-block__head { display: flex; justify-content: space-between; align-items: baseline; }
+
+.mgmt-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: var(--space-6); align-items: start; min-width: 0; }
+.mgmt-workspace__main { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.mgmt-workspace__side { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+
+
+@media (max-width: 900px) {
+  .mgmt-two-col, .mgmt-workspace { grid-template-columns: minmax(0, 1fr); }
+}
+
+.ui-root[data-text-scale="125"] .ui-feature-panel[data-shape="W"] .mgmt-list__title { display: none; }
+.mgmt-scene--large .mgmt-art { width: auto; max-width: 100%; max-height: min(640px, calc(100vh - 360px)); }
+.mgmt-plan__text .small { font-size: 18px; }
+.ui-panel-body[data-shape="W"]:has([data-slot="interior.card"]) { grid-template-columns: minmax(0, 60fr) minmax(0, 40fr); }
+.ui-feature-panel[data-height="1"] .mgmt-primary[data-text-value="true"] .ui-metric-fit__value { line-height: 1.1; }
+
+/* T-063: parts hidden by the fit guard (mgmt-money/fit.tsx) */
+[data-fit-hidden] { display: none !important; }
+
+/* State messages retain their natural height (DS 12.14.1); clear the help button at 100%. */
+.ui-root:not([data-text-scale="125"]) .mgmt-state { padding-top: var(--space-2); }
+.mgmt-manual__body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.mgmt-checklist-progress { display: inline-flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.mgmt-checklist-segments { display: flex; gap: var(--stroke-control); height: var(--space-2); }
+.mgmt-checklist-segments > span { flex: 1; background: var(--secondary); }
+.mgmt-checklist-segments > [data-complete="true"] { background: var(--chart-1); }
+.mgmt-manual-step { display: flex; flex-direction: column; gap: var(--space-2); }
+.mgmt-step-example { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.mgmt-step-example svg { display: block; width: calc(var(--space-8) * 4); height: auto; border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-md); background: var(--secondary); }
+
+/* T-063 large panels (SCR-30 expanded form): the bar chart grows with the panel height. No new data. */
+.ui-feature-panel[data-height="3"] .ui-panel-body[data-shape="L"] .mgmt-bars { height: 160px; }
+.ui-feature-panel[data-height="4"] .ui-panel-body[data-shape="L"] .mgmt-bars { height: 256px; }
+
+/* T-063: in edit mode the 48px resize handle sits over the bottom-right corner; a bottom-aligned list keeps its values clear of it */
+.ui-feature-panel[data-editing="true"] .mgmt-list { margin-inline-end: calc(var(--target-default) + var(--space-2)); }
+
+.mgmt-checklist-segments > span { border: var(--stroke-hairline) solid var(--input); }
+
+.mgmt-detail-toolbar { display: flex; justify-content: flex-end; }
+
+.mgmt-manual-draft { min-width: 0; }
+.mgmt-manual-draft .ui-inline-form__actions {
+  position: sticky;
+  bottom: 0;
+  justify-content: flex-start;
+  background: var(--card);
+  border-top: var(--stroke-hairline) solid var(--border);
+  padding-block: var(--space-3);
+}
+.mgmt-manual-draft .ui-inline-form__actions [type="submit"] { min-height: var(--target-primary); }
+.mgmt-manual-draft__fields, .mgmt-manual-draft__steps, .mgmt-manual-draft__steps ol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.mgmt-manual-draft__steps, .mgmt-manual-draft__steps ol { border: 0; margin: 0; padding: 0; }
+.mgmt-manual-draft__steps ol { list-style: none; }
+.mgmt-manual-draft__steps legend { padding: 0 0 var(--space-2); font-weight: var(--weight-bold); }
+.mgmt-manual-draft__steps > .ui-button { align-self: flex-start; }
+.mgmt-manual-draft .ui-field textarea { background: var(--card); }
+
+.ui-overlay-body:has(.mgmt-manual-draft) { scroll-padding-block-end: calc(var(--target-primary) + var(--space-8)); }

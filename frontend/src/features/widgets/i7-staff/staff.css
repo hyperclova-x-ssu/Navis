@@ -1,0 +1,111 @@
+.staff-primary { min-width: 0; }
+.staff-primary .ui-metric-fit { font-weight: var(--weight-bold); }
+.staff-label, .staff-secondary, .staff-panel-list p { margin: 0; }
+.staff-label { color: var(--muted-foreground); }
+.staff-secondary { color: var(--muted-foreground); }
+.staff-panel-list { display: grid; gap: var(--space-2); min-width: 0; }
+.staff-panel-list p, .staff-mini th, .staff-mini td { overflow-wrap: anywhere; }
+.staff-mini { overflow: auto; max-width: 100%; }
+.staff-mini table { width: 100%; border-collapse: collapse; font-size: var(--type-caption); }
+.staff-mini th, .staff-mini td { padding: var(--space-1); text-align: left; vertical-align: top; }
+.staff-mini td span { display: block; }
+.staff-detail { display: grid; align-content: start; gap: var(--space-4); min-width: 0; }
+.staff-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.staff-toolbar__view { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+/* A6/C3: the add buttons are secondary 48 buttons at the right end of the tool row. */
+.staff-toolbar__add { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin-inline-start: auto; }
+.staff-grid-scroll { position: relative; max-width: 100%; overflow: auto; }
+/* The date axis has one narrow column per person, so it never scrolls sideways: no scroller, and the kit header sticks to the dialog body. */
+.staff-grid-scroll[data-orientation='date'] { overflow: clip; }
+.staff-grid, .staff-history { width: 100%; }
+/* Separate borders let the sticky cells paint their own outer edge during scroll. */
+.staff-grid { border-collapse: separate; border-spacing: 0; }
+.staff-history { border-collapse: collapse; }
+.staff-grid th, .staff-grid td, .staff-history th, .staff-history td { min-width: 8rem; min-height: var(--space-16); padding: var(--space-2); border: 1px solid var(--border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.staff-grid :is(th, td) { border-width: 0 var(--stroke-hairline) var(--stroke-hairline) 0; }
+.staff-grid thead th { border-top-width: var(--stroke-hairline); }
+.staff-grid tbody th { background: var(--secondary); }
+.staff-grid tbody :is(th, td) { vertical-align: middle; }
+.staff-grid tr > th:first-child { position: sticky; left: 0; z-index: 1; border-left-width: var(--stroke-hairline); }
+/* The corner cell is sticky on both axes: opaque, and above the date headers that slide under it. */
+.staff-grid.ui-table thead th:first-child { z-index: 2; background: var(--muted); }
+.staff-grid tbody [data-today] { background: var(--selection); }
+.staff-grid.ui-table thead th[data-today] { background: var(--selection); }
+.staff-shift { display: block; width: 100%; min-height: var(--space-16); margin-block: var(--space-1); padding: var(--space-2); border: 1px solid var(--selection-foreground); border-radius: var(--radius-md); background: var(--selection); color: var(--selection-foreground); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.staff-grid .staff-shift { min-inline-size: min-content; padding-inline: var(--space-1); }
+.staff-shift__time { white-space: nowrap; }
+.staff-shift__rest { display: block; }
+.staff-shift[data-kind='off'] { background: var(--secondary); color: var(--muted-foreground); border-color: var(--border); }
+.staff-shift:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
+.staff-people { min-width: 0; }
+.staff-people > .ui-data-grid { height: auto; --table-action-width: var(--space-16); }
+.staff-people .ui-data-grid__scroll { min-height: 0; }
+.staff-people .ui-data-grid__actions { text-align: center; }
+.staff-people .ui-data-grid__table th:last-child > span { position: absolute; clip-path: inset(50%); }
+/* DS 12.1 RowDelete: the trash is --muted-foreground, never red. Hover and press keep the kit's own face. */
+.staff-people .ui-data-grid__actions .staff-people__delete > .ui-press-surface { color: var(--muted-foreground); }
+.staff-history-empty { display: grid; justify-items: center; gap: var(--space-3); padding: var(--space-6); text-align: center; }
+.staff-history-empty .ui-inline-state { padding: 0; }
+.staff-field { display: grid; gap: var(--space-2); }
+/* D-326 Q11: add/edit/delete open in the right DetailSidePanel (DS 12.2), which overlays the right edge of the dialog body.
+   Everything else in the detail (tabs, tool row, table) keeps to the width left of it, so no column or button sits under the panel. */
+.staff-detail:has(> .ui-detail-side-panel[data-layout="overlay"]) > :not(.ui-detail-side-panel) { max-width: calc(100% - var(--sidepanel-width) - var(--space-6)); }
+/* The form is one column of fields inside the 560 panel. Messages, the overlap list and the extra buttons take the whole row. */
+.staff-editor { display: grid; gap: var(--space-4); min-width: 0; }
+.staff-editor > :is(p, ul) { margin: 0; }
+/* Start and end of a shift sit side by side, so the form is short enough to show its save button and the delete action without scrolling. */
+.staff-editor__times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
+.staff-editor > .ui-button, .staff-editor__actions { justify-self: start; }
+.staff-editor__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.staff-error { color: var(--destructive); }
+.staff-overlap { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; color: var(--muted-foreground); }
+.staff-empty { padding: var(--space-4); }
+/* The retry in the failed state keeps its own width instead of stretching across the dialog. */
+.staff-retry { display: flex; }
+@media (max-width: 600px) { .staff-grid th, .staff-grid td { min-width: 7rem; } }
+
+.staff-mobile-list { display: none; }
+@media (max-width: 600px) {
+  .staff-grid-scroll { display: none; }
+  .staff-mobile-list { display: grid; gap: var(--space-3); }
+  .staff-mobile-list h3 { font-size: var(--type-body); margin-block: var(--space-2); }
+}
+/* Table cell heights are minimums. The cards grow with their contents. */
+.staff-grid tbody :is(td, th) { height: var(--space-16); }
+[data-text-scale='125'] .staff-grid tbody :is(td, th) { height: calc(var(--space-16) * 1.25); }
+[data-text-scale='125'] .staff-shift { min-height: calc(var(--space-16) * 1.25); }
+.staff-shift { transition: transform var(--motion-duration-press) var(--motion-ease-out); }
+.staff-shift:active { transform: scale(var(--motion-scale-press)); }
+@media (prefers-reduced-motion: reduce) { .staff-shift { transition: none; } .staff-shift:active { transform: none; } }
+[data-reduced-motion='true'] .staff-shift { transition: none; }
+[data-reduced-motion='true'] .staff-shift:active { transform: none; }
+
+/* D-298 MetricBlock / ValueRow / ScheduleGrid. */
+.staff-panel { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-6); min-width: 0; height: 100%; }
+.staff-panel .staff-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); min-width: 0; }
+.staff-panel[data-width='1'] .staff-metrics { grid-template-columns: minmax(0, 1fr); }
+.staff-panel .staff-label { margin-top: var(--space-1); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); }
+.staff-panel .staff-panel-list { display: block; }
+.staff-value-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--target-min); border-bottom: var(--stroke-hairline) solid var(--border); font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-medium); word-break: keep-all; }
+.staff-value-row:last-of-type { border-bottom: 0; }
+.staff-value-row > span { min-width: 0; }
+.staff-value-row strong { text-align: right; font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.staff-off { display: inline-flex; align-items: center; min-height: var(--icon-row); border-radius: var(--radius-sm); padding-inline: var(--space-2); background: var(--secondary); color: var(--muted-foreground); font-size: var(--type-caption); }
+.staff-week-total, .staff-recent { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); margin-top: var(--space-3) !important; }
+.staff-panel[data-height='1']:not([data-width='1']) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.staff-panel[data-height='1'] .staff-value-row { min-height: var(--leading-body); border-bottom: 0; }
+.staff-panel:not([data-height='1']):is([data-width='3'], [data-width='4']) { grid-template-columns: minmax(0, 1fr); }
+.staff-panel .staff-mini { overflow: hidden; }
+.staff-panel .staff-mini table { table-layout: fixed; font-size: var(--type-caption); line-height: var(--leading-caption); }
+.staff-panel .staff-mini th, .staff-panel .staff-mini td { height: var(--target-min); padding: var(--space-1); border-bottom: var(--stroke-hairline) solid var(--border); vertical-align: middle; word-break: keep-all; }
+.staff-panel .staff-mini tr:last-child > * { border-bottom: 0; }
+.staff-panel .staff-mini tr > :first-child { width: 120px; }
+.staff-panel .staff-mini th[data-today] { background: var(--selection); }
+.staff-panel .staff-mini td span { padding: var(--space-1); border-radius: var(--radius-lg); border: var(--stroke-hairline) solid var(--selection-foreground); background: var(--selection); color: var(--selection-foreground); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.staff-panel .staff-mini td span[data-kind='off'] { background: var(--secondary); color: var(--muted-foreground); border-color: var(--border); }
+[data-text-scale='125'] .staff-panel .staff-mini :is(th, td) { height: var(--target-primary); }
+
+.staff-panel .staff-metrics:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+.staff-panel .i7-panel-remainder { margin-top: var(--space-2); color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+/* At 125% the 3-column preview drops both weekend columns together, preserving header/cell alignment. */
+[data-text-scale='125'] .staff-panel[data-width='3'] .staff-mini .staff-late-day { display: none; }

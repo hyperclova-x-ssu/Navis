@@ -1,0 +1,340 @@
+/* T-048 mgmt-customers widgets. Tokens only (BLUEPRINT 9.3); no font-size below the kit's caption; text is never shrunk (DS 11.3.3). */
+.mc-root { height: 100%; min-width: 0; }
+.mc-root:not(:has(.mc-state)) { overflow: hidden; }
+.mc-root [hidden], .mc-detail [hidden] { display: none !important; }
+.mc-chart-slot { height: 100%; min-height: 0; }
+/* A hidden chart must release the kit grid item too. */
+.mc-root .ui-panel-chart:has(> .mc-chart-slot[hidden]) { display: none; }
+
+/* Key block */
+.mc-kpi { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.mc-label, .mc-sub, .mc-list__title, .mc-caption { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mc-label { color: var(--foreground); font-weight: var(--weight-medium); }
+.mc-value { min-width: 0; }
+.mc-sub { color: var(--muted-foreground); }
+.mc-flag { color: var(--warning); font-weight: var(--weight-medium); }
+.mc-flag .ui-icon { width: 16px; height: 16px; vertical-align: -3px; }
+
+/* List rows */
+.mc-list ul, .mc-notes, .mc-prep, .mc-cards, .mc-reservations { margin: 0; padding: 0; list-style: none; }
+.mc-list__title { margin-bottom: var(--space-1); }
+.mc-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3); min-height: var(--space-8); padding-block: var(--space-1); border-top: var(--stroke-hairline) solid var(--border); font-size: var(--type-body); line-height: var(--leading-body); }
+.mc-list ul > .mc-row:first-child { border-top: 0; }
+.mc-row__name { min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.mc-row__note { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mc-row__value { flex: 0 1 auto; max-width: 100%; margin-inline-start: auto; text-align: end; font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums lining-nums; }
+
+/* Bars: direct number labels above, hour labels below; shape markers carry the meaning, not colour alone */
+.mc-bars { display: flex; align-items: stretch; gap: var(--space-2); height: 100%; min-height: 104px; min-width: 0; }
+.mc-bars[data-height="tall"] { height: 260px; }
+.mc-bar { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: var(--space-1); padding: var(--space-1) 0; margin: 0; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--foreground); font: inherit; }
+button.mc-bar { min-height: var(--target-default); cursor: pointer; }
+button.mc-bar:active { transform: scale(var(--motion-scale-press)); }
+button.mc-bar:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
+button.mc-bar[aria-pressed="true"] { background: var(--selection); color: var(--selection-foreground); }
+.mc-bar__display, .mc-bar__label, .mc-bar__sub { font-size: var(--type-caption); line-height: var(--leading-caption); font-variant-numeric: tabular-nums lining-nums; text-align: center; overflow-wrap: anywhere; }
+.mc-bar__display { font-weight: var(--weight-semibold); }
+.mc-bar__label, .mc-bar__sub { color: var(--muted-foreground); }
+.mc-root .mc-bar__display, .mc-root .mc-bar__label, .mc-root .mc-bar__sub { flex: none; }
+.mc-root .mc-bar__sub { height: auto; max-width: 100%; white-space: nowrap; overflow-wrap: normal; }
+.mc-bar__track { position: relative; flex: 1 1 auto; width: 100%; min-height: 32px; display: flex; align-items: flex-end; justify-content: center; }
+.mc-bar__fill { display: block; width: min(100%, 48px); border-radius: var(--radius-sm) var(--radius-sm) 0 0; background: var(--chart-1); }
+.mc-bar[data-tone="b"] .mc-bar__fill { background: var(--chart-2); }
+.mc-bar[data-tone="peak"] .mc-bar__fill { background: var(--chart-1); box-shadow: inset 0 0 0 var(--stroke-control) var(--foreground); }
+.mc-bar__fill--gap { height: 100% !important; background: repeating-linear-gradient(135deg, transparent 0 5px, var(--input) 5px 6px); border: var(--stroke-hairline) dashed var(--input); border-bottom: 0; }
+.mc-bar__marker { position: absolute; top: 0; inset-inline: 0; margin-inline: auto; color: var(--warning); }
+
+/* Tables */
+.mc-table { width: 100%; border-collapse: collapse; font-size: var(--type-body); line-height: var(--leading-body); font-variant-numeric: tabular-nums lining-nums; }
+.mc-table th, .mc-table td { padding: var(--space-2) var(--space-3); text-align: start; border-bottom: var(--stroke-hairline) solid var(--border); vertical-align: top; }
+.mc-table thead th { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); font-weight: var(--weight-medium); }
+.mc-table tbody th { font-weight: var(--weight-medium); }
+[data-widget="customer-analysis"] .mc-table :is(th, td):is(:nth-child(2), :nth-child(3)) { text-align: end; }
+.mc-table tr[data-below="true"] { background: var(--warning-bg); }
+.mc-table tr[data-selected="true"] { background: var(--selection); }
+.mc-ratio { margin-inline-end: var(--space-2); }
+.mc-below { white-space: nowrap; }
+
+/* Detail layout */
+.mc-detail { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.mc-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.mc-tools__date { margin: 0; font-size: var(--type-section); line-height: var(--leading-section); font-weight: var(--weight-semibold); }
+.mc-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); margin: 0; }
+.mc-kpis > div { min-width: 0; padding: var(--space-3) var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.mc-kpis dt { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mc-kpis dd { margin: 0; font-size: var(--type-display); line-height: var(--leading-display); font-weight: var(--weight-metric); letter-spacing: var(--tracking-display); white-space: nowrap; font-variant-numeric: tabular-nums lining-nums; }
+.mc-kpis dd small { margin-inline-start: var(--space-1); font-size: var(--type-caption); font-weight: var(--weight-medium); letter-spacing: 0; }
+.mc-kpis dd.mc-kpis__text { font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-medium); letter-spacing: var(--tracking-body); white-space: normal; }
+.mc-kpis dd[data-flash="true"], .mc-card-row[data-flash="true"] { animation: mc-flash 1040ms var(--motion-ease-out) 1; }
+.mc-columns { display: grid; grid-template-columns: minmax(0, 58fr) minmax(0, 42fr); gap: var(--space-6); align-items: start; }
+.mc-main, .mc-side, .mc-stack, .mc-chart-card { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.mc-h3 { margin: 0; font-size: var(--type-control); line-height: var(--leading-control); font-weight: var(--weight-semibold); }
+.mc-legend .ui-icon { width: 16px; height: 16px; vertical-align: -3px; }
+.mc-compare, .mc-call, .mc-propose { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--card); min-width: 0; }
+.mc-call, .mc-propose { margin-top: var(--space-2); background: var(--muted); }
+.mc-compare__range { margin: 0; font-size: var(--type-section); line-height: var(--leading-section); font-weight: var(--weight-semibold); }
+.mc-compare__line { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-medium); }
+.mc-badges, .mc-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.mc-call__summary { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); }
+.mc-extracted { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-4); margin: 0; width: 100%; }
+.mc-extracted dt { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mc-extracted dd { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.mc-done { margin: 0; min-height: var(--leading-caption); font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--success); font-weight: var(--weight-medium); }
+.mc-detail-state { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); padding: var(--space-6); }
+.mc-detail-state p { margin: 0; font-size: var(--type-section); line-height: var(--leading-section); }
+.mc-detail-state[data-tone="error"] p { color: var(--destructive); }
+.mc-notes li { display: flex; gap: var(--space-2); align-items: flex-start; color: var(--warning); font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-medium); }
+.mc-notes .ui-icon { width: 20px; height: 20px; flex: none; margin-top: 2px; }
+
+/* Linked suggestion rows (buttons, >= 48 high) */
+.mc-prep { display: flex; flex-direction: column; gap: var(--space-2); }
+.mc-link-row { width: 100%; min-height: var(--target-default); display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--secondary); color: var(--secondary-foreground); font: inherit; font-size: var(--type-body); line-height: var(--leading-body); text-align: start; cursor: pointer; }
+.mc-link-row:active { transform: scale(var(--motion-scale-press)); }
+.mc-link-row:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
+.mc-link-row__text { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.mc-link-row .ui-icon { flex: none; }
+
+/* Membership and reservation rows */
+.mc-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+@media (max-width: 1500px) { .mc-cards { grid-template-columns: minmax(0, 1fr); } }
+.mc-card-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-4); align-items: center; min-height: 64px; padding: var(--space-3) var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.mc-card-row[data-canceled="true"] { background: var(--muted); }
+.mc-card-row__title { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.mc-card-row__main { display: flex; flex-direction: column; min-width: 0; }
+.mc-card-row__side { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-3); max-width: 440px; }
+.mc-card-row__left { font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-semibold); white-space: nowrap; }
+.mc-reservations { display: flex; flex-direction: column; gap: var(--space-2); }
+.mc-reservation { width: 100%; min-height: 64px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; padding: var(--space-2) var(--space-3); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--card); color: var(--card-foreground); font: inherit; font-size: var(--type-body); line-height: var(--leading-body); text-align: start; cursor: pointer; }
+.mc-reservation:active { transform: scale(var(--motion-scale-press)); }
+.mc-reservation:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
+.mc-reservation[aria-pressed="true"] { background: var(--selection); border-color: var(--selection-foreground); }
+.mc-reservation__time { font-weight: var(--weight-bold); font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
+.mc-reservation__main { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+
+@keyframes mc-flash { 0% { background-color: transparent; } 12% { background-color: var(--selection); } 88% { background-color: var(--selection); } 100% { background-color: transparent; } }
+[data-reduced-motion="true"] .mc-kpis dd[data-flash="true"], [data-reduced-motion="true"] .mc-card-row[data-flash="true"] { animation: none; background-color: var(--selection); }
+@media (prefers-reduced-motion: reduce) {
+  .mc-kpis dd[data-flash="true"], .mc-card-row[data-flash="true"] { animation: none; background-color: var(--selection); }
+  button.mc-bar:active, .mc-link-row:active, .mc-reservation:active { transform: none; }
+}
+[data-reduced-motion="true"] button.mc-bar:active, [data-reduced-motion="true"] .mc-link-row:active, [data-reduced-motion="true"] .mc-reservation:active { transform: none; }
+.ui-root[data-text-scale="125"] .mc-bars[data-height="tall"] { height: 300px; }
+@media (max-width: 1400px) { .mc-columns { grid-template-columns: minmax(0, 1fr); } }
+
+/* T-063: at 100%, start the state below the help button. State messages keep their natural height. */
+.ui-root:not([data-text-scale="125"]) .mc-state { padding-top: var(--space-2); }
+
+/* Iteration 5 adapters; geometry is supplied by the kit's tokens. */
+.mc-workspace { position: relative; height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.mc-mini { min-width: 0; }
+.mc-mini .ui-mini-table { table-layout: auto; }
+.mc-mini th, .mc-mini td { overflow-wrap: anywhere; }
+.mc-camera-stills { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: var(--space-6); }
+.mc-camera-stills[data-expanded="true"] { grid-template-columns: minmax(0,1fr); }
+.mc-camera-stills .ui-still-frame { width: 100%; height: auto; }
+.mc-camera-chart { display: flex; flex-direction: column; gap: var(--space-4); height: 100%; min-height: 0; }
+/* Direct labels and the track set the floor; flex only uses the height left by the list. */
+.mc-camera-chart .mc-bars { flex: 1 1 0; min-height: min-content; height: auto; }
+.mc-camera-chart > .mc-list { flex: none; }
+/* The edit resize handle extends into the panel content at the bottom edge. */
+.ui-feature-panel[data-editing="true"] .mc-root[data-widget="customer-analysis"] .mc-camera-chart { padding-bottom: calc(var(--target-default) + var(--space-4) - var(--panel-padding)); }
+.mc-recipe-usage { display: flex; flex-direction: column; gap: var(--space-2); padding: 0; list-style: none; }
+.mc-detail select { background: var(--card); color: var(--foreground); }
+.mc-workspace > .ui-data-grid, .mc-grid-region > .ui-data-grid { flex: 1; min-height: 0; }
+.mc-workspace > .mc-grid-region, .mc-workspace > .mc-grid-context { flex: 1 1 0; min-height: 0; }
+.mc-grid-region { display: flex; flex-direction: column; }
+.mc-grid-context { display: flex; flex-direction: column; gap: var(--space-4); overflow: auto; }
+.mc-root[data-widget="menu"] .ui-panel-body[data-shape="L"], .mc-root[data-widget="voice-booking"] .ui-panel-body[data-shape="L"] { grid-template-columns: minmax(0,1fr); }
+/* A visible booking chart takes its natural height; the list gets the flexible row.
+   Once hidden, its wrapper collapses and the kit's two rows apply again (also in 3x2). */
+.mc-root[data-widget="voice-booking"] .ui-panel-body[data-shape="L"]:has(> .ui-panel-chart > .mc-chart-slot:not([hidden])) { grid-template-rows: auto auto minmax(0, 1fr); }
+.mc-root[data-widget="menu"] .ui-panel-body[data-shape="L"] .ui-panel-list, .mc-root[data-widget="voice-booking"] .ui-panel-body[data-shape="L"] .ui-panel-list { grid-column: 1 / -1; }
+.mc-root[data-widget="customer-analysis"] .ui-still-frame-container { min-width: 0; }
+.mc-root[data-widget="customer-analysis"] .ui-still-frame { max-height: var(--stillframe-height); object-fit: contain; }
+.mc-root[data-widget="customer-analysis"] .ui-panel-body[data-shape="L"] .ui-still-frame { max-height: none; }
+.mc-root .ui-panel-body[data-shape="W"] .mc-list ul { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,var(--stillframe-width)),1fr)); column-gap: var(--space-4); }
+.mc-value > .ui-visible-value { display: block; }
+
+
+/* T-075 CCTV 손님분석: toggle, ⋯ menu, size layouts, detail record header. Tokens only. */
+.cc-root { display: flex; flex-direction: column; gap: var(--space-2); position: relative; }
+.cc-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex: none; min-width: 0; }
+.cc-body { flex: 1 1 auto; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.cc-toggle[data-hidden="true"], .cc-menu[data-hidden="true"] { visibility: hidden; }
+.cc-toggle--q { flex: none; margin-top: auto; }
+.cc-guests { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.cc-delta { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.cc-delta[data-dir="up"] { color: var(--change-up); }
+.cc-delta[data-dir="down"] { color: var(--change-down); }
+.cc-numbers { display: flex; gap: var(--space-3); min-height: 0; min-width: 0; }
+.cc-numbers--W { flex-direction: row; align-items: flex-start; }
+.cc-numbers--W > * { flex: 1 1 0; min-width: 0; }
+.cc-numbers--T { flex-direction: column; }
+.cc-numbers__main { display: flex; flex-direction: column; gap: var(--space-1); }
+.cc-status { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); color: var(--foreground); flex: none; }
+.cc-video { flex: 1 1 auto; min-height: 0; border-radius: var(--radius-md); overflow: hidden; background: var(--muted); position: relative; }
+.cc-video--off { background: transparent; }
+.cc-video > * { width: 100%; height: 100%; }
+.cc-video .cs-stage, .cc-video .panel-video { height: 100%; }
+.cc-video video, .cc-video canvas { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cc-band { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); flex: none; }
+.cc-band .cc-guests { flex-direction: row; align-items: baseline; gap: var(--space-2); }
+.cc-band__chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.cc-chip { padding: 0 var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-full, 999px); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.cc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.cc-menu { flex: none; }
+.cc-menu__list { position: fixed; z-index: 1000; min-width: 200px; display: flex; flex-direction: column; padding: var(--space-1); background: var(--card); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-popover, 0 4px 16px rgb(0 0 0 / 0.16)); }
+.cc-menu__item { min-height: 44px; padding: 0 var(--space-3); text-align: left; background: transparent; color: inherit; border: 0; border-radius: var(--radius-sm); font: inherit; cursor: pointer; }
+.cc-menu__item:hover:not(:disabled) { background: var(--muted); }
+.cc-menu__item:disabled { color: var(--muted-foreground); cursor: default; }
+.cc-menu__hint { margin: 0; padding: 0 var(--space-3) var(--space-2); font-size: var(--type-caption); color: var(--muted-foreground); }
+.cc-detail__head { display: flex; align-items: center; gap: var(--space-2); }
+.cc-live { display: flex; flex-direction: column; gap: var(--space-3); }
+.cc-line { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: var(--type-body); }
+.cc-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted-foreground); flex: none; }
+.cc-line[data-tone="ok"] .cc-dot { background: var(--success); }
+.cc-line[data-tone="warn"] .cc-dot { background: var(--warning); }
+.cc-line[data-tone="bad"] .cc-dot { background: var(--destructive); }
+.cc-avg { margin: 0; font-size: var(--type-section); font-weight: var(--weight-semibold); }
+.cc-record { display: flex; flex-direction: column; gap: var(--space-3); border-top: 1px solid var(--border); padding-top: var(--space-4); }
+.cc-record__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.cc-record__title { margin: 0; font-size: var(--type-section); line-height: var(--leading-section); font-weight: var(--weight-semibold); }
+.cc-record__note { font-size: var(--type-caption); color: var(--muted-foreground); }
+.cc-toggle, .cc-menu { position: relative; z-index: 2; }
+.cc-toggle .ui-choice-chip { position: relative; min-height: var(--target-min); padding: 0 var(--space-3); }
+.cc-toggle .ui-choice-chip::after { content: ''; position: absolute; inset: calc(var(--space-2) * -1) 0; }
+.cc-toggle--q { align-self: flex-start; }
+.cc-numbers--W .cc-numbers__main { gap: var(--space-1); }
+.cc-band { align-items: flex-start; }
+.cc-band .cc-guests { flex-direction: column; flex: none; }
+.cc-band .cc-delta { flex-basis: 100%; }
+.cc-live .cctv-playback { display: contents; }
+/* T-076: toggle and ⋯ sit on the shell's title row (SCREENS 9.2 "패널 안 위치"); the shell has no slot, so the root reaches up to the title row and the head is placed there. 1×1 (Q) starts under the title (height budget 168). T keeps the head in the body (1 cell wide: no room next to the title). */
+.cc-root { --cc-ct: calc(var(--space-16) + var(--space-4) - var(--stroke-hairline)) }
+.ui-root[data-text-scale="125"] .cc-root { --cc-ct: calc(var(--space-16) + var(--space-8) + var(--space-1) - var(--stroke-hairline)) }
+.cc-root--Q { --cc-up: calc(var(--cc-ct) - var(--space-4) - var(--leading-panel-title) - var(--space-1)); }
+.cc-root--W, .cc-root--S, .cc-root--L { --cc-up: calc(var(--cc-ct) - var(--space-4) - var(--leading-panel-title) / 2 + var(--target-default) / 2); }
+.cc-root--Q, .cc-root--W, .cc-root--S, .cc-root--L { margin-top: calc(var(--cc-up) * -1); padding-top: var(--cc-up); height: calc(100% + var(--cc-up)); box-sizing: border-box; }
+.cc-root--Q { padding-top: 0; padding-bottom: var(--space-2); height: calc(100% + var(--cc-up) + var(--space-2)); margin-bottom: calc(var(--space-2) * -1); gap: var(--space-1); } /* the toggle's 44px hit area reaches 8px below it: keep it inside the root, not counted as overflow */
+.cc-root--Q .cc-body { gap: var(--space-1); flex: 0 0 auto; } /* natural height: when the toggle has no room the root overflows and the fit-drop hides the unit line first (9.2) */
+.cc-root--Q .cc-body { justify-content: flex-start; }
+.cc-head--title { position: absolute; top: 0; right: calc(var(--target-default) + var(--space-3) - var(--panel-padding)); height: var(--target-default); }
+.ui-feature-panel[data-feature-id="customer-analysis"] { --cc-toggle-w: 152px; --cc-menu-w: 0px; }
+.ui-root[data-text-scale="125"] .ui-feature-panel[data-feature-id="customer-analysis"] { --cc-toggle-w: 192px; }
+.ui-feature-panel[data-feature-id="customer-analysis"]:has(.cc-menu) { --cc-menu-w: calc(var(--target-default) + var(--space-2)); }
+.ui-feature-panel[data-feature-id="customer-analysis"]:not([data-shape="Q"], [data-shape="T"]):not([data-editing="true"]) .ui-panel-title { right: calc(var(--target-default) + var(--space-3) + var(--space-2) + var(--cc-toggle-w) + var(--cc-menu-w)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-detail .cctv-fake { display: none; }
+/* T-079: in the S·L band the band's number column had no width of its own, so MetricFit measured it as narrow and dropped 명 under the number (stage 2); give it room. */
+.cc-band .cc-guests { min-width: calc(var(--space-16) * 2); }
+.cc-band .cc-guests .mc-value { width: 100%; }
+.detail-header-slot { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+.mc-mini th, .mc-mini td { padding-inline: var(--space-2); word-break: keep-all; }
+.mc-root .ui-panel-body { gap: var(--space-3); }
+
+.mc-camera-stills .ui-still-frame-container figcaption { display: none; }
+.mc-camera-unavailable { display: grid; place-items: center; padding: var(--space-4); color: var(--det-chip-fg); text-align: center; font-size: var(--type-body); line-height: var(--leading-body); }
+
+.mc-workspace[data-widget="customer-analysis"] { height: auto; }
+.mc-workspace[data-widget="customer-analysis"] > .mc-grid-context, .mc-workspace[data-widget="customer-analysis"] > .mc-grid-region { flex: none; overflow: visible; }
+
+/* 예약 창 (SCR-225, DS 12.2): the window body never scrolls. Toolbar, summary and the time table / pickups band keep their height, the reservation
+   grid takes the rest and scrolls inside. The side panel is the kit overlay, so the grid beside it shrinks and drops columns (dropOrder). */
+.mc-workspace[data-widget="voice-booking"] > :not(.ui-data-grid, .ui-detail-side-panel) { flex: none; }
+.mc-workspace[data-widget="voice-booking"]:has(> .ui-detail-side-panel[data-layout="overlay"]) > :not(.ui-data-grid, .ui-detail-side-panel) { max-width: calc(100% - var(--sidepanel-width) - var(--space-6)); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.mc-workspace[data-widget="voice-booking"] .mc-booking-edit {
+  display: grid;
+  gap: var(--space-3);
+  padding-block-start: var(--space-4);
+  border-block-start: var(--stroke-hairline) solid var(--border);
+}
+.mc-workspace[data-widget="voice-booking"] .mc-booking-edit__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.mc-workspace[data-widget="voice-booking"] .mc-booking-edit__fields > :has(textarea) { grid-column: 1 / -1; }
+/* 예약 추가하기 form: three columns so 저장하기 stays on the first screen (H3). */
+.mc-workspace[data-widget="voice-booking"] .mc-booking-add { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3) var(--space-4); align-items: start; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-add > :has(textarea) { grid-column: span 2; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-add textarea { min-height: calc(var(--target-default) * 1.5); }
+/* While the form is open the grid may shrink to one row, so 저장하기 and the form never push the window body to scroll. */
+.mc-workspace[data-widget="voice-booking"][data-adding="true"] > .ui-data-grid .ui-data-grid__scroll { min-height: calc(var(--table-header-height) + var(--table-row-min) + 2 * var(--stroke-hairline)); }
+/* Summary: count, status chips (read only) and the free seats / tables in one row. */
+.mc-workspace[data-widget="voice-booking"] .mc-booking-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); min-height: var(--target-default); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-summary p { margin: 0; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-summary__total { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--type-body); line-height: var(--leading-body); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-summary__total strong { font-size: var(--type-section); line-height: var(--leading-section); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums lining-nums; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-summary__chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-summary__free { margin-inline-start: auto !important; font-size: var(--type-body); line-height: var(--leading-body); color: var(--muted-foreground); }
+/* Band: time table (kit Table, header 48) beside the pickups. Both cap at the height of the table with four slots and scroll inside past that. */
+.mc-workspace[data-widget="voice-booking"] .mc-booking-band { --mc-band-max: calc(var(--table-header-height) + 4 * var(--table-row-min) + 3rem); display: flex; align-items: flex-start; gap: var(--space-6); min-width: 0; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-time-wrap { flex: 0 0 min(400px, 100%); max-height: var(--mc-band-max); overflow: auto; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-time { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-time__time { width: 30%; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-time caption { text-align: start; padding-block-end: var(--space-1); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-time :is(th, td) {
+  padding-inline: var(--table-cell-padding-x);
+  text-align: start;
+  border-bottom: var(--stroke-hairline) solid var(--border);
+}
+.mc-workspace[data-widget="voice-booking"] .mc-booking-time tbody tr { height: var(--table-row-min); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-time tbody th { font-weight: var(--weight-medium); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-time .mc-booking-time__number {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.mc-workspace[data-widget="voice-booking"] .mc-booking-toolbar > .ui-button { margin-inline-start: auto; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-toolbar > .ui-button > .ui-press-surface { padding-block: 0; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-pickups { flex: 1 1 0; min-width: 0; max-height: var(--mc-band-max); overflow: auto; display: flex; flex-direction: column; gap: var(--space-2); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-pickups .ui-data-grid { flex: none; height: auto; }
+.mc-workspace[data-widget="voice-booking"] .custom-pickups > :is(h3, .custom-pickup-summary) { display: none; }
+.mc-workspace[data-widget="voice-booking"] .custom-pickups [data-grid-column-id="order"] .ui-button {
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+}
+.mc-booking-empty { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
+.mc-booking-empty p { margin: 0; }
+
+/* 회원목록 (SCR-220): beside the side panel the search shrinks instead of pushing 회원 추가하기 to a second line (C3); the grid width is the kit push rule. */
+.mc-workspace[data-widget="members"] .ui-data-grid__toolbar { flex-wrap: nowrap; }
+.mc-workspace[data-widget="members"] .ui-data-grid__toolbar .ui-search-field { flex: 1 1 200px; min-width: 200px; width: auto; max-width: var(--table-search-width); }
+.mc-workspace[data-widget="members"] .ui-data-grid__toolbar > .ui-button { flex: none; }
+.mc-grade-manual { margin-inline-start: var(--space-2); font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mc-member-add { display: grid; grid-template-columns: repeat(2, minmax(0, 360px)); gap: var(--space-3) var(--space-4); }
+.mc-member-note p { margin: 0; overflow-wrap: anywhere; }
+.mc-member-side > p { margin: 0; }
+/* An empty or failed view sits in the middle of the window's minimum height instead of the top edge (C2), like 매장 CCTV. */
+[data-widget="members"] .mc-detail-state, [data-widget="voice-booking"] .mc-detail-state { align-items: center; justify-content: center; min-height: var(--dialog-compact-min); text-align: center; }
+.mc-member-side > h4 { margin: var(--space-2) 0 0; }
+.mc-workspace[data-widget="members"] th:has([data-grid-target='["$header","remaining"]']),
+.mc-workspace[data-widget="members"] td[data-grid-column-id="remaining"] {
+  padding-inline-end: calc(var(--table-cell-padding-x) + var(--space-2));
+}
+
+/* F-1 · DESIGN_SYSTEM 12.1 RowDelete blocked: muted face, 1px --border, disabled colour, trash at 0.38, not-allowed cursor.
+   Stays focusable (aria-disabled, not disabled) so pressing or focusing it shows the reason. Tokens only. */
+.mc-delete-blocked { cursor: not-allowed; }
+.ui-detail-side-panel__danger .ui-button.mc-delete-blocked > .ui-press-surface { gap: var(--space-2); background: var(--muted); color: var(--disabled-foreground); border: 1px solid var(--border); box-shadow: none; transform: none; }
+.ui-detail-side-panel__danger .ui-button.mc-delete-blocked:not(:disabled):hover > .ui-press-surface,
+.ui-detail-side-panel__danger .ui-button.mc-delete-blocked[data-pressed="true"] > .ui-press-surface { background: var(--muted); color: var(--disabled-foreground); }
+.mc-delete-blocked .ui-icon { opacity: 0.38; }
+.mc-delete-reason { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mc-delete-reason[role="alert"] { color: var(--foreground); font-weight: var(--weight-semibold); }
+
+/* WV-CUST-B · CCTV 현황 (F1, H1/C2). The 머문 시간 chart is drawn by src/features/cctv/playback/StayCharts (a fixed 6-column grid, bars as wide as the cell):
+   here it gets one flexible column per counted hour, bars at most 64 wide (chart.bar.max-width, detail) and the plot at chart.plot.min-height. */
+[data-widget="customer-analysis"] .cctv-bars--col { display: flex; align-items: flex-end; gap: var(--space-3); }
+[data-widget="customer-analysis"] .cctv-bars--col li { flex: 1 1 0; min-width: 0; }
+[data-widget="customer-analysis"] .cctv-bars--col .cctv-bar__track { height: var(--chart-plot-min-height); justify-content: center; }
+[data-widget="customer-analysis"] .cctv-bars--col .cctv-bar__fill { width: min(100%, 64px); }
+/* An empty or failed view sits in the middle of the window's minimum height instead of the top edge (C2). */
+[data-widget="customer-analysis"] .mc-detail-state { align-items: center; justify-content: center; min-height: var(--dialog-compact-min); text-align: center; }
+.mc-zero-visits { display: flex; }

@@ -1,0 +1,175 @@
+/* DS 19.8 / 19.11: local artwork aliases, no surface painted over the dashboard glass. */
+.i7-environment-panel, .i7-environment-detail {
+  --tt-plinth: var(--secondary); --tt-line: var(--border); --tt-record: var(--foreground);
+  --tt-groove: var(--muted-foreground); --tt-label: var(--group-store, var(--group-recommend)); --tt-ink: var(--card); --tt-arm: var(--input);
+  --environment-metric-size: var(--type-metric-hero, 4.9375rem); --environment-metric-leading: 1.08;
+  --environment-record-turn: 1800ms; --environment-arm-duration: var(--motion-duration-check, 200ms);
+  min-width: 0; color: var(--foreground);
+}
+[data-theme='dark'] :is(.i7-environment-panel, .i7-environment-detail) { --tt-plinth: var(--muted); --tt-record: var(--background); --tt-groove: var(--border); }
+.i7-environment-panel { display: grid; grid-template-columns: minmax(0, 1fr) var(--stroke-hairline) minmax(0, 1fr); column-gap: var(--space-6); height: 100%; min-height: 0; }
+.i7-environment-panel p, .i7-environment-detail p, .i7-environment-panel h4, .i7-environment-detail h4 { margin: 0; }
+.i7-environment-climate-half, .i7-environment-music-half { min-width: 0; min-height: 0; }
+.i7-environment-divider { background: var(--border); align-self: stretch; }
+.i7-environment-readings { display: grid; gap: var(--space-6); min-width: 0; }
+.i7-climate { min-width: 0; }
+.i7-climate-icon { color: var(--muted-foreground); display: inline-flex; flex: none; }
+.i7-climate svg { flex: none; width: var(--icon-default); height: var(--icon-default); }
+.i7-climate .ui-metric-fit { flex-direction: row !important; align-items: baseline !important; gap: var(--space-1); width: max-content; max-width: 100%; }
+.i7-climate .ui-metric-fit .ui-metric-fit__value { font-size: var(--environment-metric-size); line-height: var(--environment-metric-leading); font-weight: var(--weight-metric); }
+.i7-climate .ui-metric-fit[data-stage='1'] .ui-metric-fit__value { font-size: var(--type-metric); }
+.i7-climate .ui-metric-fit[data-stage='2'] .ui-metric-fit__value { font-size: var(--type-heading); }
+.i7-climate .ui-metric-fit .ui-metric-fit__unit { font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); flex-shrink: 0; }
+.i7-climate-label, .i7-climate-range, .i7-environment-measured, .i7-environment-artist, .i7-environment-music-state { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.i7-climate .i7-climate-label { display: flex; gap: var(--space-1); align-items: center; margin-top: var(--space-1); }
+.i7-climate[data-tone='warning'] :is(.ui-metric-fit, .i7-climate-icon), .i7-climate[data-tone='warning'] .i7-climate-label svg { color: var(--warning); }
+.i7-climate[data-tone='stale'] .ui-metric-fit { color: var(--muted-foreground); }
+.i7-climate[data-variant='row'] { display: flex; align-items: center; gap: var(--space-1); }
+.i7-environment-panel .i7-climate[data-variant='row'] .ui-metric-fit .ui-metric-fit__value { font-size: 28px; line-height: 38px; font-weight: var(--weight-bold); }
+.i7-climate[data-variant='row'] .ui-metric-fit { gap: 0; }
+.i7-environment-climate-half > :is(.i7-environment-status, .i7-environment-measured) { margin-top: var(--space-2); }
+.i7-environment-status { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.i7-environment-status-block { width: calc(var(--space-10) * 2); height: calc(var(--space-12) + var(--space-8) + var(--space-1)); }
+/* DS 19.8 EnvironmentStatusBlock (1x1 only): icon 20, text 15/20 700 as the DS sets it, radius 8. */
+.i7-environment-status-block > span { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-1); width: 100%; min-height: var(--icon-row); padding: var(--space-1); border-radius: var(--radius-lg); text-align: center; word-break: normal; font-size: 15px; line-height: 20px; font-weight: var(--weight-bold); background: var(--warning-bg); color: var(--warning); }
+.i7-environment-status-block > [data-tone='danger'] { background: var(--change-up-bg); color: var(--destructive); }
+.i7-environment-status-block > span > span { font-size: 20px; line-height: 20px; }
+.i7-environment-player { display: grid; gap: var(--space-3); min-width: 0; }
+.i7-environment-art { width: 140px; max-width: 100%; justify-self: center; }
+.i7-environment-art .tt { width: 100%; height: auto; display: block; }
+.tt .tt-disc { transform-box: view-box; transform-origin: 100px 100px; }
+.tt .tt-arm { transform-box: view-box; transform-origin: 204px 40px; transition: transform var(--environment-arm-duration) var(--motion-ease-out); }
+.tt[data-playing] .tt-arm { transform: rotate(24deg); }
+.tt[data-reduced-motion] .tt-arm { transition: none; }
+.i7-environment-now { min-width: 0; }
+.i7-environment-track { font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-bold); word-break: keep-all; overflow-wrap: normal; }
+.i7-environment-music-state { display: flex; align-items: center; gap: var(--space-1); }
+.i7-environment-control-scope { position: relative; z-index: 2; display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+.i7-environment-control-scope[data-hidden] { visibility: hidden; }
+.i7-environment-controls { display: flex; align-items: center; gap: var(--space-2); }
+.i7-environment-controls .ui-button { flex: none; width: var(--target-default); min-width: var(--target-default); min-height: var(--target-default); border-radius: var(--radius-xl); }
+.i7-environment-controls .ui-press-surface { padding: 0; }
+.i7-environment-volume { display: flex; align-items: center; gap: var(--space-2); min-height: var(--target-min); min-width: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.i7-environment-volume > span { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
+.i7-environment-volume input { appearance: none; background: transparent; flex: 1; min-width: 0; height: var(--target-min); margin: 0; cursor: pointer; accent-color: var(--primary); }
+.i7-environment-volume input::-webkit-slider-runnable-track { height: var(--space-2); border-radius: var(--radius-sm); background: var(--secondary); box-shadow: inset 0 0 0 var(--stroke-hairline) var(--input); }
+.i7-environment-volume input::-moz-range-track { height: var(--space-2); border-radius: var(--radius-sm); background: var(--secondary); box-shadow: inset 0 0 0 var(--stroke-hairline) var(--input); }
+.i7-environment-volume input::-webkit-slider-thumb { appearance: none; height: var(--icon-default); width: var(--icon-default); margin-top: calc(var(--space-2) * -1); background: var(--card); border: var(--stroke-control) solid var(--primary); border-radius: 50%; }
+.i7-environment-volume input::-moz-range-thumb { height: var(--icon-default); width: var(--icon-default); background: var(--card); border: var(--stroke-control) solid var(--primary); border-radius: 50%; }
+.i7-environment-volume input:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); border-radius: var(--radius-sm); }
+.i7-environment-volume input:disabled { cursor: not-allowed; }
+.i7-environment-playlists .ui-choice-chip { min-height: var(--target-default); }
+.i7-environment-panel[data-width='1'][data-height='1'] { grid-template-columns: 112px var(--stroke-hairline) 80px; column-gap: var(--space-3); }
+.i7-environment-panel[data-width='1'][data-height='1'] .i7-environment-readings { gap: var(--space-2); }
+.i7-environment-panel[data-width='1'][data-height='1'] .i7-environment-art { width: calc(var(--space-10) * 2); }
+.i7-environment-panel[data-width='1'][data-height='1'] .i7-environment-now { display: none; }
+.i7-environment-panel[data-height='1']:not([data-width='1']) .i7-environment-readings { display: flex; gap: var(--space-6); }
+.i7-environment-panel[data-height='1']:not([data-width='1']) .i7-environment-player { grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); }
+.i7-environment-panel[data-height='1']:not([data-width='1']) .i7-environment-art { width: 100.8px; }
+.i7-environment-panel[data-height='1']:is([data-width='3'], [data-width='4']) .i7-climate .ui-metric-fit .ui-metric-fit__value { font-size: var(--type-metric); line-height: var(--leading-metric); font-weight: var(--weight-metric); }
+.i7-environment-panel[data-height='1']:is([data-width='3'], [data-width='4']) .i7-environment-now { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; }
+.i7-environment-panel[data-height='1']:is([data-width='3'], [data-width='4']) .i7-environment-music-state { padding-left: var(--space-2); }
+.i7-environment-panel[data-height='1']:is([data-width='3'], [data-width='4']) .i7-environment-control-scope { grid-column: 1 / -1; margin-top: var(--space-2); }
+.i7-environment-panel[data-width='1']:not([data-height='1']) { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto var(--stroke-hairline) minmax(0, 1fr); row-gap: var(--space-6); }
+.i7-environment-panel[data-width='1'][data-height='2'] .i7-environment-readings { gap: var(--space-2); }
+.i7-environment-panel[data-width='1'][data-height='2']:not([data-abnormal]) .i7-climate .ui-metric-fit .ui-metric-fit__value { font-size: var(--type-metric); line-height: var(--leading-metric); font-weight: var(--weight-metric); }
+.i7-environment-panel[data-width='1'][data-height='2'] .i7-environment-climate-half > .i7-environment-status { margin-top: var(--space-1); }
+.i7-environment-panel[data-width='1'][data-height='2'] .i7-environment-player { grid-template-columns: 86.4px minmax(0, 1fr); gap: var(--space-2); }
+.i7-environment-panel[data-width='1'][data-height='2'] .i7-environment-control-scope { margin-left: calc(-86.4px - var(--space-2)); margin-top: var(--space-2); }
+.i7-environment-panel[data-width='1'][data-height='2'] .i7-environment-controls { justify-content: center; }
+.i7-environment-panel[data-width='1']:is([data-height='3'], [data-height='4']) .i7-environment-readings { gap: var(--space-4); }
+.i7-environment-panel[data-width='1']:is([data-height='3'], [data-height='4']) .i7-environment-art { width: 120px; }
+.i7-environment-panel[data-width='1']:is([data-height='3'], [data-height='4']) .i7-environment-controls { justify-content: center; }
+.i7-environment-panel[data-abnormal][data-width='2'][data-height='2'] .i7-environment-readings { gap: var(--space-2); }
+.i7-environment-panel[data-width='3'][data-height='2'] .i7-environment-player,
+.i7-environment-panel[data-width='4'][data-height='2'] .i7-environment-player { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-6); }
+.i7-environment-panel[data-width='3'][data-height='2'] .i7-environment-art { width: 160px; }
+.i7-environment-panel[data-width='3'][data-height='2'] .i7-environment-artist { display: none; }
+.i7-environment-panel:is([data-width='3'], [data-width='4']):not([data-height='1']):not([data-height='2']) .i7-environment-art,
+.i7-environment-panel[data-width='4'][data-height='2'] .i7-environment-art { width: 200px; }
+.i7-environment-panel[data-width='4']:not([data-height='1']) .i7-environment-readings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.i7-environment-trend { min-width: 0; flex-shrink: 0; margin-top: var(--space-6); }
+.i7-environment-charts { display: grid; gap: var(--space-4); }
+.i7-environment-charts > div > p { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.i7-environment-trend .ui-mini-chart { margin: 0; height: auto; min-height: 0; }
+/* The split owns the plot height; a percentage figure height otherwise includes
+   its label/axis twice. Line-only trends avoid stretched SVG point markers. */
+.i7-environment-trend .ui-line-plot circle { display: none; }
+.i7-environment-trend [data-kind='humidity'] .ui-line-plot line { stroke-dasharray: 6 4; }
+.i7-environment-panel .i7-environment-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.i7-environment-panel .i7-environment-trend .ui-chart-plot { min-height: 120px; height: 120px; }
+.i7-environment-trend-rows { margin-top: var(--space-6); }
+.i7-environment-value-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); min-height: var(--target-min); border-bottom: var(--stroke-hairline) solid var(--border); font-size: var(--type-body); line-height: var(--leading-body); }
+.i7-environment-value-row:last-child { border-bottom: 0; }
+.i7-environment-value-row strong { font-weight: var(--weight-bold); text-align: right; font-variant-numeric: tabular-nums; }
+.i7-environment-detail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; }
+.i7-environment-section { border-radius: var(--space-4); padding: calc(var(--space-6) + var(--space-1)); box-shadow: inset 0 0 0 var(--stroke-control) var(--border); min-width: 0; }
+.i7-environment-section > h3 { font-size: var(--type-panel-title); line-height: var(--leading-panel-title); font-weight: var(--weight-bold); margin: 0 0 var(--space-10); }
+.i7-environment-section > .i7-environment-status { margin-bottom: var(--space-4); }
+.i7-environment-detail .i7-environment-readings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.i7-climate[data-variant='tile'] .i7-climate-icon { width: var(--rail-item); height: var(--rail-item); border-radius: 50%; background: var(--secondary); justify-content: center; align-items: center; margin-bottom: var(--space-4); }
+.i7-climate[data-variant='tile'] .i7-climate-icon svg { width: var(--space-10); height: var(--space-10); }
+.i7-climate[data-variant='tile'][data-tone='warning'] .i7-climate-icon { background: var(--warning-bg); }
+.i7-environment-detail .i7-environment-measured { margin-top: var(--space-4); }
+.i7-environment-detail .i7-environment-art { width: 320px; }
+.i7-environment-detail .i7-environment-player { gap: var(--space-6); }
+.i7-environment-detail .i7-environment-track { font-size: var(--type-section); line-height: var(--leading-section); }
+.i7-environment-detail .i7-environment-controls { justify-content: center; }
+.i7-environment-detail .i7-environment-controls .ui-button { width: var(--target-primary); min-width: var(--target-primary); min-height: var(--target-primary); }
+.i7-environment-detail .i7-environment-controls .i7-environment-play { width: var(--rail-item); min-width: var(--rail-item); min-height: var(--rail-item); border-radius: 50%; }
+.i7-environment-detail .i7-environment-control-scope { gap: var(--space-6); margin-top: var(--space-6); }
+.i7-environment-detail .i7-environment-charts { height: var(--chart-plot-min-height, 240px); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.i7-environment-detail .i7-environment-trend-row { display: grid; grid-template-columns: var(--space-12) minmax(0, 1fr) var(--space-16); gap: var(--space-2); align-items: center; min-width: 0; min-height: 0; }
+.i7-environment-detail .i7-environment-trend-row > strong { font-size: var(--type-body); line-height: var(--leading-body); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.i7-environment-detail .i7-environment-trend .ui-mini-chart { height: 100%; }
+.i7-environment-detail .i7-environment-trend .ui-chart-plot { min-height: 0; height: 100%; border-bottom: var(--stroke-hairline) solid var(--border); }
+.i7-environment-detail .i7-environment-trend .ui-chart-endpoints { display: none; }
+.i7-environment-trend-axis { display: flex; justify-content: space-between; gap: var(--space-2); margin-inline-end: calc(var(--space-16) + var(--space-2)); font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+/* DS 12.1 Table: the kit gives the 48 sticky header and right-aligned data-numeric cells; the rows are 56 (64 at 125%). No column stretches to the window. */
+.i7-environment-table { width: auto; margin-top: var(--space-6); }
+.i7-environment-table :is(th, td) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.i7-environment-table :is(th, td):first-child { min-width: calc(var(--space-16) * 1.75); }
+.i7-environment-table :is(th, td):not(:first-child) { min-width: calc(var(--space-16) * 2); }
+.i7-environment-table tbody > tr { height: var(--table-row-min); }
+/* The next step in an empty or unavailable state (DS 11.5): one muted line under the sentence. */
+.i7-environment-panel .i7-environment-next, .i7-environment-detail .i7-environment-next { margin-top: var(--space-1); font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+/* Failed load in the window: message and the kit's default 48 button. */
+.i7-environment-state { display: grid; justify-items: center; gap: var(--space-4); padding: var(--space-10) var(--space-6); text-align: center; }
+.i7-environment-state > p { margin: 0; font-size: var(--type-panel-title); line-height: var(--leading-panel-title); font-weight: var(--weight-bold); }
+.i7-environment-state-icon { color: var(--destructive); }
+[data-text-scale='125'] .i7-environment-detail { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 900px) { .i7-environment-detail { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .i7-environment-detail .i7-environment-readings { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .tt .tt-arm { transition: none; } }
+[data-reduced-motion='true'] .tt .tt-arm { transition: none; }
+
+.i7-environment-panel[data-width='2'][data-height='1'] .i7-environment-track-tail,
+.i7-environment-panel[data-width='2'][data-height='2'] .i7-environment-track-tail,
+.i7-environment-panel[data-width='1'][data-height='2'] .i7-environment-track-tail { display: block; }
+[data-text-scale='125'] .i7-environment-panel[data-height='1']:is([data-width='3'], [data-width='4']) .i7-climate .ui-metric-fit .ui-metric-fit__value { font-size: 55px; line-height: 59px; }
+[data-screen-preset='B'][data-text-scale='125'] .i7-environment-panel[data-height='1']:is([data-width='3'], [data-width='4']) .i7-climate .ui-metric-fit .ui-metric-fit__value { font-size: 65px; line-height: 70px; }
+.i7-climate[data-variant='tile'] > .i7-environment-status { margin-top: var(--space-2); }
+/* The panel's two directly labelled lines share a 120px budget; detailed axes/table remain in the dialog. */
+.i7-environment-panel .i7-environment-trend h4 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.i7-environment-panel .i7-environment-charts > div { position: relative; }
+.i7-environment-panel .i7-environment-charts > div > p { position: absolute; top: 0; left: 0; z-index: 1; }
+.i7-environment-panel .i7-environment-trend .ui-chart-endpoints { display: none; }
+.i7-environment-panel .i7-environment-trend .ui-line-plot { inset-block-start: var(--space-6); height: calc(100% - var(--space-6)); }
+/* L music: controls sit beside the art, with the playlist using the full half-width. */
+.i7-environment-panel:is([data-width='3'], [data-width='4']):not([data-height='1']) .i7-environment-player { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-6); row-gap: 0; align-items: start; }
+.i7-environment-panel:is([data-width='3'], [data-width='4']):not([data-height='1']) .i7-environment-art { grid-column: 1; grid-row: 1 / 6; align-self: center; }
+.i7-environment-panel:is([data-width='3'], [data-width='4']):not([data-height='1']) :is(.i7-environment-now, .i7-environment-control-scope) { display: contents; }
+.i7-environment-panel:is([data-width='3'], [data-width='4']):not([data-height='1']) .i7-environment-track { grid-column: 2; grid-row: 1; }
+.i7-environment-panel:is([data-width='3'], [data-width='4']):not([data-height='1']) .i7-environment-artist { grid-column: 2; grid-row: 2; }
+.i7-environment-panel:is([data-width='3'], [data-width='4']):not([data-height='1']) .i7-environment-music-state { grid-column: 2; grid-row: 3; }
+.i7-environment-panel:is([data-width='3'], [data-width='4']):not([data-height='1']) .i7-environment-controls { grid-column: 2; grid-row: 4; margin-top: var(--space-3); }
+.i7-environment-panel:is([data-width='3'], [data-width='4']):not([data-height='1']) .i7-environment-volume { grid-column: 2; grid-row: 5; margin-top: var(--space-3); }
+.i7-environment-panel:is([data-width='3'], [data-width='4']):not([data-height='1']) .i7-environment-playlists { grid-column: 1 / -1; grid-row: 6; margin-top: var(--space-3); }
+.i7-environment-panel:is([data-width='3'], [data-width='4']):not([data-height='1']) :is(.i7-environment-controls, .i7-environment-volume, .i7-environment-playlists) { position: relative; z-index: 2; }
+.i7-environment-detail .i7-environment-now { text-align: center; }
+.i7-environment-detail .i7-environment-music-state, .i7-environment-detail .ui-chip-choice { justify-content: center; }
+.i7-environment-detail .i7-environment-volume { width: 80%; margin-inline: auto; }
+.i7-environment-panel[data-width='1'][data-height='1'] .i7-environment-music-half { display: flex; align-items: center; }
+.i7-environment-panel[data-height='1']:not([data-width='1']) .i7-environment-climate-half > :is(.i7-environment-status, .i7-environment-measured) { margin-top: var(--space-1); }
+/* 54px reading + 28px abnormal chip must remain within the A one-row 84px budget. */
+.i7-environment-panel[data-height='1']:is([data-width='3'], [data-width='4']) .i7-environment-climate-half > .i7-environment-status { margin-top: var(--stroke-control); }

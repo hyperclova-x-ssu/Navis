@@ -1,0 +1,257 @@
+/* T-049 mgmt-supply widgets (캘린더·재고관리·거래처). Kit tokens only (DS 3·11.1·11.3·11.4·11.6, MOTION 9). */
+
+/* ───── Panel body: slots K / list / chart, shapes Q W T S L (SCR-30). The fit hook hides [data-drop] parts. ───── */
+.ms-panel { position: relative; height: 100%; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; gap: var(--space-2); }
+.ms-panel [hidden] { display: none !important; }
+.ms-panel[data-shape="W"] { display: grid; grid-template-columns: minmax(0, 42fr) minmax(0, 58fr); grid-template-rows: minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.ms-panel[data-shape="L"] { display: grid; grid-template-columns: minmax(0, 58fr) minmax(0, 42fr); grid-template-rows: auto minmax(0, 1fr); gap: var(--space-3) var(--space-6); align-items: start; }
+.ms-panel[data-shape="L"] > :is(.ms-k, .ms-inventory-state) { grid-column: 1 / -1; }
+.ms-panel[data-shape="S"] { gap: var(--space-3); }
+.ms-panel > .ms-state { min-width: 0; }
+/* DS 11.5 state pattern: the one action is never clipped (it may use the panel's bottom padding at 125%);
+   in W the message stays left and the action sits on the right, vertically centred. */
+.ms-panel[data-state] { overflow: visible; display: block; }
+.ms-panel[data-state][data-shape="W"] .ui-panel-state { display: grid; grid-template-columns: minmax(0, 42fr) minmax(0, 58fr); align-items: center; column-gap: var(--space-4); }
+.ms-panel[data-state][data-shape="W"] .ui-panel-state { row-gap: var(--space-1); }
+.ms-panel[data-state][data-shape="W"] .ui-panel-state > .ui-panel-state__text { grid-column: 1; grid-row: 1 / span 3; }
+.ms-panel[data-state][data-shape="W"] .ui-panel-state > :not(.ui-panel-state__text) { grid-column: 2; justify-self: start; }
+
+.ms-k { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.ms-label { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.ms-k__value { display: block; min-width: 0; }
+.ms-k__value > .ms-flash { display: block; }
+.ms-inventory-state { min-width: 0; }
+.ms-sup-state-note { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--warning); white-space: normal; }
+.ui-feature-panel[data-editing="true"] .ms-panel[data-widget="suppliers"][data-shape="Q"] .ms-sup-state-note { max-width: calc(100% - var(--target-default)); }
+.ms-sub { margin: var(--space-1) 0 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.ms-warn { display: flex; align-items: flex-start; gap: var(--space-1); margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--warning); }
+.ms-warn .ui-icon { flex: none; width: var(--space-5); height: var(--space-5); margin-top: calc(var(--space-1) / 2); }
+.ms-aside, .ms-chart, .ms-list { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.ms-list__title { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.ms-rule { flex: none; width: 100%; margin: 0; border: 0; border-top: var(--stroke-hairline) solid var(--border); }
+
+.ms-rows { list-style: none; margin: 0; padding: 0; min-width: 0; }
+.ms-row { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-2); padding-block: var(--space-1); border-bottom: var(--stroke-hairline) solid var(--border); min-width: 0; }
+.ms-row:last-child, .ms-row:not(:has(~ .ms-row:not([hidden]))) { border-bottom: 0; }
+.ms-row__lead, .ms-row__area { flex: 0 1 auto; max-width: 100%; white-space: normal; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+.ms-row__area { font-size: var(--type-caption); line-height: var(--leading-caption); }
+/* The name wraps beside the value; when even its narrowest form (a badge) cannot sit next to the value, the value moves under it. */
+.ms-row__name { flex: 1 1 0; min-width: min-content; }
+.ms-row__value { flex: none; margin-inline-start: auto; display: flex; flex-direction: column; align-items: flex-end; text-align: end; white-space: nowrap; font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.ms-row__caption { font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-regular); color: var(--muted-foreground); }
+.ms-row--more { color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.ms-mark { display: inline-block; margin-inline-start: var(--space-2); padding: 0 var(--space-1); border-radius: var(--radius-sm); background: var(--warning-bg); color: var(--warning); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-semibold); white-space: nowrap; }
+.ms-mark[data-tone="neutral"] { background: var(--secondary); color: var(--secondary-foreground); }
+.ms-caption { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); display: flex; align-items: flex-start; gap: var(--space-1); }
+.ms-caption .ui-icon { flex: none; width: var(--space-5); height: var(--space-5); }
+
+/* Calendar week strip and month grid (P5, SCR-14). */
+.ms-dot { display: inline-block; flex: none; width: var(--space-2); height: var(--space-2); border-radius: 50%; background: var(--chart-1); }
+.ms-dot[data-source="delivery"] { background: var(--chart-2); }
+.ms-dot[data-source="reservation"] { background: var(--chart-4); }
+.ms-dot[data-source="shift"] { background: var(--chart-3); }
+.ms-dot[data-source="deadline"] { background: var(--chart-5); }
+.ms-week { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-1); }
+.ms-week__day { display: flex; flex-direction: column; align-items: center; gap: 0; padding-block: var(--space-1); border-radius: var(--radius-md); background: var(--muted); min-width: 0; }
+.ms-week__day[data-today="true"] { background: var(--selection); color: var(--selection-foreground); box-shadow: inset 0 0 0 var(--stroke-hairline) var(--selection-foreground); }
+.ms-week__weekday { font-size: var(--type-caption); line-height: var(--leading-caption); }
+.ms-week__date { font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.ms-week__count { display: inline-flex; align-items: center; gap: var(--space-1); min-height: var(--leading-caption); font-size: var(--type-caption); line-height: var(--leading-caption); font-variant-numeric: tabular-nums; }
+.ms-month { width: 100%; border-collapse: separate; border-spacing: var(--space-1); table-layout: fixed; font-variant-numeric: tabular-nums; }
+.ms-month th { font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-semibold); color: var(--muted-foreground); text-align: center; padding: 0; }
+.ms-month td { vertical-align: top; padding: var(--space-1); border-radius: var(--radius-sm); background: var(--muted); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.ms-month td[data-in-month="false"] { background: transparent; color: var(--muted-foreground); }
+.ms-month td[data-today="true"] { background: var(--selection); color: var(--selection-foreground); box-shadow: inset 0 0 0 var(--stroke-hairline) var(--selection-foreground); }
+.ms-month__date { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1); font-weight: var(--weight-bold); }
+.ms-month__today { font-weight: var(--weight-regular); }
+.ms-month__count { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); }
+.ms-month__caption { caption-side: top; text-align: start; padding-bottom: var(--space-2); font-size: var(--type-panel-title); line-height: var(--leading-panel-title); font-weight: var(--weight-bold); }
+.ms-month[data-detail="true"] { border-spacing: var(--space-2); }
+.ms-month[data-detail="true"] th { font-size: var(--type-control); line-height: var(--leading-control); }
+.ms-month[data-detail="true"] td { height: var(--target-primary); padding: var(--space-2); font-size: var(--type-body); line-height: var(--leading-body); }
+.ms-month[data-detail="true"] .ms-month__count { font-size: var(--type-caption); line-height: var(--leading-caption); }
+
+/* Inventory split (SplitBar with its total). */
+.ms-split { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.ms-split__total { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.ms-split__total strong { color: var(--foreground); font-size: var(--type-body); line-height: var(--leading-body); font-variant-numeric: tabular-nums; }
+
+.ms-flash { border-radius: var(--radius-sm); }
+
+/* ───── Detail bodies (SCR-31 ChartDetail / MasterDetail, inside the T-053 frame). ───── */
+.ms-detail { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+/* Detail body is a bounded column; the active tab passes its remaining height to DataGrid. */
+.ms-detail:is(.ms-inv, .ms-sup) { height: 100%; min-height: 0; }
+.ms-detail:is(.ms-inv, .ms-sup) > .ui-detail-tabs { display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; min-width: 0; }
+.ms-detail:is(.ms-inv, .ms-sup) .ui-detail-tabs__list { flex: none; }
+.ms-detail:is(.ms-inv, .ms-sup) .ui-detail-tabs__panel:not([hidden]) { display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; min-width: 0; }
+.ms-detail:is(.ms-inv, .ms-sup) .ui-detail-tabs__panel > .ui-data-grid { flex: 1 1 0; min-height: 0; }
+.ms-inv .ui-detail-tabs__panel > :is(p, .ms-products__summary) { flex-shrink: 0; }
+.ms-sup > section { flex: none; }
+.ms-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); min-height: var(--target-default); }
+.ms-toolbar__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ms-toolbar > .ui-integration-badge { margin-inline-start: auto; }
+.ms-count { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); font-size: var(--type-body); line-height: var(--leading-body); }
+.ms-count strong { font-size: var(--type-heading); line-height: var(--leading-heading); font-weight: var(--weight-heading); font-variant-numeric: tabular-nums; }
+.ms-section { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.ms-section__title { margin: 0; font-size: var(--type-panel-title); line-height: var(--leading-panel-title); font-weight: var(--weight-bold); }
+.ms-error { display: flex; align-items: flex-start; gap: var(--space-1); margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--destructive); }
+.ms-error .ui-icon { flex: none; width: var(--space-5); height: var(--space-5); }
+.ms-done { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; color: var(--success); font-weight: var(--weight-bold); }
+.ms-detail-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-6); border-radius: var(--radius-lg); background: var(--muted); }
+.ms-detail-state > p { margin: 0; flex: 1 1 auto; min-width: 0; }
+.ms-detail-state > .ui-icon { flex: none; color: var(--muted-foreground); }
+.ms-detail-state[data-tone="error"] > .ui-icon { color: var(--destructive); }
+.ms-detail-state > .ui-inline-form { flex: 1 1 100%; }
+
+/* The agenda sits beside the month grid. Week and day use the full column. */
+.ms-cal__body, .ms-cal__main, .ms-cal__side, .ms-cal__agenda { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+.ms-cal__body[data-view="month"] { display: grid; grid-template-columns: minmax(0, 62fr) minmax(0, 38fr); gap: var(--space-8); align-items: start; }
+.ms-cal__body:not([data-view="month"]) > .ms-cal__side { order: -1; }
+.ms-cal__body[data-view="week"] > .ms-cal__main { container-type: inline-size; }
+.ms-day { display: flex; flex-direction: column; gap: var(--space-4); }
+.ms-week-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-2); }
+.ms-week-grid__day { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; padding: var(--space-1); border-radius: var(--radius-md); background: var(--muted); }
+@container (max-width: 64rem) {
+  .ms-week-grid { grid-template-columns: minmax(0, 1fr); }
+  .ms-week-grid__day { display: grid; grid-template-columns: calc(var(--space-16) * 2) minmax(0, 1fr); align-items: start; gap: var(--space-2); padding: var(--space-2); }
+}
+.ms-week-grid__day[data-today="true"] { background: var(--selection); box-shadow: inset 0 0 0 var(--stroke-hairline) var(--selection-foreground); }
+.ms-week-grid__head { margin: 0; font-size: var(--type-control); line-height: var(--leading-control); font-weight: var(--weight-regular); }
+.ms-entries { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.ms-entry-item { display: flex; flex-direction: column; gap: var(--space-2); }
+.ms-entry { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-3); width: 100%; min-height: var(--target-primary); padding: var(--space-3) var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-md); background: var(--card); color: var(--card-foreground); font: inherit; text-align: start; cursor: pointer; touch-action: manipulation; transition: transform var(--motion-duration-press) var(--motion-ease-out); }
+.ms-entry:active { transform: scale(var(--motion-scale-press)); }
+.ms-entry[aria-pressed="true"] { background: var(--selection); border-color: var(--selection-foreground); }
+.ms-entry:focus-visible, .ms-item:focus-visible, .ms-link-row:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
+.ms-entry[data-compact="true"] { grid-template-columns: minmax(0, 1fr); gap: 0; min-height: var(--target-default); padding: var(--space-1) var(--space-2); }
+.ms-entry[data-compact="true"] .ms-entry__chevron { display: none; }
+.ms-entry[data-compact="true"] .ms-entry__title { overflow-wrap: anywhere; }
+.ms-entry__time { font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ms-entry__body { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.ms-entry__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.ms-entry__chevron { align-self: center; color: var(--muted-foreground); }
+.ms-entry__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding-inline-start: var(--space-4); }
+.ms-entry__actions > .ms-caption { flex: 1 1 100%; }
+.ms-tag { display: inline-block; padding: 0 var(--space-2); border-radius: var(--radius-sm); background: var(--secondary); color: var(--secondary-foreground); white-space: nowrap; }
+.ms-switches { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ms-switch-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-height: var(--target-default); border-bottom: var(--stroke-hairline) solid var(--border); }
+.ms-switch-row:last-child { border-bottom: 0; }
+
+/* Master list rows (min 64, large text 80) and selected item detail. */
+.ms-master { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.ms-group { display: flex; flex-direction: column; gap: var(--space-2); }
+.ms-group__title { margin: 0; display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--type-control); line-height: var(--leading-control); font-weight: var(--weight-bold); }
+.ms-group__count { color: var(--muted-foreground); font-weight: var(--weight-regular); font-variant-numeric: tabular-nums; }
+.ms-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.ms-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name value" "meta value" "badges badges"; align-items: baseline; gap: 0 var(--space-3); width: 100%; min-height: calc(var(--target-primary) + var(--space-2)); padding: var(--space-3) var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-md); background: var(--card); color: var(--card-foreground); font: inherit; text-align: start; cursor: pointer; touch-action: manipulation; transition: transform var(--motion-duration-press) var(--motion-ease-out); }
+[data-text-scale="125"] .ms-item { min-height: calc(var(--space-16) + var(--space-4)); }
+.ms-item:active { transform: scale(var(--motion-scale-press)); }
+.ms-item[aria-pressed="true"] { background: var(--selection); border-color: var(--selection-foreground); box-shadow: inset 0 0 0 var(--stroke-hairline) var(--selection-foreground); }
+.ms-item__name { grid-area: name; font-weight: var(--weight-semibold); min-width: 0; }
+.ms-item__value { grid-area: value; white-space: nowrap; font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; text-align: end; }
+.ms-item__meta { grid-area: meta; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); min-width: 0; }
+.ms-badges { grid-area: badges; display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.ms-badges:empty { display: none; }
+.ms-item .ms-badges:not(:empty) { margin-top: var(--space-1); }
+.ms-item-detail, .ms-order { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.ms-item-detail__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.ms-facts { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); margin: 0; }
+.ms-facts > div { display: flex; flex-direction: column; min-width: 0; }
+.ms-facts dt { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.ms-facts dd { margin: 0; font-size: var(--type-heading); line-height: var(--leading-heading); font-weight: var(--weight-heading); letter-spacing: var(--tracking-heading); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ms-facts--text dd { font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-body); white-space: normal; }
+.ms-editor { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3) var(--space-4); }
+.ms-editor > .ui-field { flex: 1 1 calc(var(--space-16) * 3); }
+.ms-editor > .ms-caption { flex: 1 1 100%; }
+.ms-editor__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ms-link-row { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: var(--target-primary); padding: var(--space-2) var(--space-4); border: var(--stroke-hairline) solid var(--input); border-radius: var(--radius-md); background: var(--secondary); color: var(--secondary-foreground); font: inherit; font-weight: var(--weight-semibold); text-align: start; cursor: pointer; touch-action: manipulation; transition: transform var(--motion-duration-press) var(--motion-ease-out); }
+.ms-link-row > span { flex: 1 1 auto; min-width: 0; }
+.ms-link-row .ui-icon { flex: none; }
+.ms-link-row:active { transform: scale(var(--motion-scale-press)); }
+
+/* Products tab: summary, table and ChannelTransfer (SCR-32). */
+.ms-products { display: flex; flex-direction: column; gap: var(--space-6); }
+.ms-products__summary { display: flex; flex-direction: column; gap: var(--space-2); max-width: calc(var(--space-16) * 10); }
+.ms-products__body { display: grid; grid-template-columns: minmax(0, 58fr) minmax(0, 42fr); gap: var(--space-6); align-items: start; }
+.ms-products__body .ui-table td .ui-status-badge { margin-inline-start: var(--space-1); }
+.ms-transfer { padding: var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+
+[data-reduced-motion="true"] :is(.ms-entry, .ms-item, .ms-link-row) { transition: none; }
+[data-reduced-motion="true"] :is(.ms-entry, .ms-item, .ms-link-row):active { transform: none; }
+@media (prefers-reduced-motion: reduce) { :is(.ms-entry, .ms-item, .ms-link-row) { transition: none; } :is(.ms-entry, .ms-item, .ms-link-row):active { transform: none; } }
+
+/* T-063: state panels. At 100 % the content box starts at y 49, under the 48px help button (ends at y 56): the message starts 8px lower. DS 11.5 keeps the message to 2 lines; the full text stays in the DOM. */
+.ui-root:not([data-text-scale="125"]) .ms-state { padding-top: var(--space-2); }
+.ms-state .ui-panel-state__message { overflow-wrap: anywhere; }
+
+.ui-data-grid__table[aria-labelledby="stock-grid-label"] [data-grid-column-id="status"],
+.ui-data-grid__table[aria-labelledby="stock-grid-label"] th:has([data-grid-target='["$header","status"]']) .ui-data-grid__header-content > span {
+  text-align: start;
+  justify-content: flex-start;
+}
+.ui-data-grid__table[aria-labelledby="stock-grid-label"] [data-grid-column-id="delivery"] { cursor: default; }
+.ui-data-grid__table[aria-labelledby="stock-grid-label"] [data-grid-column-id="delivery"]:active > .ui-data-grid__value { transform: none; }
+.ms-stock-order.ui-button { min-height: var(--target-min); }
+
+.ms-stock-expanded { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); }
+.ms-stock-expanded > section { min-width: 0; overflow-wrap: anywhere; }
+.ms-stock-history { overflow-y: auto; }
+.ms-stock-history table { width: 100%; border-collapse: collapse; }
+.ms-stock-history td { padding: var(--space-2); border-bottom: var(--stroke-hairline) solid var(--border); }
+.ms-calendar-toolbar__primary > label { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--target-min); }
+.ms-detail select { min-height: var(--target-min); max-width: 100%; }
+
+/* SCR-215/216: wide panels keep the public MiniTable on the full body width. */
+.ms-panel[data-mini] { display: flex; flex-direction: column; align-items: stretch; }
+.ms-mini { min-width: 0; }
+.ms-mini .ui-mini-table { table-layout: auto; }
+.ms-mini .ui-mini-table th { font-weight: var(--weight-bold); padding-inline: var(--space-2); }
+.ms-mini .ui-mini-table td { overflow-wrap: anywhere; }
+.ms-rows[data-wide-rows] { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: var(--space-4); }
+.ms-panel[data-wide] .ms-aside .ms-rows { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: var(--space-4); }
+.ms-stock-history { max-height: calc(var(--target-primary) * 7.5); overscroll-behavior: contain; }
+[data-screen-preset="B"] .ms-stock-history { max-height: calc(var(--target-primary) * 10); }
+.ms-stock-history .ui-data-grid__scroll { max-height: none; overflow-y: visible; }
+.ms-stock-history .ui-data-grid__table { min-width: 0; }
+.ms-history-day h5 { padding: var(--space-2); margin-block: var(--space-2); background: var(--muted); font-size: var(--type-caption); }
+.ms-history-day tr[data-grid-row^="opening:"], .ms-history-day tr[data-grid-row^="ending:"] { font-weight: var(--weight-bold); }
+.ms-history-day tr[data-grid-row^="ending:"] { border-top: var(--stroke-hairline) solid var(--input); }
+.ms-detail input[type="date"], .ms-detail select { background: var(--card); color: var(--foreground); border: var(--stroke-hairline) solid var(--input); border-radius: var(--radius-md); padding: var(--space-2); font: inherit; }
+.ms-detail :is(input[type="date"],select):focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
+.ms-detail :is(label,fieldset) { min-width: 0; }
+.ms-detail label:has(input[type="checkbox"]) { min-height: var(--target-default); }
+
+.ms-mark[data-tone="danger"] { background: var(--change-up-bg); color: var(--destructive); }
+.ms-detail [data-grid-column-id="delivery"] button, .ms-detail [data-grid-column-id="due"] button { min-height: var(--target-min); }
+
+.ms-panel, .ms-detail { word-break: keep-all; }
+.ms-detail .ui-grid-warning-row:has([id^="stock-warning-out-"]) > td { background: var(--change-up-bg) !important; }
+.ms-detail .ui-grid-warning-row:has([id^="stock-warning-out-"]) .ui-grid-warning { color: var(--destructive); }
+
+.ms-calendar-toolbar { display: flex; flex-direction: column; align-items: stretch; }
+.ms-calendar-toolbar__primary, .ms-calendar-toolbar__filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); }
+.ms-calendar-toolbar__filters > span { font-weight: var(--weight-bold); }
+.ms-calendar-toolbar__primary .ms-toolbar__actions { margin-inline-start: auto; }
+.ms-month[data-detail="true"] { height: auto; min-height: calc(var(--target-primary) * 6); flex-shrink: 0; }
+.ms-detail .ui-data-grid__icon[aria-disabled="true"] { cursor: not-allowed; background: var(--muted); border: var(--stroke-hairline) solid var(--border); opacity: .38; }
+.ms-detail .ui-data-grid__icon[aria-disabled="true"]:focus-visible + .ui-sr-only { position: absolute; width: auto; height: auto; padding: var(--space-2); overflow: visible; clip: auto; clip-path: none; margin: 0; white-space: normal; background: var(--card); color: var(--foreground); border: var(--stroke-hairline) solid var(--border); z-index: 2; }
+
+/* Form fields sit in a grid (SCR-210 NewRow / InlineForm) instead of one 1666px-wide field per line. */
+.ms-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-16) * 4), 1fr)); gap: var(--space-4) var(--space-6); align-items: start; }
+/* An order with several items: one value per line, aligned across the item, quantity and received cells. */
+.ms-lines { display: flex; flex-direction: column; align-items: flex-start; }
+.ms-lines > span { display: block; white-space: nowrap; }
+.ui-data-grid__cell[data-kind="computed"] .ms-lines, .ui-data-grid__cell[data-kind="number"] .ms-lines { align-items: flex-end; }
+.ms-muted { color: var(--muted-foreground); }
+.ms-closure { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.ms-entry__part { display: block; }
+.ms-entry__parts { display: flex; flex-direction: column; min-width: 0; }
+/* The view date is one date, not a full-width bar. */
+.ms-cal__main > .ui-field { max-width: calc(var(--space-16) * 5); }
+.ms-cal__side .ms-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ms-sup > section > h3 { margin-block-start: 0; }
+.ms-list__heading { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); font-weight: var(--weight-bold); }
+.ms-form-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3) var(--space-6); }
+.ms-wrap { display: block; white-space: normal; overflow-wrap: anywhere; }
+.ms-lines[data-wrap] > span { white-space: normal; overflow-wrap: anywhere; }

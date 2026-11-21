@@ -1,0 +1,114 @@
+/* R4 SCR-258 and DS 15.12 A; other values use the existing kit tokens. */
+.menu-pos-section, .menu-pos-group { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.menu-pos-section h4 { margin: 0; }
+.menu-pos-group { padding: var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.menu-pos-group-header, .menu-pos-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+.menu-pos-group-header > :first-child { flex: 1; min-width: 0; }
+.menu-pos-group-header .ui-segmented { width: 160px; }
+.menu-pos-group > .ui-data-grid { flex: none; height: auto; }
+/* The kit reserves header + 3 rows for a scroller; an option group with one or two rows must not carry a blank box under them. */
+.menu-pos-group > .ui-data-grid > .ui-data-grid__scroll { flex: none; min-height: 0; }
+.menu-photo-empty { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.menu-pos-recipe { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; }
+.menu-pos-group-header .ui-field { min-width: 0; }
+
+.menu-editor, .menu-editor-section { display: flex; flex-direction: column; min-width: 0; }
+.menu-editor { gap: var(--space-4); }
+.menu-editor-section { gap: var(--space-2); }
+.menu-editor > :is(section, details) + :is(section, details) {
+  border-block-start: var(--stroke-hairline) solid var(--border);
+  padding-block-start: var(--space-2);
+}
+.menu-editor-section > :is(h4, p, ul), .menu-editor-memo-heading > h4, .menu-editor > p { margin-block: 0; }
+.menu-editor-section h4 { font-size: var(--type-panel-title); line-height: var(--leading-panel-title); }
+.menu-editor-field-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: var(--space-2); }
+/* The button is 48 from the kit (K-D); only its place changes: centred on the 56 input under the field label. */
+.menu-editor-field-form > .ui-button { margin-block-start: calc(var(--leading-control) + 2 * var(--space-1)); }
+.menu-editor-section > .menu-editor-total { font-size: var(--type-control); line-height: var(--leading-control); font-weight: var(--weight-semibold); }
+.menu-editor-choices, .menu-editor-memo-heading { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.menu-editor-memo-heading { align-items: center; justify-content: space-between; }
+.menu-editor-recipe-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); }
+.menu-editor-extra > summary { min-height: var(--target-default); align-content: center; cursor: pointer; font-weight: var(--weight-semibold); }
+.menu-editor-extra > summary:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
+.menu-editor-extra > .menu-editor-section { gap: var(--space-4); }
+.menu-editor-delete { align-self: flex-start; }
+.menu-editor-delete > .ui-press-surface { color: var(--destructive); }
+
+/* New-menu row: name, price and category side by side (they were three full-width fields, 424px tall). */
+.menu-add-fields { display: grid; grid-template-columns: minmax(0, 1fr) 220px 200px; gap: var(--space-4); align-items: start; }
+.menu-add-fields > .ui-field { min-width: 0; }
+
+.menu-editor-recipe-grid > .ui-data-grid { height: auto; }
+.menu-editor-recipe-grid .ui-data-grid__scroll { flex: none; min-height: 0; }
+/* Frame the ingredient rows inside the panel's own scrolling body. */
+.menu-editor-recipe-grid[data-short-list] .ui-data-grid__scroll { border-color: transparent; }
+.menu-editor-recipe-grid[data-short-list] .ui-data-grid__table {
+  box-sizing: content-box;
+  width: calc(100% - 2 * var(--stroke-hairline));
+  border: var(--stroke-hairline) solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: clip;
+}
+.menu-editor-recipe-grid[data-short-list] .ui-data-grid__table > tbody > tr:last-child > td { border-bottom-color: transparent; }
+
+.menu-management > .ui-data-grid {
+  --table-action-width: calc(var(--target-default) + 2 * var(--table-cell-padding-x));
+}
+.menu-management[data-panel-open] > .ui-data-grid {
+  width: calc(100% - var(--sidepanel-width) - var(--space-6));
+}
+.menu-management[data-panel-open] > .ui-data-grid > .ui-data-grid__scroll {
+  overflow-x: auto;
+}
+.menu-management[data-panel-open][data-more-columns] > .ui-data-grid > .ui-data-grid__scroll {
+  mask-image: linear-gradient(to right, black calc(100% - var(--space-4)), transparent);
+}
+.menu-management > .ui-data-grid .ui-data-grid__cell { cursor: pointer; }
+
+.menu-management > .ui-data-grid .ui-data-grid__cell[data-first] .ui-data-grid__value {
+  min-width: 0;
+  word-break: keep-all;
+  overflow: hidden;
+}
+
+/* Keep the thumbnail and the empty state aligned with the column heading. */
+.menu-management > .ui-data-grid .ui-data-grid__cell[data-grid-column-id="photo"] {
+  text-align: left;
+}
+
+.menu-management > .ui-data-grid .ui-data-grid__header-content > [data-grid-target='["$header","photo"]'] {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.menu-management > .ui-data-grid .ui-data-grid__table > thead > tr > th:last-child > span {
+  position: absolute;
+  inline-size: var(--stroke-hairline);
+  block-size: var(--stroke-hairline);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.menu-management > .ui-data-grid .ui-data-grid__actions > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.menu-management > .ui-data-grid .ui-data-grid__actions .ui-button > .ui-press-surface {
+  color: var(--muted-foreground);
+}
+
+.menu-management > .ui-data-grid .ui-data-grid__actions .ui-button[aria-disabled="true"] {
+  padding: calc(var(--space-3) / 2);
+  cursor: not-allowed;
+}
+
+.menu-management > .ui-data-grid .ui-data-grid__actions .ui-button[aria-disabled="true"] > .ui-press-surface {
+  min-height: 0;
+  padding: 0;
+  background: var(--muted);
+  border-color: var(--border);
+  color: var(--disabled-foreground);
+}

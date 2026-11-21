@@ -1,0 +1,71 @@
+/* Detail window (공지 작성 / 보낸 기록). The footer is not here: it goes into the window's bottom row (DetailFooterContent), outside the scrolling body, so it never covers the band, an error or 보냈어요(예시). */
+.i7-notice-detail { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.i7-notice-detail[data-tab='history'] { flex: 1 1 auto; min-height: 0; }
+.i7-notice-form { display: grid; gap: var(--space-3); min-width: 0; }
+.i7-notice-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.i7-notice-calendar-load.ui-button { flex: none; margin-inline-start: auto; min-width: min(100%, 120px); }
+.i7-notice-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.i7-notice-draft-pick { flex: 0 1 320px; width: auto; min-width: 240px; max-width: 100%; }
+.i7-notice-dates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4) var(--space-6); align-items: start; }
+.i7-notice-groups { display: flex; flex-wrap: wrap; column-gap: var(--space-6); }
+.i7-notice-stale { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--secondary); }
+.i7-notice-stale > p { margin: 0; min-width: 0; flex: 1 1 200px; overflow-wrap: anywhere; }
+/* RecipientRuleBand: ⓘ on --secondary for an informational notice, ⚠ on --warning-bg once ad wording is found. */
+.i7-notice-rule { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-2) var(--space-4); border-radius: var(--radius-md); background: var(--secondary); overflow-wrap: anywhere; word-break: keep-all; }
+.i7-notice-rule p { margin: 0; }
+.i7-notice-rule > .ui-icon { flex: none; width: 24px; height: 24px; margin-block: calc((var(--leading-body) - 24px) / 2); color: var(--muted-foreground); }
+.i7-notice-rule[data-tone='warning'] { background: var(--warning-bg); color: var(--warning); }
+.i7-notice-rule[data-tone='warning'] > .ui-icon { color: var(--warning); }
+.i7-notice-preview { display: grid; gap: var(--space-2); padding: var(--space-4); border-radius: var(--radius-md); background: var(--secondary); overflow-wrap: anywhere; word-break: keep-all; scroll-margin-block: var(--space-4); }
+.i7-notice-preview > * { margin: 0; }
+.i7-notice-preview > h3 { font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-bold); }
+.i7-notice-preview-body { white-space: pre-line; }
+/* Footer row: the status sentence on the left (an error, 보냈어요(예시), or why 공지 보내기 is off), the four default-size buttons on the right. */
+.i7-notice-footbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-3) var(--space-6); padding-top: var(--space-3); border-top: var(--stroke-hairline) solid var(--border); color: var(--foreground); }
+/* The Navis launcher sits in this window's bottom-right corner (dashboard.css .ui-dialog > .dashboard-navis-dock: right space-8, bottom space-8, space-16 wide): the right-aligned buttons end before it. */
+.i7-notice-footbar { padding-inline-end: calc(var(--space-16) + var(--space-4)); }
+.i7-notice-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); flex: 1 1 320px; min-width: 0; margin: 0; overflow-wrap: anywhere; word-break: keep-all; }
+.i7-notice-status > span { min-width: 0; }
+.i7-notice-status > .ui-icon { flex: none; width: 24px; height: 24px; }
+.i7-notice-status[data-tone='hint'] { color: var(--muted-foreground); }
+.i7-notice-status[data-tone='error'] { color: var(--destructive); }
+.i7-notice-status[data-tone='ok'] { color: var(--success); }
+.i7-notice-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-3); flex: none; max-width: 100%; }
+/* 보낸 기록: the kit DataGrid is as tall as its rows (never a stretched empty table) and scrolls its own body once the rows outgrow the window; the empty state keeps its next action centred. */
+.i7-notice-sent-grid { display: flex; flex-direction: column; flex: 0 1 auto; min-width: 0; min-height: 0; }
+.i7-notice-sent-grid > .ui-data-grid { height: auto; }
+.i7-notice-history-state { display: grid; justify-items: center; align-content: center; gap: var(--space-3); padding: var(--space-6); text-align: center; }
+.i7-notice-history-state > .ui-icon { color: var(--muted-foreground); }
+.i7-notice-history-state .ui-inline-state { justify-items: center; padding: 0; }
+
+/* D-298: number then subtitle; the compact action shares the number line. */
+.i7-notice-panel { display: grid; align-content: start; gap: var(--space-6); height: 100%; min-width: 0; }
+.i7-notice-panel p { margin: 0; }
+.i7-notice-metric, .i7-notice-panel-list, .i7-notice-wide-rows, .i7-notice-workspace > div { min-width: 0; }
+.i7-notice-metric-line { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
+.i7-notice-metric-line > .i7-notice-number { flex: 1; min-width: 0; }
+.i7-notice-metric-line > .ui-panel-action-slot { flex: none; }
+.i7-notice-subtitle { margin-top: var(--space-1) !important; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); }
+.i7-notice-panel[data-height='1']:not([data-width='1']) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto; column-gap: var(--space-6); row-gap: 0; }
+.i7-notice-panel[data-height='1']:not([data-width='1']) .i7-notice-metric { grid-row: 1 / 3; }
+.i7-notice-wide-rows { grid-column: 2; grid-row: 1; }
+.i7-notice-wide-action { grid-column: 2; grid-row: 2; align-self: end; justify-self: end; }
+.i7-notice-panel[data-height='1']:is([data-width='3'], [data-width='4']) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+.i7-notice-panel[data-height='1']:is([data-width='3'], [data-width='4']) .i7-notice-wide-action { grid-column: 3; grid-row: 1 / 3; }
+.i7-notice-value-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--target-min); border-bottom: var(--stroke-hairline) solid var(--border); font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-medium); word-break: keep-all; }
+.i7-notice-value-row:last-child { border-bottom: 0; }
+.i7-notice-value-row > span { min-width: 0; }
+.i7-notice-value-row > strong { text-align: right; font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.i7-notice-panel[data-height='1'] .i7-notice-value-row { min-height: var(--leading-body); border: 0; }
+.i7-notice-panel-list > .ui-panel-action-slot { margin-bottom: var(--space-6); }
+.i7-notice-closure { display: flex; gap: var(--space-2); align-items: center; min-width: 0; font-size: var(--type-caption); line-height: var(--leading-caption); word-break: keep-all; }
+.i7-notice-panel-list > :is(.i7-notice-closure, .i7-notice-history, .i7-notice-history-empty) { margin-top: var(--space-6); }
+.i7-notice-history-empty { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.i7-notice-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); min-width: 0; }
+.i7-notice-drafts { margin-top: var(--space-6); }
+.i7-notice-history-table { min-width: 0; }
+.i7-notice-history-table table { width: 100%; border-collapse: collapse; font-size: var(--type-body); line-height: var(--leading-body); word-break: keep-all; }
+.i7-notice-history-table th { color: var(--muted-foreground); font-size: var(--type-caption); font-weight: var(--weight-medium); }
+.i7-notice-history-table :is(th, td) { height: var(--target-min); padding: var(--space-1); border-bottom: var(--stroke-hairline) solid var(--border); text-align: left; }
+.i7-notice-history-table tr:last-child td { border-bottom: 0; }
+.i7-notice-history-table tr > :is(:nth-last-child(1), :nth-last-child(2)) { text-align: right; font-variant-numeric: tabular-nums; }

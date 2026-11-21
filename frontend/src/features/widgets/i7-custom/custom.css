@@ -1,0 +1,65 @@
+.custom-primary { min-width: 0; }
+.custom-label, .custom-secondary, .custom-panel-list p { margin: 0; }
+.custom-label, .custom-secondary { color: var(--muted-foreground); }
+.custom-panel-list { display: grid; gap: var(--space-2); min-width: 0; }
+.custom-panel-list p { overflow-wrap: anywhere; }
+.custom-detail, .custom-editor, .custom-templates, .custom-fields { display: grid; align-content: start; gap: var(--space-4); min-width: 0; overflow-wrap: anywhere; }
+.custom-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.custom-toolbar .ui-field { flex: 1; min-width: 0; }
+.custom-workspace { min-width: 0; }
+/* Keep the three-row scroll area, with the frame ending at the last visible order. */
+.custom-workspace[data-short-list] > .ui-data-grid > .ui-data-grid__scroll { border-color: transparent; }
+.custom-workspace[data-short-list] > .ui-data-grid .ui-data-grid__table {
+  box-sizing: content-box;
+  width: calc(100% - 2 * var(--stroke-hairline));
+  border: var(--stroke-hairline) solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: clip;
+}
+.custom-workspace[data-short-list] > .ui-data-grid .ui-data-grid__table > tbody > tr:last-child > td { border-bottom-color: transparent; }
+.custom-field { display: grid; gap: var(--space-2); min-width: 0; }
+.custom-field select { width: 100%; background: var(--card); color: var(--foreground); }
+.custom-fieldset { border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); padding: var(--space-4); display: grid; gap: var(--space-3); min-width: 0; }
+.custom-datetime { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.custom-editor :is(p, h4) { margin: 0; }
+.custom-facts { display: grid; gap: var(--space-2); margin: 0; }
+.custom-facts > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); }
+.custom-facts dt { color: var(--muted-foreground); }
+.custom-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+.custom-template-list { list-style: none; padding: 0; display: grid; gap: var(--space-3); }
+.custom-template-list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.custom-template-list strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.custom-error { color: var(--destructive); }
+
+/* D-298: MetricBlock, four equal stage counts and two-line order rows. */
+.custom-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); align-content: start; height: 100%; min-width: 0; }
+.custom-panel-summary { display: flex; align-items: start; gap: var(--space-6); min-width: 0; }
+.custom-panel-summary > .custom-primary { flex: 1; }
+.custom-panel .custom-label { margin-top: var(--space-1); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); }
+.custom-panel .custom-panel-list { display: block; }
+.custom-panel[data-height='1']:not([data-width='1']) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.custom-value-row { display: flex; align-items: center; justify-content: space-between; min-height: var(--target-min); gap: var(--space-3); border-bottom: var(--stroke-hairline) solid var(--border); font-size: var(--type-body); line-height: var(--leading-body); word-break: keep-all; }
+.custom-value-row:last-child { border-bottom: 0; }
+.custom-value-row strong { font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; text-align: right; }
+.custom-panel[data-height='1'] .custom-value-row { min-height: var(--leading-body); border-bottom: 0; }
+.custom-stage-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); flex: 2; min-width: 0; }
+.custom-stage-counts strong { font-size: var(--type-section); line-height: var(--leading-section); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.custom-stage-counts p { margin: var(--space-1) 0 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); word-break: keep-all; }
+.custom-order-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; column-gap: var(--space-3); min-height: var(--target-primary); border-bottom: var(--stroke-hairline) solid var(--border); font-size: var(--type-body); line-height: var(--leading-body); }
+.custom-order-row:last-child { border-bottom: 0; }
+.custom-order-name { font-weight: var(--weight-bold); word-break: keep-all; overflow-wrap: normal; }
+.custom-order-meta { grid-column: 1; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.custom-order-row > .ui-status-chip { grid-column: 2; grid-row: 1 / 3; }
+.custom-panel .ui-status-chip { white-space: nowrap; }
+.custom-panel[data-width='1'] .custom-order-row { grid-template-columns: minmax(0, 1fr); }
+.custom-panel[data-width='1'] .custom-order-name { grid-column: 1 / -1; }
+.custom-panel > .ui-panel-action-slot { justify-self: start; }
+.custom-panel-table { min-width: 0; }
+.custom-panel-table table { width: 100%; border-collapse: collapse; word-break: keep-all; font-size: var(--type-body); line-height: var(--leading-body); }
+.custom-panel-table th { color: var(--muted-foreground); font-size: var(--type-caption); font-weight: var(--weight-medium); }
+.custom-panel-table :is(th, td) { text-align: left; min-height: var(--target-primary); height: var(--target-primary); padding: var(--space-1); border-bottom: var(--stroke-hairline) solid var(--border); }
+/* DS 12.1 MiniTable: the header is one caption line, only body rows are 56 (a 56 header left no room for a row at 3x2). */
+.custom-panel-table th { height: auto; min-height: 0; padding-block: var(--space-1); }
+.custom-panel-table tr:last-child td { border-bottom: 0; }
+.custom-panel-table .custom-quote-column, .custom-panel-table tr > :first-child { text-align: right; font-variant-numeric: tabular-nums; }
+.custom-panel .i7-panel-remainder { margin: var(--space-2) 0 0; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }

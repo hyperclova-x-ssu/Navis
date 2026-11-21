@@ -1,0 +1,61 @@
+/* The root must not clip: FitProbe reads the overflow of the surrounding .mc-root (which clips) and drops rows until the actions fit (P-1). */
+.credit-root { min-width: 0; height: 100%; }
+.credit-root [hidden] { display: none !important; }
+.credit-stack { display: grid; align-content: start; gap: var(--space-4); min-width: 0; overflow-wrap: anywhere; }
+/* .mc-workspace is a flex column: everything above the table keeps its height and the table takes the rest of the window. */
+.credit-detail { gap: var(--space-4); min-width: 0; overflow-wrap: anywhere; }
+.credit-detail > :not(.ui-data-grid, .ui-detail-side-panel) { flex: none; }
+.credit-detail-state { display: grid; place-items: center; min-height: 100%; }
+.credit-detail-state > * { max-width: 100%; }
+/* DS 12.1 / checklist A6: the table search is 48 high (the kit's .ui-search-field__control default is the 56 primary target). */
+.credit-search .ui-search-field__control { height: var(--target-default); min-height: 0; }
+.credit-search .ui-input { align-self: stretch; min-height: 0; padding-block: 0; }
+.credit-metric { min-width: 0; }
+.credit-metric p { margin: 0; overflow-wrap: anywhere; }
+.credit-label { color: var(--foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.credit-secondary { color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.credit-actions, .credit-tools { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; min-width: 0; }
+.credit-tools .ui-field { flex: 1; min-width: 0; }
+/* SCR-279 요약 카드 2칸: label above a big value (MetricFit, same sizes as the panel). */
+.credit-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin: 0; min-width: 0; }
+.credit-summary-card { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; padding: var(--space-4) var(--space-6); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.credit-summary-card dt { margin: 0; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); word-break: keep-all; }
+.credit-summary-card dd { margin: 0; min-width: 0; font-variant-numeric: tabular-nums; }
+.ui-detail-side-panel .credit-summary-card { padding: var(--space-3) var(--space-4); }
+/* DS 12.2: beside an overlay side panel the summary stays left of it, like the table (the kit pushes only .ui-data-grid). */
+.ui-overlay-body :has(> .ui-detail-side-panel[data-layout="overlay"]) > .credit-summary { width: calc(100% - var(--sidepanel-width) - var(--space-6)); }
+.credit-history { display: grid; gap: var(--space-2); list-style: none; margin: 0; padding: 0; }
+.credit-history li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); border-top: var(--stroke-hairline) solid var(--border); overflow-wrap: anywhere; }
+.credit-history p { margin: 0; }
+.credit-history strong { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
+.credit-pass { padding: var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); min-width: 0; }
+.credit-pass p { margin: 0; overflow-wrap: anywhere; }
+.credit-root .mc-mini { min-width: 0; }
+
+/* D-298: both account totals use the same MetricBlock and fit against the same longest value. */
+.credit-panel { display: grid; align-content: start; gap: var(--space-6); color: var(--foreground); }
+.credit-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); min-width: 0; }
+.credit-panel[data-width='1'] .credit-metrics { grid-template-columns: minmax(0, 1fr); }
+.credit-panel .credit-label { margin-top: var(--space-1); color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); }
+.credit-panel[data-height='1']:is([data-width='3'], [data-width='4']) { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.credit-panel .credit-panel-history { display: block; min-width: 0; }
+.credit-panel-history li, .credit-value-row { display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: center; gap: var(--space-3); min-height: var(--target-min); border-top: 0; border-bottom: var(--stroke-hairline) solid var(--border); font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-medium); word-break: keep-all; }
+.credit-panel-history li:last-child, .credit-value-row:last-child { border-bottom: 0; }
+.credit-panel-history strong, .credit-value-row strong { flex-shrink: 0; text-align: right; font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.credit-panel[data-height='1'] .credit-panel-history li { min-height: var(--leading-body); border: 0; }
+.credit-panel .credit-actions { align-self: end; }
+.credit-panel-table { min-width: 0; }
+.credit-panel-table .ui-table { width: 100%; border-collapse: collapse; font-size: var(--type-body); line-height: var(--leading-body); word-break: keep-all; }
+.credit-panel-table .ui-table :is(th, td) { height: var(--target-min); box-sizing: border-box; border-bottom: var(--stroke-hairline) solid var(--border); padding: var(--space-1); text-align: right; font-variant-numeric: tabular-nums; }
+/* K-A item 5: the same 48 header with its 1px rule as the kit Table in a window (the kit rule only covers .ui-overlay-body). */
+.credit-panel-table .ui-table thead th { height: var(--table-header-height); padding-block: 0; background: var(--muted); color: var(--foreground); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-bold); vertical-align: middle; }
+.credit-panel-table .ui-table tr > :first-child { text-align: left; }
+.credit-panel-table .ui-table tbody tr:last-child td { border-bottom: 0; }
+.credit-panel .i7-panel-remainder { margin: var(--space-2) 0 0; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+
+/* 원거래 column (DS 12.1 LinkCell): label + right chevron, the whole cell is one press target. */
+.ui-data-grid__cell:has(> .ui-data-grid__value > .credit-original-link) { display: flex; padding: 0; }
+.ui-data-grid__cell:has(> .ui-data-grid__value > .credit-original-link) > .ui-data-grid__value { display: flex; flex: 1; }
+.ui-data-grid__cell:has(> .ui-data-grid__value > .credit-original-link):active > .ui-data-grid__value { transform: none; }
+.credit-original-link { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 0 var(--table-cell-padding-x); text-align: start; }
+.credit-original-link > .ui-icon { width: var(--space-4); height: var(--space-4); flex: none; }

@@ -1,0 +1,86 @@
+.receipt-ocr {
+  display: grid;
+  gap: var(--space-2);
+}
+.receipt-ocr__actions,
+.receipt-ocr__band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.receipt-ocr__band {
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border: var(--stroke-hairline) solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  font-size: var(--type-body);
+  line-height: var(--leading-body);
+}
+.receipt-ocr__band p {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+.receipt-ocr__band[data-state="proposal"] {
+  border-color: var(--selection-foreground);
+  background: var(--selection);
+  color: var(--selection-foreground);
+}
+.receipt-ocr__band[data-state="error"] {
+  border-color: var(--destructive);
+  background: var(--change-up-bg);
+}
+.receipt-ocr__band[data-state="error"] .ui-icon {
+  flex: none;
+  color: var(--destructive);
+}
+.receipt-ocr__scan .ui-icon {
+  inline-size: var(--space-5);
+  block-size: var(--space-5);
+}
+.receipt-ocr__scan .ui-progress { display: none; }
+.receipt-ocr__retry.ui-button { min-height: var(--target-min); }
+.receipt-ocr__picker.ui-button { display: none; }
+@media (any-pointer: coarse) {
+  .receipt-ocr__picker.ui-button { display: inline-flex; }
+}
+
+.receipt-ocr-field {
+  position: relative;
+  min-inline-size: 0;
+}
+.receipt-ocr-field[data-review="true"] {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+.receipt-ocr-field[data-review="true"] > .ui-field { display: contents; }
+.receipt-ocr-field[data-review="true"] .ui-field__label { grid-area: 1 / 1; }
+.receipt-ocr-field[data-review="true"] :is(.ui-field__control, .ui-field__error) {
+  grid-column: 1 / -1;
+}
+.receipt-ocr-field__badge {
+  grid-area: 1 / 2;
+  justify-self: start;
+}
+.receipt-ocr-field[data-review="true"] :is(.ui-text-input, .ui-picker-field__button) {
+  border-color: var(--warning);
+}
+/* The visible kit badge sits by the label. Keep the kit's described-by hint for assistive technology. */
+.receipt-ocr-field[data-review="true"] .ui-field__hint {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ui-inline-form:has(> .ui-inline-form__body > .receipt-ocr) .ui-inline-form__actions > button[type="submit"] {
+  min-block-size: var(--target-primary);
+}
