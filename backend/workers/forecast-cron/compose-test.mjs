@@ -24,8 +24,8 @@ services:
     build: !reset null
     networks: !override [forecast-test-data]
     secrets: !override
-      - { source: test_inventory_relay_password, target: inventory_relay_password }
-      - { source: test_pos_relay_password, target: pos_relay_password }
+      - { source: test_inventory_rly_password, target: inventory_rly_password }
+      - { source: test_pos_rly_password, target: pos_rly_password }
     environment:
       NAVIS_FORECAST_TEST_REDIS_URL: redis://${redis}:6379/3
       NAVIS_INSIGHT_TEST_REDIS_URL: redis://${redis}:6379/2

@@ -10,6 +10,7 @@ type Result = {
   modelVersion: string;
   status: 'ready' | 'no_data';
   results: Array<{ scope: 'store' | 'menu' | 'ingredient'; targetId: string | null; expected: string }>;
+  stale?: true;
 };
 type Config = { storeId: string; insight: Endpoint; inventory: Endpoint; now?: () => Date };
 
@@ -92,5 +93,6 @@ export async function runForecast({ storeId, insight, inventory, now = () => new
     || (result.status !== 'ready' && result.status !== 'no_data') || !Array.isArray(result.results)) {
     throw new Error('Invalid inventory forecast response');
   }
-  return { targetDate, modelVersion, status: result.status, results: result.results };
+  return { targetDate, modelVersion, status: result.status, results: result.results,
+    ...(result.stale === true ? { stale: true } : {}) };
 }

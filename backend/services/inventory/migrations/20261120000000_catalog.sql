@@ -34,20 +34,20 @@ WHERE inventory_item_id IS NOT NULL;
 
 ALTER TABLE inventory.store ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory.store FORCE ROW LEVEL SECURITY;
-CREATE POLICY store_scope ON inventory.store TO inventory_migrate
+CREATE POLICY store_scope ON inventory.store TO inventory_mig
     USING (store_id = (SELECT nullif(current_setting('app.store_id', true), '')::uuid));
 
 ALTER TABLE inventory.inventory_item ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory.inventory_item FORCE ROW LEVEL SECURITY;
-CREATE POLICY store_scope ON inventory.inventory_item TO inventory_migrate
+CREATE POLICY store_scope ON inventory.inventory_item TO inventory_mig
     USING (store_id = (SELECT nullif(current_setting('app.store_id', true), '')::uuid));
 
 ALTER TABLE inventory.menu_item ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory.menu_item FORCE ROW LEVEL SECURITY;
-CREATE POLICY store_scope ON inventory.menu_item TO inventory_migrate, inventory_runtime
+CREATE POLICY store_scope ON inventory.menu_item TO inventory_mig, inventory_run
     USING (store_id = (SELECT nullif(current_setting('app.store_id', true), '')::uuid));
 
-GRANT SELECT ON inventory.menu_item TO inventory_runtime;
+GRANT SELECT ON inventory.menu_item TO inventory_run;
 
 -- Down Migration
 DROP TABLE inventory.menu_item;

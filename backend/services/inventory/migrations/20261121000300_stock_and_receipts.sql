@@ -182,7 +182,7 @@ BEGIN
         EXECUTE format('ALTER TABLE inventory.%I ENABLE ROW LEVEL SECURITY', name);
         EXECUTE format('ALTER TABLE inventory.%I FORCE ROW LEVEL SECURITY', name);
         EXECUTE format(
-            'CREATE POLICY stock_scope ON inventory.%I TO inventory_migrate, inventory_runtime USING (%s)',
+            'CREATE POLICY stock_scope ON inventory.%I TO inventory_mig, inventory_run USING (%s)',
             name,
             CASE WHEN name = 'outbox_scope'
                 THEN 'scope_key = (SELECT current_setting(''app.store_id'', true))'
@@ -196,11 +196,11 @@ $$;
 GRANT SELECT ON inventory.business_day, inventory.recipe_version, inventory.recipe_current,
     inventory.sale_usage, inventory.sale_usage_line, inventory.sale_usage_correction, inventory.purchase_order,
     inventory.purchase_order_line, inventory.goods_receipt, inventory.stock_daily_opening,
-    inventory.stock_movement, inventory.outbox, inventory.outbox_scope TO inventory_runtime;
+    inventory.stock_movement, inventory.outbox, inventory.outbox_scope TO inventory_run;
 GRANT INSERT ON inventory.sale_usage, inventory.sale_usage_line, inventory.sale_usage_correction,
-    inventory.goods_receipt, inventory.stock_movement, inventory.outbox, inventory.outbox_scope TO inventory_runtime;
-GRANT UPDATE (restored_quantity) ON inventory.sale_usage_line TO inventory_runtime;
-GRANT UPDATE (last_seq) ON inventory.outbox_scope TO inventory_runtime;
+    inventory.goods_receipt, inventory.stock_movement, inventory.outbox, inventory.outbox_scope TO inventory_run;
+GRANT UPDATE (restored_quantity) ON inventory.sale_usage_line TO inventory_run;
+GRANT UPDATE (last_seq) ON inventory.outbox_scope TO inventory_run;
 
 -- Down Migration
 DROP TABLE inventory.outbox, inventory.outbox_scope;

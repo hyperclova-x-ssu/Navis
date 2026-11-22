@@ -22,10 +22,10 @@ CREATE INDEX demand_forecast_item ON inventory.demand_forecast (store_id, item_i
 
 ALTER TABLE inventory.demand_forecast ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory.demand_forecast FORCE ROW LEVEL SECURITY;
-CREATE POLICY demand_forecast_scope ON inventory.demand_forecast TO inventory_migrate, inventory_runtime
+CREATE POLICY demand_forecast_scope ON inventory.demand_forecast TO inventory_mig, inventory_run
     USING (store_id = (SELECT nullif(current_setting('app.store_id', true), '')::uuid));
 
-GRANT SELECT, INSERT ON inventory.demand_forecast TO inventory_runtime;
+GRANT SELECT, INSERT ON inventory.demand_forecast TO inventory_run;
 
 -- Down Migration
 DROP TABLE inventory.demand_forecast;

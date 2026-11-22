@@ -54,6 +54,11 @@ describe.skipIf(!process.env.NAVIS_FORECAST_TEST_REDIS_URL)('T-315 forecast with
   const posSetup = dbPool('pos', 'migrate', 'test');
   const pos = createPosApp(posDb, { gatewayToken: gateway, now: () => posNow, logging: false });
   const inventory = createInventoryApp(inventoryDb, gateway, false, () => inventoryNow, inventoryToken);
+  inventory.addHook('onSend', async (_req, reply, payload) => {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    reply.header('x-content-type-options', 'nosniff');
+    return payload;
+  });
   const insight = createInsightApp(insightDb, { forecastToken: insightToken, logging: false, cctvEnabled: false });
   let inventoryRelayDb: Pool;
   let posRelayDb: Pool;
@@ -150,6 +155,10 @@ describe.skipIf(!process.env.NAVIS_FORECAST_TEST_REDIS_URL)('T-315 forecast with
     const body = { menus: [{ menuId: menu, fourWeekQuantity: '7' }] };
     expect((await put(body, day, ownerHeaders())).statusCode).toBe(401);
     expect((await put(body, day, workloadHeaders(inventoryToken, otherStore))).statusCode).toBe(403);
+    const persisted = await inInventory(inventoryDb, store, db => db.query(
+      'SELECT 1 FROM inventory.demand_forecast WHERE store_id = $1', [store]));
+    expect(persisted.rowCount).toBe(0);
+    expect(await generated()).toHaveLength(0);
     expect((await inventory.inject({ url: forecastUrl(), headers: ownerHeaders(otherStore) })).statusCode).toBe(403);
     expect((await put(body, '2026-02-30')).statusCode).toBe(400);
     expect((await put({ menus: [body.menus[0], body.menus[0]] })).statusCode).toBe(400);
@@ -187,6 +196,11 @@ describe.skipIf(!process.env.NAVIS_FORECAST_TEST_REDIS_URL)('T-315 forecast with
   }
 
   it('replays POS correction, uses current recipes, and publishes once per forecast key on retry', async () => {
+    const batchId = randomUUID();
+    await inInventory(inventorySetup, store, db => db.query(`
+      INSERT INTO inventory.stock_batch (store_id, batch_id, item_id, quantity_base, remaining_base, expires_on, received_at)
+      VALUES ($1, $2, $3, 1000, 1000, $4, $5)
+    `, [store, batchId, milk, day, new Date(+atHistory(history[1]) - 3600_000)]));
     await recognize(history[0], 2);
     const canceled = await recognize(history[1], 3);
     const quote = await posPost(`/payments/${canceled}/reversal-quote`, { kind: 'cancel' });
@@ -232,6 +246,17 @@ describe.skipIf(!process.env.NAVIS_FORECAST_TEST_REDIS_URL)('T-315 forecast with
     await stockConsumer.step();
     expect(await redis.pending('pos', 'insight')).toBe(0);
     expect(await redis.pending('pos', 'inventory')).toBe(0);
+    const lots = await inInventory(inventoryDb, store, db => db.query(`
+      SELECT u.used_base, u.restored_base, b.remaining_base
+      FROM inventory.stock_batch_usage u JOIN inventory.stock_batch b USING (store_id, batch_id)
+      WHERE u.store_id = $1 AND u.batch_id = $2
+      ORDER BY u.restored_base DESC, u.used_base DESC
+    `, [store, batchId]));
+    expect(lots.rows).toEqual([
+      { used_base: '780', restored_base: '780', remaining_base: '0' },
+      { used_base: '780', restored_base: '0', remaining_base: '0' },
+      { used_base: '220', restored_base: '0', remaining_base: '0' },
+    ]);
 
     const historicalStock = () => inInventory(inventoryDb, store, db => stockForItem(db, store, history[3], milk));
     expect(await historicalStock()).toMatchObject({ usedQuantityBase: '520', rawQuantityBase: '9480' });
@@ -266,9 +291,15 @@ describe.skipIf(!process.env.NAVIS_FORECAST_TEST_REDIS_URL)('T-315 forecast with
       producer: 'inventory', database: inventoryRelayDb, redis, groups: [{ name: 'pos', database: posRelayDb }],
     });
     expect(await relay.step()).toBe('rebuilt');
-    for (let publication = 0; publication < 4; publication++) expect(await relay.step()).toBe('published');
-    expect(await relay.step()).toBe('idle');
-    const relayed = (await redis.events('inventory')).filter(event => event.eventType === 'inventory.forecast_generated.v1');
+    const ownEvents = async () => (await redis.events('inventory')).filter(event => event.storeId === store);
+    await expect.poll(async () => {
+      expect(['published', 'idle']).toContain(await relay.step());
+      return (await ownEvents()).map(event => event.eventType);
+    }, { interval: 10, timeout: 10_000 }).toEqual([
+      ...events.map(() => 'inventory.stock_changed.v1'),
+      'inventory.receipt_recorded.v1', ...publications.map(() => 'inventory.forecast_generated.v1'),
+    ]);
+    const relayed = (await ownEvents()).filter(event => event.eventType === 'inventory.forecast_generated.v1');
     expect(relayed.map(event => event.aggregateId)).toEqual(publications.map(row => row.aggregate_id));
     expect((await put({ menus: [{ menuId: menu, fourWeekQuantity: '8' }] })).json()).toEqual({
       code: 'CONFLICT', reason: 'IDEMPOTENCY_MISMATCH',
@@ -305,6 +336,7 @@ describe.skipIf(!process.env.NAVIS_FORECAST_TEST_REDIS_URL)('T-315 forecast with
     });
     const after = await generated();
     expect(after.slice(0, before.length)).toEqual(before);
-    expect(after.slice(before.length).map(row => row.store_seq)).toEqual(['5', '6', '7']);
+    const lastSequence = BigInt(before.at(-1)!.store_seq);
+    expect(after.slice(before.length).map(row => row.store_seq)).toEqual([1n, 2n, 3n].map(step => String(lastSequence + step)));
   });
 });

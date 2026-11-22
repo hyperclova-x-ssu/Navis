@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import type { RecipeIngredient } from '../recipes.ts';
+import { lockStockStore } from '../reality/03/commands.ts';
 
 export type ForecastKey = { storeId: string; targetDate: string; modelVersion: string };
 export type MenuBaseline = { menuId: string; fourWeekQuantity: string };
 type Scope = 'store' | 'menu' | 'ingredient';
-type ForecastRow = { menu_id: string | null; item_id: string | null; expected: string };
+type ForecastRow = { menu_id: string | null; item_id: string | null; expected: string; stale: boolean };
 type CurrentMenu = {
   menu_id: string | null;
   selling: boolean | null;
@@ -21,14 +22,21 @@ function targetOf(row: ForecastRow): { scope: Scope; targetId: string | null } {
 
 export async function readForecast(db: PoolClient, { storeId, targetDate, modelVersion }: ForecastKey) {
   const { rows } = await db.query<ForecastRow>(`
-    SELECT menu_id, item_id, expected::text
+    WITH catalog AS (
+      SELECT coalesce(max(store_seq), 0) AS seq FROM inventory.outbox
+      WHERE store_id = $1 AND event_type = 'inventory.catalog_changed.v1'
+    )
+    SELECT menu_id, item_id, expected::text,
+      menu_id IS NULL AND item_id IS NULL AND seq > coalesce(catalog_seq, 0) AS stale
     FROM inventory.demand_forecast
+    CROSS JOIN catalog
     WHERE store_id = $1 AND target_date = $2 AND model_version = $3
     ORDER BY (menu_id IS NOT NULL)::int + 2 * (item_id IS NOT NULL)::int, menu_id, item_id
   `, [storeId, targetDate, modelVersion]);
   return {
     targetDate, modelVersion, status: rows.length ? 'ready' as const : 'no_data' as const,
     results: rows.map(row => ({ ...targetOf(row), expected: row.expected })),
+    ...(rows[0]?.stale ? { stale: true as const } : {}),
   };
 }
 
@@ -54,6 +62,8 @@ export async function saveForecast(db: PoolClient, key: ForecastKey, menus: Menu
     return readForecast(db, key);
   }
 
+  // Take the catalog command lock so the captured event sequence and current recipes describe the same version.
+  await lockStockStore(db, storeId);
   const { rows: current } = await db.query<CurrentMenu>(`
     SELECT m.menu_id, (m.kind = 'menu' AND m.deleted_at IS NULL AND m.sale_status = 'selling') AS selling,
       s."fourWeekQuantity" AS four_week_quantity, v.ingredients
@@ -86,12 +96,17 @@ export async function saveForecast(db: PoolClient, key: ForecastKey, menus: Menu
     forecast_id: randomUUID(), menu_id: menuId, item_id: itemId, total: total.toString(),
   }));
   await db.query(`
-    WITH written AS (
+    WITH catalog AS (
+      SELECT coalesce(max(store_seq), 0) AS seq FROM inventory.outbox
+      WHERE store_id = $1 AND event_type = 'inventory.catalog_changed.v1'
+    ), written AS (
       INSERT INTO inventory.demand_forecast
-        (forecast_id, store_id, target_date, model_version, menu_id, item_id, expected, generated_at, input_fingerprint)
+        (forecast_id, store_id, target_date, model_version, menu_id, item_id, expected, generated_at, input_fingerprint, catalog_seq)
       SELECT v.forecast_id, $1::uuid, $2, $3, v.menu_id, v.item_id, v.total * 0.25, $4,
-        CASE WHEN v.menu_id IS NULL AND v.item_id IS NULL THEN $5 END
+        CASE WHEN v.menu_id IS NULL AND v.item_id IS NULL THEN $5 END,
+        CASE WHEN v.menu_id IS NULL AND v.item_id IS NULL THEN seq END
       FROM jsonb_to_recordset($6::jsonb) AS v(forecast_id uuid, menu_id uuid, item_id uuid, total numeric)
+      CROSS JOIN catalog
       RETURNING forecast_id, target_date, model_version, menu_id, item_id, generated_at
     ), reserved AS (
       INSERT INTO inventory.outbox_scope (scope_key, last_seq) VALUES ($1::uuid::text, $7::bigint)
@@ -117,5 +132,10 @@ export async function readForecastBusinessDay(db: PoolClient, storeId: string, a
     LIMIT 2
   `, [storeId, at]);
   if (rows.length > 1) throw new Error('Overlapping inventory business days');
-  return { targetDate: rows[0]?.targetDate ?? null };
+  if (rows[0]) return rows[0];
+  const { rows: [projected] } = await db.query<{ targetDate: string | null }>(`
+    SELECT (($1::timestamptz AT TIME ZONE stock_timezone) - (stock_day_start - time '00:00'))::date::text AS "targetDate"
+    FROM inventory.store
+  `, [at]);
+  return { targetDate: projected?.targetDate ?? null };
 }

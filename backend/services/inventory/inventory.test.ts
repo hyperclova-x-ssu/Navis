@@ -14,7 +14,7 @@ const emptyStoreId = '33123a19-6780-4d38-9bca-ce96efcf8560';
 const syntheticMenu = {
   menuId: '33123a19-6780-4d38-9bca-ce96efcf8561',
   name: 'Synthetic store tea',
-  category: 'drink',
+  category: 'beverage',
   price: 3100,
   saleStatus: 'sold_out',
 };
@@ -71,7 +71,12 @@ afterAll(async () => {
 describe('inventory management catalog', () => {
   it('matches every SPA seed menu field and DB UUID in UUID order after a seed retry', async () => {
     const expected = seedCatalog.menu
-      .map(({ dbId, name, category, price, saleStatus }) => ({ menuId: dbId, name, category, price, saleStatus }))
+      .map(({ dbId, menuId, name, sourceCategory, category, season, price, saleStatus }) => ({
+        menuId: dbId, name, price, saleStatus,
+        category: sourceCategory === '커피' ? 'coffee' : sourceCategory === '티' || menuId === 'm-yuja-chamomile' ? 'tea'
+          : category === 'dessert' ? 'dessert' : 'beverage',
+        ...(season ? { seasonal: season } : {}),
+      }))
       .sort((a, b) => a.menuId.localeCompare(b.menuId));
     const res = await app.inject({ url: urlFor(cafeId.toUpperCase()), headers: headers(cafeId) });
     expect(res.statusCode).toBe(200);
@@ -151,28 +156,34 @@ describe('inventory database isolation', () => {
       ORDER BY c.relname
     `);
     expect(rows).toEqual([
-      'business_day', 'demand_forecast', 'goods_receipt', 'inventory_item', 'menu_item', 'outbox',
-      'purchase_order', 'purchase_order_line', 'recipe_current', 'recipe_version', 'sale_usage',
-      'sale_usage_correction', 'sale_usage_line', 'stock_daily_opening', 'stock_movement', 'store', 'supplier',
+      'business_day', 'card_approval', 'commerce_link', 'demand_forecast', 'goods_receipt', 'inventory_item', 'menu_command', 'menu_item', 'outbox',
+      'owner_publication', 'publication_preview',
+      'purchase_command', 'purchase_item', 'purchase_order', 'purchase_order_line', 'recipe_current', 'recipe_version', 'sale_usage',
+      'sale_usage_correction', 'sale_usage_line', 'stock_batch', 'stock_batch_usage', 'stock_command',
+      'stock_daily_opening', 'stock_movement', 'store', 'supplier', 'supplier_dispatch',
     ].map((name) => ({
-      name, enabled: true, forced: true, owner: 'inventory_migrate',
+      name, enabled: true, forced: true, owner: 'inventory_mig',
     })));
     const role = await runtime.query(`
       SELECT current_user AS name, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user
     `);
-    expect(role.rows).toEqual([{ name: 'inventory_runtime', rolsuper: false, rolbypassrls: false }]);
-    await expect(runtime.query('UPDATE inventory.menu_item SET price = 1 WHERE false')).rejects.toMatchObject({ code: '42501' });
+    expect(role.rows).toEqual([{ name: 'inventory_run', rolsuper: false, rolbypassrls: false }]);
+    await expect(runtime.query('UPDATE inventory.menu_item SET kind = \'menu\' WHERE false')).rejects.toMatchObject({ code: '42501' });
+    await expect(runtime.query('DELETE FROM inventory.menu_item WHERE false')).rejects.toMatchObject({ code: '42501' });
     await expect(runtime.query('SELECT store_id FROM inventory.store')).rejects.toMatchObject({ code: '42501' });
-    await expect(runtime.query('SELECT item_id FROM inventory.inventory_item')).rejects.toMatchObject({ code: '42501' });
+    await expect(runtime.query('SELECT recipe_key FROM inventory.inventory_item')).rejects.toMatchObject({ code: '42501' });
+    await expect(runtime.query('UPDATE inventory.inventory_item SET base_unit = \'g\' WHERE false')).rejects.toMatchObject({ code: '42501' });
   });
 
   it('restricts unfiltered runtime SELECTs to their transaction store and denies missing or empty scope', async () => {
-    const sql = 'SELECT DISTINCT store_id FROM inventory.menu_item';
-    expect((await runtime.query(sql)).rows).toEqual([]);
-    for (const storeId of [cafeId, syntheticStoreId, '']) {
-      await withStoreTransaction(runtime, storeId, async (client) => {
-        expect((await client.query(sql)).rows).toEqual(storeId ? [{ store_id: storeId }] : []);
-      });
+    for (const table of ['menu_item', 'inventory_item']) {
+      const sql = `SELECT DISTINCT store_id FROM inventory.${table}`;
+      expect((await runtime.query(sql)).rows).toEqual([]);
+      for (const storeId of [cafeId, syntheticStoreId, '']) {
+        await withStoreTransaction(runtime, storeId, async (client) => {
+          expect((await client.query(sql)).rows).toEqual(storeId ? [{ store_id: storeId }] : []);
+        });
+      }
     }
   });
 

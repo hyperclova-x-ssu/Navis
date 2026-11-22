@@ -3,7 +3,7 @@ import { dbPool } from '../../packages/db/index.ts';
 import { connectStreams } from '../../packages/streams/index.ts';
 import { createInventoryStockConsumer } from './stock-consumer.ts';
 
-const pool = dbPool('inventory');
+const pool = dbPool('inventory', 'worker');
 const stop = new AbortController();
 process.once('SIGINT', () => stop.abort());
 process.once('SIGTERM', () => stop.abort());

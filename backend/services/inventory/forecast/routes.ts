@@ -62,7 +62,7 @@ export function registerForecastRoutes(
   const invalid = (reply: FastifyReply) => reply.code(400).send({ code: 'INVALID_REQUEST' });
 
   app.get<{ Params: ForecastKey }>(resource, {
-    onRequest: async (req, reply) => { authorize(req, reply, workload, gateway); },
+    onRequest: async (req, reply) => authorize(req, reply, workload, gateway),
   }, async ({ params }, reply) => {
     if (!isDate(params.targetDate) || !model.test(params.modelVersion)) return invalid(reply);
     return withStoreTransaction(pool, params.storeId, db => readForecast(db, params), { readOnly: true });
@@ -71,7 +71,7 @@ export function registerForecastRoutes(
   if (!workload) return;
 
   app.get<{ Params: { storeId: string }; Querystring: { at?: string } }>(root + '/forecast-business-day', {
-    onRequest: async (req, reply) => { authorize(req, reply, workload); },
+    onRequest: async (req, reply) => authorize(req, reply, workload),
   }, async (req, reply) => {
     const { at } = req.query;
     if (Object.keys(req.query).length !== 1 || typeof at !== 'string'
@@ -83,7 +83,7 @@ export function registerForecastRoutes(
   });
 
   app.put<{ Params: ForecastKey }>(resource, {
-    onRequest: async (req, reply) => { authorize(req, reply, workload); },
+    onRequest: async (req, reply) => authorize(req, reply, workload),
   }, async ({ params, body }, reply) => {
     if (!isDate(params.targetDate) || !model.test(params.modelVersion)) return invalid(reply);
     const menus = parseMenus(body);

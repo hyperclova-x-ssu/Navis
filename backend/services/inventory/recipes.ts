@@ -3,6 +3,31 @@ import type { PoolClient } from 'pg';
 
 type RecipeLine = { itemId: string; quantityBase: number; unitDimension: string };
 export type RecipeIngredient = { item_id: string; quantity_base: number };
+type RecipeComponent = { componentId: string; ingredients: readonly RecipeIngredient[] };
+
+/** Store validated inventory UUIDs using the same immutable versions the sales consumer reads. */
+export async function saveRecipeComponents(
+  db: PoolClient, storeId: string, menuId: string, components: readonly RecipeComponent[],
+): Promise<void> {
+  if (!components.length) return;
+  const versions = components.map(({ componentId, ingredients }) => {
+    const sorted = [...ingredients].sort((a, b) => a.item_id.localeCompare(b.item_id));
+    const version = createHash('sha256').update(JSON.stringify(sorted)).digest('hex');
+    return { component_id: componentId, version, ingredients: sorted };
+  });
+  await db.query(`
+    WITH changes AS (
+      SELECT * FROM jsonb_to_recordset($3::jsonb)
+        AS c(component_id uuid, version text, ingredients jsonb)
+    ), versions AS (
+      INSERT INTO inventory.recipe_version (store_id, menu_id, component_id, version, ingredients)
+      SELECT $1, $2, component_id, version, ingredients FROM changes ON CONFLICT DO NOTHING
+    )
+    INSERT INTO inventory.recipe_current (store_id, menu_id, component_id, version)
+    SELECT $1, $2, component_id, version FROM changes
+    ON CONFLICT (store_id, menu_id, component_id) DO UPDATE SET version = EXCLUDED.version
+  `, [storeId, menuId, JSON.stringify(versions)]);
+}
 
 export async function saveRecipeVersion(
   db: PoolClient, storeId: string, menuId: string, componentId: string, lines: readonly RecipeLine[],

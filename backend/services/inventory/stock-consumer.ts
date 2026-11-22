@@ -2,6 +2,8 @@ import type { Pool, PoolClient } from 'pg';
 import type { SaleUsageLine } from '../../packages/contracts/events.ts';
 import { PermanentStreamError, StreamConsumer, type RedisStreams, type StreamEnvelope } from '../../packages/streams/index.ts';
 import type { RecipeIngredient } from './recipes.ts';
+import { advanceUsageRevision, allocateSaleLots, restoreSaleLots } from './reality/03/batch-usage.ts';
+import { lockStockStore, publishStockChange } from './reality/03/commands.ts';
 
 const saleType = 'pos.sale_recognized.v1';
 const correctionType = 'pos.sale_corrected.v1';
@@ -24,11 +26,12 @@ function isUsageLine(value: unknown, keep: boolean): value is SaleUsageLine {
 
 function readUsageEvent(event: StreamEnvelope) {
   const { payload, storeId, scopeKey, aggregateId, eventType } = event;
-  const { settlementId, correctionId, billId, orderId, paymentId, businessDate, kind, usageEffect, target, lines } = payload;
+  const { settlementId, correctionId, billId, orderId, paymentId, memberId, businessDate, kind, usageEffect, target, lines } = payload;
   const corrected = eventType === correctionType;
+  const hasPaymentIdentity = uuid(paymentId) || (paymentId === undefined && uuid(memberId));
   const keep = corrected && kind === 'refund' && usageEffect === 'keep';
   const restore = corrected && kind === 'cancel' && usageEffect === 'restore';
-  if (!storeId || storeId !== scopeKey || !uuid(settlementId) || !uuid(billId) || !uuid(orderId) || !uuid(paymentId)
+  if (!storeId || storeId !== scopeKey || !uuid(settlementId) || !uuid(billId) || !uuid(orderId) || !hasPaymentIdentity
       || typeof businessDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(businessDate)
       || (corrected ? !uuid(correctionId) || aggregateId !== correctionId || target !== 'recognized_sale' || (!keep && !restore)
         : aggregateId !== settlementId)
@@ -41,7 +44,7 @@ function readUsageEvent(event: StreamEnvelope) {
   if (!Number.isFinite(+date) || date.toISOString().slice(0, 10) !== businessDate || businessDate.startsWith('0000')) {
     throw new PermanentStreamError('SALE_USAGE_EVENT_INVALID');
   }
-  return { storeId, settlementId, billId, orderId, paymentId, businessDate, lines, correctionId, restore };
+  return { storeId, settlementId, billId, orderId, paymentId, memberId, businessDate, lines, correctionId, restore };
 }
 
 const identity = ({ orderLineId, menuId, recipeVersion, options }: SaleUsageLine) =>
@@ -49,10 +52,11 @@ const identity = ({ orderLineId, menuId, recipeVersion, options }: SaleUsageLine
 
 async function recognizeSale(db: PoolClient, event: StreamEnvelope) {
   const { storeId, settlementId, businessDate, lines } = readUsageEvent(event);
+  await lockStockStore(db, storeId);
   const added = await db.query(`
-    INSERT INTO inventory.sale_usage (store_id, settlement_id, business_date, sale)
-    VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING
-  `, [storeId, settlementId, businessDate, event.payload]);
+    INSERT INTO inventory.sale_usage (store_id, settlement_id, business_date, sale, recorded_at)
+    VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING
+  `, [storeId, settlementId, businessDate, event.payload, event.occurredAt]);
 
   if (!added.rowCount) {
     const duplicate = await db.query(`
@@ -98,20 +102,27 @@ async function recognizeSale(db: PoolClient, event: StreamEnvelope) {
     FROM jsonb_to_recordset($3::jsonb)
       AS l(allocation_id uuid, line_identity jsonb, recognized_quantity integer, ingredients jsonb)
   `, [storeId, settlementId, JSON.stringify(allocations)]);
+  const itemIds = await advanceUsageRevision(db, storeId, settlementId, event.occurredAt);
+  await allocateSaleLots(db, storeId, settlementId, event.occurredAt);
+  if (itemIds.length) {
+    await publishStockChange(db, storeId, businessDate, settlementId, 'sale_recognized', itemIds, new Date(event.occurredAt));
+  }
 }
 
 async function correctSale(db: PoolClient, event: StreamEnvelope) {
-  const { storeId, settlementId, businessDate, correctionId, billId, orderId, paymentId, restore, lines } = readUsageEvent(event);
+  const { storeId, settlementId, businessDate, correctionId, billId, orderId, paymentId, memberId, restore, lines } = readUsageEvent(event);
+  const originalIdentity = paymentId === undefined ? { billId, orderId, memberId } : { billId, orderId, paymentId };
+  await lockStockStore(db, storeId);
   const original = await db.query(`
     SELECT 1 FROM inventory.sale_usage WHERE store_id = $1 AND settlement_id = $2 AND business_date = $3
-      AND sale @> $4::jsonb
-  `, [storeId, settlementId, businessDate, { billId, orderId, paymentId }]);
+      AND sale @> $4::jsonb AND (sale ? 'paymentId') = $5
+  `, [storeId, settlementId, businessDate, originalIdentity, paymentId !== undefined]);
   if (!original.rowCount) throw new PermanentStreamError('SALE_USAGE_ORIGINAL_MISSING');
 
   const added = await db.query(`
-    INSERT INTO inventory.sale_usage_correction (store_id, correction_id, settlement_id, correction)
-    VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING
-  `, [storeId, correctionId, settlementId, event.payload]);
+    INSERT INTO inventory.sale_usage_correction (store_id, correction_id, settlement_id, correction, recorded_at)
+    VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING
+  `, [storeId, correctionId, settlementId, event.payload, event.occurredAt]);
   if (!added.rowCount) {
     const duplicate = await db.query(`
       SELECT 1 FROM inventory.sale_usage_correction WHERE store_id = $1 AND correction_id = $2 AND correction = $3
@@ -131,6 +142,12 @@ async function correctSale(db: PoolClient, event: StreamEnvelope) {
       AND l.line_identity = r.line_identity AND r.quantity <= l.recognized_quantity - l.restored_quantity
   `, [storeId, settlementId, JSON.stringify(restores)]);
   if (result.rowCount !== lines.length) throw new PermanentStreamError('SALE_USAGE_RESTORE_INVALID');
+  const allocationIds = lines.map(line => line.allocationId);
+  const itemIds = await advanceUsageRevision(db, storeId, settlementId, event.occurredAt, allocationIds);
+  await restoreSaleLots(db, storeId, settlementId, allocationIds);
+  if (itemIds.length) {
+    await publishStockChange(db, storeId, businessDate, event.aggregateId, 'sale_corrected', itemIds, new Date(event.occurredAt));
+  }
 }
 
 export function createInventoryStockConsumer(database: Pool, redis: RedisStreams, name: string) {
