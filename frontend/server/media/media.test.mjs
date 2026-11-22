@@ -15,8 +15,10 @@ const speechPath = '/api/navis/media/transcription';
 const speechInvokeUrl = 'https://clovaspeech-gw.ncloud.com/recog/v1/stt';
 const speechUrl = `${speechInvokeUrl}?lang=Kor`;
 const ocrUrl = 'https://fixture.apigw.ntruss.com/custom/v1/1234/invoke-fixture/document/receipt';
+const generalOcrUrl = 'https://fixture.apigw.ntruss.com/custom/v1/1234/invoke-fixture/general';
 const speechEnv = { NAVIS_CLOVASPEECH_PROVIDER: 'live', NAVIS_CLOVASPEECH_INVOKE_URL: speechInvokeUrl, NAVIS_CLOVASPEECH_SECRET: 'fixture-speech' };
 const ocrEnv = { NAVIS_CLOVA_OCR_PROVIDER: 'live', NAVIS_CLOVA_OCR_URL: ocrUrl, NAVIS_CLOVA_OCR_SECRET: 'fixture-ocr' };
+const generalOcrEnv = { ...ocrEnv, NAVIS_CLOVA_OCR_URL: generalOcrUrl };
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGP4DwYMEAoAU7oL9ZisIGcAAAAASUVORK5CYII=', 'base64');
 const tinyPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC', 'base64');
 const stamp = 1_795_212_000_000;
@@ -151,6 +153,157 @@ test('receipt wire uses multipart V2 and maps only reviewed expense fields', asy
   });
   const fakeSpeech = await post(origin, speechPath, wav(), 'audio/wav');
   assert.equal((await fakeSpeech.json()).text, '딸기스무디 메뉴 추가해줘');
+});
+
+function generalReceipt(lines, { lineBreaks = true } = {}) {
+  const fields = lines.flatMap((tokens, row) => tokens.map((token, column) => {
+    const [inferText, inferConfidence] = typeof token === 'string' ? [token, 0.99] : token;
+    const x = 110 * column;
+    const y = 25 * row;
+    return {
+      inferText, inferConfidence,
+      ...(lineBreaks && { lineBreak: column === tokens.length - 1 }),
+      boundingPoly: { vertices: [{ x, y }, { x: x + 80, y }, { x: x + 80, y: y + 12 }, { x, y: y + 12 }] },
+    };
+  }));
+  return { images: [{ inferResult: 'SUCCESS', fields }] };
+}
+
+const reviewed = (value, needsReview = false) => ({ value, needsReview });
+
+test('General OCR sends a single V2 JSON image to its exact host and extracts a café supplier receipt', async t => {
+  const liveFetch = t.mock.fn(async (url, init) => {
+    assert.equal(url, generalOcrUrl);
+    assert.equal(init.method, 'POST');
+    assert.equal(init.redirect, 'error');
+    const request = new Request(url, init);
+    assert.equal(request.headers.get('x-ocr-secret'), 'fixture-ocr');
+    assert.equal(request.headers.get('content-type'), 'application/json');
+    const message = await request.json();
+    assert.match(message.requestId, uuid);
+    assert.deepEqual(message, { version: 'V2', requestId: message.requestId, timestamp: stamp,
+      images: [{ format: 'png', name: message.requestId, data: png.toString('base64') }] });
+    return Response.json(generalReceipt([
+      ['거래명세서'], ['사업자등록번호', '123-45-67890'], ['상호명:', '성수 원두상회'],
+      ['서울특별시 성동구 성수이로 12'], ['TEL', '02-1234-5678'], ['거래일자', '2026.11.22'],
+      ['품목명', '수량', '단가', '금액'], ['에티오피아', '원두 1kg', '2', '15,000', '30,000'],
+      ['우유', '3개', ['9,000원', 0.74]], ['종이필터', '2', '350', '700'],
+      ['공급가액 합계', '39,700'], ['부가세', '3,970'], ['합계', '43,670'], ['결제금액', '₩', '42,700'],
+    ]));
+  });
+  const { origin, downstream } = await serve(t, { env: generalOcrEnv, now: () => stamp, liveFetch });
+  const response = await post(origin);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const result = await response.json();
+  assert.equal(result.requestId, (await new Request(generalOcrUrl, liveFetch.mock.calls[0].arguments[1]).json()).requestId);
+  assert.deepEqual(result, {
+    requestId: result.requestId, merchant: reviewed('성수 원두상회'), date: reviewed('2026-11-22'), totalWon: reviewed(42700),
+    items: [
+      { name: reviewed('에티오피아 원두 1kg'), quantity: reviewed(2), amountWon: reviewed(30000) },
+      { name: reviewed('우유'), quantity: reviewed(3), amountWon: reviewed(9000, true) },
+      { name: reviewed('종이필터'), quantity: reviewed(2), amountWon: reviewed(700) },
+    ],
+  });
+  assert.equal(liveFetch.mock.callCount(), 1);
+  assert.deepEqual(downstream, []);
+});
+
+test('General OCR rebuilds convenience mart lines from bounds when lineBreak is missing', async t => {
+  const payload = generalReceipt([
+    ['서울시 관악구 남부순환로 42'], ['02-123-4567'], ['111-22-33333'], ['행복동네마트'],
+    ['판매일시', ['26-11-22', 0.77], '10:55:00'], ['상 품 명', '단가', '수량', '금액'],
+    ['백설', '설탕 1kg', '3,500', '2', '7,000'], ['블루베리', '1', '4,500'], ['종이컵', '2,900'], ['총액', '14,400'],
+    ['받을', '금액'], [['14,000 원', null]], ['받은금액', '15,000'], ['거스름돈', '1,000'],
+  ], { lineBreaks: false });
+  const { origin } = await serve(t, { env: generalOcrEnv, liveFetch: () => Response.json(payload) });
+  const response = await post(origin);
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual(result, {
+    requestId: result.requestId, merchant: reviewed('행복동네마트'), date: reviewed('2026-11-22', true), totalWon: reviewed(14000, true),
+    items: [
+      { name: reviewed('백설 설탕 1kg'), quantity: reviewed(2), amountWon: reviewed(7000) },
+      { name: reviewed('블루베리'), quantity: reviewed(1), amountWon: reviewed(4500) },
+      { name: reviewed('종이컵'), quantity: null, amountWon: reviewed(2900) },
+    ],
+  });
+});
+
+test('General OCR prefers the card approval amount and keeps card metadata out of a slip suggestion', async t => {
+  const payload = generalReceipt([
+    ['[신용카드 매출전표]'], ['가맹점명', ['동작커피', 0.67]], ['가맹점번호', '84001234'],
+    ['카드번호', '4321-****-****-1234'], ['결제일시', '2026년', '11월', '22일', '15:42:36'],
+    ['할부', '일시불'], ['공급가액', '12,000'], ['세액', '1,200'], ['합계', '13,200'],
+    ['카드 승인금액', '13,000원'], ['승인번호', '99001234'], ['이용해 주셔서 감사합니다'],
+  ]);
+  const { origin } = await serve(t, { env: generalOcrEnv, liveFetch: () => Response.json(payload) });
+  const response = await post(origin);
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual(result, {
+    requestId: result.requestId, merchant: reviewed('동작커피', true), date: reviewed('2026-11-22'), totalWon: reviewed(13000), items: [],
+  });
+});
+
+test('General OCR uses the full payment amount when the receipt also shows a partial card approval', async t => {
+  const payload = generalReceipt([
+    ['행복동네마트'], ['결제금액', '13,000원'], ['카드 승인금액', '8,000원'], ['현금 결제', '5,000원'],
+  ]);
+  const { origin } = await serve(t, { env: generalOcrEnv, liveFetch: () => Response.json(payload) });
+  const response = await post(origin);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).totalWon, reviewed(13000));
+});
+
+test('General OCR leaves an invalid date and a missing payment total blank', async t => {
+  const payload = generalReceipt([
+    ['거래일자', '2026.02.29'], ['상호', '남산포장'], ['머그컵', '2', '12,000'],
+    ['과세 합계', '12,000'], ['부가세', '1,200'], ['합계', '0원'],
+  ]);
+  const { origin } = await serve(t, { env: generalOcrEnv, liveFetch: () => Response.json(payload) });
+  const response = await post(origin);
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual(result, {
+    requestId: result.requestId, merchant: reviewed('남산포장'), date: null, totalWon: null,
+    items: [{ name: reviewed('머그컵'), quantity: reviewed(2), amountWon: reviewed(12000) }],
+  });
+});
+
+test('General OCR keeps inline merchant details and payment metadata out of expense fields', async t => {
+  const payload = generalReceipt([
+    ['새빛로 12-1'], ['상호:', '나무커피', '사업자등록번호:', '123-45-67890'],
+    ['유효기간', '2026.12.31'], ['텀블러', '1', '14,000'], ['합계', '14,000'],
+    ['카드 결제금액', '13,000원'], ['포인트 적립', '130'], ['회원번호', '1234567'],
+  ]);
+  const { origin } = await serve(t, { env: generalOcrEnv, liveFetch: () => Response.json(payload) });
+  const response = await post(origin);
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.deepEqual(result, {
+    requestId: result.requestId, merchant: reviewed('나무커피'), date: null, totalWon: reviewed(13000),
+    items: [{ name: reviewed('텀블러'), quantity: reviewed(1), amountWon: reviewed(14000) }],
+  });
+});
+
+test('General OCR rejects failed and unusable recognition without disclosing the upstream payload', async t => {
+  const payloads = [
+    { images: [{ inferResult: 'FAILURE', message: 'private upstream detail' }] },
+    generalReceipt([['대표전화', '02-123-4567'], ['승인번호', '123456'], ['카드번호', '1234-****-****-8888']]),
+    { images: [{ inferResult: 'SUCCESS', fields: [null, { inferText: 42 }, { inferText: '  ' }] }] },
+  ];
+  const { origin } = await serve(t, { env: generalOcrEnv, liveFetch: () => Response.json(payloads.shift()) });
+  for (let index = 0; index < 3; index++) await checkError(await post(origin), 422, 'MEDIA_UNREADABLE');
+});
+
+test('General OCR credentials stay inert in fake mode and a non-NCP host is rejected in live mode', async t => {
+  const liveFetch = t.mock.fn(() => assert.fail('live transport used'));
+  const fake = await serve(t, { env: { ...generalOcrEnv, NAVIS_CLOVA_OCR_PROVIDER: 'fake' }, liveFetch });
+  assert.equal((await (await post(fake.origin)).json()).merchant.value, '샘플 원두상회');
+  const live = await serve(t, { env: { ...generalOcrEnv, NAVIS_CLOVA_OCR_URL: 'https://fixture.apigw.ntruss.com.invalid/general' }, liveFetch });
+  await checkError(await post(live.origin), 503, 'UNAVAILABLE');
+  assert.equal(liveFetch.mock.callCount(), 0);
 });
 
 test('live CLOVA Speech uses the Korean short-sentence endpoint and sends the original WAV bytes once', async t => {
@@ -437,10 +590,12 @@ test('live smoke requires approval and the owner files before attempting NCP', a
   assert.deepEqual(await runSmoke({ service: 'speech', approved: false, secretsDir, fetchImpl }), skipped);
   await writeFile(join(secretsDir, 'NCP_CLOVASPEECH_INVOKE_URL'), speechInvokeUrl);
   assert.deepEqual(await runSmoke({ service: 'speech', approved: true, secretsDir, fetchImpl }), skipped);
-  assert.deepEqual(await runSmoke({ service: 'receipt', approved: true, secretsDir, fetchImpl }), skipped);
+  await writeFile(join(secretsDir, 'NCP_CLOVA_OCR_URL'), generalOcrUrl);
+  assert.deepEqual(await runSmoke({ service: 'receipt', approved: true, secretsDir, fetchImpl }),
+    { status: null, fieldCount: 0, reviewFieldCount: 0, exitCode: 2 });
 });
 
-test('live smoke reports only the upstream status and recognized text length from one attempt', async t => {
+test('live smoke reports only the upstream status and speech length or receipt field counts from one attempt', async t => {
   const secretsDir = await mkdtemp(join(tmpdir(), 'storesaas-smoke-test-'));
   t.after(() => rm(secretsDir, { recursive: true, force: true }));
   const speech = join(secretsDir, 'speech.wav');
@@ -452,14 +607,18 @@ test('live smoke reports only the upstream status and recognized text length fro
   await writeFile(join(secretsDir, 'NCP_CLOVA_OCR_URL'), `${ocrUrl}\n`);
   await writeFile(join(secretsDir, 'NCP_CLOVA_OCR_SECRET'), 'fixture-ocr\n');
 
-  for (const [service, fixturePath, reply, status, textLength, exitCode] of [
-    ['speech', speech, Response.json({ text: '  안녕하세요  ' }), 200, 5, 0],
-    ['speech', speech, Response.json({ text: ' ' }), 200, 0, 1],
-    ['speech', speech, new Response(null, { status: 421 }), 421, 0, 1],
-    ['receipt', receipt, Response.json({ images: [{ inferResult: 'SUCCESS', receipt: { result: {
+  for (const [service, fixturePath, mode, reply, expected] of [
+    ['speech', speech, null, Response.json({ text: '  안녕하세요  ' }), { status: 200, textLength: 5, exitCode: 0 }],
+    ['speech', speech, null, Response.json({ text: ' ' }), { status: 200, textLength: 0, exitCode: 1 }],
+    ['speech', speech, null, new Response(null, { status: 421 }), { status: 421, textLength: 0, exitCode: 1 }],
+    ['receipt', receipt, 'document', Response.json({ images: [{ inferResult: 'SUCCESS', receipt: { result: {
       storeInfo: { name: { text: '예시상점' } },
-    } } }] }), 200, 4, 0],
+    } } }] }), { status: 200, fieldCount: 1, reviewFieldCount: 1, exitCode: 0 }],
+    ['receipt', receipt, 'general', Response.json(generalReceipt([
+      [['예시상점', 0.75]], ['결제금액', '10,000원'],
+    ])), { status: 200, fieldCount: 2, reviewFieldCount: 1, exitCode: 0 }],
   ]) {
+    if (mode === 'general') await writeFile(join(secretsDir, 'NCP_CLOVA_OCR_URL'), generalOcrUrl);
     let calls = 0;
     const result = await runSmoke({ service, fixturePath, approved: true, secretsDir, fetchImpl: (url, init) => {
       calls++;
@@ -470,13 +629,14 @@ test('live smoke reports only the upstream status and recognized text length fro
         assert.equal(headers.get('x-clovaspeech-api-key'), 'fixture-speech');
         assert.deepEqual(init.body, wav());
       } else {
-        assert.equal(url, ocrUrl);
+        assert.equal(url, mode === 'general' ? generalOcrUrl : ocrUrl);
         assert.equal(headers.get('x-ocr-secret'), 'fixture-ocr');
-        assert.ok(init.body instanceof FormData);
+        if (mode === 'general') assert.equal(headers.get('content-type'), 'application/json');
+        else assert.ok(init.body instanceof FormData);
       }
       return reply;
     } });
     assert.equal(calls, 1);
-    assert.deepEqual(result, { status, textLength, exitCode });
+    assert.deepEqual(result, expected);
   }
 });

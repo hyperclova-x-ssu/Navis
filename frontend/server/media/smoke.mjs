@@ -36,7 +36,8 @@ async function readFixture(service, fixturePath) {
 }
 
 export async function runSmoke({ service, approved, fixturePath, secretsDir, fetchImpl = fetchMediaOnce }) {
-  const skipped = { status: null, textLength: 0, exitCode: 2 };
+  const emptyResult = service === 'receipt' ? { fieldCount: 0, reviewFieldCount: 0 } : { textLength: 0 };
+  const skipped = { status: null, ...emptyResult, exitCode: 2 };
   if (approved !== true || (service !== 'speech' && service !== 'receipt')) return skipped;
 
   let status = null;
@@ -62,21 +63,20 @@ export async function runSmoke({ service, approved, fixturePath, secretsDir, fet
     const { suggestion } = await withProviderDeadline(signal => (
       providers[service]({ bytes, type, info, requestId, signal })
     ), new AbortController().signal);
-    // OCR reports lengths of recognized names, dates and amounts, never their values.
-    const fields = service === 'speech' ? [suggestion.text] : [
-      suggestion.merchant?.value, suggestion.date?.value, suggestion.totalWon?.value,
-      ...suggestion.items.flatMap(item => [item.name?.value, item.quantity?.value, item.amountWon?.value]),
-    ];
-    const textLength = fields.reduce((length, value) => length + String(value ?? '').length, 0);
-    return { status, textLength, exitCode: 0 };
+    if (service === 'speech') return { status, textLength: suggestion.text.length, exitCode: 0 };
+    const fields = [
+      suggestion.merchant, suggestion.date, suggestion.totalWon,
+      ...suggestion.items.flatMap(item => [item.name, item.quantity, item.amountWon]),
+    ].filter(Boolean);
+    return { status, fieldCount: fields.length, reviewFieldCount: fields.filter(field => field.needsReview).length, exitCode: 0 };
   } catch {
-    return { status, textLength: 0, exitCode: 1 };
+    return { status, ...emptyResult, exitCode: 1 };
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const [service, flag, fixturePath, ...extra] = process.argv.slice(2);
-  const { status, textLength, exitCode } = await runSmoke({ service, fixturePath, approved: flag === '--approve-live' && !!fixturePath && extra.length === 0 });
-  process.stdout.write(`${JSON.stringify({ status, textLength })}\n`);
+  const { exitCode, ...counts } = await runSmoke({ service, fixturePath, approved: flag === '--approve-live' && !!fixturePath && extra.length === 0 });
+  process.stdout.write(`${JSON.stringify(counts)}\n`);
   process.exitCode = exitCode;
 }
