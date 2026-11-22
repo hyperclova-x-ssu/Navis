@@ -277,12 +277,12 @@ npm run build        # 배포용 빌드
     <td align="center" width="25%">
       <img src="docs/images/team-gu-jeonghyun.jpg" width="150" alt="구정현" /><br/>
       <b>구정현</b><br/>
-      <sub>팀장 · AI · 프론트엔드</sub>
+      <sub>AI · 프론트엔드</sub>
     </td>
     <td align="center" width="25%">
       <img src="docs/images/team-kwon-nahyun.jpg" width="150" alt="권나현" /><br/>
       <b>권나현</b><br/>
-      <sub>서비스 기획 · UX</sub>
+      <sub>팀장서비스 · 기획 · UX</sub>
     </td>
     <td align="center" width="25%">
       <img src="docs/images/team-lee-minwoo.jpg" width="150" alt="이민우" /><br/>
