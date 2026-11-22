@@ -33,3 +33,13 @@
 .order-status__grid tr:has([data-status="missing"]) .ui-status-chip { background:var(--missing-bg); color:var(--missing); }
 .order-status__grid tr:has([data-status="slow"]) .ui-status-chip { background:var(--warning-bg); color:var(--warning); }
 .order-status__leaving { position:absolute; z-index:var(--layer-rail); pointer-events:none; overflow:hidden; }
+
+/* SCR-249 preparation confirmation for the shared order table. */
+.pos-naver__prepare { display:grid; gap:var(--space-3); min-width:calc(var(--space-16) * 5); }
+.pos-naver__prepare-actions { display:flex; justify-content:flex-end; gap:var(--space-3); }
+
+/* UXP-17: the 내용 cell wraps — one order line per line, options never cut — instead of running over the 금액 column. */
+.order-status__content { display:grid; gap:var(--space-1); white-space:normal; overflow-wrap:anywhere; text-align:start; }
+.order-status__naver-number { white-space:normal; overflow-wrap:anywhere; }
+/* A wrapped 내용 cell grows its row (the kit pins every POS row to one height, which clips the third line). */
+.order-status .order-status__grid.ui-pos-order-grid .ui-data-grid__table tbody tr { height:auto; min-height:var(--pos-order-row-height); }

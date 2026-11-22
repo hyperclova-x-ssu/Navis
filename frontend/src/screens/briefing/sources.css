@@ -1,0 +1,9 @@
+/* REAL-PLAN F12: the briefing's "sources and basis" card and the honest line that replaces a withheld section. Tokens only. */
+.briefing-withheld { margin: 0; color: var(--muted-foreground); font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
+.briefing-sources { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.briefing-sources__row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-height: var(--table-row-min); padding: var(--space-2) 0; overflow-wrap: anywhere; }
+.briefing-sources__row + .briefing-sources__row { border-block-start: var(--stroke-hairline) solid var(--border); }
+.briefing-sources__text { display: flex; flex-direction: column; min-width: 0; gap: var(--space-1); }
+.briefing-sources__meta { color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.briefing-sources__note { margin: 0; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.briefing-ack-status { margin: 0; }

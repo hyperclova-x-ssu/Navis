@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useBundle } from '../../../i18n';
 import { usePosSnapshot } from '../../../pos/react';
+import { lineOptionCaption } from '../option-text';
 import { quoteBill } from '../../../pos/tables';
 import { ActionButton, ChecklistRow, PosDialog, PosMoney, PosQuantityStepper } from '../../../ui';
 import { tableTransferBundle } from './messages';
@@ -25,7 +26,7 @@ export function SeparateDialog({ billId, onClose, onNext }: {
     <div className="pos-table-detail">
       {lines.map(line => <div key={line.orderLineId} className="pos-table-separate__line">
         <ChecklistRow checked={!!selected[line.orderLineId]} onCheckedChange={checked => setSelected(s => ({ ...s, [line.orderLineId]: checked ? 1 : 0 }))}>
-          <strong>{line.nameAtOrder}</strong><small>{line.optionsAtOrder.map(o => o.name).join(' · ')}{line.request ? ` · ${line.request}` : ''}</small>
+          <strong>{line.nameAtOrder}</strong><small>{[lineOptionCaption(read.data.catalog.items, line.menuId, line.optionsAtOrder), line.request].filter(Boolean).join(' · ')}</small>
         </ChecklistRow>
         <PosQuantityStepper name={line.nameAtOrder} value={selected[line.orderLineId] ?? 0}
           onChange={qty => setSelected(s => ({ ...s, [line.orderLineId]: Math.max(0, Math.min(qty, line.qty)) }))}/>

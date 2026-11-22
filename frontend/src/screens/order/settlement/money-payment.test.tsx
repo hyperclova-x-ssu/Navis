@@ -59,9 +59,10 @@ describe('M3 controlled settlement allocations', () => {
 
   it('requires a member and explains the charge balance limit', () => {
     const rendered = renderWithKit(<Harness memberId={null}/>);
-    expect(screen.getByRole('spinbutton', { name: '충전금 사용' })).toBeDisabled();
-    expect(screen.getByRole('spinbutton', { name: '외상 정산' })).toBeDisabled();
-    expect(screen.getByText('회원을 먼저 연결해 주세요')).toBeInTheDocument();
+    // UXP-11: a walk-in gets one muted line instead of two disabled number fields; the fields come with a linked member.
+    expect(screen.queryByRole('spinbutton', { name: '충전금 사용' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton', { name: '외상 정산' })).not.toBeInTheDocument();
+    expect(screen.getByText(/회원을 먼저 연결해 주세요/)).toBeInTheDocument();
     rendered.unmount();
     renderWithKit(<Harness balance={2000}/>);
     fireEvent.change(screen.getByRole('spinbutton', { name: '충전금 사용' }), { target: { value: '3000' } });

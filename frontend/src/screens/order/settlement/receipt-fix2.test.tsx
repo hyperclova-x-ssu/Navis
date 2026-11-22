@@ -91,7 +91,7 @@ it('SCR-248 restores show-again, cash issuance, masked status and issue cancella
   const paymentId = h.actions.money.receipt({ settlementId: original.settlementId })!.paymentId!;
   const mounted = receiptHost(h, { paymentId, view: 'receipt' });
   fireEvent.click(screen.getByRole('button', { name: '영수증 다시 보기' }));
-  expect(screen.getByRole('status')).toHaveTextContent('영수증을 다시 보여 드렸어요(예시)');
+  expect(screen.getByRole('status')).toHaveTextContent('영수증을 다시 보여 드렸어요');
   fireEvent.click(screen.getByRole('button', { name: '현금영수증 발행하기' }));
   fireEvent.change(screen.getByRole('textbox', { name: '휴대폰 번호' }), { target: { value: '123' } });
   fireEvent.click(screen.getByRole('button', { name: '발행하기' }));
@@ -99,11 +99,11 @@ it('SCR-248 restores show-again, cash issuance, masked status and issue cancella
   expect(selectCashReceiptTotals(h.pos.read().pos)).toEqual({ count: 0, amount: 0 });
   fireEvent.change(screen.getByRole('textbox', { name: '휴대폰 번호' }), { target: { value: '01012345678' } });
   fireEvent.click(screen.getByRole('button', { name: '발행하기' }));
-  expect(screen.getByRole('status')).toHaveTextContent('현금영수증을 발행했어요(예시)');
+  expect(screen.getByRole('status')).toHaveTextContent('현금영수증을 발행했어요');
   expect(screen.getByText('현금영수증 소득공제 · 010-****-5678')).toBeInTheDocument();
   expect(selectCashReceiptTotals(h.pos.read().pos)).toEqual({ count: 1, amount: 3000 });
-  fireEvent.click(screen.getByRole('button', { name: '발행 취소(예시)' }));
-  expect(screen.getByRole('status')).toHaveTextContent('현금영수증 발행을 취소했어요(예시)');
+  fireEvent.click(screen.getByRole('button', { name: '발행 취소' }));
+  expect(screen.getByRole('status')).toHaveTextContent('현금영수증 발행을 취소했어요');
   expect(selectCashReceiptTotals(h.pos.read().pos)).toEqual({ count: 0, amount: 0 });
   fireEvent.click(screen.getByRole('button', { name: '현금영수증 발행하기' }));
   fireEvent.click(screen.getByRole('radio', { name: '지출증빙' }));
@@ -116,7 +116,7 @@ it('SCR-248 restores show-again, cash issuance, masked status and issue cancella
   expect(selectCashReceiptTotals(h.pos.read().pos)).toEqual({ count: 0, amount: 0 });
   mounted.unmount();
   receiptHost(h, { settlementId: original.settlementId, view: 'receipt' });
-  expect(screen.getByText('현금영수증 발행을 취소했어요(예시)')).toBeInTheDocument();
+  expect(screen.getByText('현금영수증 발행을 취소했어요')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '현금영수증 발행하기' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: '발행 취소(예시)' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '발행 취소' })).not.toBeInTheDocument();
 });

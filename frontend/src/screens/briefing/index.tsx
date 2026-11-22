@@ -4,11 +4,14 @@ import { useBundle } from '../../i18n';
 import { dataBundles, resolveDataText, TODAY } from '../../data/widget-data';
 import { PosContext } from '../../pos/react';
 import { orderStatusRuntime } from '../../pos/runtime';
-import { useWidgetView } from '../../data/react';
+import { useWidgetDataStore, useWidgetView } from '../../data/react';
+import { recordBriefingAcknowledgement } from '../../data/reality/12/ack';
+import { sectionWithheld } from '../../data/reality/12/overlay';
 import { ActionButton, BriefingCard, ContentRecovery, Icon, InlineError, motionTokens, OverlayExitSurface, ScrollArea } from '../../ui';
 import { FullscreenToggle } from '../../ui/components/overlays';
 import {arrivalBundle} from './arrival-messages';
 import { briefingBundle } from './messages';
+import { WithheldLines, type BriefingCopy } from './real';
 import './briefing.css';
 
 export interface BriefingOverlayProps {
@@ -31,6 +34,7 @@ function BriefingContent({ run, failContent, detailFocusKey, onRetry }: { readon
   // K-E 9: the failure sample (and a real load error) is a state, not an exception: nothing is thrown, so the console stays clean. The title and close stay (the card is outside this body).
   if (failContent || view.status === 'error') return <InlineError onRetry={() => { onRetry?.(); if (view.status === 'error') run.actions.resetWidgetPreview('briefing'); }} />;
   const model = view.status === 'ready' ? view.model : null;
+  const copy: BriefingCopy = { t: (key, params) => t(key as never, params as never), date: (iso, style) => format.date(iso, style), time: hhmm => format.time(hhmm) };
   const open = (ref: import('../../data/derive/operations').AlertItem['ref']) => {
     if ('sourceId' in ref) { pos?.openPos({ tab: 'status', orderId: ref.orderId, forceVisible: true }); return; }
     const token=run.actions.closeOverlay('button');if(token)run.actions.finishOverlayExit(token);
@@ -39,16 +43,32 @@ function BriefingContent({ run, failContent, detailFocusKey, onRetry }: { readon
   return <ScrollArea role="region" aria-label={t('briefing.region')} className="briefing-content"><div className="briefing-summary">
     <time className="briefing-date" dateTime={TODAY}>{format.date(TODAY,'long')}</time>
     {!model?<p className="briefing-empty">{t('data.state.briefing.none')}</p>:<>
-      <section><h3>{t('arrival.schedule')}</h3><ActionButton variant="ghost" onClick={()=>open({featureId:'calendar'})}>{t('arrival.todaySchedule',{n:model.schedules.todayCount})}<Icon name="chevron-right" aria-hidden /></ActionButton><p lang="ko">{t(model.staff.today.nextHandoffAt ? 'briefing.staffHandoff' : 'briefing.staffCount', { n: model.staff.today.workingCount, time: model.staff.today.nextHandoffAt ?? '' })}</p>{model.schedules.todayEntries.map(entry=><p key={entry.id}>{format.date(entry.date,'short')} {resolveDataText(t,entry.title)}</p>)}</section>
-      <section><h3>{t('arrival.reservations')}</h3><ActionButton variant="ghost" onClick={()=>open({featureId:'voice-booking'})}>{t('arrival.todayReservations',{count:model.reservations.count,people:model.reservations.partyTotal})}<Icon name="chevron-right" aria-hidden /></ActionButton>{model.reservations.completedCount > 0 ? <p lang="ko">{t('data.pos.completedVisits',{n:model.reservations.completedCount})}</p> : null}<p>{t('arrival.changes',{n:model.reservations.changes})}</p><ActionButton variant="ghost" lang="ko" onClick={()=>open({featureId:'voice-booking'})}>{t('briefing.pickupToday',{n:model.custom.summary.todayPickup})}<Icon name="chevron-right" aria-hidden /></ActionButton><p lang="ko">{t('briefing.customPending',{n:model.custom.summary.approvalPending,m:model.custom.summary.todayNotComplete})}</p></section>
-      <section><h3>{t('arrival.alerts',{n:model.importantAlerts.count})}</h3><ul className="briefing-list" aria-label={t('arrival.alerts',{n:model.importantAlerts.count})}>{model.importantAlerts.groups.map(group=><li key={group.id}><h4>{t(`arrival.${group.id}`)}</h4>{group.items.map(item=><ActionButton key={item.id} variant="ghost" className="briefing-item" data-feature-id={'sourceId' in item.ref ? undefined : item.ref.featureId} onClick={()=>open(item.ref)}><span className="briefing-item__text">{t(item.messageKey,item.params)}</span><Icon name="chevron-right"/></ActionButton>)}</li>)}</ul></section>
+      <section><h3>{t('arrival.schedule')}</h3>{sectionWithheld(model,'schedule') ? <WithheldLines copy={copy} model={model} sections={['schedule']} /> : <><ActionButton variant="ghost" onClick={()=>open({featureId:'calendar'})}>{t('arrival.todaySchedule',{n:model.schedules.todayCount})}<Icon name="chevron-right" aria-hidden /></ActionButton><p lang="ko">{t(model.staff.today.nextHandoffAt ? 'briefing.staffHandoff' : 'briefing.staffCount', { n: model.staff.today.workingCount, time: model.staff.today.nextHandoffAt ?? '' })}</p>{model.schedules.todayEntries.map(entry=><p key={entry.id}>{format.date(entry.date,'short')} {resolveDataText(t,entry.title)}</p>)}</>}</section>
+      <section><h3>{t('arrival.reservations')}</h3>{sectionWithheld(model,'reservations') ? null : <><ActionButton variant="ghost" onClick={()=>open({featureId:'voice-booking'})}>{t('arrival.todayReservations',{count:model.reservations.count,people:model.reservations.partyTotal})}<Icon name="chevron-right" aria-hidden /></ActionButton>{model.reservations.completedCount > 0 ? <p lang="ko">{t('data.pos.completedVisits',{n:model.reservations.completedCount})}</p> : null}<p>{t('arrival.changes',{n:model.reservations.changes})}</p></>}{sectionWithheld(model,'pickups') ? null : <><ActionButton variant="ghost" lang="ko" onClick={()=>open({featureId:'voice-booking'})}>{t('briefing.pickupToday',{n:model.custom.summary.todayPickup})}<Icon name="chevron-right" aria-hidden /></ActionButton><p lang="ko">{t('briefing.customPending',{n:model.custom.summary.approvalPending,m:model.custom.summary.todayNotComplete})}</p></>}<WithheldLines copy={copy} model={model} sections={['reservations','pickups']} /></section>
+      <section><h3>{t('arrival.alerts',{n:model.importantAlerts.count})}</h3><ul className="briefing-list" aria-label={t('arrival.alerts',{n:model.importantAlerts.count})}>{model.importantAlerts.groups.map(group=><li key={group.id}><h4>{t(`arrival.${group.id}`)}</h4>{group.items.map(item=><ActionButton key={item.id} variant="ghost" className="briefing-item" data-feature-id={'sourceId' in item.ref ? undefined : item.ref.featureId} onClick={()=>open(item.ref)}><span className="briefing-item__text">{t(item.messageKey,item.params)}</span><Icon name="chevron-right"/></ActionButton>)}</li>)}</ul><WithheldLines copy={copy} model={model} sections={['purchasing','stock','tax','tasks']} /></section>
     </>}
   </div></ScrollArea>;
+}
+
+/**
+ * REAL-PLAN F12: the explicit acknowledgement made outside the detail (the Navis card `ui.acknowledgeBriefing`, which only sets the run flag) also
+ * reaches the service. Only the run's own `pending → dismissed` step counts; closing the arrival card (`visible → dismissed`) is not a confirmation,
+ * and a day the service already holds sends nothing. Over fixture the helper does nothing.
+ */
+function useAcknowledgementSync(run: RunStore) {
+  const store = useWidgetDataStore();
+  useEffect(() => run.subscribe((state, previous) => {
+    if (previous.briefing !== 'pending' || state.briefing !== 'dismissed' || previous.overlay.type === 'briefing') return;
+    void recordBriefingAcknowledgement(store).then(result => {
+      if (result && !result.ok) run.actions.showNotice({ kind: 'error', messageKey: result.messageKey, featureId: 'briefing' });
+    });
+  }), [run, store]);
 }
 
 /** One presentation per run; the shared store owns coaching, safe time and idle. */
 export function BriefingOverlay({ run, returnFocusRef, detailFocusKey = defaultFocusKey, verification }: BriefingOverlayProps) {
   const state = useSyncExternalStore(run.subscribe, run.getState);
+  useAcknowledgementSync(run);
   const { t } = useBriefingT();
   const [announcement, setAnnouncement] = useState('');
   const announcementTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

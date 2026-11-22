@@ -6,13 +6,30 @@
 .order-composer > .ui-pos-cart { width:var(--pos-cart-width); flex:none; }
 .order-composer__header { display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); min-height:var(--pos-order-header-height); }
 .order-composer__empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--space-4); color:var(--muted-foreground); }
-.order-composer__dialog { display:flex; flex-direction:column; gap:var(--space-4); }
-.order-composer__dialog h3 { display:flex; align-items:center; gap:var(--space-2); }
-.order-composer__dialog-actions { display:flex; justify-content:flex-end; gap:var(--space-4); }
-.order-composer__dialog-actions > :last-child { flex:1; }
-.order-composer__dialog-price { margin:0; font-size:var(--type-section); line-height:var(--leading-section); font-variant-numeric:tabular-nums; }
-.order-composer__dialog-price strong { display:inline-block; white-space:nowrap; font-weight:var(--weight-metric); }
-.order-composer__dialog-price .ui-pos-money { font:inherit; }
+/* SCR-242 option sheet: groups stack with a title and a 필수/선택 marker; every choice is a 56px chip (kit .ui-choice-chip). */
+.order-option { display:flex; flex-direction:column; gap:var(--space-6); }
+.order-option__group { display:flex; flex-direction:column; gap:var(--space-3); }
+.order-option__group + .order-option__group { padding-top:var(--space-5); border-top:var(--stroke-hairline) solid var(--border); }
+.order-option__title { margin:0; display:flex; align-items:center; gap:var(--space-2); font-size:var(--type-panel-title); line-height:var(--leading-panel-title); font-weight:var(--weight-heading); letter-spacing:var(--tracking-panel-title); }
+.order-option__kind .ui-status-chip { background:transparent; border:var(--stroke-hairline) solid var(--border); color:var(--muted-foreground); }
+.order-option__group[data-required] .order-option__kind .ui-status-chip { border-color:var(--selection-foreground); color:var(--selection-foreground); }
+.order-option__hint { margin:0; font-size:var(--type-caption); line-height:var(--leading-caption); color:var(--muted-foreground); }
+.order-option__single .ui-chip-choice, .order-option__chips { display:flex; flex-wrap:wrap; gap:var(--space-3); }
+.order-option__single .ui-choice-chip, .order-option__chip { min-height:var(--target-primary); min-width:var(--target-primary); padding:0 var(--space-5); display:inline-flex; align-items:center; justify-content:center; gap:var(--space-2); }
+.order-option__single .ui-choice-chip { flex:1 1 0; min-width:calc(var(--space-16) * 2); }
+.order-option__chip .ui-icon { width:var(--pos-small-icon-size); height:var(--pos-small-icon-size); flex:none; }
+.order-option__delta { font-size:var(--type-caption); line-height:var(--leading-caption); font-weight:var(--weight-bold); }
+.order-option__footer { display:flex; align-items:center; justify-content:space-between; gap:var(--space-4); }
+.order-option__total { display:flex; flex-direction:column; min-width:0; }
+.order-option__picked { font-size:var(--type-control); line-height:var(--leading-control); font-weight:var(--weight-bold); overflow-wrap:anywhere; }
+.order-option__sum { font-size:var(--type-caption); line-height:var(--leading-caption); color:var(--muted-foreground); font-variant-numeric:tabular-nums; }
+.order-option__amount.ui-pos-money { font-size:var(--type-panel-title); line-height:var(--leading-panel-title); font-weight:var(--weight-metric); white-space:nowrap; }
+.order-option__actions { display:flex; align-items:center; justify-content:flex-end; gap:var(--space-3); flex:1; }
+.order-option__actions > .ui-button--primary { flex:1; max-width:calc(var(--space-16) * 5); }
+/* The Navis launcher sits in a dialog's bottom-right corner unless it docks to the header; keep 담기 clear of it. */
+.ui-dialog:has(> .dashboard-navis-dock:not([data-header-dock])) .order-option__actions { padding-inline-end:calc(var(--space-16) + var(--space-8)); }
+.order-composer__line-name { display:inline; }
+.order-composer__line-edit { width:var(--pos-small-icon-size); height:var(--pos-small-icon-size); margin-inline-start:var(--space-2); vertical-align:-0.125em; color:var(--muted-foreground); }
 /* Motion retains exiting rows; only opacity changes, never layout or business state. */
 .order-composer__line { transition:none; }
 .order-composer__line .ui-pos-line-button > .ui-press-surface { overflow-wrap:anywhere; }

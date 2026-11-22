@@ -1,7 +1,6 @@
-import manifest from '../data/db/generated/manifest.json';
+import { APP_CLOCK, readAppClock } from '../data/db/app-clock';
 
-/** D-248: business timestamps never use the device clock or approval timers. */
-export const POS_BUSINESS_DATE = manifest.cutoff.businessDate;
-export const POS_NOW_TIME = manifest.cutoff.localTime.slice(0, 5);
-export const POS_NOW = `${POS_BUSINESS_DATE}T${POS_NOW_TIME}`;
-export const businessNow = (): string => POS_NOW;
+export const POS_BUSINESS_DATE = APP_CLOCK.businessDate;
+export const POS_NOW_TIME = APP_CLOCK.time;
+export const POS_NOW = APP_CLOCK.local;
+export const businessNow = (): string => readAppClock().local;

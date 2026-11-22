@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { BusinessType } from '../../contracts';
 import { getRegistry } from '../../catalog';
 import { screenPresets } from '../../layout';
-import { createTableLayout } from '../../layout/table-layout';
+import { sixTableLayout as createTableLayout } from '../../layout/table-layout-fixture';
 import { testTime } from '../../layout/test-policy';
 import { createRunStore } from '../../state';
 import { createWidgetDataStore, deriveStock, deriveUsage, readModel, selectReservations } from '../../data/widget-data';

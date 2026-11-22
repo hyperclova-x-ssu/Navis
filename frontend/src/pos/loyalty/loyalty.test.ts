@@ -9,6 +9,7 @@ import { planPaymentBegin, planPaymentFinish } from './approval';
 import { POS_BUSINESS_DATE, POS_NOW } from '../clock';
 import { seedToday } from '../../data/db/generated/today';
 import { seedOperations } from '../../data/db/generated/operations';
+import { addDays } from '../../data/db/time';
 
 const cafeCoupon = seedOperations.coupons.find(coupon => coupon.status === 'active')!;
 
@@ -70,6 +71,32 @@ describe('T-249 member and discount calculations', () => {
     h.pos.execute({ type: 'bill.setDiscount', billId, discountInput: { source: 'coupon', couponId: cafeCoupon.couponId }, meta: h.meta() });
     const selected = h.pos.read(), unavailable = { ...selected, data: { ...selected.data, loyalty: { ...selected.data.loyalty!, coupons: exhausted.data.loyalty.coupons } } };
     expect(planPaymentBegin(unavailable, { billId, quoteRevision: selected.posRevision, splits: [{ method: 'card', amount: 2000 }], meta: h.meta() }, POS_NOW)).toMatchObject({ ok: false, reason: 'COUPON_UNAVAILABLE', details: { reason: 'COUPON_EXHAUSTED' } });
+  });
+
+  it.each(['coupon.endEarly', 'coupon.unpublish'] as const)('honors a presented issued code through the original end date after %s', type => {
+    const h = setup();
+    const item = readModel(h.data.getSnapshot(), 'expiry-coupon').target!;
+    expect(h.data.dispatch({ type: 'coupon.createExpiry', itemId: item.itemId, benefit: { kind: 'percent', value: 40 },
+      route: 'place_news', idempotencyKey: 'loyalty-create-expiry' }).ok).toBe(true);
+    const { codeId, couponId } = h.data.getSnapshot().tables.marketing.couponCode.at(-1)!;
+    expect(h.data.dispatch({ type: 'coupon.markPosted', codeId, idempotencyKey: 'loyalty-post-expiry' }).ok).toBe(true);
+    expect(h.data.dispatch({ type: 'coupon.extend', couponId }).ok).toBe(true);
+    const { endsOn } = h.data.getSnapshot().tables.marketing.coupon.find(coupon => coupon.couponId === couponId)!;
+    expect(endsOn > POS_BUSINESS_DATE).toBe(true);
+    expect(h.add(item.menuId).ok).toBe(true);
+    const idempotencyKey = 'loyalty-close-expiry';
+    expect(h.data.dispatch(type === 'coupon.endEarly' ? { type, couponId, idempotencyKey } : { type, codeId, idempotencyKey }).ok).toBe(true);
+
+    const read = h.pos.read(), billId = getPaymentBillId(read);
+    const select = (date: string, code?: string) => planLoyaltyCommand(read, { type: 'bill.setDiscount', billId,
+      discountInput: { source: 'coupon', couponId, ...(code && { codeId: code }) }, meta: h.meta() }, `${date}T15:45`);
+    const redemption = select(endsOn, codeId);
+    if (!redemption.ok) throw new Error(JSON.stringify(redemption));
+    expect(redemption.plan.nextPos.bills.find(bill => bill.billId === billId)?.discounts).toEqual([
+      expect.objectContaining({ source: 'coupon', couponId, codeId, amount: Math.floor(item.price * 0.4) }),
+    ]);
+    expect(select(addDays(endsOn, 1), codeId)).toMatchObject({ ok: false, details: { reason: 'COUPON_ENDED' } });
+    expect(select(endsOn)).toMatchObject({ ok: false, reason: 'COUPON_UNAVAILABLE' });
   });
 
   it('offers the cafe latte count pass only for its configured menu', () => {

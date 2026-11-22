@@ -1,26 +1,59 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { PosMemberRead, PosLoyaltyCommand, PosLoyaltyQuote, PosReadSnapshot, PosResult, PosCommandValue } from '../../../contracts/pos';
+import type { ListPage } from '../../../data/reality/00/port';
+import { projectMemberChoice } from '../../../data/reality/02/checkout-view';
+import type { PosMemberChoice } from '../../../data/reality/02/dto';
+import type { PosRemote } from '../../../data/reality/02/remote';
 import { useBundle } from '../../../i18n';
 import { posBundle } from '../../../i18n/messages/pos';
 import { dataBundles, resolveDataText } from '../../../data/widget-data';
 import { findPosMembers, selectPosDiscountOptions, buildSplitPlan } from '../../../pos/loyalty';
-import { ActionButton, InlineEmpty, NumberField, PosMoney, QuantityStepper, SegmentedControl, TextField, formatPosMoney } from '../../../ui';
+import { ActionButton, InlineEmpty, NumberField, PosMoney, QuantityStepper, SegmentedControl, Spinner, TextField, formatPosMoney } from '../../../ui';
 import { loyaltyBundle } from '../messages';
 
 export function usePayText() { return useBundle(loyaltyBundle, posBundle, ...dataBundles); }
 export const payName = (t:ReturnType<typeof usePayText>['t'], value:PosMemberRead['name']) => typeof value==='string'?value:resolveDataText(t,value);
 export type LoyaltyInput = PosLoyaltyCommand extends infer C ? C extends PosLoyaltyCommand ? Omit<C, 'meta' | 'billId'> : never : never;
 export type PayCommand = (input: LoyaltyInput) => PosResult<PosCommandValue>;
-export function MemberSearch({ read, execute, onApplied }: { read: PosReadSnapshot; execute: PayCommand; onApplied: () => void }) {
-  const { t } = usePayText(), [suffix, setSuffix] = useState('');
+export function MemberSearch({ read, execute, onApplied, source }: {
+  read: PosReadSnapshot; execute: PayCommand; onApplied: () => void;
+  source?: { remote: PosRemote; onSelect: (member: PosMemberChoice) => void; onRegister?: () => void };
+}) {
+  const { t } = usePayText(), [query, setQuery] = useState('');
+  const [cursor, setCursor] = useState<string>();
+  const [reload, setReload] = useState(0);
+  const [loaded, setLoaded] = useState<{ key: string; page?: ListPage<PosMemberChoice> }>();
   const input = useRef<HTMLInputElement>(null);
-  const result = suffix ? findPosMembers(read, { phoneSuffix: suffix }) : null;
-  return <div className="pay-tools__stack"><TextField inputRef={input} name="member-phone-suffix" label={t('pay.phoneSuffix')} value={suffix} onValueChange={setSuffix} inputMode="numeric" error={result && !result.ok ? t('pay.phoneInvalid') : undefined}/>
-    {result?.ok ? result.rows.length ? <ul className="pay-tools__list">{result.rows.map(member => <li key={member.memberId}><ActionButton variant="secondary" onClick={() => { if (execute({ type:'bill.member',memberId:member.memberId }).ok) onApplied(); }}>{payName(t, member.name)} · {member.phone} · {t(`pay.${member.grade}`)}</ActionButton></li>)}</ul> : <InlineEmpty title={t('pay.memberEmpty')}/> : null}
+  const key = JSON.stringify([query, cursor, reload]);
+  const remote = source?.remote;
+  useEffect(() => {
+    if (!remote) return;
+    const request = new AbortController();
+    const search = query.trim(), digits = search.replace(/\D/g, '');
+    void remote.members(/^[\d\s()+-]+$/.test(search) ? digits.slice(-4) : search, cursor, request.signal).then(
+      page => { if (!request.signal.aborted) setLoaded({ key, page }); },
+      () => { if (!request.signal.aborted) setLoaded({ key }); },
+    );
+    return () => request.abort();
+  }, [remote, query, cursor, key]);
+  const local = !source && query ? findPosMembers(read, { phoneSuffix: query }) : null;
+  const current = loaded?.key === key ? loaded : undefined;
+  const rows = source ? current?.page?.items.map(projectMemberChoice).map(member => ({
+    id: member.memberId, label: `${member.name} · ${member.phoneMasked}`, select: () => { source.onSelect(member); onApplied(); },
+  })) : local?.ok ? local.rows.map(member => ({
+    id: member.memberId, label: `${payName(t, member.name)} · ${member.phone} · ${t(`pay.${member.grade}`)}`,
+    select: () => { if (execute({ type: 'bill.member', memberId: member.memberId }).ok) onApplied(); },
+  })) : undefined;
+  return <div className="pay-tools__stack"><TextField inputRef={input} type={source ? 'search' : 'text'} name={source ? 'member-search' : 'member-phone-suffix'} label={source ? '이름 또는 전화번호 끝 네 자리' : t('pay.phoneSuffix')} value={query} onValueChange={value => { setQuery(source ? value.slice(0, 80) : value); setCursor(undefined); }} inputMode={source ? 'text' : 'numeric'} error={local && !local.ok ? t('pay.phoneInvalid') : undefined}/>
+    {rows?.length ? <ul className="pay-tools__list">{rows.map(member => <li key={member.id}><ActionButton variant="secondary" onClick={member.select}>{member.label}</ActionButton></li>)}</ul> : rows ? <InlineEmpty title={t('pay.memberEmpty')}/> : null}
+    {source && (!current ? <p role="status"><Spinner/> 회원을 불러오는 중이에요</p> : !current.page ? <div role="alert"><p>회원을 불러오지 못했어요</p><ActionButton variant="secondary" onClick={() => setReload(value => value + 1)}>다시 불러오기</ActionButton></div> : null)}
+    {cursor && <ActionButton variant="secondary" onClick={() => setCursor(undefined)}>첫 페이지</ActionButton>}
+    {current?.page?.nextCursor && <ActionButton variant="secondary" onClick={() => setCursor(current.page?.nextCursor ?? undefined)}>다음 페이지</ActionButton>}
+    {source?.onRegister && <ActionButton variant="secondary" onClick={source.onRegister}>회원 등록</ActionButton>}
   </div>;
 }
 
-export function DiscountTools({ read, quote, execute, onApplied, onFindMember }: { read: PosReadSnapshot; quote: PosLoyaltyQuote; execute: PayCommand; onApplied: () => void; onFindMember:()=>void }) {
+export function DiscountTools({ read, quote, execute, onApplied, onFindMember, remoteCoupon }: { read: PosReadSnapshot; quote: PosLoyaltyQuote; execute: PayCommand; onApplied: () => void; onFindMember:()=>void; remoteCoupon?: ReactNode }) {
   const { t } = usePayText(), [unit, setUnit] = useState<'won'|'percent'>('won'), [amount, setAmount] = useState<number|null>(null), [memo, setMemo] = useState('');
   const options = selectPosDiscountOptions(read, quote.billId), direct = quote.discounts.find(d => d.source === 'direct');
   const apply = (input: LoyaltyInput) => { if (execute(input).ok) onApplied(); };
@@ -30,6 +63,7 @@ export function DiscountTools({ read, quote, execute, onApplied, onFindMember }:
     if (code === 'COUPON_MENU_REQUIRED') return t('pay.menuRequired', { name:read.data.catalog.items.find(i => i.menuId === coupon?.targetMenuId)?.name ?? '' });
     return t(({ MEMBER_REQUIRED:'pay.memberRequired',COUPON_MEMBER_REQUIRED:'pay.couponMember',COUPON_ENDED:'pay.couponEnded',COUPON_CODE_INACTIVE:'pay.couponInactive',COUPON_EXHAUSTED:'pay.couponExhausted',COUPON_SHOT_REQUIRED:'pay.shotRequired',PASS_MORNING_ONLY:'pay.morning',PASS_DAILY_LIMIT:'pay.usedToday',PASS_MENU_REQUIRED:'pay.passMenu',PASS_INACTIVE:'pay.passInactive' } as Record<string,string>)[code] ?? 'pay.couponInactive');
   };
+  if (remoteCoupon) return <div className="pay-tools__stack"><section><h3>{t('pay.coupon')}</h3>{remoteCoupon}</section></div>;
   return <div className="pay-tools__stack">
     <section><h3>{t('pay.direct')}</h3>{direct ? <div className="pay-tools__row"><PosMoney amount={direct.amount}/><ActionButton variant="ghost" onClick={() => apply({ type:'bill.removeDiscount',discountId:direct.discountId })}>{t('pay.removeDiscount',{name:t('pay.direct')})}</ActionButton></div> : <div className="pay-tools__stack">
       <SegmentedControl label={t('pay.direct')} value={unit} onChange={setUnit} options={[{value:'won',label:t('pay.won')},{value:'percent',label:'%'}]}/>

@@ -18,15 +18,22 @@ export interface MoneyReceiptController {
   readonly quoteReversal: (input: MoneyReversalQuote['input']) => MoneyReversalQuote;
   readonly onConfirm: (quote: MoneyReversalQuote) => boolean; readonly onReset: () => void;
 }
-export interface MoneyReversalReceiptProps {
-  readonly settlementId: string; readonly initialView: MoneyReversalReceiptEntry['view']; readonly money: MoneyReceiptController;
+export type MoneyReversalReceiptProps = {
+  readonly settlementId: string;
   readonly onClose: () => void; readonly returnFocusRef?: RefObject<HTMLElement | null>;
-}
+} & ({
+  readonly initialView: MoneyReversalReceiptEntry['view']; readonly money: MoneyReceiptController;
+  readonly recorded?: undefined; readonly onRecordedRefund?: undefined;
+} | {
+  readonly initialView: 'receipt'; readonly money: Pick<MoneyReceiptController, 'receipt'>;
+  readonly recorded: { readonly approvalNo?: string; readonly receiptNo?: string; readonly note?: string };
+  readonly onRecordedRefund?: () => void;
+});
 const allocationLabels = { charge: '충전금 사용', receivable: '외상 정산', membership_count: '회원권 이용분', membership_period: '구독권 이용' };
 type ReversalScope = 'all' | 'items' | 'amount';
 
 /** A settlement receipt exists even when no real payment or approval number exists. */
-export function MoneyReversalReceipt({ settlementId, initialView, money, onClose, returnFocusRef }: MoneyReversalReceiptProps) {
+export function MoneyReversalReceipt({ settlementId, initialView, money, onClose, returnFocusRef, recorded, onRecordedRefund }: MoneyReversalReceiptProps) {
   const runtime = usePosSession(), read = usePosSnapshot();
   const { t, format } = useBundle(posBundle, receiptBundle, ...dataBundles);
   const receiptTime = (at: string) => `${format.date(at.slice(0, 10), 'long')} · ${format.time(at.slice(11, 16))}`;
@@ -44,7 +51,7 @@ export function MoneyReversalReceipt({ settlementId, initialView, money, onClose
   const orderNo = receipt.billId ?? (settlementId.startsWith('seed:') ? settlementId.slice('seed:'.length) : null);
   const cancelable = lines.some(line => !line.prepared), refundable = lines.some(line => line.prepared);
   const mixedPreparation = cancelable && refundable;
-  if (view !== 'receipt') {
+  if (view !== 'receipt' && 'quoteReversal' in money) {
     const kind = view;
     const itemScope = receipt.purpose === 'sale' && lines.length > 0 && !receipt.wholeBillDiscount;
     const amountScope = kind === 'refund' && !mixedPreparation && receipt.purpose !== 'charge_topup' && receipt.purpose !== 'membership_sale';
@@ -77,7 +84,7 @@ export function MoneyReversalReceipt({ settlementId, initialView, money, onClose
       selection={selection} onAmountChange={effectiveScope === 'amount' && amountScope ? setAmount : undefined}/>;
   }
   const reversible = receipt.remainingRefundable > 0 || receipt.membershipEffects.some(use => !use.canceledAt);
-  const paymentReceipt = receipt.paymentId ? selectReceipt(read, { paymentId: receipt.paymentId }) : null;
+  const paymentReceipt = !recorded && receipt.paymentId ? selectReceipt(read, { paymentId: receipt.paymentId }) : null;
   const cashReceipt = paymentReceipt?.cashReceipt;
   const runReceipt = (command: 'receipt.showAgain' | 'cashReceipt.issue' | 'cashReceipt.cancel') => {
     const meta = { runId: read.runId, idempotencyKey: `money-receipt:${crypto.randomUUID()}` };
@@ -93,7 +100,7 @@ export function MoneyReversalReceipt({ settlementId, initialView, money, onClose
   const correctionKinds: readonly ('cancel' | 'refund')[] = receipt.purpose === 'sale'
     ? [...(cancelable || !lines.length ? ['cancel' as const] : []), ...(refundable ? ['refund' as const] : [])]
     : [receipt.purpose === 'membership_sale' || receipt.currentPrepared ? 'refund' : 'cancel'];
-  const openReversal = (kind: 'cancel' | 'refund') => { money.onReset(); setAmount(null); setScope('all'); setSelected({}); setView(kind); };
+  const openReversal = (kind: 'cancel' | 'refund') => { if ('onReset' in money) money.onReset(); setAmount(null); setScope('all'); setSelected({}); setView(kind); };
   return <PosDialog open kind="receipt" title="영수증" returnFocusRef={focus} onClose={onClose} footer={<ActionButton variant="secondary" onClick={onClose}>닫기</ActionButton>}>
     <div lang="ko" className="shared-settlement">
       {notice && <p role="status">{notice}</p>}
@@ -109,15 +116,20 @@ export function MoneyReversalReceipt({ settlementId, initialView, money, onClose
         <div><dt>정산 금액</dt><dd><PosMoney amount={receipt.amount}/></dd></div>
         <div><dt>실제 입금</dt><dd><PosMoney amount={receipt.payment?.amount ?? 0}/></dd></div>
         {receipt.payment?.splits.map(row => <div key={row.method}><dt>{realMethodLabels[row.method]}</dt><dd><PosMoney amount={row.amount}/></dd></div>)}
+        {recorded?.approvalNo && <div><dt>승인 번호</dt><dd>{recorded.approvalNo}</dd></div>}
+        {recorded?.receiptNo && <div><dt>영수증 번호</dt><dd>{recorded.receiptNo}</dd></div>}
         {receipt.allocations.filter(row => row.kind !== 'method').map((row, index) => <div key={row.allocationId ?? index}><dt>{row.kind === 'method' ? '' : allocationLabels[row.kind]}</dt><dd><PosMoney amount={row.amount}/></dd></div>)}
         {receipt.membershipEffects.map(use => <div key={use.useId}><dt>회원권 할인</dt><dd><PosMoney amount={use.membershipDiscount}/></dd></div>)}
       </dl>
       {cashReceipt && <p>{cashReceipt.status === 'issued' ? `${t('receipt.cashReceipt')} ${t(cashReceipt.kind === 'income' ? 'receipt.income' : 'receipt.business')} · ${cashReceipt.maskedIdentifier}` : t('receipt.canceledIssue')}</p>}
       {!!receipt.corrections.length && <section aria-label="취소·환불 내역">{receipt.corrections.map(correction => <div key={correction.correctionId}><p>{correction.kind === 'refund' ? '환불' : '결제 취소'} · {receiptTime(correction.at)} · <PosMoney amount={correction.amount} sign="minus"/></p>{correction.realMethodReturns.map(row => <p key={row.method}>{realMethodLabels[row.method]} <PosMoney amount={row.amount} sign="minus"/></p>)}<ReversalAccountEffects quote={correction}/></div>)}</section>}
-      <ActionButton variant="secondary" onClick={() => runReceipt('receipt.showAgain')}>{t('receipt.showAgain')}</ActionButton>
+      {!recorded && <ActionButton variant="secondary" onClick={() => runReceipt('receipt.showAgain')}>{t('receipt.showAgain')}</ActionButton>}
       {cashReceipt?.status === 'issued' ? <ActionButton variant="ghost" onClick={() => runReceipt('cashReceipt.cancel')}>{t('receipt.cancelIssue')}</ActionButton> : paymentReceipt?.canIssueCashReceipt ? <ActionButton onClick={() => { setNotice(''); setIssuing(true); }}>{t('receipt.issue')}</ActionButton> : null}
       {receiptError && <p role="alert">{receiptError}</p>}
-      {reversible && correctionKinds.map(kind => <ActionButton key={kind} variant="ghost" onClick={() => openReversal(kind)}>{t(kind === 'refund' ? 'receipt.refund' : 'receipt.cancel')}</ActionButton>)}
+      {recorded ? <>
+        {recorded.note && <p>{recorded.note}</p>}
+        {reversible && onRecordedRefund && <ActionButton variant="ghost" onClick={onRecordedRefund}>{t('receipt.refund')}</ActionButton>}
+      </> : reversible && correctionKinds.map(kind => <ActionButton key={kind} variant="ghost" onClick={() => openReversal(kind)}>{t(kind === 'refund' ? 'receipt.refund' : 'receipt.cancel')}</ActionButton>)}
       </>}
     </div>
   </PosDialog>;

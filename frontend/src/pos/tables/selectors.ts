@@ -1,4 +1,5 @@
 import type { PosBillQuote, PosCart, PosReadSnapshot, PosReservationRead, PosTableMap } from '../../contracts/pos';
+import manifest from '../../data/db/generated/manifest.json';
 import { businessNow } from '../clock';
 import { quoteCart } from '../domain/cart';
 import { canonical, freezePos, money } from '../domain/common';
@@ -6,9 +7,17 @@ import { tablesEnabled } from './preferences';
 
 export const isUnpaidBill = (bill: { readonly status: string }) => bill.status === 'open' || bill.status === 'partial';
 const minutes = (at: string) => { const time = at.slice(-5); return Number(time.slice(0, 2)) * 60 + Number(time.slice(3)); };
+const businessDayStart = minutes(manifest.store.businessDayStart);
+// The POS clock and reservation dates are store-local wall times. UTC parsing keeps the arithmetic independent of the browser's timezone.
+const wallMinutes = (local: string) => Date.parse(`${local}Z`) / 60_000;
+const bookingStart = ({ date, time }: PosReservationRead) => wallMinutes(`${date}T${time}`);
+const businessDayOf = (at: number) => Math.floor((at - businessDayStart) / 1440);
+const hasReservedSeat = (reservation: PosReservationRead) => reservation.status === 'confirmed' && !reservation.allocationWarning;
+const withinClaimWindow = (start: number, current: number) => current - start >= -30 && current - start < 120;
+
 export function reservationInWindow(reservation: PosReservationRead, now = businessNow()): boolean {
-  const delta = minutes(now) - minutes(reservation.time);
-  return reservation.status === 'confirmed' && !reservation.allocationWarning && reservation.date === now.slice(0, 10) && delta >= -30 && delta < 120;
+  const start = bookingStart(reservation), current = wallMinutes(now);
+  return hasReservedSeat(reservation) && businessDayOf(start) === businessDayOf(current) && withinClaimWindow(start, current);
 }
 
 const billQuotes = new WeakMap<PosReadSnapshot, Map<string, PosBillQuote>>();
@@ -53,13 +62,17 @@ export function selectTableMap(read: PosReadSnapshot, now = businessNow()): PosT
   let cache = maps.get(read); if (!cache) { cache = new Map(); maps.set(read, cache); }
   const hit = cache.get(now); if (hit) return hit;
   const enabled = tablesEnabled(read.settings), unpaidBills = selectUnpaidBills(read);
+  const current = wallMinutes(now), businessDay = businessDayOf(current);
   const tables = enabled ? (read.settings.tableLayout?.tables ?? []).map(table => {
     const bills = read.pos.bills.filter(b => b.tableId === table.tableId && isUnpaidBill(b));
     const quotes = bills.map(b => quoteBill(read, b.billId));
     const orders = read.pos.orders.filter(o => quotes.some(q => q.orderIds.includes(o.orderId)));
-    const reservations = (read.data.reservations ?? []).filter(r => r.tableId === table.tableId && r.status === 'confirmed' && !r.allocationWarning && r.date === now.slice(0, 10)).sort((a, b) => a.time.localeCompare(b.time));
-    const active = reservations.find(r => reservationInWindow(r, now));
-    const reservation = active ?? reservations.find(r => minutes(r.time) > minutes(now)) ?? null;
+    const reservations = (read.data.reservations ?? []).filter(r => r.tableId === table.tableId && hasReservedSeat(r))
+      .map(row => ({ row, start: bookingStart(row) }))
+      .filter(({ start }) => businessDayOf(start) === businessDay)
+      .sort((a, b) => a.start - b.start);
+    const active = reservations.find(({ start }) => withinClaimWindow(start, current))?.row;
+    const reservation = active ?? reservations.find(({ start }) => start > current)?.row ?? null;
     const cleaning = read.pos.tableSessions.some(s => s.tableId === table.tableId && s.cleaning);
     const state = bills.some(b => b.status === 'partial' || b.requestedAt) ? 'payment_pending' as const : bills.length ? 'occupied' as const
       : cleaning ? 'cleaning' as const : active ? 'reserved' as const : 'empty' as const;

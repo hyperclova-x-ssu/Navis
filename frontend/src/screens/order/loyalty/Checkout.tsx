@@ -8,6 +8,7 @@ import { DiscountTools, MemberSearch, SplitTools, usePayText, payName, type PayC
 import './loyalty.css';
 import { useSettlementUi } from '../settlement/port';
 import { MoneyLoyaltyCheckout } from './MoneyCheckout';
+import { usePosBridge } from '../../../pos/remote-context';
 
 const methods = ['card','easy_pay','cash'] as const;
 let sequence = 0;
@@ -15,11 +16,12 @@ export interface CheckoutProps {
   readonly open:boolean; readonly billId:string; readonly summary:string; readonly returnFocusRef:RefObject<HTMLElement|null>;
   readonly onClose:()=>void; readonly onComplete:(orderNo:number)=>void;
   readonly startCancel?:boolean;
+  readonly onRegisterMember?: () => void;
 }
 type View = 'payment'|'member'|'discount'|'split'|'mixed'|'cancel';
-export function LoyaltyCheckout({open,billId,summary,returnFocusRef,onClose,onComplete,startCancel=false}:CheckoutProps) {
-  const settlement = useSettlementUi();
-  if (settlement) return <MoneyLoyaltyCheckout open={open} billId={billId} summary={summary} returnFocusRef={returnFocusRef} onClose={onClose} onComplete={onComplete} startCancel={startCancel} port={settlement}/>;
+export function LoyaltyCheckout({open,billId,summary,returnFocusRef,onClose,onComplete,onRegisterMember,startCancel=false}:CheckoutProps) {
+  const settlement = useSettlementUi(), bridge = usePosBridge();
+  if (bridge || settlement) return <MoneyLoyaltyCheckout open={open} billId={billId} summary={summary} returnFocusRef={returnFocusRef} onClose={onClose} onComplete={onComplete} onRegisterMember={onRegisterMember} startCancel={startCancel} port={settlement} bridge={bridge}/>;
   return <LegacyLoyaltyCheckout open={open} billId={billId} summary={summary} returnFocusRef={returnFocusRef} onClose={onClose} onComplete={onComplete} startCancel={startCancel}/>;
 }
 function LegacyLoyaltyCheckout({open,billId,summary,returnFocusRef,onClose,onComplete,startCancel=false}:CheckoutProps) {

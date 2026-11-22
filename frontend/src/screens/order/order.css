@@ -1,7 +1,4 @@
 .order-header { width:calc(100% - var(--rail-width) - var(--rail-gap)); }
-.order-header>div:first-child { min-width:0; display:flex; align-items:baseline; gap:var(--space-4); }
-.order-header h1 { margin:0; flex:none; }
-.order-header p { margin:0; min-width:0; font-size:var(--type-body); line-height:var(--leading-body); color:var(--muted-foreground); }
 .order-tab-body { flex:1; min-height:0; min-width:0; display:flex; }
 .order-tab-body>.order-composer { flex:1; }
 .order-closed-band { display:flex; align-items:center; gap:var(--space-4); flex:none; min-height:var(--pos-band-height); padding:var(--space-2) var(--space-4); border:var(--stroke-hairline) solid var(--border); border-radius:var(--radius-lg); background:var(--secondary); }

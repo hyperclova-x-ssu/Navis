@@ -90,7 +90,7 @@ export function selectPosDayTotals(pos: PosState): PosDayTotals {
  */
 export function canonicalPosMoney(pos:PosState):import('../../data/iteration7/accounting/types').MoneyState|undefined {
   const original=pos.money;if(!original)return;
-  const payments=pos.payments.filter(p=>!original.payments.some(m=>m.paymentId===p.paymentId&&m.sourceRef.id===p.billId));
+  const payments=pos.payments.filter(p=>p.splits.length&&!original.payments.some(m=>m.paymentId===p.paymentId&&m.sourceRef.id===p.billId));
   const returns=[...pos.cancellations.map(c=>({id:c.cancellationId,row:c,kind:'cancel' as const})),...pos.refunds.map(c=>({id:c.refundId,row:c,kind:'refund' as const}))].filter(c=>!original.corrections.some(r=>r.correctionId===c.id||r.correctionId.endsWith(`:legacy-return:${c.id}`)));
   if(!payments.length&&!returns.length)return original;
   const state={...original,settlements:[...original.settlements],payments:[...original.payments],recognitions:[...original.recognitions],corrections:[...original.corrections]};

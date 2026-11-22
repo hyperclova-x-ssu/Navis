@@ -2,3 +2,4 @@
 .shared-settlement__mixed { display: grid; gap: var(--space-3); }
 .shared-settlement__selection { display: grid; gap: var(--space-3); min-width: 0; margin: 0; padding: 0; border: 0; }
 .shared-settlement .order-payment__summary { overflow-wrap: anywhere; }
+.shared-settlement__note { margin:0; color:var(--muted-foreground); font-size:var(--type-caption); line-height:var(--leading-caption); }
