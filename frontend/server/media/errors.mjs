@@ -1,9 +1,8 @@
 export class MediaError extends Error {
-  constructor(code, { retryAfter, providerQuota } = {}) {
+  constructor(code, { retryAfter } = {}) {
     super(code);
     this.code = code;
     this.retryAfter = retryAfter;
-    this.providerQuota = providerQuota;
   }
 }
 

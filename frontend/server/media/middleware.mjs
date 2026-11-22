@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { privateOriginAllowed } from '../private-origin.mjs';
+import { mediaLiveOptions } from './config.mjs';
 import { MediaError, withProviderDeadline } from './errors.mjs';
-import { FAKE_RECEIPT_URL, fakeMediaFetch } from './fake.mjs';
+import { FAKE_RECEIPT_URL, FAKE_SPEECH_URL, fakeMediaFetch } from './fake.mjs';
+import { fetchMediaOnce } from './fetch-once.mjs';
 import { createProviders } from './providers.mjs';
 import { MAX_BYTES, MEDIA_TYPES, readBounded, validateMedia } from './validation.mjs';
 
@@ -26,8 +28,15 @@ function json(res, status, body, headers) {
   res.end(JSON.stringify(body));
 }
 
-export function createMediaService({ allowedOrigins = new Map(), fetchImpl = fakeMediaFetch, timeoutMs, now } = {}) {
-  const providers = createProviders({ fetchImpl, receiptUrl: FAKE_RECEIPT_URL, now });
+export function createMediaService({
+  allowedOrigins = new Map(), originAllowed = req => privateOriginAllowed(req, allowedOrigins),
+  env = {}, fetchImpl = fakeMediaFetch, liveFetch = fetchMediaOnce, timeoutMs, now,
+} = {}) {
+  const liveSpeech = env.NAVIS_CLOVASPEECH_PROVIDER === 'live';
+  const liveReceipt = env.NAVIS_CLOVA_OCR_PROVIDER === 'live';
+  const fixture = createProviders({ fetchImpl, receiptUrl: FAKE_RECEIPT_URL, speechUrl: FAKE_SPEECH_URL, now });
+  const live = createProviders({ fetchImpl: liveFetch, live: true, ...mediaLiveOptions(env), now });
+  const providers = { receipt: liveReceipt ? live.receipt : fixture.receipt, speech: liveSpeech ? live.speech : fixture.speech };
   const active = new Map();
   let closed = false;
 
@@ -44,7 +53,7 @@ export function createMediaService({ allowedOrigins = new Map(), fetchImpl = fak
       });
     }
 
-    if (!privateOriginAllowed(req, allowedOrigins)) return fail('FORBIDDEN');
+    if (!originAllowed(req)) return fail('FORBIDDEN');
     if (req.method !== 'POST') return fail('METHOD_NOT_ALLOWED', { Allow: 'POST' });
     const type = req.headers['content-type']?.trim().toLowerCase();
     if (!MEDIA_TYPES[service].includes(type)) return fail('UNSUPPORTED_MEDIA_TYPE');
@@ -60,7 +69,9 @@ export function createMediaService({ allowedOrigins = new Map(), fetchImpl = fak
     req.once('aborted', cancel);
     res.once('close', cancel);
     try {
-      const bytes = await readBounded(req.iterator({ destroyOnReturn: false }), MAX_BYTES[service], signal);
+      const bytes = await withProviderDeadline(uploadSignal => (
+        readBounded(req.iterator({ destroyOnReturn: false }), MAX_BYTES[service], uploadSignal)
+      ), signal, timeoutMs);
       signal.throwIfAborted();
       const info = validateMedia(service, type, bytes);
       const { suggestion } = await withProviderDeadline(providerSignal => (

@@ -1,6 +1,7 @@
 import { validateMedia } from './validation.mjs';
 
 export const FAKE_RECEIPT_URL = 'https://receipt-fixture.invalid/document/receipt';
+export const FAKE_SPEECH_URL = 'https://speech-fixture.invalid/recog/v1/stt?lang=Kor';
 
 export async function fakeMediaFetch(url, { body, signal }) {
   signal.throwIfAborted();

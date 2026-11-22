@@ -1,6 +1,7 @@
 import { MediaError } from './errors.mjs';
 
-const SPEECH_URL = 'https://clovaspeech-gw.ncloud.com/recog/v1/stt?lang=Kor';
+const SPEECH_HOST = 'clovaspeech-gw.ncloud.com';
+const SPEECH_PATH = '/recog/v1/stt';
 const REVIEW_THRESHOLD = 0.80;
 
 function validRetryAfter(value) {
@@ -29,11 +30,26 @@ async function providerJson(fetchImpl, url, init) {
   }
 }
 
-function receiptEndpoint(value) {
+function receiptEndpoint(value, live) {
   try {
     const url = new URL(value);
-    if (url.protocol === 'https:' && url.pathname.endsWith('/document/receipt')
+    const validHost = !live || /^[a-z0-9-]+\.apigw\.ntruss\.com$/.test(url.hostname);
+    if (validHost && url.protocol === 'https:' && !url.port && url.pathname.endsWith('/document/receipt')
         && !url.username && !url.password && !url.search && !url.hash) return url.href;
+  } catch { /* Keep configuration details out of errors. */ }
+  throw new MediaError('UNAVAILABLE');
+}
+
+function speechEndpoint(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'https:' && url.hostname === SPEECH_HOST && !url.port
+        && !url.username && !url.password && !url.hash) {
+      const path = url.pathname.replace(/\/+$/, '');
+      url.pathname = path.endsWith(SPEECH_PATH) ? path : path + SPEECH_PATH;
+      url.searchParams.set('lang', 'Kor');
+      return url.href;
+    }
   } catch { /* Keep configuration details out of errors. */ }
   throw new MediaError('UNAVAILABLE');
 }
@@ -104,11 +120,11 @@ function receiptResult(payload, requestId) {
   return { requestId, merchant, date: recognizedDate, totalWon, items };
 }
 
-// Fetch is always supplied by the caller. The app supplies the fake transport.
-export function createProviders({ fetchImpl, receiptUrl, receiptSecret, speechSecret, now = Date.now }) {
+export function createProviders({ fetchImpl, live = false, receiptUrl, receiptSecret, speechUrl, speechSecret, now = Date.now }) {
   return {
     async receipt({ bytes, type, info, requestId, signal }) {
-      const url = receiptEndpoint(receiptUrl);
+      if (live && !receiptSecret) throw new MediaError('UNAVAILABLE');
+      const url = receiptEndpoint(receiptUrl, live);
       const { format } = info;
       const body = new FormData();
       body.set('message', JSON.stringify({ version: 'V2', requestId, timestamp: now(), images: [{ format, name: requestId }] }));
@@ -119,14 +135,15 @@ export function createProviders({ fetchImpl, receiptUrl, receiptSecret, speechSe
     },
     async speech({ bytes, requestId, signal }) {
       const headers = { 'Content-Type': 'application/octet-stream' };
-      if (speechSecret) headers['X-CLOVASPEECH-API-KEY'] = speechSecret;
-      const payload = await providerJson(fetchImpl, SPEECH_URL, { headers, body: bytes, signal });
-      const rawQuota = payload?.quota;
-      const quota = typeof rawQuota === 'string' && /^\d{1,12}(?:\.\d{1,6})?$/.test(rawQuota) ? Number(rawQuota) : rawQuota;
-      const providerQuota = Number.isFinite(quota) && quota >= 0 && quota <= Number.MAX_SAFE_INTEGER ? quota : undefined;
+      const url = live ? speechEndpoint(speechUrl) : speechUrl;
+      if (live) {
+        if (!speechSecret) throw new MediaError('UNAVAILABLE');
+        headers['X-CLOVASPEECH-API-KEY'] = speechSecret;
+      }
+      const payload = await providerJson(fetchImpl, url, { headers, body: bytes, signal });
       const transcript = text(payload?.text);
-      if (!transcript) throw new MediaError('MEDIA_UNREADABLE', { providerQuota });
-      return { suggestion: { requestId, text: transcript }, providerQuota };
+      if (!transcript) throw new MediaError('MEDIA_UNREADABLE');
+      return { suggestion: { requestId, text: transcript } };
     },
   };
 }

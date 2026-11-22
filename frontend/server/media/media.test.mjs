@@ -12,6 +12,11 @@ import { startPreview } from '../preview.mjs';
 
 const receiptPath = '/api/navis/media/receipt-ocr';
 const speechPath = '/api/navis/media/transcription';
+const speechInvokeUrl = 'https://clovaspeech-gw.ncloud.com/recog/v1/stt';
+const speechUrl = `${speechInvokeUrl}?lang=Kor`;
+const ocrUrl = 'https://fixture.apigw.ntruss.com/custom/v1/1234/invoke-fixture/document/receipt';
+const speechEnv = { NAVIS_CLOVASPEECH_PROVIDER: 'live', NAVIS_CLOVASPEECH_INVOKE_URL: speechInvokeUrl, NAVIS_CLOVASPEECH_SECRET: 'fixture-speech' };
+const ocrEnv = { NAVIS_CLOVA_OCR_PROVIDER: 'live', NAVIS_CLOVA_OCR_URL: ocrUrl, NAVIS_CLOVA_OCR_SECRET: 'fixture-ocr' };
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGP4DwYMEAoAU7oL9ZisIGcAAAAASUVORK5CYII=', 'base64');
 const tinyPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC', 'base64');
 const stamp = 1_795_212_000_000;
@@ -104,11 +109,12 @@ test('default fake suggestions do not reach chat, ledger or inventory, even if n
 });
 
 test('receipt wire uses multipart V2 and maps only reviewed expense fields', async t => {
-  const { origin } = await serve(t, { now: () => stamp, fetchImpl: async (url, init) => {
-    assert.equal(new URL(url).pathname, '/document/receipt');
+  const { origin } = await serve(t, { env: ocrEnv, now: () => stamp, liveFetch: async (url, init) => {
+    assert.equal(url, ocrUrl);
     assert.equal(init.method, 'POST');
     assert.equal(init.redirect, 'error');
     const request = new Request(url, init);
+    assert.equal(request.headers.get('X-OCR-SECRET'), 'fixture-ocr');
     assert.match(request.headers.get('content-type'), /^multipart\/form-data; boundary=/);
     const form = await request.formData();
     assert.deepEqual([...form.keys()].sort(), ['file', 'message']);
@@ -143,23 +149,75 @@ test('receipt wire uses multipart V2 and maps only reviewed expense fields', asy
       { name: { value: '우유', needsReview: true }, quantity: null, amountWon: null },
     ],
   });
+  const fakeSpeech = await post(origin, speechPath, wav(), 'audio/wav');
+  assert.equal((await fakeSpeech.json()).text, '딸기스무디 메뉴 추가해줘');
 });
 
-test('short speech wire uses fixed Korean URL and sends the original WAV bytes', async t => {
+test('live CLOVA Speech uses the Korean short-sentence endpoint and sends the original WAV bytes once', async t => {
   const bytes = wav(60 * 16_000, true);
-  const { origin } = await serve(t, { fetchImpl: async (url, init) => {
-    assert.equal(String(url), 'https://clovaspeech-gw.ncloud.com/recog/v1/stt?lang=Kor');
+  const liveFetch = t.mock.fn(async (url, init) => {
+    assert.equal(url, speechUrl);
     assert.equal(init.method, 'POST');
     assert.equal(init.redirect, 'error');
-    assert.equal(new Headers(init.headers).get('content-type'), 'application/octet-stream');
+    const headers = new Headers(init.headers);
+    assert.equal(headers.get('content-type'), 'application/octet-stream');
+    assert.equal(headers.get('x-clovaspeech-api-key'), 'fixture-speech');
+    assert.equal(headers.get('x-ncp-apigw-api-key-id'), null);
+    assert.equal(headers.get('x-ncp-apigw-api-key'), null);
     assert.deepEqual(init.body, bytes);
     return Response.json({ text: '  말한 문장  ', quota: 4, internal: 'hidden' });
-  } });
+  });
+  const { origin } = await serve(t, { env: speechEnv, liveFetch });
   const response = await post(origin, speechPath, bytes, 'audio/wav');
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.match(body.requestId, uuid);
   assert.deepEqual(body, { requestId: body.requestId, text: '말한 문장' });
+  assert.equal((await (await post(origin)).json()).merchant.value, '샘플 원두상회');
+  assert.equal(liveFetch.mock.callCount(), 1);
+});
+
+test('credentials alone leave both routes on fixtures', async t => {
+  const env = { ...speechEnv, ...ocrEnv, NAVIS_CLOVASPEECH_PROVIDER: 'fake', NAVIS_CLOVA_OCR_PROVIDER: undefined };
+  const { origin } = await serve(t, { env, liveFetch: () => assert.fail('live transport used') });
+  assert.equal((await (await post(origin, speechPath, wav(), 'audio/wav')).json()).text, '딸기스무디 메뉴 추가해줘');
+  assert.equal((await (await post(origin)).json()).merchant.value, '샘플 원두상회');
+});
+
+test('explicit live modes fail closed for missing keys and non-NCP OCR URLs', async t => {
+  const env = { ...speechEnv, ...ocrEnv, NAVIS_CLOVASPEECH_SECRET: ' ', NAVIS_CLOVA_OCR_URL: 'https://other.invalid/document/receipt' };
+  const { origin } = await serve(t, { env, liveFetch: () => assert.fail('live transport used') });
+  await checkError(await post(origin, speechPath, wav(), 'audio/wav'), 503, 'UNAVAILABLE');
+  await checkError(await post(origin), 503, 'UNAVAILABLE');
+});
+
+test('the short-sentence request keeps the console path prefix and accepts a WAV under 400 ms', async t => {
+  const invoke = 'https://clovaspeech-gw.ncloud.com/domain-fixture/';
+  const bytes = wav(6399);
+  const liveFetch = t.mock.fn((url, init) => {
+    assert.equal(url, `${invoke}recog/v1/stt?lang=Kor`);
+    assert.deepEqual(init.body, bytes);
+    return Response.json({ text: '네' });
+  });
+  const { origin } = await serve(t, { env: { ...speechEnv, NAVIS_CLOVASPEECH_INVOKE_URL: invoke }, liveFetch });
+  const response = await post(origin, speechPath, bytes, 'audio/wav');
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).text, '네');
+  assert.equal(liveFetch.mock.callCount(), 1);
+});
+
+test('live speech rejects missing or invalid invoke URLs before sending audio or credentials', async t => {
+  const liveFetch = t.mock.fn();
+  for (const invoke of [
+    undefined, 'https://naveropenapi.apigw.ntruss.com/recog/v1/stt',
+    'https://clovaspeech-gw.ncloud.com.other.invalid', 'https://clovaspeech-gw.ncloud.com@other.invalid',
+    'http://clovaspeech-gw.ncloud.com', 'https://clovaspeech-gw.ncloud.com:8443',
+    `${speechInvokeUrl}#fragment`,
+  ]) {
+    const { origin } = await serve(t, { env: { ...speechEnv, NAVIS_CLOVASPEECH_INVOKE_URL: invoke }, liveFetch });
+    await checkError(await post(origin, speechPath, wav(), 'audio/wav'), 503, 'UNAVAILABLE');
+  }
+  assert.equal(liveFetch.mock.callCount(), 0);
 });
 
 test('requests reject invalid bytes, mismatched MIME and actual duration and size before recognition', async t => {
@@ -188,10 +246,15 @@ test('requests reject invalid bytes, mismatched MIME and actual duration and siz
 
 test('oversized declared lengths are rejected before the first body byte', async t => {
   const { origin } = await serve(t, { fetchImpl: () => { assert.fail('overflow reached provider'); } });
-  for (const [path, type, length] of [[receiptPath, 'image/png', 5_000_001], [speechPath, 'audio/wav', 10_000_001]]) {
+  const { origin: liveOrigin } = await serve(t, { env: speechEnv, liveFetch: () => assert.fail('overflow reached CLOVA Speech') });
+  for (const [base, path, type, length] of [
+    [origin, receiptPath, 'image/png', 5_000_001],
+    [origin, speechPath, 'audio/wav', 10_000_001],
+    [liveOrigin, speechPath, 'audio/wav', 10_000_001],
+  ]) {
     const res = await new Promise((resolve, reject) => {
-      const req = request(origin + path, {
-        method: 'POST', headers: { origin, 'content-type': type, 'content-length': length },
+      const req = request(base + path, {
+        method: 'POST', headers: { origin: base, 'content-type': type, 'content-length': length },
       }, resolve);
       req.on('error', reject);
       req.flushHeaders();
@@ -286,6 +349,26 @@ test('local deadline aborts the provider, responds once and releases the lane', 
   assert.equal(signals.length, 2);
 });
 
+test('a stalled upload times out, closes the connection and releases the same-service lane', { timeout: 2_000 }, async t => {
+  let calls = 0;
+  const { origin } = await serve(t, { timeoutMs: 80, fetchImpl: () => {
+    calls++;
+    return Response.json({ text: 'retry' });
+  } });
+  const req = request(origin + speechPath, { method: 'POST', headers: { 'content-type': 'audio/wav', origin } });
+  t.after(() => req.destroy());
+  const response = once(req, 'response');
+  req.write(wav().subarray(0, 50));
+  const [res] = await response;
+  const chunks = [];
+  for await (const chunk of res) chunks.push(chunk);
+  await checkError(new Response(Buffer.concat(chunks), { status: res.statusCode, headers: res.headers }), 504, 'TIMEOUT');
+  assert.equal(res.headers.connection, 'close');
+  assert.equal(calls, 0);
+  assert.equal((await post(origin, speechPath, wav(), 'audio/wav')).status, 200);
+  assert.equal(calls, 1);
+});
+
 test('busy same-service lane and disconnect abort upstream without falling through', async t => {
   let start, cancel;
   const started = new Promise(resolve => { start = resolve; });
@@ -346,81 +429,54 @@ test('Node preview mounts both fake routes ahead of the bridge', async t => {
   assert.equal((await post(origin, speechPath, wav(), 'audio/wav')).status, 200);
 });
 
-test('live smoke stays pending without approval or relevant credentials and performs zero attempts', async () => {
+test('live smoke requires approval and the owner files before attempting NCP', async t => {
+  const secretsDir = await mkdtemp(join(tmpdir(), 'storesaas-smoke-test-'));
+  t.after(() => rm(secretsDir, { recursive: true, force: true }));
   const fetchImpl = () => assert.fail('no call allowed');
-  const env = new Proxy({}, { get: () => assert.fail('read credentials before approval') });
-  const unapproved = await runSmoke({ service: 'receipt', approved: false, env, fetchImpl });
-  assert.equal(unapproved.outcome, 'pending');
-  assert.equal(unapproved.reason, 'APPROVAL_REQUIRED');
-  assert.equal(unapproved.outboundCalls, 0);
-  for (const service of ['receipt', 'speech']) {
-    const missing = await runSmoke({ service, approved: true, env: {}, fetchImpl });
-    assert.equal(missing.outcome, 'pending');
-    assert.equal(missing.reason, 'CREDENTIALS_REQUIRED');
-    assert.equal(missing.outboundCalls, 0);
-  }
+  const skipped = { status: null, textLength: 0, exitCode: 2 };
+  assert.deepEqual(await runSmoke({ service: 'speech', approved: false, secretsDir, fetchImpl }), skipped);
+  await writeFile(join(secretsDir, 'NCP_CLOVASPEECH_INVOKE_URL'), speechInvokeUrl);
+  assert.deepEqual(await runSmoke({ service: 'speech', approved: true, secretsDir, fetchImpl }), skipped);
+  assert.deepEqual(await runSmoke({ service: 'receipt', approved: true, secretsDir, fetchImpl }), skipped);
 });
 
-test('approved smoke boundary records one simulated attempt per service and only summary metadata', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'storesaas-smoke-test-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const receipt = join(root, 'receipt.png');
-  const speech = join(root, 'speech.wav');
-  await writeFile(receipt, png);
+test('live smoke reports only the upstream status and recognized text length from one attempt', async t => {
+  const secretsDir = await mkdtemp(join(tmpdir(), 'storesaas-smoke-test-'));
+  t.after(() => rm(secretsDir, { recursive: true, force: true }));
+  const speech = join(secretsDir, 'speech.wav');
+  const receipt = join(secretsDir, 'receipt.png');
   await writeFile(speech, wav());
-  const credentialSentinel = ['fixture', 'credential'].join('-');
-  const env = {
-    CLOVA_OCR_RECEIPT_INVOKE_URL: 'https://fake.invalid/approved/document/receipt',
-    CLOVA_OCR_RECEIPT_SECRET: credentialSentinel,
-    CLOVA_SPEECH_SHORT_SECRET: credentialSentinel,
-  };
-  for (const [service, fixturePath, header, response] of [
-    ['receipt', receipt, 'X-OCR-SECRET', Response.json({ images: [{ inferResult: 'SUCCESS', receipt: { result: { storeInfo: { name: { text: 'synthetic' } } } } }] })],
-    ['speech', speech, 'X-CLOVASPEECH-API-KEY', Response.json({ text: 'synthetic', quota: 2 })],
+  await writeFile(receipt, png);
+  await writeFile(join(secretsDir, 'NCP_CLOVASPEECH_INVOKE_URL'), `${speechInvokeUrl}\n`);
+  await writeFile(join(secretsDir, 'NCP_CLOVASPEECH_SECRET'), 'fixture-speech\n');
+  await writeFile(join(secretsDir, 'NCP_CLOVA_OCR_URL'), `${ocrUrl}\n`);
+  await writeFile(join(secretsDir, 'NCP_CLOVA_OCR_SECRET'), 'fixture-ocr\n');
+
+  for (const [service, fixturePath, reply, status, textLength, exitCode] of [
+    ['speech', speech, Response.json({ text: '  안녕하세요  ' }), 200, 5, 0],
+    ['speech', speech, Response.json({ text: ' ' }), 200, 0, 1],
+    ['speech', speech, new Response(null, { status: 421 }), 421, 0, 1],
+    ['receipt', receipt, Response.json({ images: [{ inferResult: 'SUCCESS', receipt: { result: {
+      storeInfo: { name: { text: '예시상점' } },
+    } } }] }), 200, 4, 0],
   ]) {
     let calls = 0;
-    const report = await runSmoke({ service, fixturePath, approved: true, env, fetchImpl: (url, init) => {
+    const result = await runSmoke({ service, fixturePath, approved: true, secretsDir, fetchImpl: (url, init) => {
       calls++;
-      assert.equal(String(url), service === 'receipt' ? env.CLOVA_OCR_RECEIPT_INVOKE_URL : 'https://clovaspeech-gw.ncloud.com/recog/v1/stt?lang=Kor');
-      const headers = new Headers(init.headers);
-      assert.equal(headers.get(header), credentialSentinel);
       assert.equal(init.redirect, 'error');
-      assert.ok(Buffer.isBuffer(init.body));
-      assert.equal(headers.get('content-length'), String(init.body.length));
-      if (service === 'receipt') assert.match(headers.get('content-type'), /^multipart\/form-data; boundary=/);
-      else assert.deepEqual(init.body, wav());
-      return response;
+      const headers = new Headers(init.headers);
+      if (service === 'speech') {
+        assert.equal(url, speechUrl);
+        assert.equal(headers.get('x-clovaspeech-api-key'), 'fixture-speech');
+        assert.deepEqual(init.body, wav());
+      } else {
+        assert.equal(url, ocrUrl);
+        assert.equal(headers.get('x-ocr-secret'), 'fixture-ocr');
+        assert.ok(init.body instanceof FormData);
+      }
+      return reply;
     } });
     assert.equal(calls, 1);
-    assert.equal(report.outboundCalls, 1);
-    assert.equal(report.outcome, 'succeeded');
-    assert.match(report.requestId, uuid);
-    assert.ok(report.elapsedMs >= 0);
-    assert.equal(report.service, service);
-    if (service === 'speech') {
-      assert.equal(report.durationSeconds, 1);
-      assert.equal(report.providerQuota, 2);
-      assert.equal(report.estimatedChargeWon, 4);
-    } else {
-      assert.equal(report.estimatedPhotoUnits, 1);
-    }
-    assert.doesNotMatch(JSON.stringify(report), /synthetic|fake\.invalid|credential|\.wav|\.png/);
+    assert.deepEqual(result, { status, textLength, exitCode });
   }
-  const skipped = await runSmoke({ service: 'receipt', fixturePath: receipt, approved: true,
-    env: { ...env, CLOVA_OCR_RECEIPT_INVOKE_URL: 'http://fake.invalid/document/receipt' }, fetchImpl: () => assert.fail('invalid URL used') });
-  assert.equal(skipped.outboundCalls, 0);
-  assert.equal(skipped.reason, 'UNAVAILABLE');
-  const redirected = await runSmoke({ service: 'speech', fixturePath: speech, approved: true, env,
-    fetchImpl: () => Response.redirect('https://fake.invalid/redirect') });
-  assert.equal(redirected.outboundCalls, 1);
-  assert.equal(redirected.reason, 'UNAVAILABLE');
-  const misdirected = await runSmoke({ service: 'speech', fixturePath: speech, approved: true, env,
-    fetchImpl: () => new Response(null, { status: 421 }) });
-  assert.equal(misdirected.outboundCalls, 1);
-  assert.equal(misdirected.reason, 'UNAVAILABLE');
-  const emptySpeech = await runSmoke({ service: 'speech', fixturePath: speech, approved: true, env,
-    fetchImpl: () => Response.json({ text: ' ', quota: '1.5' }) });
-  assert.equal(emptySpeech.outboundCalls, 1);
-  assert.equal(emptySpeech.reason, 'MEDIA_UNREADABLE');
-  assert.equal(emptySpeech.providerQuota, 1.5);
 });
