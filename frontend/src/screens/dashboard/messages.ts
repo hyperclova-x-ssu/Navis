@@ -15,9 +15,11 @@ const rows = [
   ['dashboard.title', '우리 가게', 'Management', '管理', '管理'],
   // U-A2: the empty-state card no longer repeats the top-right tip ("pick the features here"); it only states the situation above its start button.
   ['dashboard.empty.hint', '아직 패널이 없어요', 'No panels yet', '还没有面板', '還沒有面板'],
+  ['dashboard.recommended.allPlaced', '추천 기능을 모두 놓았어요', 'All recommended panels are placed', '已放置全部推荐面板', '已放置全部推薦面板'],
   ['dashboard.starter.business', `${businessKo} 사장님이 많이 쓰는 3개로 시작하기`, `Start with 3 picks popular with ${businessEn}`, `从${businessHans}老板常用的 3 个开始`, `從${businessHant}老闆常用的 3 個開始`],
   ['dashboard.starter.general', '많이 쓰는 3개로 시작하기', 'Start with 3 popular picks', '从常用的 3 个开始', '從常用的 3 個開始'],
   ['dashboard.coach.choose', '필요한 기능을 여기서 눌러 추가해요', 'Pick the features you need here', '在这里选择需要的功能', '在這裡選擇需要的功能'],
+  ['dashboard.coach.chooseFromRecommendations', '추천에서 필요한 기능을 추가해요', 'Add the features you need from Recommendations', '从推荐中添加需要的功能', '從推薦中新增需要的功能'],
   ['dashboard.coach.resize', '길게 누른 뒤 모서리를 끌면 크기가 바뀌어요', 'Drag a corner to resize', '拖动边角可调整大小', '拖曳邊角可調整大小'],
   // The header button is named "배치 편집" (U-A1); en / zh names follow it.
   ['dashboard.coach.move', "길게 누르거나 위의 '배치 편집'을 눌러 옮길 수 있어요", "Press and hold, or tap 'Edit layout' above, to move it", '长按，或点按上方的“编辑布局”即可移动', '長按，或點按上方的「編輯版面」即可移動'],

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { commonBundle, widgetNamesBundle } from './messages';
 import { posBundle } from './messages/pos';
+import { membershipPosBundle } from './messages/membership-pos';
+import { loyaltyBundle } from '../screens/order/messages';
 import { findDuplicateKeys, findKoGaps } from './bundles';
 import { createTranslator } from './translator';
 import { locales } from '../contracts';
@@ -15,7 +17,8 @@ import type { Locale, MessageBundle } from './types';
 const tables = readLocalesTables();
 // LOCALES 20 writes placeholders in Korean ({이유}); the catalog uses the ICU names the other columns already use.
 const norm20 = (s: string) => s
-  .replace(/\{이유\}/g, '{reason}').replace(/\{지역\}/g, '{area}').replace(/\{기준일\}/g, '{date}').replace(/\{시\}/g, '{h}');
+  .replace(/\{이유\}/g, '{reason}').replace(/\{지역\}/g, '{area}').replace(/\{기준일\}/g, '{date}').replace(/\{시\}/g, '{h}')
+  .replace(/\{정산 유형\}/g, '{method}').replace(/\{금액\}/g, '{amount}');
 const norm = (s: string) => s
   .replace(/\{기능 이름\}(은\/는|을\/를|이\/가|과\/와)/g, '{name, particle, $1}')
   .replace(/\{기능 이름\}/g, '{name}').replace(/\{현재\}/g, '{current}').replace(/\{전체\}/g, '{total}').replace(/\{레이어\}/g, '{layer}');
@@ -257,13 +260,13 @@ describe('LOCALES 20절 페르소나 연결 기능 문구 (D-343~D-347)', () => 
     expect(rows.map(r => r[0]).sort()).toEqual([...locales20Map.map(m => m.match), ...locales20ReferenceRows].sort());
   });
   for (const m of locales20Map) {
-    for (const l of locales) {
+    for (const l of m.koOnly ? ['ko'] as const : locales) {
       it(`20절 ${m.match} / ${l}`, () => {
         const row = rows.find(r => r[0] === m.match);
         expect(row, m.match).toBeDefined();
         const cell = norm20(row![1 + locales.indexOf(l)]);
         // Some Chinese cells write the list separator without a space before it (“…（相对值）/ …”), so split on the slash.
-        expect(m.keys.map(k => raw(l, k, [commonBundle, bookingCancelCopy, dataBundle])))
+        expect(m.keys.map(k => raw(l, k, [commonBundle, bookingCancelCopy, dataBundle, membershipPosBundle, loyaltyBundle])))
           .toEqual(cell.split(m.separator ?? /\s*\/\s*/u));
       });
     }

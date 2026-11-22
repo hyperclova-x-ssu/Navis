@@ -28,7 +28,7 @@ export function createFormatters(_locale: Locale, msg: Msg): Formatters {
     const big = abs >= 10000;
     const tenThousands = Math.round(abs / 1000) / 10;
     // D-244 / LOCALES 3: the 만 amount always keeps one decimal (ko 11.0만 원; zh 11.0万韩元, 11.0萬韓元, grouped when large). English shows the full won amount and ignores n.
-    const n = _locale === 'ko' ? tenThousands.toFixed(1) : oneDecimal.format(tenThousands);
+    const n = oneDecimal.format(tenThousands);
     return msg('format.money.compact', { sign, full, big: big ? 'yes' : 'no', n });
   };
   const count: Formatters['count'] = (value, unit: UnitCode) => {

@@ -208,9 +208,9 @@ export function PayScreen({ state, send }: { readonly state: KioskState; readonl
     <button type="button" className="ck-nfc ck-press" aria-label="삼성페이 애플페이 여기에 대 주세요" onClick={() => choose('삼성·애플·NFC')}>
       <ContactlessHand className="ck-nfc__hand"/>
       <span className="ck-nfc__brands"><b>SAMSUNG</b> Pay<span aria-hidden="true">·</span><ApplePayMark/>Pay</span>
-      <span className="ck-nfc__text">여기에 대주세요</span>
+      <span className="ck-nfc__text">여기에 대 주세요</span>
     </button>
-    <p className="ck-pay__amount"><span>결제금액</span><strong>{won(cartTotal(state.cart))}</strong></p>
+    <p className="ck-pay__amount"><span>결제 금액</span><strong>{won(cartTotal(state.cart))}</strong></p>
     <div className="ck-pay__tiles">
       <button type="button" className="ck-pay__tile ck-press" onClick={() => choose('네이버페이')}>
         <span className="ck-pay__disc"><NoQrGlyph/></span><span><NpayPill/>간편 결제</span>

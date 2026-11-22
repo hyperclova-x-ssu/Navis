@@ -60,6 +60,8 @@ describe('the kiosk screens', () => {
   it('every payment tile approves by itself (~1.5 s) and hands exactly one paid order to Navis', async () => {
     render(<Kiosk transport={transport} newId={() => 'order-A'} now={() => new Date('2026-11-22T03:00:00.000Z')}/>);
     toPay();
+    expect(screen.getByText('여기에 대 주세요')).toBeVisible();
+    expect(screen.getByText('결제 금액')).toBeVisible();
     expect(screen.getByRole('button', { name: /삼성페이 애플페이/ })).toBeInTheDocument();
     click(/카드를 넣거나/);
     expect(screen.getByText('결제를 요청 중이에요')).toBeInTheDocument();

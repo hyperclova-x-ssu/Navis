@@ -96,7 +96,9 @@ function buildCatalog(content, rows, id, date) {
     const row = requireRow(supplierRows, id(`supplier:${source.id}`));
     return {
       supplierId: source.id, dbId: row.supplier_id, name: row.name, contact: row.contact_name,
-      phoneMask: `02-****-${String(index).padStart(4, '0')}`, memo: row.memo, leadDays: source.lead_days,
+      ...(source.test_contact ? { phone: source.test_contact.phone } : {}),
+      phoneMask: source.test_contact ? `010-****-${source.test_contact.phone.slice(-4)}` : `02-****-${String(index).padStart(4, '0')}`,
+      memo: row.memo, leadDays: source.lead_days,
       orderWeekdays: source.order_weekdays, minimumOrder: source.min_order_krw,
     };
   });

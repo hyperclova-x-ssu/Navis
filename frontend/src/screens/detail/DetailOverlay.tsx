@@ -1,5 +1,5 @@
 import {selectDetailViewState,type PresentationRunStore} from '../../state';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { animate, motion, useMotionValue } from 'motion/react';
 import type { DetailRef, FeatureId, InputSequence, RunStore, ViewportTransform } from '../../contracts';
@@ -37,6 +37,7 @@ export interface DetailOverlayProps {
 }
 const resolveById = (key: string) => document.getElementById(key);
 const ignoreKitExit = () => undefined;
+const ignoreFooterClaim = () => undefined;
 const identity = 'translate3d(0px, 0px, 0px) scale(1, 1)';
 function frameTransform(frame: FrameRect, base: FrameRect): string {
   if (base.width <= 0 || base.height <= 0) return identity;
@@ -177,8 +178,10 @@ export function DetailOverlay({ run, resolveReturnFocus = resolveById, simulateC
     if (!active) return;
     const closeSelector = 'button[data-inline-form-action]:not([type="submit"]), [data-esc-close]';
     // Forms inside a side panel are the panel's own sections (e.g. 주문제작 견적·승인): their close only resets values, so Esc there stays the panel's step.
-    const openLayers = () => Array.from(bodyHost.querySelectorAll<HTMLElement>('form.ui-inline-form, [data-esc-layer]')).filter(el => !el.closest('[inert], .ui-detail-side-panel') && el.querySelector(closeSelector));
-    return registerGridLayer({ root: bodyHost, priority: () => openLayers().length ? 15 : 0, dismiss: () => { openLayers().at(-1)?.querySelector<HTMLElement>(closeSelector)?.click(); } });
+    const closeButton = (layer: HTMLElement) => layer.querySelector<HTMLElement>(closeSelector) ??
+      (layer instanceof HTMLFormElement ? Array.from(layer.elements).find((element): element is HTMLButtonElement => element instanceof HTMLButtonElement && element.matches(closeSelector)) : undefined);
+    const openLayers = () => Array.from(bodyHost.querySelectorAll<HTMLElement>('form.ui-inline-form, [data-esc-layer]')).filter(el => !el.closest('[inert], .ui-detail-side-panel') && closeButton(el));
+    return registerGridLayer({ root: bodyHost, priority: () => openLayers().length ? 15 : 0, dismiss: () => { const layer = openLayers().at(-1); if (layer) closeButton(layer)?.click(); } });
   }, [active, bodyHost]);
   const compactTokens = useMemo(() => featureId==='briefing' ? {...layout.textDetail,minHeight:state.screenPreset.id==='B'?800:720,largeTextMinHeight:state.screenPreset.id==='B'?800:720} : layout.textDetail, [featureId, layout.textDetail, state.screenPreset.id]);
   // U-D: the compact height is plain React state keyed by widget/preset/text size. A motion value wrote `height` straight into the DOM
@@ -193,9 +196,7 @@ export function DetailOverlay({ run, resolveReturnFocus = resolveById, simulateC
   const faultKey = `${state.runId}:${featureId}`;
   const [surface, setSurface] = useState<HTMLDivElement | null>(null);
   const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
-  const [claims, setClaims] = useState(0);
-  const claim = useCallback((on: boolean) => setClaims(n => Math.max(0, n + (on ? 1 : -1))), []);
-  const footerCtx = useMemo(() => ({ slot: footerSlot, claim }), [footerSlot, claim]);
+  const footerCtx = useMemo(() => ({ slot: footerSlot, claim: ignoreFooterClaim }), [footerSlot]);
   const memory = useRef<{ key: string; frame: FrameRect; opacity: number } | null>(null);
   const transform = useMotionValue(identity);
   const opacity = useMotionValue(0);
@@ -344,7 +345,7 @@ export function DetailOverlay({ run, resolveReturnFocus = resolveById, simulateC
   const widgetName = featureId ? text(`widget.${featureId}.title`) : '';
   const coachText = featureId ? text(`widget.${featureId}.coach`) : '';
   const title = widgetName || t('detail.error');
-  const showCctvPrivacy = featureId === 'customer-analysis' && cctvMode === 'live' && claims === 0;
+  const showCctvPrivacy = featureId === 'customer-analysis' && cctvMode === 'live';
   const footer = <>{showCctvPrivacy ? <span>{cctvT('cctv.footer.live')}</span> : null}<div ref={setFooterSlot} className="detail-footer-slot" /></>;
   const groupId = featureId ? getRegistration(featureId)?.groupId : undefined;
   const style = { ...(groupId ? groupStyle(groupId) : {}), transform, opacity, transformOrigin: 'top left', ...detailFrameStyle(compact, fullscreen, compactTokens, textScale, compactHeight) };
@@ -357,7 +358,7 @@ export function DetailOverlay({ run, resolveReturnFocus = resolveById, simulateC
     {coachText ? <HelpButton ref={helpRef} name={widgetName} onPress={() => { if (helpOpen) run.actions.closeWidgetHelp(); else run.actions.openWidgetHelp(featureId, 'detail', `detail-help:${featureId}`); }} /> : null}
     <span className="ui-sr-only" aria-live="polite">{announcement}</span>
   </> : null;
-  const coach = featureId && coachText ? <WidgetCoach open={helpOpen} anchorRef={helpRef} onClose={() => { run.actions.closeWidgetHelp(); }} title={widgetName}>{coachText}</WidgetCoach> : null;
+  const coach = featureId && coachText ? <WidgetCoach open={helpOpen} anchorRef={helpRef} onClose={() => { run.actions.closeWidgetHelp(); }} title={widgetName} showTitle={!active || state.overlay.featureId !== 'local-changes'}>{coachText}</WidgetCoach> : null;
   if(!descriptor)return <>{preserved}</>;
   if (active) return <>{preserved}<DetailFooterContext.Provider value={footerCtx}><DetailDialog open onContextChange={run.actions.clearNotice} title={title} fullscreen={fullscreen} returnFocusRef={returnFocusRef} popupRef={setSurface} popupStyle={style} popupClassName={resizing ? 'detail-frame-resize' : undefined} onClose={close} footer={footer} headerAction={headerAction} closeLabel={t('common.close')}>{bodySlot}{coach}</DetailDialog></DetailFooterContext.Provider></>;
   if (!state.exitPendingToken) return <>{preserved}</>;

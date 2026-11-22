@@ -8,6 +8,7 @@ import { usePanelChrome } from '../panel-chrome';
 import { ActionButton } from './controls';
 import { StatusBadge } from './badges';
 import { Textarea, copyText } from './forms';
+import { DetailFooterContent } from './overlays';
 import { TimeField } from './time-field';
 import { Icon } from '../icons';
 import { motionTokens, pageTokens } from '../motion';
@@ -81,18 +82,18 @@ export const BenefitCard=BenefitCards;
 export function maskName(name:string):string{if(/[○*]/u.test(name))return name;const chars=Array.from(name.trim());return chars.length<=1?name:`${chars[0]}${'○'.repeat(Math.min(chars.length-1,3))}`;}
 export interface Recipient { readonly id:string;readonly name:string;/** day, time and visit count line */readonly meta?:string;readonly consent:boolean }
 /** DS 11.9.4 RecipientList: check rows (min 64, hit 48), masked names, no-consent rows disabled with a sentence and an icon. */
-export function RecipientList({recipients,selected,onChange,onEmptyChange,label}:{readonly recipients:readonly Recipient[];readonly selected:readonly string[];readonly onChange:(ids:readonly string[])=>void;readonly onEmptyChange?:(empty:boolean)=>void;readonly label?:string}){
+export function RecipientList({recipients,selected=[],onChange,onEmptyChange,label,consentLabels}:{readonly recipients:readonly Recipient[];readonly selected?:readonly string[];readonly onChange?:(ids:readonly string[])=>void;readonly onEmptyChange?:(empty:boolean)=>void;readonly label?:string;readonly consentLabels?:{readonly yes:string;readonly no:string}}){
   const {t,locale}=useKitT();
   const valid=new Set(recipients.filter(r=>r.consent).map(r=>r.id));
   const chosen=selected.filter(id=>valid.has(id));
   useEffect(()=>{onEmptyChange?.(chosen.length===0);},[chosen.length,onEmptyChange]);
-  const toggle=(id:string,on:boolean)=>onChange(on?[...new Set([...chosen,id])]:chosen.filter(x=>x!==id));
+  const toggle=(id:string,on:boolean)=>onChange?.(on?[...new Set([...chosen,id])]:chosen.filter(x=>x!==id));
   return <div className="ui-recipient-list">
     {recipients.length===0?<p className="ui-recipient-list__empty">{t('marketing.noRecipients')}</p>:null}
-    <ul aria-label={label??t('ui.recipient.listLabel')}>{recipients.map(r=>{const id=`rcp-${r.id}`;return <li key={r.id} className="ui-recipient-row" data-consent={String(r.consent)}>
-      <Checkbox.Root checked={r.consent&&chosen.includes(r.id)} disabled={!r.consent} aria-labelledby={`${id}-name`} aria-describedby={r.consent?undefined:`${id}-reason`} onCheckedChange={on=>toggle(r.id,on)} className="ui-checklist-row__box"><Checkbox.Indicator className="ui-checklist-row__tick"><Icon name="check"/></Checkbox.Indicator></Checkbox.Root>
-      <span className="ui-recipient-row__text"><span id={`${id}-name`} className="ui-recipient-row__name">{maskName(r.name)}</span>{r.meta?<span className="ui-recipient-row__meta">{locale==='ko'?koreanScreenText(r.meta):r.meta}</span>:null}{r.consent?null:<span id={`${id}-reason`} className="ui-recipient-row__reason"><Icon name="no-entry"/>{t('marketing.noConsent')}</span>}</span>
-      {r.consent?<StatusBadge semantic="done" label={t('ui.recipient.sendable')}/>:null}</li>;})}</ul></div>;
+    <ul aria-label={label??t('ui.recipient.listLabel')}>{recipients.map(r=>{const id=`rcp-${r.id}`;return <li key={r.id} className="ui-recipient-row" data-row-id={r.id} data-consent={String(r.consent)}>
+      {onChange && <Checkbox.Root checked={r.consent&&chosen.includes(r.id)} disabled={!r.consent} aria-labelledby={`${id}-name`} aria-describedby={r.consent?undefined:`${id}-reason`} onCheckedChange={on=>toggle(r.id,on)} className="ui-checklist-row__box"><Checkbox.Indicator className="ui-checklist-row__tick"><Icon name="check"/></Checkbox.Indicator></Checkbox.Root>}
+      <span className="ui-recipient-row__text"><span id={`${id}-name`} className="ui-recipient-row__name">{maskName(r.name)}</span>{r.meta?<span className="ui-recipient-row__meta">{locale==='ko'?koreanScreenText(r.meta):r.meta}</span>:null}{!r.consent&&!consentLabels&&<span id={`${id}-reason`} className="ui-recipient-row__reason"><Icon name="no-entry"/>{t('marketing.noConsent')}</span>}</span>
+      {r.consent?<StatusBadge semantic="done" label={consentLabels?.yes??t('ui.recipient.sendable')}/>:consentLabels?<span id={`${id}-reason`}><StatusBadge semantic="warning" label={consentLabels.no}/></span>:null}</li>;})}</ul></div>;
 }
 
 /** DS 11.9.4 SmsPreview: '(광고)' first line and the opt-out last line cannot be removed or edited; only the body is a Textarea. */
@@ -121,16 +122,19 @@ export function SendTimePicker({mode,onModeChange,time,onTimeChange}:{readonly m
 }
 
 /** DS 11.9.4 ConfirmStep: question title (focused on open), three summary lines, [보내기] disabled at once on press, no undo after sending. */
-export function ConfirmStep({count,summary,onSend,onCancel,phase='ask',sendDisabled=false}:{readonly count:number;readonly summary:readonly {readonly label:string;readonly value:string}[];readonly onSend:()=>void;readonly onCancel:()=>void;readonly phase?:'ask'|'sending'|'sent';readonly sendDisabled?:boolean}){
+export function ConfirmStep({count,summary,onSend,onCancel,cancelLabel,phase='ask',sendDisabled=false,footerActions=false}:{readonly count:number;readonly summary:readonly {readonly label:string;readonly value:string}[];readonly onSend:()=>void;readonly onCancel:()=>void;readonly cancelLabel?:string;readonly phase?:'ask'|'sending'|'sent';readonly sendDisabled?:boolean;readonly footerActions?:boolean}){
   const {t}=useKitT();const title=useRef<HTMLHeadingElement>(null);const [locked,setLocked]=useState(false);
   useEffect(()=>{title.current?.focus();},[]);
   const busy=locked||phase!=='ask';
+  const actions = <>
+    {phase==='sending'?<p className="ui-confirm-step__status" role="status">{t('ui.confirm.sending')}</p>:null}
+    {phase==='sent'?<p className="ui-confirm-step__status" role="status"><Icon name="check"/>{t('common.sentSample')}</p>:null}
+    {phase!=='sent'?<div className="ui-confirm-step__actions"><ActionButton disabled={busy||sendDisabled} onClick={()=>{if(busy)return;setLocked(true);onSend();}}>{t('ui.confirm.send')}</ActionButton><ActionButton variant="secondary" disabled={phase==='sending'} onClick={onCancel}>{cancelLabel??t('ui.confirm.notNow')}</ActionButton></div>:null}
+  </>;
   return <section className="ui-confirm-step" aria-labelledby="ui-confirm-title">
     <h3 id="ui-confirm-title" ref={title} tabIndex={-1} className="ui-confirm-step__title">{t('ui.confirm.title',{n:count})}</h3>
     <dl className="ui-confirm-step__summary">{summary.map(row=><div key={row.label}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>
-    {phase==='sending'?<p className="ui-confirm-step__status" role="status">{t('ui.confirm.sending')}</p>:null}
-    {phase==='sent'?<p className="ui-confirm-step__status" role="status"><Icon name="check"/>{t('common.sentSample')}</p>:null}
-    {phase!=='sent'?<div className="ui-confirm-step__actions"><ActionButton disabled={busy||sendDisabled} onClick={()=>{if(busy)return;setLocked(true);onSend();}}>{t('ui.confirm.send')}</ActionButton><ActionButton variant="secondary" disabled={phase==='sending'} onClick={onCancel}>{t('ui.confirm.notNow')}</ActionButton></div>:null}</section>;
+    {footerActions ? <DetailFooterContent><div className="detail-footer-actions">{actions}</div></DetailFooterContent> : actions}</section>;
 }
 
 /** DS 11.9.4a CopyThenPosted: post text card, real clipboard copy, then 'I posted it'. Nothing counts as posted before the second press. */

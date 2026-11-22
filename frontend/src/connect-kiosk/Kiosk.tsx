@@ -3,7 +3,7 @@
  * the window, the customer flow, its timers (60 s idle, ~1.5 s approval for every payment tile, 10 s 끝내기) and the hand-over of a
  * paid order to the Navis window. No real payment, camera feed, card number or phone number is handled here.
  */
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import type { Locale } from '../contracts';
 import './kiosk.css';
 import { CONNECT_CHANNEL, createBrowserTransport, type ConnectTransport } from './channel';
@@ -36,7 +36,7 @@ export function KioskStage({ children, screen, onActivity }: { readonly children
   const stage = useRef<HTMLDivElement>(null);
   const scale = useFit(stage);
   return <div ref={stage} className="ck-stage" data-screen={screen} onPointerDownCapture={onActivity} onKeyDownCapture={onActivity}>
-    <div className="ck-frame" style={{ transform: `scale(${scale})` }} lang="ko">{children}</div>
+    <div className="ck-frame" style={{ transform: `scale(${scale})`, '--ck-touch-size': `${44 / scale}px` } as CSSProperties} lang="ko">{children}</div>
   </div>;
 }
 

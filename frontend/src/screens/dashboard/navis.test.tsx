@@ -69,12 +69,12 @@ it('hides the launcher while a settings, closing or POS dialog is open and bring
  await waitFor(()=>expect(screen.getByRole('button',{name:'Navis 열기'})).toBeInTheDocument());
  act(()=>run.dispose());
 });
-it('parks the launcher in the POS header row so it never covers 결제하기, 담기 or a row [완료] (UXP-1)',()=>{
+it('hides the launcher on the POS layer and restores it on management (D-430)',()=>{
  const run=setup();
  const launch=screen.getByRole('button',{name:'Navis 열기'});
  expect(launch).toHaveAttribute('data-layer','management');
  act(()=>{run.actions.switchLayer('orders-payment');});
- expect(screen.getByRole('button',{name:'Navis 열기'})).toHaveAttribute('data-layer','orders-payment');
+ expect(screen.queryByRole('button',{name:'Navis 열기'})).not.toBeInTheDocument();
  act(()=>run.dispose());
 });
 it('answers the owner\'s close-chat request with a sentence, not the button name (TEXT-REVIEW-CHAT #10)',async()=>{
@@ -144,6 +144,10 @@ it.each([['주문/결제','orders-payment'],['마케팅','marketing']] as const)
  expect(fetcher.mock.calls[0][1].signal.aborted).toBe(true);
  expect(chat()).toBeNull();
  expect(run.getState().layer).toBe(layerId);
+ if (layerId==='orders-payment') {
+  expect(screen.queryByRole('button',{name:'Navis 열기'})).not.toBeInTheDocument();
+  await userEvent.setup().click(screen.getByRole('button',{name:'관리'}));
+ }
  // Reopening continues the same conversation: the owner's question is still there and the unsent words are back in the field.
  fireEvent.click(screen.getByRole('button',{name:'Navis 열기'}));
  expect(chat()).not.toBeNull();

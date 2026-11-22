@@ -77,7 +77,7 @@ function Group({ copy, title, note, sources }: { readonly copy: BriefingCopy; re
 const order = (source: BriefingSource): number => { const index = SOURCE_NAMES.indexOf(source.key as never); return index < 0 ? SOURCE_NAMES.length : index; };
 
 /** One card for every source the service sent: Navis' own records and drafts first, then what NAVER itself reported, each with its period and state. */
-export function SourcesCard({ copy, real }: { readonly copy: BriefingCopy; readonly real: BriefingRealView }) {
+export function SourcesCard({ copy, real }: { readonly copy: BriefingCopy; readonly real: { readonly sources: readonly BriefingSource[] } }) {
   const sorted = [...real.sources].sort((a, b) => order(a) - order(b));
   return <section className="mm-card mm-briefing-card" data-slot="briefing.sources" aria-label={copy.t('briefing.sources.title')}>
     <h3 className="mm-card__title">{copy.t('briefing.sources.title')}</h3>

@@ -30,6 +30,7 @@ function collect(): readonly MessageBundle<string>[] {
 const bundles = collect();
 const iteration5Ids = ['run', 'data.management', 'ui-management', 'closing', 'arrival', 't207'] as const;
 const iteration6M3Ids = ['pos-payment-tools', 'pos-receipt', 'pos-table-transfer', 'widget.menu.pos'] as const;
+const membershipPosId = 'membership-pos';
 const translatedWidgetIds = ['widget.booking.cancel', 'data.reality.07.export-reasons'] as const;
 const expectedIds = [
   'common', 'widget-names', 'ui', 'dashboard', 'shell', 'detail', 'briefing', 'navis', 'data', 'preview.variant',
@@ -40,6 +41,7 @@ const expectedIds = [
   // D-242 / ARCHITECTURE 16.2: POS screens do not add a widget folder.
   'ui-pos', 'pos-shell', 'pos-order-status',
   ...iteration6M3Ids,
+  membershipPosId,
   'widget.menu.photo',
   ...translatedWidgetIds,
 ] as const;
@@ -66,7 +68,7 @@ describe('all message bundles (T-055 ③, API-12)', () => {
   });
   it('preserves Korean fallback for Korean-only rows and the localized management camera alert', () => {
     // D-209 / T-244c: archived order-status copy first ships with the POS screen.
-    for (const id of [...iteration5Ids, 'ui-pos', 'pos-shell', 'pos-order-status', 'data-pos', ...iteration6M3Ids]) {
+    for (const id of [...iteration5Ids, 'ui-pos', 'pos-shell', 'pos-order-status', 'data-pos', ...iteration6M3Ids, membershipPosId]) {
       const b = bundles.find(bundle => bundle.id === id);
       expect(b, `Missing bundle: ${id}`).toBeDefined();
       if (!b) continue;

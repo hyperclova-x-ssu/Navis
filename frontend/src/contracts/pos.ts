@@ -342,7 +342,7 @@ export type PosLoyaltyCommand =
   | { readonly type: 'bill.confirmZero'; readonly billId: string; readonly meta: PosCommandMeta }
   | { readonly type: 'bill.cancelPartial'; readonly billId: string; readonly confirmed: boolean; readonly meta: PosCommandMeta };
 export interface PosMemberRead {
-  readonly memberId: string; readonly customerId: string; readonly name: string | { readonly key: string } | { readonly raw: string };
+  readonly memberId: string; readonly memberCode?: string; readonly customerId: string; readonly name: string | { readonly key: string } | { readonly raw: string };
   readonly phone: string; readonly grade: 'regular' | 'frequent' | 'occasional' | 'inactive'; readonly recentVisits: number;
 }
 export interface PosPassRead {
@@ -393,7 +393,7 @@ export interface PosReceiptView {
   readonly splits: readonly PosMethodSplit[];
   readonly lines: readonly { readonly orderLineId: string; readonly menuId: string; readonly name: string; readonly options: readonly PosOrderOption[]; readonly request: string; readonly qty: number; readonly gross: number; readonly discount: number; readonly amount: number }[];
   readonly discounts: readonly { readonly source: PosDiscount['source']; readonly amount: number }[];
-  readonly member: { readonly memberId: string; readonly name: PosMemberRead['name']; readonly phone: string } | null;
+  readonly member: { readonly memberId: string; readonly memberCode?: string; readonly name: PosMemberRead['name']; readonly phone: string } | null;
   readonly cashReceipt: PosCashReceipt | null; readonly canIssueCashReceipt: boolean;
   readonly corrections: readonly { readonly correctionId: string; readonly kind: 'cancel' | 'refund'; readonly at: string; readonly seq: number; readonly amount: number; readonly methods: readonly PosMethodSplit[]; readonly restockRetail: boolean }[];
 }

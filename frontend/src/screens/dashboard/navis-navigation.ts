@@ -349,6 +349,15 @@ const navigationAliases: readonly [FeatureId, RegExp][] = [
 
 const quotedValue = /"[^"\n]+"|“[^”\n]+”|'[^'\n]+'|‘[^’\n]+’|「[^」\n]+」|『[^』\n]+』/gu;
 const quoteMark = /[“”"'‘’「」『』]/u;
+const OPEN_VERB = /열어|띄워|켜\s*줘|눌러|틀어|재생해|넘어가|(?:화면|메뉴|탭|패널|위젯|창)(?:으로|로)\s*(?:가|이동)|\bopen\b|打开|開啟/iu;
+const SHOW_VERB = /보여(?:\s*(?:줘|주(?![던는신])|줄)|(?=\s*[.!?？]*$))|\bshow\b|顯示|显示/iu;
+const dismissCoaches = (text: string) => /코치(?:마크)?|사용법 안내|안내\s*말풍선|튜토리얼\s*팁/u.test(text)
+  && /그만|끄|건너뛰|넘겨|스킵/u.test(text);
+/** D-419. A display request is a read unless the owner also requests a UI action. */
+export function isDataDisplayRequest(input: string) {
+  const directive = input.normalize('NFKC').replace(quotedValue, ' ').trim();
+  return SHOW_VERB.test(directive) && !OPEN_VERB.test(directive) && !dismissCoaches(directive);
+}
 const negatedNavigation = /(?:하지|열지|보여\s*주지|가지)\s*마|말아\s*줘|무시|ignore\s+|\b(?:don't|never|do not)\b/iu;
 const panelLocation = /어디(?:\s*(?:에\s*)?(?:있|야)|[.!?]?$)|몇\s*페이지|(?:위젯|패널).{0,8}\d+\s*페이지에\s*있|(?:대시)?보드에서\s*(?:찾|보여)|(?:패널|위젯)\s*위치|응대\s*패널\s*보여/u;
 
@@ -366,7 +375,6 @@ const datedStaffWeek = /^\d{1,2}\s*월\s*\d{1,2}\s*일\s*주\s*(?:직원\s*)?근
 const cctvPlayback = /(?:카페|CCTV|씨씨티비|분석한|카메라)\s*영상.*(?:틀어|재생|보여|열어)/iu;
 const briefingTaxAlert = /^(?:(?:원천세|세금)\s*알림|브리핑에서\s*세금\s*쪽).*(?:열어|보여|눌러|상세)/u;
 const couponSendView = /^(?:(?:[월화수목금토일]요일\s*)?(?:한산한\s*시간|빈\s*시간)\s*쿠폰|단골\s*쿠폰\s*보내기)\s*(?:화면|창)(?:으로|로)?\s*(?:가|이동|열어|보여)/u;
-const endedCouponList = /^끝난\s*쿠폰\s*\d+\s*장\s*보여\s*줘[.!?]?$/u;
 const quotedNavigationRequest = /열어|열기|보여|띄워|자세히|상세|(?:바꿔서|고쳐서|수정해서).*(?:준비|세팅)|\b(?:open|show)\b|打开|開啟/iu;
 
 function isReportFeature(feature: unknown): feature is 'ledger' | 'margin' | 'tax' {
@@ -377,11 +385,11 @@ function isReportFeature(feature: unknown): feature is 'ledger' | 'margin' | 'ta
 export function classifyNavigation(input: string, state: RunState, snapshot: ReturnType<WidgetDataStore['getSnapshot']>, reference?: FeatureId): RoutedAction | undefined {
   const text = input.trim();
   if (blocksLocalNavigation(text) || widgetStatusQuery(text)) return;
-  const screenText = text.replace(quotedValue, ' ').trim();
+  const screenText = text.normalize('NFKC').replace(quotedValue, ' ').trim();
+  if (isDataDisplayRequest(text)) return;
   if (quoteMark.test(text) && (quoteMark.test(screenText) || !quotedNavigationRequest.test(screenText))) return;
   if (blankMenuForm.test(text)) return { command: 'ui.openDetail', args: { featureId: 'menu', view: 'register' } };
   if (packagedStockView.test(text)) return { command: 'ui.openDetail', args: { featureId: 'inventory-booking', view: 'products' } };
-  if (endedCouponList.test(text)) return { command: 'ui.openDetail', args: { featureId: 'coupon-status', view: 'ended' } };
   const businessDate = snapshot.pos?.businessDate ?? TODAY;
   if (datedStaffWeek.test(text)) {
     const date = parseNavisDate(text, businessDate);
@@ -471,16 +479,15 @@ export function classifyNavigation(input: string, state: RunState, snapshot: Ret
 export function routeNavisNavigation(input: string, { state, feature, ingredient, menuItem, condition, reference }: RoutingContext): RoutedAction | undefined {
   const text = input.normalize('NFKC').trim();
   const compact = text.replace(/\s+/gu, '');
-  if (/^(?:매출|입금|수입|일정|스케줄)\s*(?:좀\s*)?보여\s*줘[.!?]?$/u.test(text)) return;
-  if (blocksLocalNavigation(text) || quoteMark.test(text)) return;
+  if (blocksLocalNavigation(text) || quoteMark.test(text) || isDataDisplayRequest(text)) return;
   const to = (command: AgentNavigationCommand, args: AgentWireArgs = {}, local?: boolean): RoutedAction => ({ command, args, local });
-  const open = /열(?:어|기|고)|보여\s*줘|띄워|자세히|상세\s*$|켜\s*줘|(?:화면|메뉴)(?:으로|로)?\s*(?:가|이동)|\b(?:open|show)\b|打开|開啟|顯示|显示/iu.test(text);
+  const open = OPEN_VERB.test(text) || /열(?:기|고)|자세히|상세\s*$/u.test(text);
   if (/마감/.test(text) && /마감\s*(?:해\s*(?:줘|주세요)|처리|취소)|영업\s*종료/.test(text)) return;
   const closingTab = closingStartTab(text);
   if (closingTab) return to('ui.open_closing', { tab: closingTab });
   if (/^(?:Navis|나비스|채팅창?|대화창?|이제\s*그만\s*창)(?:을|를)?\s*닫/iu.test(text)) return to('ui.close_chat');
   if (/^(?:서랍|기능 목록|상세(?: 창)?|설정 창)(?:을|를)?\s*닫|^오른쪽\s*목록\s*치워/u.test(text)) return to('ui.close_overlay');
-  if (/코치(?:마크)?|사용법 안내|안내\s*말풍선|튜토리얼\s*팁/u.test(text) && /그만|끄|건너뛰|넘겨|스킵/u.test(text)) return to('ui.skip_coaches');
+  if (dismissCoaches(text)) return to('ui.skip_coaches');
   if (state.edit.mode === 'edit' && /^완료[.!]?$/u.test(text)) return to('ui.exit_layout_edit');
   if (/패널\s*위치\s*바꾸게/u.test(text)) return to('ui.enter_layout_edit');
   if (/배치\s*편집|편집\s*모드/u.test(text)) {

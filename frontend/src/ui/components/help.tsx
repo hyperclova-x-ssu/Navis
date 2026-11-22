@@ -31,10 +31,10 @@ export function CoachFooter({current,total,onSkipAll,onNext,nextLabel,last=false
   return <div className="ui-coach-footer"><span className="ui-coach-footer__count">{t('ui.coach.progress',{current,total})}</span>
     <div className="ui-coach-footer__actions">{last?null:<ActionButton variant="link" className="ui-coach-footer__skip" onClick={onSkipAll}>{t('ui.coach.skipAll')}</ActionButton>}{onNext&&label?<ActionButton className="ui-coach-footer__next" onClick={onNext}>{label}</ActionButton>:null}</div></div>;
 }
-export interface WidgetCoachProps { readonly open:boolean;readonly anchorRef:RefObject<HTMLElement|null>;readonly onClose:(reason:CloseReason,event?:Event)=>void;readonly title:string;readonly children:ReactNode;readonly side?:'top'|'right'|'bottom'|'left';readonly queue?:CoachFooterProps }
+export interface WidgetCoachProps { readonly open:boolean;readonly anchorRef:RefObject<HTMLElement|null>;readonly onClose:(reason:CloseReason,event?:Event)=>void;readonly title:string;readonly children:ReactNode;readonly side?:'top'|'right'|'bottom'|'left';readonly queue?:CoachFooterProps;readonly showTitle?:boolean }
 /** DS 11.4 WidgetCoach: CoachMark with a bold widget-name line, 8px, then the muted description. Non-modal note. */
-export function WidgetCoach({open,anchorRef,onClose,title,children,side,queue}:WidgetCoachProps){
+export function WidgetCoach({open,anchorRef,onClose,title,children,side,queue,showTitle=true}:WidgetCoachProps){
   // One step (a help opened with (?) or a queue of one) has no footer, so its close reads 확인 like the last step of a tour (D-326 Q14).
   return <CoachMark open={open} anchorRef={anchorRef} onClose={onClose} side={side} noteLabel={title}
-    footer={queue&&queue.total>=2?<CoachFooter {...queue}/>:undefined}><span className="ui-widget-coach__title">{title}</span><span className="ui-widget-coach__body">{children}</span></CoachMark>;
+    footer={queue&&queue.total>=2?<CoachFooter {...queue}/>:undefined}>{showTitle?<span className="ui-widget-coach__title">{title}</span>:null}<span className="ui-widget-coach__body">{children}</span></CoachMark>;
 }

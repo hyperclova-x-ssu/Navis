@@ -154,6 +154,9 @@
 .ck-line__x { position: absolute; right: 26px; top: 28px; width: 52px; height: 52px; border-radius: 50%; background: #3a3a3a; display: grid; place-items: center; }
 .ck-line__x svg { width: 24px; height: 24px; }
 .ck-line__step { grid-column: 2; justify-self: end; margin-top: 4px; }
+/* Keep the painted control dimensions while reserving a 44 CSS px hit area after scaling. */
+.ck-line__edit,.ck-step--sm button { position:relative; }
+:is(.ck-tab,.ck-line__edit,.ck-line__x,.ck-step--sm button)::before { content:''; position:absolute; top:50%; left:50%; inline-size:max(100%, var(--ck-touch-size)); block-size:max(100%, var(--ck-touch-size)); transform:translate(-50%, -50%); }
 .ck-cart__more { position: absolute; left: 0; right: 0; top: 150px; text-align: center; font-size: 26px; font-weight: 500; display: none; }
 .ck-more { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 30px auto 0; height: 64px; font-size: 26px; font-weight: 500; }
 .ck-more svg { width: 22px; height: 22px; }

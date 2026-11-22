@@ -1,5 +1,9 @@
-NanumSquareNeo-Variable.woff2: official unmodified distribution https://campaign.naver.com/nanumsquare_neo/download/NaverNanumSquareNeo.zip
-License and copyright: https://help.naver.com/service/30016/contents/18088
+NanumSquareNeo-Variable.woff2: derived from Naver's official variable webfont in https://campaign.naver.com/nanumsquare_neo/download/NaverNanumSquareNeo.zip
+Copyright NAVER Corp.; SIL Open Font License 1.1 (OFL.txt; https://help.naver.com/service/30016/contents/18088).
+PUBREV-FIX-A: fontTools 4.60.0 WOFF2 re-encode with the orphaned STAT AxisValue removed. The record referred to axis 1, but the table declares only axis 0 (wght). The internal family/PostScript name is Navis Square Neo Variable/NavisSquareNeo-Variable under the reserved-name terms. The app keeps its CSS font-family alias. The 100–900 weight axis, glyph coverage and metrics are preserved.
+Original SHA-256: 141ac2f0717274f96e4f7e0109952bcb29251eb0d23eabeb11834e23214948d9
+Repaired SHA-256: f35ae22b609186239555e68bc2ee782ed773b303f9931c186bf66b89788cc398
+Validation: OpenType Sanitizer 9.2.0 reports no diagnostics on the repaired file.
 
 NavisHans-500.woff2, NavisHans-700.woff2, NavisHant-500.woff2, NavisHant-700.woff2 (T-056, 2026-11-09):
 Subsets of Noto Sans CJK (SIL Open Font License 1.1, see OFL-NotoSansCJK.txt), renamed "Navis Hans" / "Navis Hant" in CSS only.

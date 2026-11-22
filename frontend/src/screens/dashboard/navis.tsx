@@ -9,6 +9,7 @@ import {findPlacement} from '../../state';
 import {isNavisLayoutNavigationConflict} from '../../features/assistant/domains/layout';
 import {navisStreamMessages as copy,navisTranslator} from '../../features/assistant/messages';
 import {destinationOpenLabel,openedDetailText} from '../../features/assistant/destinations';
+import {pressIsOutsideChat} from './navis-outside';
 import {ChatGlyph} from '../../features/assistant/chat-glyphs';
 import {NAVIS_INPUT_LIMIT, type ProposalSession} from '../../features/assistant/navis-conversation';
 import {motionTokens,timePolicy,transitionFor,useUi} from '../../ui';
@@ -223,7 +224,7 @@ export function DashboardNavis({run,controller,readRect,dragging,visible,onShowP
  // and focus stays where the press put it, so the close does not restore focus to the launcher.
  useEffect(()=>{
   if(!open||hiddenHandoff)return;
-  const outside=(target:EventTarget|null)=>target instanceof Node&&!dock.contains(target)&&!(target instanceof Element&&target.closest('.app-common-notice'));
+  const outside=(target:EventTarget|null)=>pressIsOutsideChat(dock,target);
   const pressed=(event:PointerEvent)=>{if(outside(event.target))closeRef.current(false);};
   // A mouse, touch or pen click is handled by its press (a text selection that ends outside is not an outside press); a keyboard or scripted click has detail 0.
   const clicked=(event:MouseEvent)=>{if(event.detail===0&&outside(event.target))closeRef.current(false);};

@@ -7,7 +7,6 @@ import { createWidgetDataStore, dataBundles, readModel, resolveDataText, type Wi
 import { supportedConditions } from '../../data/conditions';
 import { createTranslator } from '../../i18n';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { App } from '../../app/App';
 import { sseFrame } from '../../features/assistant/stream-fixture';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame, validateAgentRequest, type AgentRequest } from '../../../shared/navis-agent-schema.mjs';
@@ -17,7 +16,7 @@ import { getRegistry } from '../../catalog';
 import { screenPresets } from '../../layout';
 import { createRunStore } from '../../state';
 import { timePolicy } from '../../ui';
-import { applyNavisDetailSelection, classifyNavigation, createNavisNavigation, NAVIS_RETURN_FOCUS, prepareNavigationRequest, routeMenuForm } from './navis-navigation';
+import { applyNavisDetailSelection, classifyNavigation, createNavisNavigation, isDataDisplayRequest, NAVIS_RETURN_FOCUS, prepareNavigationRequest, routeMenuForm, routeNavisNavigation } from './navis-navigation';
 import { detailBoardPlacement, openedDetailText } from '../../features/assistant/destinations';
 import { navisTranslator } from '../../features/assistant/messages';
 import type { DetailRef } from '../../contracts';
@@ -79,7 +78,7 @@ it('retains only allowable detail routing and expands a locally validated item a
 
 it.each([
   ['카페라테 상세 열어줘', 'item'],
-  ['카페라테 레시피 보여줘', 'recipe'],
+  ['카페라테 레시피 열어줘', 'recipe'],
   ['카페라떼 메뉴 편집 화면', 'item'],
 ])('opens the named café menu item for %s', async (text, view) => {
   const { run, navigation } = setup();
@@ -111,7 +110,7 @@ it('opens a named margin simulation without applying any price changes', async (
 it('opens the products tab for a packaged-item view without inventing an item selection', () => {
   const { run } = setup();
   const snapshot = createWidgetDataStore().getSnapshot();
-  expect(classifyNavigation('원두 200g 재고 보여줘', run.getState(), snapshot)).toMatchObject({
+  expect(classifyNavigation('원두 200g 재고 열어줘', run.getState(), snapshot)).toMatchObject({
     command: 'ui.openDetail', args: { featureId: 'inventory-booking', view: 'products' },
   });
   expect(classifyNavigation('원두 200g 재고 몇 개 있어?', run.getState(), snapshot)).toBeUndefined();
@@ -124,6 +123,28 @@ it.each([
 ])('defers stock reads and new items to their typed domain for %s', text => {
   const { run } = setup();
   expect(classifyNavigation(text, run.getState(), createWidgetDataStore().getSnapshot())).toBeUndefined();
+});
+
+it.each([
+  ['끝난 쿠폰 2장 보여줘', 'coupon-status'],
+  ['지난달 손익 좀 보여 줄래?', 'ledger'],
+  ['11월 23일 주 근무표 보여줘', 'staff-schedule'],
+  ['원두 200g 재고 화면 보여주세요', 'inventory-booking'],
+  ['카페라테 레시피 보여주라', 'menu'],
+  ['그거 다시 보여줘', 'ai-response'],
+] as const)('leaves %s on the data path across both navigation entry points', (text, feature) => {
+  const { run } = setup();
+  const state = run.getState(), snapshot = createWidgetDataStore().getSnapshot();
+  expect(classifyNavigation(text, state, snapshot, feature)).toBeUndefined();
+  expect(routeNavisNavigation(text, { state, feature, reference: feature })).toBeUndefined();
+});
+
+it('keeps an explicit open even when the owner also uses a display verb', () => {
+  const { run } = setup();
+  const state = run.getState(), snapshot = createWidgetDataStore().getSnapshot();
+  const text = '손익 위젯 열어서 자료 보여줘';
+  expect(classifyNavigation(text, state, snapshot)).toMatchObject({ command: 'ui.openDetail', args: { featureId: 'ledger' } });
+  expect(routeNavisNavigation(text, { state, feature: 'ledger' })).toMatchObject({ command: 'ui.openDetail' });
 });
 
 it('uses the vendor read for a supplier list question and locates explicitly named panels', () => {
@@ -142,7 +163,7 @@ it.each(['재고 위젯 위치 알려줘', '손익 패널 위치 알려줘', '�
   },
 );
 
-it.each(['메뉴 추가하는 화면 열어줘', '메뉴 추가 폼 띄워줘', '새 메뉴 입력창', '새 메뉴 등록 폼 열어줘', '메뉴 새로 등록하는 창 열어', '메뉴 등록 폼 보여줘'])('opens a blank menu form for %s', async text => {
+it.each(['메뉴 추가하는 화면 열어줘', '메뉴 추가 폼 띄워줘', '새 메뉴 입력창', '새 메뉴 등록 폼 열어줘', '메뉴 새로 등록하는 창 열어'])('opens a blank menu form for %s', async text => {
   const { run, navigation } = setup();
   const store = createWidgetDataStore();
   const snapshot = store.getSnapshot();
@@ -169,17 +190,17 @@ it.each([
 });
 
 it.each([
-  ['쿠폰 위젯 보드에서 보여줘', 'ui.show_panel', { featureId: 'coupon-status' }],
+  ['쿠폰 위젯 보드에서 찾아줘', 'ui.show_panel', { featureId: 'coupon-status' }],
   ['손익 위젯이 2페이지에 있어?', 'ui.show_panel', { featureId: 'ledger' }],
   ['카페 영상 틀어줘', 'ui.openDetail', { featureId: 'customer-analysis' }],
-  ['분석한 영상 보여줘', 'ui.openDetail', { featureId: 'customer-analysis' }],
-  ['세금 알림 자세히 보여줘', 'ui.openDetail', { featureId: 'tax', view: 'payments', itemId: 'sample-tax-1' }],
+  ['분석한 영상 재생해줘', 'ui.openDetail', { featureId: 'customer-analysis' }],
+  ['세금 알림 자세히 열어줘', 'ui.openDetail', { featureId: 'tax', view: 'payments', itemId: 'sample-tax-1' }],
   ['브리핑에서 세금 쪽 열어줘', 'ui.openDetail', { featureId: 'tax', view: 'payments', itemId: 'sample-tax-1' }],
   ['12월 10일 세금 항목 어디서 봐?', 'ui.openDetail', { featureId: 'tax', view: 'payments', itemId: 'sample-tax-1' }],
   ['11월 23일 주 근무표', 'ui.openDetail', { featureId: 'staff-schedule', view: 'week', date: '2026-11-23' }],
   ['화요일 한산한 시간 쿠폰 화면으로 가줘', 'ui.openDetail', { featureId: 'slot-coupon', view: 'send', focus: 'action' }],
   ['단골 쿠폰 보내기 화면으로 가줘', 'ui.openDetail', { featureId: 'slot-coupon', view: 'send', focus: 'action' }],
-  ['끝난 쿠폰 2장 보여줘', 'ui.openDetail', { featureId: 'coupon-status', view: 'ended' }],
+  ['끝난 쿠폰 화면 열어줘', 'ui.openDetail', { featureId: 'coupon-status', view: 'ended' }],
 ])('routes %s to its read-only destination', (text, command, args) => {
   const { run } = setup();
   const store = createWidgetDataStore();
@@ -189,7 +210,7 @@ it.each([
 it('marks an explicitly requested reporting month unavailable when the widget lacks it', () => {
   const { run } = setup();
   const snapshot = createWidgetDataStore().getSnapshot();
-  expect(classifyNavigation('9월 원가 화면으로 보여줘', run.getState(), snapshot)).toMatchObject({ unsupportedPeriod: true });
+  expect(classifyNavigation('9월 원가 화면 열어줘', run.getState(), snapshot)).toMatchObject({ unsupportedPeriod: true });
 });
 
 it('opens nothing for the removed 마케팅 성과 screen (D-365)', () => {
@@ -374,7 +395,7 @@ it('highlights the named panel on the actual second dashboard page after a chat 
 }, 45000);
 
 
-it('returns from stock history to the composer, closes chat for editing, and keeps chat across POS navigation', async () => {
+it('returns from stock history, closes chat for editing, and hides Navis on the POS layer', async () => {
   const requests: AgentRequest[] = [];
   vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
     const request = JSON.parse(String(init.body)) as AgentRequest;
@@ -392,7 +413,7 @@ it('returns from stock history to the composer, closes chat for editing, and kee
     fireEvent.keyDown(composer(), { key: 'Enter' });
   };
   const milk = milkIn(createWidgetDataStore().getSnapshot());
-  send('우유 입고 내역 보여줘');
+  send('우유 재고 변동 기록 열어줘');
   await waitFor(() => expect(screen.getByRole('button', { name: `${milk.label} 재고 변동 기록` })).toHaveAttribute('aria-expanded', 'true'));
   expect(JSON.stringify(requests[0])).not.toContain(milk.itemId);
   expect(requests[0].intent).toMatchObject({ kind: 'command', command: 'ui.openDetail', args: { view: 'history', itemId: { handle: 'navis-detail-selection' } } });
@@ -411,11 +432,12 @@ it('returns from stock history to the composer, closes chat for editing, and kee
   await waitFor(() => expect(reopenedInput).toHaveFocus());
   send('주문 화면으로 가줘');
   await waitFor(() => expect(run.getState().layer).toBe('orders-payment'));
-  expect(composer()).toBe(reopenedInput);
-  send('관리로 돌아가줘');
+  expect(screen.queryByRole('textbox', { name: '질문하거나 요청해 주세요' })).toBeNull();
+  expect(screen.queryByRole('button', { name: /^Navis (?:열기|닫기)$/u })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '관리' }));
   await waitFor(() => expect(run.getState().layer).toBe('management'));
-  expect(requests.at(-1)?.layer).toBe('pos');
-  expect(screen.getByText('우유 입고 내역 보여줘')).toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('button', { name: 'Navis 열기' }));
+  expect(await screen.findByText('우유 재고 변동 기록 열어줘', {}, { timeout: 4000 })).toBeInTheDocument();
 }, 60000);
 
 it('keeps the chat for the widget it opened: presses in that widget do not close it and it returns with its history (D-369, C-04)', async () => {
@@ -426,7 +448,7 @@ it('keeps the chat for the widget it opened: presses in that widget do not close
   fireEvent.click(screen.getByRole('button', { name: 'Navis 열기' }));
   const input = screen.getByRole('textbox', { name: '질문하거나 요청해 주세요' });
   const milk = milkIn(createWidgetDataStore().getSnapshot());
-  fireEvent.change(input, { target: { value: '우유 입고 내역 보여줘' } });
+  fireEvent.change(input, { target: { value: '우유 재고 변동 기록 열어줘' } });
   fireEvent.keyDown(input, { key: 'Enter' });
   await waitFor(() => expect(screen.getByRole('button', { name: `${milk.label} 재고 변동 기록` })).toHaveAttribute('aria-expanded', 'true'));
   expect(screen.queryByRole('textbox', { name: '질문하거나 요청해 주세요' })).toBeNull();
@@ -439,69 +461,51 @@ it('keeps the chat for the widget it opened: presses in that widget do not close
   fireEvent.click(dialog.querySelector('[data-ui-close]')!);
   await waitFor(() => { expect(input).toHaveFocus(); expect(run.getState().exitPendingToken).toBeNull(); }, { timeout: 4000 });
   expect(screen.getByRole('textbox', { name: '질문하거나 요청해 주세요' })).toBe(input);
-  expect(screen.getByText('우유 입고 내역 보여줘')).toBeInTheDocument();
+  expect(screen.getByText('우유 재고 변동 기록 열어줘')).toBeInTheDocument();
   // Back in view, the chat is an ordinary chat again: a press elsewhere closes it.
   fireEvent.pointerDown(document.body);
   expect(screen.queryByRole('region', { name: 'Navis' })).toBeNull();
 }, 60000);
 
 it.each([
-  { mode: 'fake', aliases: ['테스트 번호 1'], count: '시험 번호 1곳' },
-  { mode: 'fake', aliases: ['테스트 번호 1', '테스트 번호 2'], count: '시험 번호 2곳' },
-  { mode: 'off', aliases: [], count: undefined },
-  { mode: 'fake', aliases: ['invalid alias'], count: undefined },
-])('uses only the verified allowlisted count and hands off test SMS to its widget ($mode $aliases)', async ({ mode, aliases, count }) => {
-  const targets = { mode, targets: aliases.map((label, index) => ({ id: `opaque-alias-${index}`, label })) };
-  const body = '안녕하세요.';
-  const transport = vi.fn(async (path: string, init: RequestInit) => {
-    if (path === '/api/navis/reply-test-targets' && init.method === 'GET') return Response.json(targets);
-    if (path === '/api/navis/widget-drafts' && init.method === 'POST') {
-      return Response.json({ status: 'draft', draftId: 'fake-draft', kind: 'reply', content: { body }, sourceLabels: [] });
-    }
-    if (path === '/api/navis/reply-test-send' && init.method === 'POST') {
-      return Response.json({ status: 'simulated', receiptId: 'fake-receipt' });
-    }
-    throw new Error(`Unexpected transport request: ${path}`);
-  });
-  const draftRequests = () => transport.mock.calls.map(([path]) => path)
-    .filter(path => path.startsWith('/api/navis/reply-test-') || path === '/api/navis/widget-drafts');
+  ['message', '답변 초안', '톡톡으로 답변 보내기', 'message-draft'],
+  ['review', '답글 초안', '답글 올리기', 'review-draft'],
+  ['message', '답변 초안', '톡톡으로 답변 보내기', undefined],
+] as const)('opens a scoped Navis %s reply at the draft editor (%s, %s, %s)', async (view, label, reply, step) => {
+  const transport = vi.fn(() => { throw new Error('Unexpected transport request'); });
   vi.stubGlobal('fetch', transport);
-  const { run } = setup();
+  const { run, navigation } = setup();
+  const thread = createWidgetDataStore().getSnapshot().tables.inquiryThread.find(row => row.type === view && row.status === 'waiting')!;
+  const suggested = '안녕하세요. 문의해 주셔서 감사합니다.';
+  const destination = step
+    ? await navigation.handoff({ featureId: 'ai-response', step, itemId: thread.threadId })
+    : await navigation.execute('ui.openDetail', { featureId: 'ai-response', view, itemId: thread.threadId, focus: 'action', prefill: { body: suggested } });
+  expect(destination).toBe('opened');
+  expect(run.getState().overlay).toMatchObject({ stack: [{ featureId: 'ai-response', view, itemId: thread.threadId, focus: 'action' }] });
   render(<App run={run} manageLifecycle={false}/>);
-  fireEvent.click(screen.getByRole('button', { name: 'Navis 열기' }));
-  const input = screen.getByRole('textbox', { name: '질문하거나 요청해 주세요' });
-  await waitFor(() => expect(input).toHaveFocus());
-  fireEvent.change(input, { target: { value: '시험 문자 보내줘' } });
-  fireEvent.keyDown(input, { key: 'Enter' });
-
-  const card = await screen.findByRole('region', { name: '테스트 문자 보내기' });
-  const open = within(card).getByRole('button', { name: '메시지·리뷰 응대 열기' });
-  await waitFor(() => expect(draftRequests()).toEqual(['/api/navis/reply-test-targets']));
-  if (count) expect(await within(card).findByText(count)).toBeInTheDocument();
-  else expect(within(card).queryByText(/^시험 번호 \d+곳$/u)).toBeNull();
-  expect(card.textContent).not.toMatch(/opaque-alias|테스트 번호 \d/u);
-  expect(run.getState().overlay.type).toBe('none');
-
-  if (aliases.length !== 1 || !count) return;
-  await userEvent.setup().click(open);
   const dialog = await screen.findByRole('dialog', { name: '메시지·리뷰 응대' });
-  const generate = within(dialog).getByRole('button', { name: '답변 초안 만들기' });
-  await waitFor(() => expect(generate).toHaveFocus());
-  expect(draftRequests()).toEqual(['/api/navis/reply-test-targets']);
-  fireEvent.click(generate);
-  const preview = within(dialog).getByRole('button', { name: '보낼 내용 확인하기' });
-  await waitFor(() => expect(preview).toBeEnabled());
-  fireEvent.click(preview);
-  const send = within(dialog).getByRole('button', { name: '테스트 문자 보내기' });
-  expect(within(dialog).getByText(body)).toBeInTheDocument();
-  expect(draftRequests()).not.toContain('/api/navis/reply-test-send');
+  const field = within(dialog).getByRole('textbox', { name: label });
+  const send = within(dialog).getByRole('button', { name: reply });
+  await waitFor(() => expect(field).toHaveFocus());
+  expect(field).toHaveValue(step ? '' : suggested);
+  expect(within(dialog).getByRole('button', { current: true })).toHaveTextContent(resolveDataText(ko.t, { key: thread.bodyKey }));
+  expect(within(dialog).queryByRole('button', { name: '테스트 문자 보내기' })).not.toBeInTheDocument();
+  const body = '안녕하세요. 찾아 주셔서 감사합니다.';
+  fireEvent.change(field, { target: { value: body } });
+  if (view === 'review') {
+    expect(send).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole('button', { name: '초안 저장하기' }));
+    await waitFor(() => expect(send).toBeEnabled());
+  } else {
+    expect(send).toBeEnabled();
+  }
+  const sentHeading = view === 'review' ? '내 답글' : '보낸 답변';
+  expect(within(dialog).queryByRole('heading', { name: sentHeading })).not.toBeInTheDocument();
   fireEvent.click(send);
-  fireEvent.click(send);
-  expect(await within(dialog).findByRole('heading', { name: '보낸 답변' })).toBeInTheDocument();
+  expect(await within(dialog).findByRole('heading', { name: sentHeading })).toBeInTheDocument();
   expect(within(dialog).getByText(body)).toBeInTheDocument();
-  expect(within(dialog).queryByRole('button', { name: '테스트 문자 보내기' })).toBeNull();
-  expect(draftRequests().filter(path => path === '/api/navis/reply-test-send')).toHaveLength(1);
-}, 45000);
+  expect(transport).not.toHaveBeenCalled();
+});
 
 it('opens a populated menu form and leaves the owner to save it', async () => {
   const { run } = setup();
@@ -623,6 +627,13 @@ it.skipIf(!hasCorpus)('replays each assigned N03 client scenario against the fak
         : id === 'S7-111' || id === 'S7-112' ? 'ui.enter_layout_edit' : canonicalTool(expectedTool?.name ?? '');
       const noMove = ['S7-067', 'S7-072', 'S7-073', 'S7-098', 'S7-108', 'S7-111', 'S7-112'].includes(id);
       try {
+        // Older scenarios assumed a display request would open their linked view.
+        if (isDataDisplayRequest(text)) {
+          expect(plan).toBeUndefined();
+          expect(run.getState()).toBe(before);
+          checkedUtterances++;
+          continue;
+        }
         if ((id === 'S7-097' || id === 'S7-098') && index === 2) {
           // These variants use their domain's board-location replies.
           expect(plan).toBeUndefined();
@@ -708,7 +719,7 @@ it('opens the closing history tab in the real read-only dialog', async () => {
   render(<App run={run} manageLifecycle={false}/>);
   fireEvent.click(screen.getByRole('button', { name: 'Navis 열기' }));
   const input = screen.getByRole('textbox', { name: '질문하거나 요청해 주세요' });
-  fireEvent.change(input, { target: { value: '마감 기록 보여줘' } });
+  fireEvent.change(input, { target: { value: '마감 기록 열어줘' } });
   fireEvent.keyDown(input, { key: 'Enter' });
   const history = await screen.findByRole('tab', { name: '정산 이력' });
   expect(history).toHaveAttribute('aria-selected', 'true');
@@ -740,7 +751,7 @@ function storeWithNamedMember() {
 
 it.each([
   '김도현 회원 열어줘',
-  '도현이 정보 보여줘',
+  '도현이 회원 정보 열어줘',
   '2481 회원 상세 열어봐',
 ])('opens the named member row for %s', async text => {
   const { run, navigation } = setup();
@@ -793,14 +804,14 @@ it('says which widget and row opened, and that an off-board widget is not on the
   const { run } = setup();
   const snapshot = createWidgetDataStore().getSnapshot();
   const say = (ref: DetailRef) => openedDetailText(run.getState(), ref, snapshot, navisTranslator('ko'));
-  expect(say({ featureId: 'tax' })).toBe('세무관리 위젯 화면을 열었어요. 보드에 없지만 상세는 볼 수 있어요.');
-  expect(say({ featureId: 'voice-booking' })).toContain('예약 위젯');
+  expect(say({ featureId: 'tax' })).toBe('세무관리를 열었어요. 보드에 없지만 상세는 볼 수 있어요');
+  expect(say({ featureId: 'voice-booking' })).toMatch(/^예약을 열었어요/u);
   const { itemId } = milkIn(snapshot);
   expect(say({ featureId: 'inventory-booking', view: 'history', itemId }))
-    .toBe('재고 위젯에서 목장 1등급 우유 상세를 열었어요. 보드에 없지만 상세는 볼 수 있어요.');
+    .toBe('재고에서 목장 1등급 우유 상세를 열었어요. 보드에 없지만 상세는 볼 수 있어요');
   expect(run.actions.applyLayoutIntent({ type: 'add-tap', featureId: 'inventory-booking' }).status).toBe('accepted');
-  expect(say({ featureId: 'inventory-booking', view: 'history', itemId })).toBe('재고 위젯에서 목장 1등급 우유 상세를 열었어요.');
-  expect(say({ featureId: 'menu', itemId: 'm-cafe-latte' })).toBe('메뉴 위젯에서 카페라떼 상세를 열었어요. 보드에 없지만 상세는 볼 수 있어요.');
+  expect(say({ featureId: 'inventory-booking', view: 'history', itemId })).toBe('재고에서 목장 1등급 우유 상세를 열었어요');
+  expect(say({ featureId: 'menu', itemId: 'm-cafe-latte' })).toBe('메뉴에서 카페라떼 상세를 열었어요. 보드에 없지만 상세는 볼 수 있어요');
 });
 
 it('never puts a member or an unknown row id into the opened reply', () => {
@@ -809,7 +820,7 @@ it('never puts a member or an unknown row id into the opened reply', () => {
   const say = (ref: DetailRef) => openedDetailText(run.getState(), ref, snapshot, navisTranslator('ko'));
   expect(say({ featureId: 'members', itemId: 'M-0012' })).not.toMatch(/M-0012|김|0000/u);
   expect(say({ featureId: 'menu', itemId: 'm-does-not-exist' })).not.toContain('m-does-not-exist');
-  expect(say({ featureId: 'menu', itemId: 'm-does-not-exist' })).toMatch(/^메뉴 위젯 화면을 열었어요/u);
+  expect(say({ featureId: 'menu', itemId: 'm-does-not-exist' })).toMatch(/^메뉴를 열었어요/u);
 });
 
 // A3-B28 · S1-151/S7-092: the expanded stock history, not just the row's toggle, has to be in view when the row opens.

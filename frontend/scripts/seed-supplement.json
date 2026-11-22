@@ -108,10 +108,7 @@
     {"id": "sample-expiry-1", "itemId": "i-saltbread", "menuId": "m-saltbread", "quantityBase": 12},
     {"id": "sample-expiry-2", "itemId": "i-basque-cake", "menuId": "m-basque-cake", "quantityBase": 8}
   ],
-  "promos": [
-    {"id": "sample-promo-1", "menuId": "m-chestnut-latte", "concept": "new-item", "mood": "warm", "title": "가을 끝자락, 보늬밤 라떼", "caption": "상도동에서 따뜻하게 즐기는 고소한 밤 라떼", "durationSeconds": 15, "status": "draft"},
-    {"id": "sample-promo-2", "menuId": "m-saltbread", "concept": "todays-deal", "mood": "clean", "title": "오후에 구운 버터 소금빵", "caption": "커피와 곁들이기 좋은 오후 간식", "durationSeconds": 12, "status": "draft"}
-  ],
+  "promos": [],
   "community": [
     {"id": "sample-community-1", "store": "상도 책마루", "title": "북클럽 모임 공동 안내", "category": "동네 서점", "startDay": 2, "endDay": 10}
   ]

@@ -24,6 +24,7 @@ export interface TableLayout {
 export interface CctvPosLink { readonly zoneId: string; readonly tableId: string }
 export interface ShopSettings {
   readonly cctvPosLinks?: readonly CctvPosLink[];
+  readonly smsSettings?: { readonly senderNumber: string | null; readonly optOutNumber: string | null };
   readonly businessType: BusinessType | null;
   readonly paymentStyle: PaymentStyle | null;
   readonly tableLayout: TableLayout | null;

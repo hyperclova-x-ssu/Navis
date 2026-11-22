@@ -65,6 +65,7 @@ describe('서식: 글자 그대로', () => {
     expect(f('ko').money(5000, 'compact')).toBe('5,000원');
     expect(f('ko').money(1284000, 'full')).toBe('1,284,000원');
     expect(f('ko').money(100000, 'compact')).toBe('10.0만 원');
+    expect(f('ko').money(29375000, 'compact')).toBe('2,937.5만 원');
     expect(f('ko').money(-462000, 'compact')).toBe('−46.2만 원');
     expect(f('en').money(0, 'full')).toBe('₩0');
     expect(f('ko').money(10000, 'compact')).toBe('1.0만 원');

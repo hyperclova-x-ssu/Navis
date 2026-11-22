@@ -77,7 +77,7 @@ test('emitted POS, money and catalog reconcile to the planned cutoff', () => {
   assert.equal(history.comparison.date, '2026-11-10');
   assert.equal(history.comparison.net, 882160);
   assert.equal(history.days.filter(day => day.date >= '2026-11-11').reduce((sum, day) => sum + day.net, today.rollup.net), 6706290);
-  assert.equal(catalog.menu.length, 24);
+  assert.equal(catalog.menu.length, 25);
   assert.equal(members.members.length, 460);
   assert.equal(data('closing-history').length, 89);
   const latte = catalog.menu.find(item => item.menuId === 'm-cafe-latte');
@@ -85,6 +85,43 @@ test('emitted POS, money and catalog reconcile to the planned cutoff', () => {
   assert.deepEqual(latte.recipeBase.map(part => [part.itemId, part.quantityBase, part.unitDimension]), [
     ['i-bean-house', 18, 'g'], ['i-milk', 260, 'mL'], ['i-cup-takeout', 1, 'pcs'],
   ]);
+});
+
+test('strawberry cake has a priced recipe and six portions available without seeded sales', () => {
+  const cake = data('catalog').menu.find(item => item.menuId === 'm-strawberry-cake');
+  assert.equal(cake?.name, '딸기 케이크');
+  assert.equal(cake.category, 'dessert');
+  assert.equal(cake.price, 6500);
+  assert.equal(cake.unitCost, 2420);
+  assert.deepEqual(cake.recipeBase.map(part => part.itemId), ['i-strawberry', 'i-fresh-cream', 'i-cake-sponge', 'i-strawberry-cake-slice']);
+  const today = data('today');
+  assert.ok(![today.rollup, ...data('history').days].some(day => day.menu.some(([id]) => id === cake.menuId)));
+  const portions = cake.recipeBase.map(part => {
+    const balance = today.stock.find(item => item.itemId === part.itemId && item.channel === 'store');
+    return Math.floor(balance.onHand / part.quantityBase);
+  });
+  assert.deepEqual(portions, [6, 6, 6, 6]);
+});
+
+test('ref-1 bakery menus expose one tracked finished piece per sale at the cutoff', () => {
+  const catalog = data('catalog');
+  const stock = data('today').stock;
+  for (const [slug, name, unitCost, remaining] of [
+    ['saltbread', '겉바속촉 버터 소금빵', 1418, 12],
+    ['bagel-plain', '구운 플레인 베이글', 1218, 7],
+    ['basque-cake', '바스크 치즈케이크', 2518, 18],
+    ['cookie-choco', '르뱅 초코칩 쿠키', 1318, 9],
+  ]) {
+    const menu = catalog.menu.find(row => row.menuId === `m-${slug}`);
+    const finished = catalog.items.find(row => row.itemId === `i-${slug}`);
+    assert.equal(menu.name, name);
+    assert.equal(menu.unitCost, unitCost);
+    assert.equal(finished.name.replace(/\s*(?:완제품|\(조각\))$/u, ''), name);
+    assert.equal(finished.trackRestock, true);
+    assert.equal(finished.unitDimension, 'pcs');
+    assert.equal(menu.recipeBase.find(row => row.itemId === finished.itemId)?.quantityBase, 1);
+    assert.equal(stock.find(row => row.itemId === finished.itemId && row.channel === 'store')?.onHand, remaining);
+  }
 });
 
 test('each supplement record has sample provenance and valid cafe references', () => {
@@ -104,8 +141,9 @@ test('each supplement record has sample provenance and valid cafe references', (
     const [open, close] = catalog.store.hours[weekday];
     assert.ok(open <= row.start && row.start < row.end && row.end <= close);
   }
-  for (const records of Object.values(supplement)) {
-    assert.ok(records.length > 0);
+  assert.deepEqual(supplement.promos, []);
+  for (const [section, records] of Object.entries(supplement)) {
+    if (section !== 'promos') assert.ok(records.length > 0, section);
     for (const row of records) {
       assert.equal(row.provenance, 'sample');
       if (row.memberId) assert.ok(memberIds.has(row.memberId));

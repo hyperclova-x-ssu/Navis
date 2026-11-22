@@ -41,7 +41,7 @@ export function DashboardCoaches({run,nodes,recommendNode,onFinishEditing}:Dashb
  };
  const stepText=g.active==='choose-feature'?t('dashboard.coach.choose'):g.active==='resize-panel'?t('dashboard.coach.resize'):t('dashboard.coach.move');
  return <>
-  <CoachMark coachStep={g.active??undefined} side={g.active==='choose-feature'?'left':'bottom'} open={Boolean(g.active)&&!help} anchorRef={stepAnchor} onClose={closeStep} closeLabel={g.active&&queue?t('dashboard.coach.close'):undefined} noteLabel={t('dashboard.coach.note')} scrollLabel={t('dashboard.coach.scroll')} footer={g.active&&queue?<CoachFooter {...queue}/>:undefined}>{stepText}</CoachMark>
+  <CoachMark coachStep={g.active??undefined} side={g.active==='choose-feature'?'left':'bottom'} open={Boolean(g.active)&&!help} anchorRef={stepAnchor} onClose={closeStep} closeLabel={g.active&&queue?t('dashboard.coach.close'):undefined} noteLabel={t('dashboard.coach.note')} scrollLabel={t('dashboard.coach.scroll')} secondary={g.active==='choose-feature'?t('ui.drawer.footer2'):undefined} footer={g.active&&queue?<CoachFooter {...queue}/>:undefined}>{stepText}</CoachMark>
   <WidgetCoach open={Boolean(widget)&&Boolean(nodes.get(widget!))} anchorRef={widgetAnchor} side="bottom" title={widget?name(widget):''} queue={help?undefined:queue}
    onClose={(reason,event)=>{if(help)run.actions.closeWidgetHelp();else closeStep(reason,event);}}>{widget?t(`widget.${widget}.coach`):''}</WidgetCoach>
  </>;

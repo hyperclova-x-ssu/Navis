@@ -213,6 +213,8 @@ export type WidgetRegistry = readonly ResolvedWidgetRegistration[];
 export interface WidgetHost {
   readonly layer: DashboardLayerId;
   resetPreview(): void;
+  openSettings?(): boolean;
+  hasSmsSettings?(): boolean;
   openClosing(returnFocusKey: string): boolean;
   openLinked(ref: DetailRef): void;
   /** v4.1: panel action buttons open another widget's detail (any registry widget). */

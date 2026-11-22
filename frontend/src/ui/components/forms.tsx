@@ -4,6 +4,7 @@ import { Checkbox } from '@base-ui/react/checkbox';
 import { useKitT } from '../kit-i18n';
 import { ActionButton } from './controls';
 import { Icon } from '../icons';
+import { DetailFooterContent } from './overlays';
 
 export interface TabItem<V extends string> { readonly value:V;readonly label:string }
 /** DS 11.4 Tabs (in detail): each at least 48 high, selected = selection fill plus a 2px underline. */
@@ -35,28 +36,38 @@ export function TimeChips({times,value,onChange,label}:{readonly times:readonly 
 }
 
 interface FieldShell { readonly label:string;readonly error?:string;readonly hint?:string;readonly unit?:string;readonly id?:string;readonly className?:string }
-function Field({label,error,hint,unit,className='',children,fieldId}:FieldShell&{readonly children:ReactNode;readonly fieldId:string}){
+function Field({label,error,hint,unit,className='',children,fieldId,labelAction}:FieldShell&{readonly children:ReactNode;readonly fieldId:string;readonly labelAction?:ReactNode}){
   const {t}=useKitT();
-  return <div className={`ui-field ${className}`} data-invalid={error?'true':undefined}><label id={`${fieldId}-label`} htmlFor={fieldId} className="ui-field__label">{label}</label><div className="ui-field__control">{children}{unit?<span className="ui-field__unit">{unit}</span>:null}</div>{hint&&!error?<p id={`${fieldId}-hint`} className="ui-field__hint">{hint}</p>:null}{error?<p id={`${fieldId}-error`} className="ui-field__error" role="alert"><Icon name="error"/><span className="ui-sr-only">{t('ui.field.error',{message:''})}</span>{error}</p>:null}</div>;
+  const fieldLabel = <label id={`${fieldId}-label`} htmlFor={fieldId} className="ui-field__label">{label}</label>;
+  return <div className={`ui-field ${className}`} data-invalid={error?'true':undefined}>{labelAction ? <div className="ui-field__heading">{fieldLabel}{labelAction}</div> : fieldLabel}<div className="ui-field__control">{children}{unit?<span className="ui-field__unit">{unit}</span>:null}</div>{hint&&!error?<p id={`${fieldId}-hint`} className="ui-field__hint">{hint}</p>:null}{error?<p id={`${fieldId}-error`} className="ui-field__error" role="alert"><Icon name="error"/><span className="ui-sr-only">{t('ui.field.error',{message:''})}</span>{error}</p>:null}</div>;
 }
 const describe=(id:string,error?:string,hint?:string)=>error?`${id}-error`:hint?`${id}-hint`:undefined;
+function GroupedNumber({ value, children }: { value: string; children: ReactNode }) {
+  const grouped = value.replace(/^([+-]?)(\d+)(\.\d*)?$/, (_, sign: string, digits: string, fraction?: string) =>
+    sign + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (fraction ?? ''));
+  return <span className="ui-grouped-number" data-grouped={grouped !== value || undefined}>{children}
+    {grouped !== value && <span className="ui-grouped-number__value" aria-hidden="true">{grouped}</span>}
+  </span>;
+}
 /** Shared field shell and aria-describedby id for the kit pickers (DateField, TimeField): same label above, hint and error sentence below. */
 export {Field as FieldFrame,describe as describeField};
 export type {FieldShell as FieldFrameProps};
 /** DS 11.4 TextField: height 56, label above (never a placeholder), error as a sentence with an icon under the field. */
-export function TextField({label,value,onValueChange,error,hint,unit,id,className,type='text',inputMode,placeholder,disabled,required,inputRef,name}:FieldShell&{readonly value:string;readonly onValueChange:(value:string)=>void;readonly type?:'text'|'search'|'tel'|'email';readonly inputMode?:'text'|'numeric'|'decimal';readonly placeholder?:string;readonly disabled?:boolean;readonly required?:boolean;readonly inputRef?:Ref<HTMLInputElement>;readonly name?:string}){
+export function TextField({label,value,onValueChange,error,hint,unit,id,className,type='text',inputMode,placeholder,disabled,required,inputRef,name,groupThousands}:FieldShell&{readonly value:string;readonly onValueChange:(value:string)=>void;readonly type?:'text'|'search'|'tel'|'email';readonly inputMode?:'text'|'numeric'|'decimal';readonly placeholder?:string;readonly disabled?:boolean;readonly required?:boolean;readonly inputRef?:Ref<HTMLInputElement>;readonly name?:string;readonly groupThousands?:boolean}){
   const generated=useId();const fieldId=id??generated;const d=describe(fieldId,error,hint);
-  return <Field label={label} error={error} hint={hint} unit={unit} id={fieldId} className={className} fieldId={fieldId}><input ref={inputRef} id={fieldId} name={name} className="ui-text-input" type={type} inputMode={inputMode} value={value} placeholder={placeholder} disabled={disabled} required={required} aria-invalid={error?true:undefined} aria-describedby={d} onChange={event=>onValueChange(event.currentTarget.value)}/></Field>;
+  const input=<input ref={inputRef} id={fieldId} name={name} className="ui-text-input" type={type} inputMode={inputMode} value={value} placeholder={placeholder} disabled={disabled} required={required} aria-invalid={error?true:undefined} aria-describedby={d} onChange={event=>onValueChange(event.currentTarget.value)}/>;
+  return <Field label={label} error={error} hint={hint} unit={unit} id={fieldId} className={className} fieldId={fieldId}>{groupThousands ? <GroupedNumber value={value}>{input}</GroupedNumber> : input}</Field>;
 }
 /** DS 11.4 NumberField: TextField with a unit on the right. The value is a number, or null while empty or not a number. */
-export function NumberField({label,value,onValueChange,min,max,step,error,hint,unit,id,className,disabled,inputRef,name}:FieldShell&{readonly value:number|null;readonly onValueChange:(value:number|null)=>void;readonly min?:number;readonly max?:number;readonly step?:number;readonly disabled?:boolean;readonly inputRef?:Ref<HTMLInputElement>;readonly name?:string}){
+export function NumberField({label,value,onValueChange,min,max,step,error,hint,unit,id,className,disabled,inputRef,name,groupThousands}:FieldShell&{readonly value:number|null;readonly onValueChange:(value:number|null)=>void;readonly min?:number;readonly max?:number;readonly step?:number;readonly disabled?:boolean;readonly inputRef?:Ref<HTMLInputElement>;readonly name?:string;readonly groupThousands?:boolean}){
   const generated=useId();const fieldId=id??generated;const d=describe(fieldId,error,hint);
-  return <Field label={label} error={error} hint={hint} unit={unit} id={fieldId} className={className} fieldId={fieldId}><input ref={inputRef} id={fieldId} name={name} className="ui-text-input ui-number-input" type="number" inputMode="numeric" min={min} max={max} step={step} value={value??''} disabled={disabled} aria-invalid={error?true:undefined} aria-describedby={d} onChange={event=>{const raw=event.currentTarget.value;const next=raw===''?null:Number(raw);onValueChange(next!==null&&Number.isFinite(next)?next:null);}}/></Field>;
+  const input=<input ref={inputRef} id={fieldId} name={name} className="ui-text-input ui-number-input" type="number" inputMode="numeric" min={min} max={max} step={step} value={value??''} disabled={disabled} aria-invalid={error?true:undefined} aria-describedby={d} onChange={event=>{const raw=event.currentTarget.value;const next=raw===''?null:Number(raw);onValueChange(next!==null&&Number.isFinite(next)?next:null);}}/>;
+  return <Field label={label} error={error} hint={hint} unit={unit} id={fieldId} className={className} fieldId={fieldId}>{groupThousands ? <GroupedNumber value={String(value ?? '')}>{input}</GroupedNumber> : input}</Field>;
 }
 /** DS 11.4 Textarea: min height 120. */
-export function Textarea({label,value,onValueChange,error,hint,id,className,disabled,rows=4,inputRef,name}:FieldShell&{readonly value:string;readonly onValueChange:(value:string)=>void;readonly disabled?:boolean;readonly rows?:number;readonly inputRef?:Ref<HTMLTextAreaElement>;readonly name?:string}){
+export function Textarea({label,value,onValueChange,error,hint,id,className,disabled,rows=4,inputRef,name,labelAction}:FieldShell&{readonly value:string;readonly onValueChange:(value:string)=>void;readonly disabled?:boolean;readonly rows?:number;readonly inputRef?:Ref<HTMLTextAreaElement>;readonly name?:string;readonly labelAction?:ReactNode}){
   const generated=useId();const fieldId=id??generated;const d=describe(fieldId,error,hint);
-  return <Field label={label} error={error} hint={hint} id={fieldId} className={className} fieldId={fieldId}><textarea ref={inputRef} id={fieldId} name={name} className="ui-text-input ui-textarea" rows={rows} value={value} disabled={disabled} aria-invalid={error?true:undefined} aria-describedby={d} onChange={event=>onValueChange(event.currentTarget.value)}/></Field>;
+  return <Field label={label} error={error} hint={hint} id={fieldId} className={className} fieldId={fieldId} labelAction={labelAction}><textarea ref={inputRef} id={fieldId} name={name} className="ui-text-input ui-textarea" rows={rows} value={value} disabled={disabled} aria-invalid={error?true:undefined} aria-describedby={d} onChange={event=>onValueChange(event.currentTarget.value)}/></Field>;
 }
 /** DS 11.4 DateStepper: two 48 buttons and the date text. Left/Right arrows step while the date text has focus. */
 export function DateStepper({text,onPrevious,onNext,previousDisabled=false,nextDisabled=false,label}:{readonly text:string;readonly onPrevious:()=>void;readonly onNext:()=>void;readonly previousDisabled?:boolean;readonly nextDisabled?:boolean;readonly label?:string}){
@@ -85,7 +96,7 @@ export function ChecklistRow({checked,onCheckedChange,children,disabled=false}:{
 }
 export function ChecklistProgress({done,total}:{readonly done:number;readonly total:number}){const {t}=useKitT();return <span className="ui-checklist-progress">{t('ui.checklist.progress',{done,total})}</span>;}
 /** DS 11.4 InlineForm: opens inside the detail, focus goes to the first field, closing returns to the button that opened it. */
-export function InlineForm({title,children,onSave,onClose,saveLabel,closeLabel,saveDisabled=false,saving=false,returnFocusRef}:{readonly title:string;readonly children:ReactNode;readonly onSave:()=>void;readonly onClose:()=>void;readonly saveLabel?:string;readonly closeLabel?:string;readonly saveDisabled?:boolean;readonly saving?:boolean;readonly returnFocusRef?:RefObject<HTMLElement|null>}){
+export function InlineForm({title,children,onSave,onClose,saveLabel,closeLabel,saveDisabled=false,saving=false,returnFocusRef,footerActions=false}:{readonly title:string;readonly children:ReactNode;readonly onSave:()=>void;readonly onClose:()=>void;readonly saveLabel?:string;readonly closeLabel?:string;readonly saveDisabled?:boolean;readonly saving?:boolean;readonly returnFocusRef?:RefObject<HTMLElement|null>;readonly footerActions?:boolean}){
   const {t}=useKitT();const formRef=useRef<HTMLFormElement>(null);const opener=useRef<Element|null>(null);const id=useId();
   useEffect(()=>{
     opener.current=document.activeElement;
@@ -93,9 +104,10 @@ export function InlineForm({title,children,onSave,onClose,saveLabel,closeLabel,s
     return ()=>{const target=returnFocusRef?.current??opener.current;if(target instanceof HTMLElement&&target.isConnected)target.focus();};
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
-  return <form ref={formRef} className="ui-inline-form" aria-labelledby={`${id}-title`} onSubmit={event=>{event.preventDefault();if(!saveDisabled&&!saving)onSave();}} onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();onClose();}}}>
+  const actions = <div className="ui-inline-form__actions"><ActionButton type="submit" form={id} data-inline-form-action disabled={saveDisabled} loading={saving}>{saveLabel??t('common.saveAction')}</ActionButton><ActionButton type="button" form={id} variant="secondary" data-inline-form-action onClick={onClose}>{closeLabel??t('common.close')}</ActionButton></div>;
+  return <form id={id} ref={formRef} className="ui-inline-form" aria-labelledby={`${id}-title`} onSubmit={event=>{event.preventDefault();if(!saveDisabled&&!saving)onSave();}} onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();onClose();}}}>
     <h3 id={`${id}-title`} className="ui-inline-form__title">{title}</h3><div className="ui-inline-form__body">{children}</div>
-    <div className="ui-inline-form__actions"><ActionButton type="submit" data-inline-form-action disabled={saveDisabled} loading={saving}>{saveLabel??t('common.saveAction')}</ActionButton><ActionButton variant="secondary" data-inline-form-action onClick={onClose}>{closeLabel??t('common.close')}</ActionButton></div></form>;
+    {footerActions ? <DetailFooterContent>{actions}</DetailFooterContent> : actions}</form>;
 }
 /** Local clipboard write (the only allowed system call, D-63 5). Resolves false when unavailable or refused. */
 export async function copyText(text:string):Promise<boolean>{

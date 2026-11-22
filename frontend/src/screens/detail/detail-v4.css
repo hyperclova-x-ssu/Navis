@@ -3,6 +3,8 @@
 .ui-overlay-actions .detail-back .ui-press-surface { gap: var(--space-2); }
 
 .detail-footer-slot { width: 100%; }
+.detail-footer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
+.detail-footer-slot .ui-inline-form__actions { flex-wrap: wrap; }
 .detail-footer-slot:empty { display: none; }
 /* Keep both portal targets mounted and reserve space only while the footer has content. */
 .ui-overlay-note:has(> .detail-footer-slot):not(:has(> :not(:empty))) { display: none; }

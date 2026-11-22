@@ -1,5 +1,5 @@
 /**
- * LOCALES.md §20 (persona-linked feature copy, D-343~D-347) row -> message key(s).
+ * LOCALES.md §20 (persona-linked feature and D-383 membership checkout copy) row -> message key(s).
  * `match` is the exact first-column text of the row; a cell holding `a / b / c` maps to the keys in that order.
  * Test data only: the widgets read the keys, this list proves the catalog says what the table says.
  */
@@ -7,6 +7,7 @@ export interface Locales20Row {
   readonly match: string;
   readonly keys: readonly string[];
   readonly separator?: RegExp;
+  readonly koOnly?: true;
 }
 
 const parts = /\s*\/\s*| · /u;
@@ -61,4 +62,11 @@ export const locales20Map: readonly Locales20Row[] = [
   { match: '톡톡 마케팅 · 밤', keys: ['data.real.inbox.notice.night'] },
   { match: '커뮤니티 · 카페 글 결과', keys: ['data.real.local.cafe.posted', 'data.real.local.cafe.view'], separator: parts },
   { match: '메시지·리뷰 · 답글 막힘', keys: ['data.real.inbox.error.REPLY_CONTAINS_CONTACT'] },
+  { match: 'POS 결제 · 정산 유형', keys: ['membershipPos.choose'], koOnly: true },
+  { match: 'POS 결제 · 확인', keys: ['membershipPos.record', 'membershipPos.recordWithTender'], koOnly: true },
+  { match: 'POS 결제 · 안내', keys: ['membershipPos.countHelp', 'membershipPos.periodHelp'], koOnly: true },
+  { match: 'POS 결제 · 조회 실패', keys: ['membershipPos.loadError', 'pay.real.loadRetry'], koOnly: true },
+  { match: 'POS 결제 · 사용 실패', keys: ['membershipPos.unavailable'], koOnly: true },
+  { match: '회원목록 · 사용·취소', keys: ['membershipPos.recordFromMember', 'membershipPos.cancel', 'membershipPos.confirmCancel'], koOnly: true },
+  { match: '회원권 사용 · POS 안내', keys: ['membershipPos.handoffHelp', 'membershipPos.returnToMember'], koOnly: true },
 ];

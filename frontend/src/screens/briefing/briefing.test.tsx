@@ -88,7 +88,7 @@ describe.each(['A', 'B'] as const)('%s arrival briefing', presetId => {
     advance(1199); expect(screen.queryByRole('dialog')).toBeNull(); advance(1);
     await waitFor(() => expect(screen.getByRole('dialog', { name: '오늘 가게 소식이에요' })).toBeVisible());
     expect(screen.getByRole('button', { name: '닫기' })).toHaveFocus();
-    for (const text of ['출근 전에 가게 소식을 살펴보세요', '11월 17일 화요일', '오늘 일정 3개', '예약 브리핑', '오늘 근무 5명 · 17:00 교대', '오늘 4건 · 10명', '중요 알림 2개']) expect(screen.getByText(text)).toBeVisible();
+    for (const text of ['11월 17일 화요일', '오늘 일정 3건', '예약 브리핑', '오늘 근무 5명 · 17:00 교대', '오늘 4건 · 10명', '중요 알림 2개']) expect(screen.getByText(text)).toBeVisible();
     expect(screen.getByRole('dialog')).not.toHaveTextContent('가짜 데이터로 만든 화면이에요');
     expect(within(screen.getByRole('dialog')).getAllByRole('listitem')).toHaveLength(2);
     // Three summary actions, two alert actions, fullscreen, and close.
