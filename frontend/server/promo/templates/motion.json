@@ -1,0 +1,76 @@
+{
+  "version": 2,
+  "author": "claude-opus-5-5",
+  "vocabulary": {
+    "pan": {
+      "easing": "ease-in-out",
+      "recipe": "Photo 1260px wide in 1080 frame: translateX 0 to -140px plus scale 1.06 to 1.10 over 4.5s; next scene reverses (+140px). Caption fixed at y=1380-1560.",
+      "restraint": "No pauses mid-scene; image pixels must visibly change at least every 1.5s."
+    },
+    "parallax": {
+      "easing": "cubic-bezier(.16,1,.3,1)",
+      "recipe": "Two layers from one photo: back copy blurred 8px at scale 1.15 drifts X +60px; front masked center crop drifts X -120px over 4s; caption layer static at y=1300-1500.",
+      "restraint": "Depth comes from layer offset only; text never moves with the image layers."
+    },
+    "wipe": {
+      "easing": "cubic-bezier(.65,0,.35,1)",
+      "recipe": "clip-path inset reveals next scene right to left in 380ms. Outgoing caption reaches opacity 0 by 120ms; incoming caption fades in only after the wipe ends.",
+      "restraint": "One wipe direction per video; only one scene's text is visible during a wipe."
+    },
+    "split": {
+      "easing": "cubic-bezier(.16,1,.3,1)",
+      "recipe": "Split at y=960: top photo enters X -1080 to 0, bottom enters X 1080 to 0, 360ms; then they pan 120px in opposite directions over 3s. Caption sits in y=900-1020 after landing.",
+      "restraint": "Keep caption within x=60-1020; no text during panel entry."
+    },
+    "grid": {
+      "easing": "ease-out",
+      "recipe": "2x2 grid of 510x640 cells, 20px margins and gutters, at y=120-1420. Cells scale .92 to 1 with 90ms stagger, 370ms total; each then zooms 1.00 to 1.08 over 3s. Caption at y=1460-1600.",
+      "restraint": "Max 4 cells; captions never overlap the cells."
+    },
+    "stack": {
+      "easing": "cubic-bezier(.16,1,.3,1)",
+      "recipe": "Cards 880x1180 at x=100, y=260. Next card rises from y+1920 to rest at -24px and ±2deg in 380ms; the prior card dims to .7 and scales to .96. Top card drifts 110px X over 3s.",
+      "restraint": "Max 3 cards; the caption belongs to the top card only."
+    },
+    "flip": {
+      "easing": "cubic-bezier(.65,0,.35,1)",
+      "recipe": "Outgoing rotateY 0 to 90deg (180ms), then incoming -90 to 0deg (180ms), perspective 1600px, backface hidden. After landing, photo scales 1.04 to 1.10 over 3s.",
+      "restraint": "No text mid-flip; use at most twice per video."
+    },
+    "punch": {
+      "easing": "ease-out",
+      "recipe": "On a beat, crop jumps scale 1.0 to 1.18 toward the product focal point in 200ms. Next beat goes 1.18 to 1.32 with a 40px offset. Between beats, the image drifts 120px.",
+      "restraint": "Max 3 punches per scene; caption stays fixed and is never scaled."
+    },
+    "whip": {
+      "easing": "cubic-bezier(.65,0,.35,1)",
+      "recipe": "Outgoing translateX 0 to -1080px and incoming 1080 to 0, 340ms total. A 12px motion blur peaks mid-move and clears to 0 by the end.",
+      "restraint": "Alternate direction on each whip; clear the caption before the whip, then show the next one after."
+    },
+    "slide": {
+      "easing": "cubic-bezier(.16,1,.3,1)",
+      "recipe": "Caption block slides X 60px to 0 with opacity 0 to 1 over 400ms, inside x=60-1020, y=1240-1560, then holds while the image behind pans 120px.",
+      "restraint": "Avoid the badge zone; caption fades out over 200ms before any transition."
+    },
+    "kinetic": {
+      "easing": "cubic-bezier(.16,1,.3,1)",
+      "recipe": "Inside one data-text wrapper, word spans rise translateY 40 to 0 with fade-in, 70ms stagger, 360ms each. Wrapper bounds x=60-1020, y=1200-1600.",
+      "restraint": "Preserve exact copy, spacing and order; never split Hangul syllables."
+    },
+    "badge": {
+      "easing": "ease-out",
+      "recipe": "Round 220px badge at x=780-1000, y=160-380 scales .6 to 1 in 320ms, then holds while the image keeps moving beneath it.",
+      "restraint": "Only verified price or deal facts; if there are none, omit the badge. Never invent amounts or percentages."
+    },
+    "light-leak": {
+      "easing": "ease-in-out",
+      "recipe": "Warm amber CSS radial-gradient in screen blend, max 18% opacity, sweeps X -300 to +300px over 2.4s across a transition or the end card.",
+      "restraint": "No strobing or flicker; never exceed 20% opacity; CSS only, no external files."
+    },
+    "grain": {
+      "easing": "ease-in-out",
+      "recipe": "Inline SVG feTurbulence noise at 5% opacity in overlay blend drifts 40px over 6s. On the end card, text holds while the photo scales 1.00 to 1.06.",
+      "restraint": "Cap opacity at 6%; no per-frame jitter; grain must never be the only motion."
+    }
+  }
+}

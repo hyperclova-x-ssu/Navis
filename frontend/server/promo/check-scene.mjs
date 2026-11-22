@@ -2,6 +2,7 @@
 // staticCheck는 순수 함수, runSceneCheck는 격리 Chrome(renderer.mjs)에서 실행 검사.
 import { readFile } from 'node:fs/promises';
 import { openScene } from './renderer.mjs';
+import { checkMotionObservations } from './check-motion.mjs';
 
 const FORBIDDEN_JS = [
   ['setTimeout', /\bsetTimeout\b/], ['setInterval', /\bsetInterval\b/], ['requestAnimationFrame', /\brequestAnimationFrame\b/],
@@ -47,6 +48,13 @@ export function staticCheck(html, { story, rules }) {
   }
   const declared = new Set([...html.matchAll(/data-scene\s*=\s*["']?([a-z0-9-]+)/gi)].map(m => m[1]));
   for (const s of story?.scenes || []) if (!declared.has(s.sceneId)) v.push({ sceneId: s.sceneId, rule: 'timing.scene', limit: 'data-scene present', actual: 'missing' });
+  if (story?.chatCountdown) {
+    const markers = [...html.matchAll(/<[^>]*\bdata-countdown\s*=\s*["'](\d+)["'][^>]*>/gi)];
+    const seen = markers.map(marker => [Number(marker[1]), /\bdata-text\s*=\s*["']([^"']+)["']/i.exec(marker[0])?.[1]]);
+    if (JSON.stringify(seen) !== JSON.stringify(story.chatCountdown.numbers)) {
+      v.push({ rule: 'static.countdown', limit: 'ordered data-countdown and data-text attributes from the plan', actual: 'missing or changed countdown markers' });
+    }
+  }
   return v;
 }
 
@@ -106,6 +114,25 @@ function probe(cfg) {
     return total ? { ratio: hit / total, by } : { ratio: 0, by: null };
   };
   const texts = [];
+  const captionGroups = [...stage.querySelectorAll('[data-caption-block]')];
+  const rgb = color => (color?.match(/[\d.]+/g) ?? []).map(Number);
+  const luminance = color => color.slice(0, 3).map(value => {
+    const c = value / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  }).reduce((sum, value, i) => sum + value * [0.2126, 0.7152, 0.0722][i], 0);
+  const contrastOf = (el, computed) => {
+    if (!cfg.creative) return null;
+    const fg = rgb(computed.color);
+    if (fg.length < 3) return null;
+    for (let node = el; node && stage.contains(node); node = node.parentElement) {
+      const bg = rgb(getComputedStyle(node).backgroundColor);
+      if (bg.length >= 3 && (bg[3] ?? 1) >= 0.95) {
+        const values = [luminance(bg), luminance(fg)].sort((a, b) => a - b);
+        return (values[1] + 0.05) / (values[0] + 0.05);
+      }
+    }
+    return null;
+  };
   for (const el of document.querySelectorAll('[data-text]')) {
     if (!visible(el)) continue;
     const range = document.createRange(); range.selectNodeContents(el);
@@ -124,7 +151,11 @@ function probe(cfg) {
     const overflow = block && (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1);
     const nested = !!el.querySelector('[data-text]');
     const lineRects = rects.filter(onStage).map(rel);
-    texts.push({ id: el.dataset.text, scene: el.closest('[data-scene]')?.dataset.scene || null, box, lines: tops.length, fontSize, overflow, text: textOf(el), nested, rects: lineRects, cover: coverOf(el, lineRects) });
+    const group = el.closest('[data-caption-block]');
+    texts.push({ id: el.dataset.text, scene: el.closest('[data-scene]')?.dataset.scene || null, box, lines: tops.length,
+      fontSize, overflow, text: textOf(el), nested, rects: lineRects, cover: coverOf(el, lineRects),
+      opacity: opacityOf(el), contrast: contrastOf(el, cs),
+      block: group ? `group-${captionGroups.indexOf(group)}` : el.dataset.text });
   }
   const undeclared = [];
   const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
@@ -156,7 +187,32 @@ function probe(cfg) {
   }
   for (const tx of texts) sig += tx.text;
   let h = 5381; for (let i = 0; i < sig.length; i++) h = ((h * 33) ^ sig.charCodeAt(i)) >>> 0;
-  return { current, scenes, sceneOpacity, texts, undeclared, photos, unmarked, sig: canvas ? null : h, boxes: moving };
+  const motion = cfg.creative ? {} : null;
+  if (motion) [...stage.querySelectorAll('[data-photo],[data-text],[data-motion-layer]')].forEach((el, i) => {
+    const r = el.getBoundingClientRect();
+    if (!visible(el) || !onStage(r)) return;
+    const channel = el.dataset.motionLayer || (el.dataset.photo ? 'camera' : 'text');
+    if (!['camera', 'text', 'layout', 'overlay'].includes(channel)) return;
+    const clip = getComputedStyle(el).clipPath;
+    motion[i] = { channel, opacity: opacityOf(el), box: [r.left, r.top, r.width, r.height],
+      clip, clipValues: rgb(clip) };
+  });
+  const animations = cfg.creative ? document.getAnimations() : [];
+  const easings = animations.map(animation => {
+    const curve = animation.effect?.getTiming?.().easing;
+    return curve === 'linear' ? animation.effect?.getKeyframes?.().find(frame => frame.easing !== 'linear')?.easing ?? curve : curve;
+  }).filter(Boolean);
+  const entrances = animations.flatMap(animation => {
+    const effect = animation.effect;
+    const owner = effect?.target?.closest?.('[data-text]');
+    const timing = effect?.getTiming?.();
+    if (!owner || typeof timing?.duration !== 'number' || timing.duration > 1000 || !timing.duration) return [];
+    const keys = effect.getKeyframes();
+    if (!keys.some(frame => 'transform' in frame || 'clipPath' in frame || 'opacity' in frame)) return [];
+    return [{ id: owner.dataset.text, sceneId: owner.closest('[data-scene]')?.dataset.scene,
+      at: timing.delay / 1000, duration: timing.duration }];
+  });
+  return { current, scenes, sceneOpacity, texts, undeclared, photos, unmarked, sig: canvas ? null : h, boxes: moving, motion, easings, entrances };
 }
 
 const norm = s => String(s).replace(/\s+/g, ' ').trim();
@@ -182,6 +238,15 @@ export function samplePoints(story, rules, L) {
     for (let k = -n; k <= n; k++) add(s.start + k * tr.probeStepSec, [`fade:${i}`]);
   });
   add(L - rules.ending.checkBeforeEndSec, ['ending']);
+  if (story.creative) {
+    add(0.05, ['hook']);
+    add(0.5, ['hook']);
+    add(lastT, ['hook']);
+    for (const scene of story.scenes) for (const beat of scene.motion?.editBeats ?? []) {
+      add(beat - 0.12, [`edit-before:${scene.sceneId}:${beat}`]);
+      add(beat + 0.12, [`edit-after:${scene.sceneId}:${beat}`]);
+    }
+  }
   return [...set.entries()].sort((a, b) => a[0] - b[0]).map(([t, kinds]) => ({ t, kinds }));
 }
 
@@ -237,6 +302,7 @@ export function evaluateObservations(observations, { story, rules, store }) {
     }
   }
   evaluateT087(observations, { story, rules, push, order });
+  v.push(...checkMotionObservations(observations, story));
   for (const s of story.scenes) {
     for (const id of s.textIds || []) if (!shownText.has(`${s.sceneId}|${id}`)) push({ sceneId: s.sceneId, textId: id, rule: 'pair.text', limit: 'shown in scene', actual: 'never visible' });
     for (const id of s.photoIds || []) if (!shownPhoto.has(`${s.sceneId}|${id}`)) push({ sceneId: s.sceneId, photoId: id, rule: 'pair.photo', limit: 'shown in scene', actual: 'never visible' });
@@ -372,7 +438,8 @@ export async function runSceneCheck(a) {
       if (seekMs > frameMs) v.push({ t: point.t, rule: 'runtime.timeout', limit: `frame ≤ ${frameMs}ms`, actual: `${seekMs}ms` });
       let obs;
       const lite = point.kinds.every(k => k.startsWith('fade:'));
-      try { obs = await opened.evaluate(probe, { minOpacity: rules.check.visibleOpacityMin, lite, layerCover: rules.overlap?.layerCover ?? 0.9, pxStep: rules.still?.pxStep ?? 0.5 }, 5000); } catch (err) {
+      try { obs = await opened.evaluate(probe, { minOpacity: rules.check.visibleOpacityMin, lite,
+        layerCover: rules.overlap?.layerCover ?? 0.9, pxStep: rules.still?.pxStep ?? 0.5, creative: Boolean(story.creative) }, 5000); } catch (err) {
         v.push({ t: point.t, rule: err?.code === 'TIMEOUT' ? 'runtime.timeout' : 'runtime.error', actual: 'probe failed' });
         break;
       }

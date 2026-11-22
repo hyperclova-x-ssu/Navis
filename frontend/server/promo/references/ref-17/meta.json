@@ -1,0 +1,115 @@
+{
+  "id": "ref-17",
+  "version": "1",
+  "nameKey": "promo.ref.ref-17.name",
+  "cardAspect": "9:16",
+  "previewFrom": 0,
+  "previewTo": 4,
+  "posterAt": 0.55,
+  "moods": [],
+  "concepts": [],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 7
+      },
+      "photoSlots": {
+        "max": 6
+      },
+      "minSceneSec": 1
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 10
+      },
+      "photoSlots": {
+        "max": 8
+      },
+      "minSceneSec": 1
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 16
+      },
+      "photoSlots": {
+        "max": 12
+      },
+      "minSceneSec": 1
+    }
+  },
+  "motion": {
+    "id": "ref-17",
+    "key": "parallax",
+    "name": "패럴랙스 플로트 카드",
+    "order": 11,
+    "energy": "calm",
+    "previewMenuId": "m-jeju-matcha",
+    "layout": "부드러운 그라데이션, 흐린 확대 배경 + 선명한 둥근 카드",
+    "motion": "3층 깊이(배경 0.6x/카드 1x/글자 1.4x), 천천히 달리",
+    "transition": "스케일 크로스디졸브",
+    "type": "명조 계열, 넓은 자간",
+    "cuts": {
+      "10": 3,
+      "15": 5,
+      "30": 8
+    },
+    "tempo": "피아노 75",
+    "colors": [
+      "#EEF2E6",
+      "#1E2B1F",
+      "#6E8B3D"
+    ],
+    "moves": [
+      "parallax",
+      "pan",
+      "light-leak",
+      "kinetic"
+    ],
+    "framing": "Soft gradient; blurred enlarged background + sharp rounded card (24px radius); 3 depth layers bg 0.6x / card 1x / text 1.4x; slow dolly; review quote only if real; piano 75 BPM; cuts 3/5/8; preview menu: 제주 말차 (drink)",
+    "transitions": "Primary 70%: scale cross-dissolve 500ms cubic-bezier(0.45,0,0.55,1) (1.04→1); secondary 30%: shorter scale cross-dissolve 360ms, same family",
+    "typography": "Navis Serif (myeongjo) with wide tracking 0.08–0.12em, main ≥52px; sub Navis Sans 300 ≥36px",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": null,
+    "concepts": [
+      "review-roundup"
+    ],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 1
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 1
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 1
+      }
+    }
+  }
+}

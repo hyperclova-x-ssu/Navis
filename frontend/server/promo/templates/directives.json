@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "author": "claude-opus-5-5",
+  "moods": {
+    "lively": {
+      "visual": "Bright, saturated grade; beat-synced cuts and punch-in reframes; captions pop in with quick scale. Every caption holds for its full reading time even when the image underneath moves.",
+      "copy": "Short upbeat phrases with active verbs and at most one exclamation per video. Describe only supplied facts and visible photo content. No invented prices, quotes, or taste claims."
+    },
+    "warm": {
+      "visual": "Golden, soft-contrast grade; slow push-ins and gentle crossfades; rounded caption cards with soft shadow. Favor people, hands, cups and tables in natural light.",
+      "copy": "Friendly, inviting second-person lines such as come in or stay a while. Keep the tone welcoming without claiming flavor, freshness or popularity unless a verified fact supports it."
+    },
+    "elegant": {
+      "visual": "Muted, deep-toned grade; long holds, slow drifts and dissolves; thin serif-style captions with generous margins. Use fewer, larger frames and plenty of negative space.",
+      "copy": "Spare, refined wording in few words per card. No hype words or exclamations. Name the place and its supplied details plainly. Never imply premium ingredients without verification."
+    },
+    "clean": {
+      "visual": "Neutral, true-color grade; straight cuts and static or slow linear moves; sans captions on solid bars with high contrast. Center subjects and keep the frame uncluttered.",
+      "copy": "Plain, factual statements: what, where, when. One idea per card. Use only supplied fields such as name, location and hours. Leave out adjectives that imply unverified quality."
+    }
+  },
+  "concepts": {
+    "review-roundup": {
+      "visual": "Quote or rating cards over slow reframes of supplied photos, one card per beat, with an attribution line beneath. Without verified reviews, show photo-only highlights with no card.",
+      "copy": "Use verified review text and ratings verbatim, with attribution. With no verified reviews, use neutral framing such as see why people stop by. Never paraphrase into new quotes or star counts."
+    },
+    "behind-the-scenes": {
+      "visual": "Close framing on prep surfaces, hands, equipment and counter activity, sequenced as process steps. Reframe existing photos to imply progression; never fake motion inside a still.",
+      "copy": "Describe only the visible actions: pouring, plating, setting up. No ingredient, sourcing, or made-from-scratch claims unless a verified fact supplies them."
+    },
+    "todays-deal": {
+      "visual": "Large offer card on a hero product photo, with price and terms in the most legible slot. Without a verified offer, swap in a plain product feature card with no price badge.",
+      "copy": "Insert the verified offer, price, terms and end date exactly as supplied. Without one, use neutral lines such as stop by today. No invented discounts, prices, or urgency like ends soon."
+    },
+    "new-item": {
+      "visual": "A reveal moment: hold on a dark or plain frame, then a push-in onto the item photo, with a name card anchored low. Use the same treatment for a featured item when newness is unverified.",
+      "copy": "Say new only when a verified fact confirms it; otherwise use featured or try our with the supplied item name. No taste or ingredient claims unless verified."
+    },
+    "day-at-shop": {
+      "visual": "Sequence the photos as a light progression from exterior to counter to seating to detail. Shift the grade subtly between beats to suggest time passing within the mood palette.",
+      "copy": "Short scene labels from supplied facts. Use time-of-day or hours only when verified. Without them, use neutral labels such as step inside or find a seat. No busy or popular claims."
+    }
+  },
+  "durations": {
+    "10": {
+      "beats": {
+        "open": "Hook on the strongest photo with a name or concept caption. A quick reframe is allowed; the caption holds for its full read.",
+        "show": "Two or three supporting photos with one caption each. Edit beats reframe existing photos and never shorten reading time. Respect tighter design caps on photos or scenes.",
+        "close": "Final title and location card at rest, readable for the full 2.5s while only background or accent layers move. CTA appears here."
+      },
+      "intensity": {
+        "open": "high",
+        "show": "medium",
+        "close": "low"
+      },
+      "targetCuts": 7,
+      "preferredShots": 6,
+      "photoSlots": 3,
+      "endingSeconds": 2.5,
+      "ctaPlacement": "closing"
+    },
+    "15": {
+      "beats": {
+        "open": "Establish the place or hero item with a title caption. Use one reframe for energy and hold the caption to its full read.",
+        "show": "Run the concept sequence across up to four photos with one idea per caption. Edit beats reframe existing photos without cutting reading time. Respect tighter design caps.",
+        "close": "Title and location held static and legible for 3s while one secondary layer moves gently. CTA appears here."
+      },
+      "intensity": {
+        "open": "medium",
+        "show": "high",
+        "close": "low"
+      },
+      "targetCuts": 11,
+      "preferredShots": 8,
+      "photoSlots": 4,
+      "endingSeconds": 3,
+      "ctaPlacement": "closing"
+    },
+    "30": {
+      "beats": {
+        "open": "Set the scene with an exterior or hero photo, the title caption and a calm entrance. Build into the concept with one or two reframes.",
+        "show": "Develop the concept across up to six photos in a varied order, using reframes for extra edit beats. Each caption keeps its full reading time. Respect tighter design caps on photos and scenes.",
+        "close": "Ease down to a static title and location card held legible for 4s while a background or accent layer moves. CTA appears here."
+      },
+      "intensity": {
+        "open": "medium",
+        "show": "high",
+        "close": "low"
+      },
+      "targetCuts": 19,
+      "preferredShots": 10,
+      "photoSlots": 6,
+      "endingSeconds": 4,
+      "ctaPlacement": "closing"
+    }
+  },
+  "examples": {
+    "intro": {
+      "variant": "warm",
+      "feature": "table",
+      "rationale": "The record notes seating and a supplied photo shows a table, so pick the warm recipe with the table feature. The caption invites guests to sit, with no taste, price or review claims."
+    },
+    "detail": {
+      "variant": "clean",
+      "feature": "",
+      "rationale": "The record has only a name and location, and no photo or fact supports a closeup or table. Leave the feature empty and use clean neutral captions with the name, location and CTA."
+    }
+  }
+}

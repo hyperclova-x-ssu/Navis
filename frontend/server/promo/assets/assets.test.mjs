@@ -5,6 +5,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import cp from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { PHOTO_META_SCHEMA } from '../prompts.mjs';
+import { validateSchema } from '../schema.mjs';
+import { chatCountdownSlotRequest, planChatCountdown } from '../templates/chat-countdown.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../..');
@@ -74,7 +77,7 @@ test('카페 사진 목록의 메뉴·JPEG 규격·sha256이 일치한다', () =
   const content = JSON.parse(fs.readFileSync(path.join(root, '../db/seed/ansungjalbu/content.json'), 'utf8'));
   assert.equal(cafe.store.name, content.store.name);
   assert.equal(cafe.store.location, content.store.area);
-  assert.equal(cafe.photos.length, 39);
+  assert.equal(cafe.photos.length, 180);
   assert.equal(new Set(cafe.photos.map(p => p.photoId)).size, cafe.photos.length);
   assert.deepEqual(cafe.photos.filter(p => p.menuId === null).map(p => p.photoId),
     [cafe.store.exteriorPhotoId, 'cafe-interior-01', 'cafe-interior-02']);
@@ -84,17 +87,126 @@ test('카페 사진 목록의 메뉴·JPEG 규격·sha256이 일치한다', () =
     assert.equal(menu.names.ko, content.menu.find(row => row.id === menu.menuId)?.name);
     assert.deepEqual(Object.keys(menu.names).sort(), ['en', 'ko', 'zh-Hans', 'zh-Hant']);
     assert.deepEqual(menu.photoIds, cafe.photos.filter(p => p.menuId === menu.menuId).map(p => p.photoId));
-    assert.ok(menu.photoIds.length === 0 || menu.photoIds.length === 6, menu.menuId);
+    assert.ok(menu.photoIds.length >= 5, menu.menuId);
   }
   const checksums = fs.readFileSync(path.join(here, 'SHA256.md'), 'utf8');
   for (const p of cafe.photos) {
     assert.match(p.photoId, /^[a-z0-9-]{1,32}$/);
-    assert.equal(p.file, `${p.photoId}.jpeg`);
     const file = path.join(here, 'photos', p.file);
-    assert.ok(fs.statSync(file).size < 300_000, p.file);
-    assert.equal(Math.max(p.width, p.height), 1280, p.file);
+    const publicName = path.basename(p.file);
+    if (p.file.startsWith('d409/')) {
+      assert.equal(p.photoId.replace('-d409-', '-'), path.parse(publicName).name);
+      assert.deepEqual([p.width, p.height], [1180, 1180], p.file);
+      assert.equal(sha(file), sha(path.join(root, 'public/menu-photos', publicName)), p.file);
+    } else if (p.menuId === 'm-strawberry-cake') {
+      assert.equal(p.file, `${p.photoId}.jpeg`);
+      assert.equal(Math.max(p.width, p.height), 1280);
+      assert.ok(fs.statSync(file).size < 300_000, p.file);
+      assert.equal(sha(file), sha(path.join(root, 'public/menu-photos', p.file)), p.file);
+    } else if (p.menuId === 'm-chestnut-latte') {
+      assert.equal(p.file, `${p.photoId}.jpeg`);
+      assert.deepEqual([p.width, p.height], [1180, 1180], p.file);
+      assert.ok(fs.statSync(file).size < 650_000, p.file);
+      assert.equal(sha(file), sha(path.join(root, 'public/menu-photos', p.file)), p.file);
+    } else if (p.width === 1180 && p.height === 1180) {
+      assert.equal(p.file, `${p.photoId}.jpeg`);
+      assert.match(p.file, /-01\.jpeg$/);
+      assert.equal(sha(file), sha(path.join(root, 'public/menu-photos', p.file)), p.file);
+    } else {
+      assert.equal(p.file, `${p.photoId}.jpeg`);
+      assert.ok(fs.statSync(file).size < 300_000, p.file);
+      assert.equal(Math.max(p.width, p.height), 1280, p.file);
+    }
     assert.deepEqual(jpegSize(file), { width: p.width, height: p.height }, p.file);
     assert.ok(checksums.includes(`| \`${p.file}\` | \`${sha(file)}\` |`), p.file);
+  }
+});
+
+test('D-409 adds a cover and four new selectable shots per menu in its batch', () => {
+  const cafe = catalog.sourceCatalogs.cafe;
+  const newPhotos = cafe.photos.filter(photo => photo.file.startsWith('d409/'));
+  assert.equal(newPhotos.length, 92);
+  for (const menu of cafe.menus.filter(menu => !['m-chestnut-latte', 'm-strawberry-cake'].includes(menu.menuId))) {
+    const slug = menu.menuId.slice(2);
+    assert.ok(menu.photoIds.includes(`cafe-${slug}-01`), menu.menuId);
+    const shots = newPhotos.filter(photo => photo.menuId === menu.menuId).map(photo => {
+      assert.ok(menu.photoIds.includes(photo.photoId), photo.photoId);
+      return photo.file;
+    });
+    assert.deepEqual(shots, [2, 3, 4, 5].map(n => `d409/cafe-${slug}-0${n}.jpeg`));
+  }
+});
+
+test('the strawberry cake metadata matches the ten catalog bytes and the ref-1 display and in-hand roles', () => {
+  const cafe = catalog.sourceCatalogs.cafe;
+  const cake = cafe.menus.find(menu => menu.menuId === 'm-strawberry-cake');
+  const files = cake.photoIds.map(id => `${id}.jpeg`);
+  assert.deepEqual(files, Array.from({ length: 10 }, (_, i) => `cafe-strawberry-cake-${String(i + 1).padStart(2, '0')}.jpeg`));
+  const snapshot = JSON.parse(fs.readFileSync(path.join(root, '../backend/services/marketing/promo/strawberry-cake-photo-analysis.json'), 'utf8'));
+  assert.equal(snapshot.model, 'claude-opus-5-5');
+  assert.equal(snapshot.schemaVersion, 2);
+  assert.equal(snapshot.rows.length, 10);
+  const photos = files.map(file => {
+    const row = snapshot.rows.find(row => row.sha256 === sha(path.join(here, 'photos', file)));
+    assert.ok(row, file);
+    assert.deepEqual(validateSchema(PHOTO_META_SCHEMA, row.metadata), []);
+    assert.equal(row.metadata.menuShown, 'main', file);
+    return row.metadata;
+  });
+  assert.deepEqual(photos.slice(0, 7).map(({ kind, amount }) => [kind, amount]), [
+    ['closeup', 'one'], ['display', 'many'], ['display', 'many'], ['display', 'one'], ['display', 'few'], ['inhand', 'one'], ['inhand', 'one'],
+  ]);
+  const input = { referenceId: 'ref-1', lengthSec: 30, locale: 'ko', menuIds: [cake.menuId], moods: [], concepts: [] };
+  const ctx = { input, photos: photos.map((meta, i) => ({ photoId: cake.photoIds[i], menuId: cake.menuId, menuName: cake.names.ko, meta })),
+    exterior: { photoId: cafe.store.exteriorPhotoId }, store: cafe.store };
+  const { variantId, heroPhotoId } = chatCountdownSlotRequest(ctx).schema.properties;
+  const story = planChatCountdown(ctx, { variantId: variantId.enum[0], heroPhotoId: heroPhotoId.enum[0] });
+  assert.deepEqual(story.chatCountdown.numbers.map(([n]) => n), [6, 5, 4, 3, 2, 1, 0]);
+  assert.deepEqual(story.scenes[1].photoIds, [cake.photoIds[1]]);
+  assert.deepEqual(story.scenes[3].photoIds, [cake.photoIds[3], cake.photoIds[5]]);
+});
+
+test('the chestnut latte catalog contains the original and five new photos in order', () => {
+  const menu = catalog.sourceCatalogs.cafe.menus.find(menu => menu.menuId === 'm-chestnut-latte');
+  assert.deepEqual(menu.photoIds, [
+    'cafe-chestnut-latte-01', 'cafe-chestnut-latte-02', 'cafe-chestnut-latte-03',
+    'cafe-chestnut-latte-04', 'cafe-chestnut-latte-05', 'cafe-chestnut-latte-06',
+  ]);
+});
+
+test('D-439 photos have the ref-1 roles and identical bytes in the public and server catalogs', () => {
+  const cafe = catalog.sourceCatalogs.cafe;
+  const snapshot = JSON.parse(fs.readFileSync(path.join(root, '../backend/services/marketing/promo/ref1-photos-photo-analysis.json'), 'utf8'));
+  assert.equal(snapshot.model, 'claude-opus-5-5');
+  assert.equal(snapshot.schemaVersion, 2);
+  assert.equal(snapshot.rows.length, 16);
+  for (const [slug, start] of [['saltbread', 7], ['bagel-plain', 6], ['basque-cake', 6], ['cookie-choco', 6]]) {
+    const menu = cafe.menus.find(menu => menu.menuId === `m-${slug}`);
+    const ids = Array.from({ length: 4 }, (_, index) => `cafe-${slug}-${String(start + index).padStart(2, '0')}`);
+    assert.deepEqual(menu.photoIds.slice(-4), ids);
+    const photos = ids.map(photoId => {
+      const file = `${photoId}.jpeg`;
+      const hash = sha(path.join(here, 'photos', file));
+      assert.equal(hash, sha(path.join(root, 'public/menu-photos', file)), photoId);
+      const row = snapshot.rows.find(row => row.sha256 === hash);
+      assert.ok(row, photoId);
+      assert.deepEqual(validateSchema(PHOTO_META_SCHEMA, row.metadata), []);
+      assert.equal(row.metadata.menuShown, 'main', photoId);
+      return { photoId, menuId: menu.menuId, menuName: menu.names.ko, meta: row.metadata };
+    });
+    assert.deepEqual(photos.map(({ meta }) => [meta.kind, meta.amount]), [
+      ['display', 'many'], ['display', 'one'], ['inhand', 'one'], ['other', slug === 'cookie-choco' ? 'few' : 'one'],
+    ]);
+    const ctx = {
+      input: { referenceId: 'ref-1', lengthSec: 30, locale: 'ko', menuIds: [menu.menuId], moods: [], concepts: [] },
+      photos,
+      exterior: { photoId: cafe.store.exteriorPhotoId }, store: cafe.store,
+    };
+    const { variantId, heroPhotoId } = chatCountdownSlotRequest(ctx).schema.properties;
+    const story = planChatCountdown(ctx, { variantId: variantId.enum[0], heroPhotoId: heroPhotoId.enum[0] });
+    assert.deepEqual(story.chatCountdown.numbers.map(([number]) => number), [6, 5, 4, 3, 2, 1, 0]);
+    assert.deepEqual(story.scenes[1].photoIds, [ids[0]]);
+    assert.deepEqual(story.scenes[3].photoIds, [ids[1], ids[2]]);
   }
 });
 

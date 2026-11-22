@@ -4,15 +4,18 @@ import { DEFAULT_BASE, LENGTHS, buildEstimateModel, multipliers } from '../estim
 
 const available = { claude: true, browser: true, ffmpeg: true };
 
-test('12.7 예 값과 같다(반올림 전 → 올림·반올림)', () => {
+test('시간 계산은 12.7 예 값을 유지하고 비용은 Opus 5.5 단가로 계산한다', () => {
   const { table, basis, sampleCount, pricing, fx } = buildEstimateModel({ available });
   const at = (L, n) => table[L][n];
   assert.deepEqual([at(10, 5).seconds, at(15, 5).seconds, at(30, 5).seconds, at(15, 8).seconds, at(30, 10).seconds], [121, 153, 251, 159, 262]);
-  assert.deepEqual([at(10, 5).costUsd, at(15, 5).costUsd, at(30, 5).costUsd, at(15, 8).costUsd, at(30, 10).costUsd], [0.272, 0.306, 0.409, 0.356, 0.492]);
-  assert.deepEqual([at(10, 5).costKrw, at(15, 5).costKrw, at(30, 5).costKrw, at(15, 8).costKrw, at(30, 10).costKrw], [381, 429, 572, 499, 689]);
-  assert.deepEqual(at(10, 0), { photoCount: 0, seconds: 104, costUsd: 0.189, costKrw: 265 });
+  assert.deepEqual([at(10, 5).costUsd, at(15, 5).costUsd, at(30, 5).costUsd, at(15, 8).costUsd, at(30, 10).costUsd], [0.545, 0.613, 0.817, 0.713, 0.984]);
+  assert.deepEqual([at(10, 5).costKrw, at(15, 5).costKrw, at(30, 5).costKrw, at(15, 8).costKrw, at(30, 10).costKrw], [762, 858, 1144, 998, 1377]);
+  assert.deepEqual(at(10, 0), { photoCount: 0, seconds: 104, costUsd: 0.378, costKrw: 530 });
   assert.equal(basis, 'spike'); assert.equal(sampleCount, 0);
-  assert.equal(pricing.model, 'claude-sonnet-5-5'); assert.equal(fx.krwPerUsd, 1400);
+  assert.equal(pricing.model, 'claude-opus-5-5');
+  assert.equal(pricing.inputUsdPerMTok, 4);
+  assert.equal(pricing.outputUsdPerMTok, 20);
+  assert.equal(fx.krwPerUsd, 1400);
 });
 
 test('단조성: 사진 수·길이가 늘면 값이 줄지 않음, 같은 입력은 같은 값(표본 있어도)', () => {

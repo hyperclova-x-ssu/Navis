@@ -2,7 +2,7 @@
 
 `POST /api/promo/jobs` (API-22)의 `story` 단계는 NAVER CLOVA Studio HCX-007의 Chat Completions v3 Structured Outputs를 사용합니다. 서버 프로세스에 `CLOVASTUDIO_API_KEY`를 주입합니다. `CLOVASTUDIO_BASE_URL`은 선택 항목입니다. 대본 모델은 HCX-007로 고정합니다. `scenes`(렌더용 HTML)는 기본이 Claude CLI입니다(D-327 Q7, 아래 “장면 제공자”).
 
-`NAVIS_PROMO_HCX_PILOT`을 설정하지 않으면 서비스의 `look`(사진 분석)은 NAVER HCX-005를 사용합니다(D-328 Q3). 변수를 설정할 때는 정확히 `true`인 경우에만 NAVER를 사용합니다. `false`, `0`, `off`, `no`, 빈 값, 오타 등은 Claude CLI로 전환합니다. 이 설정은 사진 분석에만 적용됩니다. 서비스의 사진 분석 호출 한도는 작업 단위입니다. 사진은 최대 5장이고 러너 재시도와 시간 초과 재시도는 각각 1회입니다. 일일 또는 전체 호출 한도는 없습니다.
+`NAVIS_PROMO_HCX_PILOT`을 설정하지 않으면 개발 서버의 `look`(사진 분석)은 NAVER HCX-005를 사용합니다(D-328 Q3). 변수를 설정할 때는 정확히 `true`인 경우에 NAVER를 사용합니다. 기존 경로의 그 외 값은 Claude CLI로 전환합니다. 호스팅에서는 사진 분석 모델을 HCX-005로 고정합니다.
 
 ## 요청과 검사
 
@@ -45,9 +45,39 @@ NAVIS_PROMO_HCX_PILOT=true node \
 | --- | --- |
 | `claude` (기본) | 헤드리스 Claude CLI(`claude -p`), 기준선과 같은 길(`scene-provider.mjs`). 로그인한 구독만 쓰도록 `ANTHROPIC_*`는 자식 프로세스에 넘기지 않고, CLI가 유료 사용량 크레딧을 권하면 그 호출의 답을 버리고 `AI_UNAVAILABLE`로 끝내며 서버를 다시 켤 때까지 더 부르지 않습니다. |
 | `naver` | HCX-007 장면 시험(기존 파일럿 경로). Claude 도구가 없어도 작업이 시작됩니다(사진 보기도 NAVER일 때). |
-| `claude-api` | 서버용 Claude API 어댑터의 **자리만** 있습니다. W5 견적·승인 전이라 키도 호출도 없고, `NAVIS_PROMO_CLAUDE_API_APPROVED=true`가 없으면 `AI_UNAVAILABLE`(`CLAUDE_API_NOT_APPROVED`), 있어도 어댑터가 없어 `AI_UNAVAILABLE`(`CLAUDE_API_NOT_IMPLEMENTED`)로 끝납니다. |
+| `claude-api` | 기존 생성 경로에서 Claude Messages API가 장면 HTML을 만듭니다. `NAVIS_PROMO_CLAUDE_API_APPROVED=true`와 `ANTHROPIC_API_KEY_FILE`이 필요합니다. |
 
 알 수 없는 값은 `claude`로 읽습니다. 사진 분석이나 장면에 Claude CLI를 선택한 경우 CLI가 필요합니다(없으면 `TOOL_MISSING`).
+
+## 호스팅과 사진 사전 분석 (D-410·D-416)
+
+매장 API가 초안을 저장하고, 확인된 생성 요청을 마케팅 PostgreSQL에 큐잉합니다. 기존 카페 사진은 Claude API로 배치 분석합니다. 권리를 확인하고 올린 사진은 HCX-005가 Claude 예시 여섯 개와 같은 스키마로 한 번 분석합니다. 분석은 매장, 이미지 SHA-256, 스키마 버전, 모델로 구분합니다. 분석이 없거나 실패하면 중립적인 초점과 빈 사진 설명을 사용합니다. 응답이 유실된 호출은 자동 재실행하지 않습니다.
+
+`templates/manifest.json`이 Claude가 만든 분위기·콘셉트 지침, 길이별 스켈레톤, 사진 메타데이터 예시와 여섯 디자인 레퍼런스 버전을 지정합니다. `server/promo/dev/author-directives.mjs`와 `server/promo/dev/author-templates.mjs`를 새 버전 작성에 사용합니다. HCX-007은 정해진 대본·슬롯 옵션을 선택합니다. 확인된 가격과 혜택을 공급받은 경우에만 해당 사실을 사용합니다. Claude API가 검증을 통과한 대본과 디자인을 토대로 영상마다 애니메이션 HTML을 작성합니다. `marketing-worker`가 격리된 Chromium에서 규칙을 검사하고 필요한 HTML 수정 후 FFmpeg로 제작한 MP4를 Account에 보관합니다.
+
+실사용 Compose에서는 승인 플래그 `NAVIS_PROMO_CLAUDE_API_APPROVED=true`를 설정하고 `compose.navis-promo-live.yaml`을 추가합니다. Helm에서는 `config.promoSceneProvider=claude-api`, `config.promoClaudeApiApproved=true`를 설정하고 `navis-providers/CLOVASTUDIO_API_KEY`와 `navis-promo-anthropic/ANTHROPIC_API_KEY`를 파일로 마운트합니다. 마케팅 작업자의 공급자 연결은 `clovastudio.stream.ntruss.com:443`와 `api.anthropic.com:443`으로 제한합니다.
+
+카페 시드 일괄 분석은 실사용 Compose 설정에서 `docker compose -f compose.yaml -f compose.navis-promo-live.yaml --profile phase3 run --rm marketing-worker node workers/marketing-worker/index.ts --photo-backfill`로 실행합니다. 이미 처리한 이미지 해시의 상태를 다시 읽습니다. 작업 종료 시 준비 및 실패 건수를 기록합니다.
+
+승인된 분석은 `node workers/marketing-worker/index.ts --import-photo-backfill /app/server/promo/assets/cafe-photo-analysis.json`과 `node workers/marketing-worker/index.ts --import-photo-backfill /app/backend/services/marketing/promo/strawberry-cake-photo-analysis.json`으로 각각 가져옵니다. 첫 파일은 Sonnet 4.6 분석 151장이고 두 번째는 Opus 5.5로 분석한 딸기 케이크 사진 10장입니다. 매장·모델·스키마와 번들 사진 해시를 검증하며, 기존 행을 보존하고 새 행을 공급자 호출 없이 추가합니다. 같은 사진에 두 분석이 있으면 Opus를 우선 사용합니다.
+
+### 모션 제작
+
+영상과 새 템플릿의 API 기본 모델은 `claude-opus-5-5`입니다. 프로세스의 `NAVIS_PROMO_CLAUDE_MODEL`로 바꿀 수 있습니다. 카페 사진 151장의 사전 분석은 저장된 모델 키를 사용합니다.
+
+`templates/creative.json`에 Claude와 Gemini가 합의한 12개의 디자인, 동작 어휘, 변주 규칙과 검사 항목이 있습니다. 갤러리는 기존 `ref-1`–`ref-6` 다음에 이 디자인들을 `ref-7`–`ref-18`로 표시합니다. 원래 하루 타임라인은 `ref-5`이고 합의안의 새 타임라인은 `ref-13`입니다. HCX-007은 정해진 자막·훅·사진 순서 옵션을 고릅니다. 여러 메뉴에서 사진을 고르면 같은 메뉴의 사진을 더 쓰기 전에 다른 메뉴의 사진을 배치합니다. 매장·메뉴·선택값·제작 회차가 같은 작업은 시드와 장면 타이밍을 재현합니다. Claude는 확정한 장면별 동작과 컷 타이밍으로 HTML을 작성합니다. 검사기는 브라우저 관찰과 인코딩된 픽셀 변화에 각각 검사 기준을 적용합니다.
+
+갤러리는 각 디자인의 메뉴 사진으로 미리 렌더한 무음 클립을 재생합니다. 같은 메뉴의 10·15·30초 작업을 만들면 실제 길이에 맞춘 편집 비트가 들어갑니다. 손글씨가 있는 디자인은 번들 글꼴 슬롯을 사용합니다. [글꼴 출처와 라이선스](assets/SOURCES.md)
+
+### 단톡방 카운트다운 (D-429·D-433·D-436)
+
+`ref-1`은 소유자 영상의 잠금화면 알림, 두 줄 진열대 자막과 대화, 외관, 품절과 사진 답장, 명조 엔딩을 고정한 합성기로 만듭니다. 확인할 때마다 HCX-007이 분위기와 콘셉트에 맞춰 `templates/ref-1-dialogue.json`의 동네 친구 단톡 변형과 대표 사진을 선택합니다. HCX는 고정된 옵션 순서, 시드 436, 온도 0.1을 사용합니다. Claude는 사진 크롭과 말풍선 등장 속도만 고릅니다. 서버가 숫자 팝, 말풍선, 품절 플래시와 장면별 이모지를 그리며 기존 정적·Chromium·MP4 검사로 결과를 확인합니다.
+
+카운트다운과 품절은 광고 연출(D-440)입니다. 선택 순서상 첫 메뉴에 10·15·30초 영상별로 3·4·6개를 표시하고 품절까지 내려갑니다. 음료를 포함한 모든 메뉴에 적용합니다.
+
+진열대와 품절 장면에는 연출에 맞는 대표 메뉴 사진을 우선 쓰고, 없으면 대표 메뉴의 다른 선택 사진이나 함께 고른 사진을 씁니다. 메뉴를 여럿 골랐다면 외관 장면의 사진 카드에 다른 메뉴를 최대 두 개 보여 줍니다.
+
+확인할 때마다 새로운 작업 ID를 발급합니다. 같은 확인 요청의 네트워크 재전송은 멱등 키로 같은 영수증을 돌려주며, 중단된 작업은 자신의 단계 체크포인트에서 이어집니다. 새 작업은 이전 작업의 대본, HTML, MP4를 가져오지 않습니다. 시연용 MP4와 대본을 앱이나 데이터 시드에 넣지 않습니다. 사전 자료는 `marketing.promo_photo_analysis`의 사진 메타데이터, `templates/`의 연출 템플릿, `references/`의 3–5초 갤러리 미리보기입니다.
 
 ## 사진 보기만 작게 돌리기 (PROMO-NEXT, D-327 Q8)
 

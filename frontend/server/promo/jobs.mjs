@@ -83,7 +83,8 @@ export function createJobStore(deps) {
     while (jobs.has(jobId)) jobId = newId();
     const t = now().toISOString();
     const job = {
-      jobId, idempotencyKey, retryOf, input: structuredClone(input), status: 'queued', stage: 'look', stageState: 'active',
+      jobId, idempotencyKey, retryOf, takeIndex: retryOf ? 1 + (jobs.get(retryOf)?.takeIndex ?? 0) : 0,
+      input: structuredClone(input), status: 'queued', stage: 'look', stageState: 'active',
       lookCount: input.photoIds.length, startedAt: t, stageStartedAt: t, finishedAt: null, failReason: null,
       stageMs: { look: 0, story: 0, scenes: 0, merge: 0 }, usage: { calls: 0, inputTokens: 0, outputTokens: 0 },
       promptVersion: PROMPT_VERSION, referenceVersion: deps.referenceVersion, model: deps.model,

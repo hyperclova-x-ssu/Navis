@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "referenceId": "ref-6",
+  "author": "claude-sonnet-4-6",
+  "html": "<!doctype html><html lang=\"{{LOCALE}}\"><head><meta charset=\"utf-8\"><style>{{BASE_STYLE}}\n*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}\nbody{background:#F7F3EE;font-family:'Helvetica Neue',Arial,sans-serif}\n#stage{position:relative;width:1080px;min-height:1920px;overflow:hidden;background:#F7F3EE}\n\n/* ── POLAROID CARD BASE ── */\n.card{position:absolute;left:50%;transform-origin:center center;background:#fff;width:760px;height:1000px;margin-left:-380px;padding:36px 36px 120px 36px;box-shadow:0 8px 24px rgba(0,0,0,.18);border-radius:4px}\n.card .photo{width:100%;height:100%;object-fit:cover;display:block;border-radius:2px}\n\n/* ── CARD STACK GHOSTS ── */\n.card-ghost{position:absolute;left:50%;background:#fff;width:760px;height:1000px;border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.12)}\n.card-ghost-1{margin-left:-372px;top:calc(var(--card-top) + 10px);transform:rotate(2deg);z-index:1}\n.card-ghost-2{margin-left:-388px;top:calc(var(--card-top) + 18px);transform:rotate(-1.5deg);z-index:0}\n\n/* ── DROP-IN ANIMATION ── */\n@keyframes drop-in-neg{from{transform:translateY(-120px) rotate(6deg);opacity:0}to{transform:translateY(0) rotate(-3deg);opacity:1}}\n@keyframes drop-in-zero{from{transform:translateY(-120px) rotate(6deg);opacity:0}to{transform:translateY(0) rotate(0deg);opacity:1}}\n@keyframes drop-in-pos{from{transform:translateY(-120px) rotate(-6deg);opacity:0}to{transform:translateY(0) rotate(2.5deg);opacity:1}}\n@keyframes drop-in-neg2{from{transform:translateY(-120px) rotate(6deg);opacity:0}to{transform:translateY(0) rotate(-2deg);opacity:1}}\n@keyframes drop-in-pos2{from{transform:translateY(-120px) rotate(-6deg);opacity:0}to{transform:translateY(0) rotate(1.5deg);opacity:1}}\n@keyframes drop-in-neg3{from{transform:translateY(-120px) rotate(4deg);opacity:0}to{transform:translateY(0) rotate(-1deg);opacity:1}}\n\n/* ── SCENES ── */\n.scene{position:absolute;width:1080px;overflow:hidden;display:flex;align-items:center;justify-content:center}\n\n/* ── HOOK SCENE (s1) ── */\n.scene.hook{top:0;height:1920px;background:#F7F3EE}\n.scene.hook .card{top:460px;animation:drop-in-neg 320ms cubic-bezier(.22,1,.36,1) both}\n.scene.hook .card-ghost-1{--card-top:470px}\n.scene.hook .card-ghost-2{--card-top:470px}\n.scene.hook .card .cap{position:absolute;bottom:0;left:0;width:100%;height:120px;display:flex;align-items:center;justify-content:center}\n.scene.hook .card .cap .title{font-size:80px;font-weight:700;line-height:1.1;text-align:center;color:#1E1E23;letter-spacing:-1px}\n.scene.hook .card .cap .title .hl{background:#FFF2CC;color:#1E1E23;padding:0 6px;display:inline}\n\n/* ── PHOTO CARD SCENES ── */\n.scene.photo-scene{background:#F7F3EE}\n.scene.photo-scene .card-ghost-1,.scene.photo-scene .card-ghost-2{position:absolute}\n.scene.photo-scene .card .cap{position:absolute;bottom:0;left:0;width:100%;height:120px;display:flex;align-items:center;justify-content:center}\n.scene.photo-scene .card .cap .label{font-size:56px;font-weight:700;color:#1E1E23;letter-spacing:-0.5px;text-align:center}\n.scene.photo-scene .card .cap .label .hl{background:#FFF2CC;color:#1E1E23;padding:0 4px}\n\n/* ── MASKING TAPE ── */\n.tape{position:absolute;width:160px;height:32px;background:rgba(255,212,0,.6);border-radius:3px;z-index:20}\n.tape-hook{top:448px;left:50%;margin-left:-80px;transform:rotate(12deg)}\n.tape-end{bottom:200px;right:120px;transform:rotate(-8deg)}\n.tape-s2{top:calc(var(--scene-top) + 36px);left:50%;margin-left:200px;transform:rotate(12deg)}\n.tape-s3{top:calc(var(--scene-top) + 36px);left:50%;margin-left:-300px;transform:rotate(-6deg)}\n\n/* ── ENDING SCENE ── */\n.scene.end{background:#F7F3EE}\n.scene.end .mat{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px}\n.scene.end .copy{position:absolute;bottom:0;left:0;width:100%;display:flex;flex-direction:column;align-items:center;gap:24px;padding-bottom:200px}\n.scene.end .end-name{font-size:96px;font-weight:700;color:#1E1E23;letter-spacing:-2px;font-style:italic}\n.scene.end .end-cta{font-size:52px;font-weight:700;color:#1E1E23}\n.scene.end .end-cta .hl{background:#FFF2CC;color:#1E1E23;padding:0 8px}\n.scene.end .end-location{font-size:38px;color:#6B6460;font-weight:400;margin-top:8px}\n.scene.end .tape{bottom:calc(100% - 160px);right:80px;transform:rotate(12deg)}\n\n/* ── COPY / HEADLINE GLOBAL ── */\n.mat{position:relative}\n.copy{position:absolute;left:60px;right:60px}\n.headline{color:#1E1E23;font-weight:700}\n\n/* ── NTH-CHILD LAYOUT VARIANTS ── */\n.scene:nth-child(2) .card{transform:rotate(-3deg);animation:drop-in-neg 320ms cubic-bezier(.22,1,.36,1) both}\n.scene:nth-child(3) .card{transform:rotate(2.5deg);animation:drop-in-pos 320ms cubic-bezier(.22,1,.36,1) both}\n.scene:nth-child(4) .card{transform:rotate(-2deg);animation:drop-in-neg2 320ms cubic-bezier(.22,1,.36,1) both}\n.scene:nth-child(5) .card{transform:rotate(1.5deg);animation:drop-in-pos2 320ms cubic-bezier(.22,1,.36,1) both}\n.scene:nth-child(6) .card{transform:rotate(-1deg);animation:drop-in-neg3 320ms cubic-bezier(.22,1,.36,1) both}\n.scene:nth-child(7) .card{transform:rotate(3deg);animation:drop-in-pos 320ms cubic-bezier(.22,1,.36,1) both}\n.scene:nth-child(8) .card{transform:rotate(-2.5deg);animation:drop-in-neg 320ms cubic-bezier(.22,1,.36,1) both}\n</style></head><body><main id=\"stage\">{{SCENES}}</main>{{PLAYER}}</body></html>",
+  "variants": [
+    {
+      "id": "warm-10",
+      "tone": "warm",
+      "lengthSec": 10,
+      "cta": {
+        "ko": "오늘 한 번 들러보세요",
+        "en": "Come find your corner",
+        "zh-Hans": "欢迎随时到访",
+        "zh-Hant": "歡迎隨時到訪"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "clean-10",
+      "tone": "clean",
+      "lengthSec": 10,
+      "cta": {
+        "ko": "메뉴를 확인해보세요",
+        "en": "See what we serve",
+        "zh-Hans": "查看我们的菜单",
+        "zh-Hant": "查看我們的菜單"
+      },
+      "slots": [
+        "menuName",
+        "feature",
+        "price",
+        "storeName",
+        "limitedOffer",
+        "cta"
+      ]
+    },
+    {
+      "id": "warm-15",
+      "tone": "warm",
+      "lengthSec": 15,
+      "cta": {
+        "ko": "잠깐 쉬어가세요",
+        "en": "Stay a little while",
+        "zh-Hans": "在这里小憩片刻",
+        "zh-Hant": "在這裡小憩片刻"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "clean-15",
+      "tone": "clean",
+      "lengthSec": 15,
+      "cta": {
+        "ko": "공간을 살펴보세요",
+        "en": "Explore our space",
+        "zh-Hans": "探索我们的空间",
+        "zh-Hant": "探索我們的空間"
+      },
+      "slots": [
+        "storeName",
+        "cta",
+        "menuName",
+        "feature",
+        "price",
+        "limitedOffer"
+      ]
+    },
+    {
+      "id": "warm-30",
+      "tone": "warm",
+      "lengthSec": 30,
+      "cta": {
+        "ko": "언제든 환영합니다",
+        "en": "Always a seat for you",
+        "zh-Hans": "随时欢迎您的到来",
+        "zh-Hant": "隨時歡迎您的到來"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "clean-30",
+      "tone": "clean",
+      "lengthSec": 30,
+      "cta": {
+        "ko": "직접 경험해보세요",
+        "en": "Experience it yourself",
+        "zh-Hans": "亲身感受一下吧",
+        "zh-Hant": "親身感受一下吧"
+      },
+      "slots": [
+        "menuName",
+        "feature",
+        "price",
+        "storeName",
+        "limitedOffer",
+        "cta"
+      ]
+    }
+  ]
+}

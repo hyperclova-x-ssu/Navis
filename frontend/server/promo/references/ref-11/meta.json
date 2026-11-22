@@ -1,0 +1,120 @@
+{
+  "id": "ref-11",
+  "version": "1",
+  "nameKey": "promo.ref.ref-11.name",
+  "cardAspect": "1:1",
+  "previewFrom": 3,
+  "previewTo": 7.5,
+  "posterAt": 4.8,
+  "moods": [
+    "warm",
+    "elegant"
+  ],
+  "concepts": [
+    "review-roundup",
+    "todays-deal"
+  ],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 6
+      },
+      "photoSlots": {
+        "max": 2
+      }
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 8
+      },
+      "photoSlots": {
+        "max": 3
+      }
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 14
+      },
+      "photoSlots": {
+        "max": 6
+      }
+    }
+  },
+  "posterScene": "s2",
+  "motion": {
+    "id": "ref-11",
+    "key": "scrapbook",
+    "name": "폴라로이드 스크랩북",
+    "order": 5,
+    "energy": "medium",
+    "previewMenuId": "m-cookie-choco",
+    "layout": "종이 질감, 폴라로이드+테이프",
+    "motion": "감쇠 스프링 낙하(±2.5°), 프레임 안 1→1.04 미세 드리프트",
+    "transition": "카드 겹쳐 쌓기/걷어내기",
+    "type": "Navis Sans 700 + 종이 카드 + 형광펜 스와이프",
+    "cuts": {
+      "10": 5,
+      "15": 7,
+      "30": 13
+    },
+    "tempo": "어쿠스틱 90",
+    "colors": [
+      "#F3EBDD",
+      "#2E2A24",
+      "#F2D84B"
+    ],
+    "moves": [
+      "stack",
+      "tilt",
+      "pan",
+      "grain",
+      "kinetic"
+    ],
+    "framing": "CSS paper texture (inline gradients/feTurbulence), polaroid frames + CSS tape strips; damped spring drop with ±2.5° rotation; in-frame micro drift 1→1.04; acoustic 90 BPM; cuts 5/7/13; preview menu: 쿠키 (dessert), real facts only",
+    "transitions": "Primary 70%: card stack-on 500ms damped spring cubic-bezier(0.34,1.4,0.64,1), overshoot ≤6%; secondary 30%: card peel-off 350ms cubic-bezier(0.55,0,1,0.45)",
+    "typography": "Navis Sans 700 on paper cards + highlighter swipe 300ms left→right behind words; main ≥52px, captions ≥36px",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": "Navis Hand Pen",
+    "concepts": [
+      "review-roundup"
+    ],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 1
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 1
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 1
+      }
+    }
+  }
+}

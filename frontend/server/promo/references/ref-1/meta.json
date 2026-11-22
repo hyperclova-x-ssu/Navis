@@ -43,5 +43,6 @@
         "max": 5
       }
     }
-  }
+  },
+  "presentation": "chat-countdown"
 }

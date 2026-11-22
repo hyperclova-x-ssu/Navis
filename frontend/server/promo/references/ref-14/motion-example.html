@@ -1,0 +1,57 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><style>
+html,body{margin:0;padding:0}#stage{position:relative;width:1080px;height:1920px;overflow:hidden;--bg:#F2EEE6;--fg:#141414;--accent:#B5462F;background:var(--bg);font-family:"Navis Sans",sans-serif}
+.scene{position:absolute;inset:0;background:var(--bg);visibility:hidden;overflow:hidden}
+.scene:before,.scene:after{content:"";position:absolute;background:var(--accent);display:block}
+.frame,.extra,.third,.background{position:absolute;overflow:hidden}
+.extra,.third,.background{display:none}.background{inset:-150px;filter:blur(16px);transform:translateX(var(--back))}
+.frame img,.extra img,.third img,.background img{height:100%;width:100%;object-fit:cover;display:block}
+.frame{transform:translate(var(--slide),var(--lift)) rotate(var(--turn));clip-path:var(--clip)}
+.frame img{transform:translate(var(--pan),var(--up)) scale(var(--zoom))}
+.extra img{transform:translate(var(--back),var(--down)) scale(1.14)}
+.third{transform:translateY(var(--up))}
+.caption{position:absolute;z-index:7;left:84px;width:912px;box-sizing:border-box;background:var(--caption-bg);color:white;
+  padding:22px 30px;text-align:center;margin:0;font-size:88px;font-weight:760;line-height:1.12;white-space:normal;word-break:keep-all}
+.frame{inset:520px 125px 275px;border-radius:50% 50% 4px 4px/27% 27% 4px 4px}.caption{top:230px;font-size:114px;font-weight:900;text-align:left;padding:20px;background:var(--bg);color:var(--fg)}
+
+</style></head><body><main id="stage">
+    <section class="scene" data-scene="s1">
+      <div class="background"><img data-photo="cafe-pumpkin-einspanner-01" src="assets/photos/cafe-pumpkin-einspanner-01.jpg" alt=""></div><div class="frame"><img data-photo="cafe-pumpkin-einspanner-01" src="assets/photos/cafe-pumpkin-einspanner-01.jpg" alt=""></div><div class="extra"><img data-photo="cafe-pumpkin-einspanner-02" src="assets/photos/cafe-pumpkin-einspanner-02.jpg" alt=""></div><div class="third"><img data-photo="cafe-pumpkin-einspanner-03" src="assets/photos/cafe-pumpkin-einspanner-03.jpg" alt=""></div>
+      <p class="caption" data-text="t1">단호박 크림 라떼</p>
+    </section>
+    <section class="scene" data-scene="s2">
+      <div class="background"><img data-photo="cafe-pumpkin-einspanner-02" src="assets/photos/cafe-pumpkin-einspanner-02.jpg" alt=""></div><div class="frame"><img data-photo="cafe-pumpkin-einspanner-02" src="assets/photos/cafe-pumpkin-einspanner-02.jpg" alt=""></div><div class="extra"><img data-photo="cafe-pumpkin-einspanner-03" src="assets/photos/cafe-pumpkin-einspanner-03.jpg" alt=""></div><div class="third"><img data-photo="cafe-pumpkin-einspanner-01" src="assets/photos/cafe-pumpkin-einspanner-01.jpg" alt=""></div>
+      <p class="caption" data-text="t2">단호박 크림 라떼</p>
+    </section>
+    <section class="scene" data-scene="s3">
+      <div class="background"><img data-photo="cafe-pumpkin-einspanner-03" src="assets/photos/cafe-pumpkin-einspanner-03.jpg" alt=""></div><div class="frame"><img data-photo="cafe-pumpkin-einspanner-03" src="assets/photos/cafe-pumpkin-einspanner-03.jpg" alt=""></div><div class="extra"><img data-photo="cafe-pumpkin-einspanner-01" src="assets/photos/cafe-pumpkin-einspanner-01.jpg" alt=""></div><div class="third"><img data-photo="cafe-pumpkin-einspanner-02" src="assets/photos/cafe-pumpkin-einspanner-02.jpg" alt=""></div>
+      <p class="caption" data-text="t3">단호박 크림 라떼</p>
+    </section></main><script>
+const scenes=[...document.querySelectorAll('.scene')];
+const starts=[0,1.1,2.36], L=4, style="magazine";
+const ease=x=>x*x*(3-2*x), decay=x=>1-Math.pow(1-x,3), bounded=x=>Math.min(1,Math.max(0,x));
+window.__duration=L;
+window.__onFrame=t=>{
+  const i=t>=starts[2]?2:t>=starts[1]?1:0;
+  const u=bounded((t-starts[i])/((starts[i+1]??L)-starts[i])), p=ease(u);
+  const enter=decay(bounded(u*4)), dir=i%2?-1:1; let pan=(.5-p)*132*dir, up=(.5-p)*48, zoom=1.14+p*.035;
+  let slide=0, lift=0, turn=0, clip='inset(0)', back=-(.5-p)*92, light=-240+p*480;
+  switch(style){
+    case 'beat-cut':zoom=1.12+Math.floor(u*3)*.035;pan=(.5-p)*170*dir;slide=i?dir*(1-enter)*125:0;break;
+    case 'lens':zoom=1.235-.195*p;pan=(1-p)*85*dir;back=-pan*.8;break;
+    case 'sticker':zoom=1.10+p*.06;clip='circle('+Math.round(59+enter*19)+'% at 50% 52%)';lift=(1-enter)*75-8*Math.sin(u*12);break;
+    case 'split-duo':slide=dir*(1-enter)*95;up=90*(.5-p);pan=58*(.5-p);back=-pan;break;
+    case 'scrapbook':lift=(1-enter)*127;turn=dir*(2.5-2.1*enter);pan=(.5-p)*108;break;
+    case 'ticker':slide=dir*(1-enter)*90;pan=13*dir+(1-p)*122;break;
+    case 'timeline':slide=dir*(1-enter)*105;turn=dir*(1-enter)*2;break;
+    case 'magazine':clip='inset('+Math.round(6-6*enter)+'% 0 0 0 round 42% 42% 1% 1%)';up=(.5-p)*102;pan=0;break;
+    case 'menu-board':clip='inset(0 '+Math.round((1-enter)*26)+'% 0 0)';pan=(.5-p)*100;break;
+    case 'film':lift=(.5-p)*112;up=(.5-p)*125;break;
+    case 'parallax':slide=(.5-p)*132;pan=(p-.5)*58;zoom=1.14+p*.08;break;
+    case 'moody-night':zoom=1.08+p*.09;pan=(.5-p)*84;up=(p-.5)*74;break;
+  }
+  for(let n=0;n<scenes.length;n++) scenes[n].style.visibility=n===i?'visible':'hidden';
+  const s=scenes[i].style;
+  for(const [k,v] of Object.entries({slide:slide+'px',lift:lift+'px',turn:turn+'deg',clip,pan:pan+'px',up:up+'px',
+    down:-up+'px',zoom,back:back+'px',light:light+'px',progress:Math.max(.01,t/L),'caption-bg':i%2?'#28221b':'#1b1816'})) s.setProperty('--'+k,v);
+};
+window.__onFrame(0);</script></body></html>

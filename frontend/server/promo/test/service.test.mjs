@@ -196,21 +196,23 @@ test('출처 바꾸기: example-7·example-4', async () => {
   }
 });
 
-test('API-20 defaults to the cafe storefront and six photos per best-selling menu', async () => {
+test('API-20 defaults to the café storefront and the approved menu photos', async () => {
   const app = await host({ env: {} });
   try {
     const cat = await (await app.get('/api/promo/catalog')).json();
     assert.equal(cat.sourceId, 'cafe');
     assert.equal(cat.store.name, '안숭잘부 카페');
     assert.equal(cat.store.exteriorUrl, '/api/promo/photos/cafe-storefront');
-    assert.equal(cat.menus.length, 24);
-    assert.deepEqual(Object.fromEntries(cat.menus.filter(m => m.photoIds.length).map(m => [m.menuId, m.photoIds.length])), {
-      'm-americano': 6, 'm-cafe-latte': 6, 'm-vanilla-latte': 6,
-      'm-saltbread': 6, 'm-dolce-latte': 6, 'm-deep-choco': 6,
-    });
-    assert.equal(cat.photos.length, 36);
+    assert.equal(cat.menus.length, 25);
+    const perMenu = cat.menus.map(menu => menu.photoIds.length).sort((a, b) => a - b);
+    assert.deepEqual(perMenu, [...Array(14).fill(5), 6, 9, 9, 9, ...Array(6).fill(10), 14]);
+    assert.equal(cat.photos.length, 177);
     assert.ok(cat.photos.every(p => p.menuId));
-    for (const url of [cat.store.exteriorUrl, cat.photos[0].url, '/api/promo/photos/cafe-interior-01', '/api/promo/photos/cafe-interior-02']) {
+    for (const url of [cat.store.exteriorUrl, '/api/promo/photos/cafe-americano-02', '/api/promo/photos/cafe-americano-d409-02',
+      '/api/promo/photos/cafe-yuja-chamomile-05', '/api/promo/photos/cafe-interior-01', '/api/promo/photos/cafe-interior-02',
+      '/api/promo/photos/cafe-strawberry-cake-01', '/api/promo/photos/cafe-strawberry-cake-10',
+      '/api/promo/photos/cafe-saltbread-07', '/api/promo/photos/cafe-bagel-plain-08',
+      '/api/promo/photos/cafe-basque-cake-07', '/api/promo/photos/cafe-cookie-choco-09']) {
       const res = await app.get(url);
       assert.equal(res.status, 200, url);
       assert.equal(res.headers.get('content-type'), 'image/jpeg');
@@ -459,7 +461,7 @@ test('다시 만들기(API-24): 같은 입력, retryOf, 캐시로 look 호출 �
   } finally { await app.close(); }
 });
 
-test('캐시: 같은 사진 두 번째는 호출 없음, 고르지 않은 사진은 읽지 않음·보내지 않음', async () => {
+test('같은 입력으로 새로 만들면 새 대본과 장면을 만들고 사진 분석만 재사용한다', async () => {
   const reads = [];
   const { createExamplePhotoSource } = await import('../photo-source.mjs');
   const real = createExamplePhotoSource();
@@ -474,11 +476,14 @@ test('캐시: 같은 사진 두 번째는 호출 없음, 고르지 않은 사진
     assert.ok(runner.calls.filter(c => c.kind !== 'look').every(c => c.images === 0));
     assert.deepEqual([...new Set(reads)].sort(), [...INPUT.photoIds, 'store-exterior'].sort());
     assert.ok(!reads.some(id => ['fin-06', 'fin-07', 'fin-08', 'fin-09', 'fin-10'].includes(id)));
-    const { jobId: second } = await (await make(app, { ...INPUT, moods: ['lively'] })).json();
-    await app.waitDone(second);
+    const { jobId: second } = await (await make(app, INPUT)).json();
+    assert.notEqual(second, jobId);
+    const repeated = await app.waitDone(second);
+    assert.equal(repeated.status, 'done');
+    assert.match(repeated.result.fileUrl, new RegExp(`/jobs/${second}/`));
     assert.equal(runner.calls.filter(c => c.kind === 'look').length, 5);
-    const story = JSON.parse(await readFile(join(app.dir, 'jobs', second, 'story.json'), 'utf8'));
-    assert.equal(story.musicTrackId, 'upbeat-joyfully');
+    assert.equal(runner.calls.filter(c => c.kind === 'story').length, 2);
+    assert.equal(runner.calls.filter(c => c.kind === 'code').length, 2);
   } finally { await app.close(); }
 });
 

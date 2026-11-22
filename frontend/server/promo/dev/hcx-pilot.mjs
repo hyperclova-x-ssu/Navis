@@ -18,6 +18,22 @@ import { validateSchema } from '../schema.mjs';
 // D-326 Q7: at most 50 real NAVER calls = up to 40 photo-look calls (39 photos + 1 spare) and up to 10 scene calls.
 // A failed or retried call counts. Every later input of a stage keeps one first call, so a stage never starves.
 export const CAPS = Object.freeze({ look: 40, scenes: 10, total: 50 });
+// This ordered D-326 cohort is independent of the café widget's growing photo catalog.
+const PILOT_PHOTO_IDS = Object.freeze([
+  'cafe-americano-01', 'cafe-americano-02', 'cafe-americano-03',
+  'cafe-americano-04', 'cafe-americano-05', 'cafe-americano-06',
+  'cafe-cafe-latte-01', 'cafe-cafe-latte-02', 'cafe-cafe-latte-03',
+  'cafe-cafe-latte-04', 'cafe-cafe-latte-05', 'cafe-cafe-latte-06',
+  'cafe-vanilla-latte-01', 'cafe-vanilla-latte-02', 'cafe-vanilla-latte-03',
+  'cafe-vanilla-latte-04', 'cafe-vanilla-latte-05', 'cafe-vanilla-latte-06',
+  'cafe-saltbread-01', 'cafe-saltbread-02', 'cafe-saltbread-03',
+  'cafe-saltbread-04', 'cafe-saltbread-05', 'cafe-saltbread-06',
+  'cafe-dolce-latte-01', 'cafe-dolce-latte-02', 'cafe-dolce-latte-03',
+  'cafe-dolce-latte-04', 'cafe-dolce-latte-05', 'cafe-dolce-latte-06',
+  'cafe-deep-choco-01', 'cafe-deep-choco-02', 'cafe-deep-choco-03',
+  'cafe-deep-choco-04', 'cafe-deep-choco-05', 'cafe-deep-choco-06',
+  'cafe-storefront', 'cafe-interior-01', 'cafe-interior-02',
+]);
 const STOP = 'PILOT_BUDGET_EXHAUSTED';
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 export const inputFingerprint = ({ prompt, schema, images = [] }) => sha256(JSON.stringify({
@@ -109,7 +125,7 @@ async function screenshot(capture, args) {
 
 export function sceneInputs(references, photoSource) {
   const { store } = photoSource.listCatalog();
-  return REFERENCE_IDS.map(id => {
+  return REFERENCE_IDS.filter(id => /^ref-[1-6]$/.test(id)).sort().map(id => {
     const ref = references.refs.get(id);
     if (!ref?.exampleStory || !ref.exampleHtml) throw new Error('PILOT_REFERENCE_MISSING');
     const story = JSON.parse(ref.exampleStory);
@@ -186,8 +202,8 @@ export async function runPilot({
   if (!transport?.available) throw new Error('PILOT_CLOVA_UNAVAILABLE');
   const cafe = createExamplePhotoSource({ sourceId: 'cafe' });
   const example = createExamplePhotoSource();
-  const photoIds = cafe.listPhotoIds();
-  if (photoIds.length !== 39 || !references.rules || !references.contract) throw new Error('PILOT_INPUTS_INVALID');
+  const photoIds = PILOT_PHOTO_IDS;
+  if (photoIds.some(id => !cafe.photoInfo(id)) || !references.rules || !references.contract) throw new Error('PILOT_INPUTS_INVALID');
   // A narrowed run (one stage, named photos, a lower cap) is checked before any call; the default stays the full pilot.
   const wantLook = only.includes('look');
   const wantScenes = only.includes('scenes');

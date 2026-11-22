@@ -72,7 +72,7 @@ export function createHcxRunner({ stage = 'story', transport, retries = 1, befor
   const maxTokens = look ? LOOK_MAX_TOKENS : stage === 'scenes' ? SCENE_MAX_TOKENS : STORY_MAX_TOKENS;
   return {
     model,
-    async run({ prompt, images, schema, timeoutMs = 120000, signal }) {
+    async run({ prompt, images, schema, temperature, seed, timeoutMs = 120000, signal }) {
       const bytes = images?.[0]?.bytes;
       if (look ? (images?.length !== 1 || !(bytes instanceof Uint8Array) || !bytes.length || bytes.length > MAX_IMAGE_BYTES) : images?.length) {
         throw new PromoError('AI_BAD_OUTPUT');
@@ -93,7 +93,7 @@ export function createHcxRunner({ stage = 'story', transport, retries = 1, befor
         model,
         messages: [{ role: 'user', content }],
         maxTokens,
-        ...(look ? { jsonResponse: true } : { responseFormat: { type: 'json', schema: structuredSchema(schema) } }),
+        ...(look ? { jsonResponse: true } : { temperature, seed, responseFormat: { type: 'json', schema: structuredSchema(schema) } }),
         signal: requestSignal,
         retryRateLimit: false,
       };

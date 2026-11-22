@@ -125,13 +125,77 @@ export async function measureLuma(ffmpeg, file) {
   return [...res.stdout.matchAll(/lavfi\.signalstats\.YAVG=([\d.]+)/g)].map(m => Number(m[1]));
 }
 
+function visiblyChanged(left, right) {
+  let total = 0;
+  let moved = 0;
+  for (let i = 0; i < left.length; i += 3) {
+    const delta = Math.max(Math.abs(left[i] - right[i]), Math.abs(left[i + 1] - right[i + 1]),
+      Math.abs(left[i + 2] - right[i + 2]));
+    total += delta;
+    moved += Number(delta >= 14);
+  }
+  const pixels = left.length / 3;
+  return total >= pixels * 3 && moved >= pixels * 0.06;
+}
+
+/** Compare against the last meaningful frame so gradual pans can accumulate but compression noise does not. */
+export function detectStaticFrames(frames, { fps, lengthSec, maxSeconds = 1.5 }) {
+  if (!frames.length) throw new PromoError('ENCODE_FAILED');
+  const violations = [];
+  let anchor = 0;
+  function checkEnd(end) {
+    const t = anchor / fps;
+    if (end - t <= maxSeconds + 1e-6) return;
+    violations.push({ rule: 'video.still', t, end,
+      limit: `visible pixel movement within ${maxSeconds}s`,
+      actual: `nearly unchanged from ${t.toFixed(2)}s to ${end.toFixed(2)}s` });
+  }
+  for (let i = 1; i < frames.length; i++) {
+    if (visiblyChanged(frames[anchor], frames[i])) {
+      checkEnd(i / fps);
+      anchor = i;
+    }
+  }
+  checkEnd(lengthSec);
+  return violations;
+}
+
+export async function measureStaticVideo(ffmpeg, file, lengthSec, maxSeconds) {
+  const width = 96; const height = 170; const fps = 8;
+  const frameBytes = width * height * 3;
+  const child = spawn(ffmpeg, [
+    '-hide_banner', '-loglevel', 'error', '-i', file, '-map', '0:v:0', '-an',
+    '-vf', `fps=${fps},scale=${width}:${height}:flags=area,format=rgb24`,
+    '-frames:v', String(Math.ceil(lengthSec * fps)), '-f', 'rawvideo', 'pipe:1',
+  ], { stdio: ['ignore', 'pipe', 'ignore'], signal: AbortSignal.timeout(35_000) });
+  const done = new Promise(resolve => {
+    child.once('error', () => resolve(-1));
+    child.once('close', resolve);
+  });
+  const frames = [];
+  let partial = Buffer.alloc(0);
+  for await (const chunk of child.stdout) {
+    const bytes = partial.length ? Buffer.concat([partial, chunk]) : chunk;
+    const fullBytes = bytes.length - bytes.length % frameBytes;
+    for (let i = 0; i < fullBytes; i += frameBytes) frames.push(bytes.subarray(i, i + frameBytes));
+    partial = bytes.subarray(fullBytes);
+  }
+  if (await done !== 0 || partial.length || frames.length < Math.floor(lengthSec * fps) - 1) {
+    throw new PromoError('ENCODE_FAILED');
+  }
+  return detectStaticFrames(frames, { fps, lengthSec, maxSeconds });
+}
+
 /** 녹화 뒤 확인(12.9의 5): 길이·해상도·코덱 + 번쩍임. */
-export async function checkVideo({ ffmpeg, file, lengthSec, rules, width = 720, height = 1280, expectAudio = true }) {
+export async function checkVideo({ ffmpeg, file, lengthSec, rules, width = 720, height = 1280, expectAudio = true, requireMotion = true }) {
   const info = await probeVideo(ffmpeg.ffprobe, file);
   const v = [];
   if (!(Math.abs(info.durationSec - lengthSec) <= 0.1)) v.push({ rule: 'video.duration', limit: `${lengthSec}±0.1`, actual: info.durationSec });
   if (info.width !== width || info.height !== height || info.videoCodec !== 'h264' || (expectAudio && info.audioCodec !== 'aac')) v.push({ rule: 'video.duration', limit: `${width}x${height} h264${expectAudio ? '+aac' : ''}`, actual: `${info.width}x${info.height} ${info.videoCodec}+${info.audioCodec}` });
   const luma = await measureLuma(ffmpeg.ffmpeg, file);
   v.push(...flashViolations(luma, rules.flash));
+  if (requireMotion && !v.some(item => item.rule === 'video.duration')) {
+    v.push(...await measureStaticVideo(ffmpeg.ffmpeg, file, lengthSec, rules.still?.maxSec));
+  }
   return { info, violations: v };
 }

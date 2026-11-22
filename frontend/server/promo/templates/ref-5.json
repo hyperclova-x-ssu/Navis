@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "referenceId": "ref-5",
+  "author": "claude-sonnet-4-6",
+  "html": "<!doctype html><html lang=\"{{LOCALE}}\"><head><meta charset=\"utf-8\"><style>{{BASE_STYLE}}\n:root{--c-morning:#FFF2CC;--c-noon:#FFFFFF;--c-afternoon:#FBEAED;--c-evening:#EAF0FC;--c-dark:#1A1A2E;--c-mid:#4A4A6A;--c-accent:#C97B5A;--r-card:32px;--w-card:840px;--tl-x:84px;--slide:280ms;}\n*{box-sizing:border-box;margin:0;padding:0;}\nbody{width:1080px;height:1920px;overflow:hidden;background:var(--c-morning);font-family:'Helvetica Neue',Arial,sans-serif;}\n#stage{position:relative;width:1080px;height:1920px;}\n.scene{position:absolute;inset:0;width:1080px;height:1920px;display:flex;flex-direction:column;align-items:center;opacity:0;pointer-events:none;transition:background 400ms ease;}\n.scene.active{opacity:1;pointer-events:auto;}\n.scene.s-morning{background:var(--c-morning);}\n.scene.s-noon{background:var(--c-noon);}\n.scene.s-afternoon{background:var(--c-afternoon);}\n.scene.s-evening{background:var(--c-evening);}\n.scene.end{background:var(--c-evening);}\n.label{position:absolute;top:120px;left:60px;font-size:36px;font-weight:800;letter-spacing:0.04em;padding:10px 24px;border-radius:40px;z-index:10;}\n.scene.s-morning .label{background:#E8C84A;color:#3A2800;}\n.scene.s-noon .label{background:#D4D4D4;color:#222;}\n.scene.s-afternoon .label{background:#E8A0A8;color:#3A0010;}\n.scene.s-evening .label{background:#8AAAD8;color:#0A1A3A;}\n.mat{position:absolute;top:300px;left:calc(50% - 420px);width:840px;height:1100px;border-radius:var(--r-card);overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.18);transform:translateX(120px);opacity:0;transition:transform var(--slide) cubic-bezier(.22,.8,.36,1),opacity var(--slide) ease;}\n.scene.active .mat{transform:translateX(0);opacity:1;}\n.mat img{width:100%;height:100%;object-fit:cover;animation:kb 8s ease-in-out infinite alternate;}\n@keyframes kb{from{transform:scale(1);}to{transform:scale(1.05);}}\n.copy{position:absolute;bottom:60px;left:60px;right:60px;z-index:10;}\n.cap{font-size:64px;font-weight:700;color:var(--c-dark);line-height:1.1;max-width:960px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}\n.scene.s-morning .cap{color:#3A2800;}\n.scene.s-noon .cap{color:#222222;}\n.scene.s-afternoon .cap{color:#3A0010;}\n.scene.s-evening .cap{color:#0A1A3A;}\n.timeline{position:absolute;left:var(--tl-x);top:200px;bottom:200px;width:4px;display:flex;flex-direction:column;align-items:center;gap:0;z-index:20;}\n.tl-track{flex:1;width:4px;background:rgba(0,0,0,0.10);border-radius:2px;position:relative;overflow:hidden;}\n.tl-fill{position:absolute;top:0;left:0;width:100%;background:var(--c-dark);border-radius:2px;transition:height 240ms ease;}\n.tl-dot{width:16px;height:16px;border-radius:50%;background:#ccc;border:3px solid #fff;box-shadow:0 0 0 2px #aaa;flex-shrink:0;transition:background 240ms,box-shadow 240ms;z-index:2;}\n.tl-dot.active{background:var(--c-dark);box-shadow:0 0 0 3px var(--c-accent);}\n.scene.end .mat{width:360px;height:480px;top:auto;bottom:280px;left:60px;border-radius:24px;box-shadow:0 12px 32px rgba(0,0,0,0.14);}\n.scene.end .copy{position:absolute;top:300px;left:60px;right:60px;bottom:auto;}\n.end-name{font-size:96px;font-weight:900;color:var(--c-dark);font-family:Georgia,'Times New Roman',serif;line-height:1;margin-bottom:28px;letter-spacing:-0.02em;}\n.end-cta{font-size:52px;font-weight:600;color:var(--c-mid);margin-bottom:20px;}\n.end-location{font-size:38px;font-weight:400;color:var(--c-mid);opacity:0.8;}\n.scene:nth-child(2) .mat{transform:translateX(-120px);opacity:0;}\n.scene:nth-child(2).active .mat{transform:translateX(0);opacity:1;}\n.scene:nth-child(4) .mat{transform:translateX(100px) translateY(20px);opacity:0;}\n.scene:nth-child(4).active .mat{transform:translateX(0) translateY(0);opacity:1;}\n.scene:nth-child(6) .mat{transform:translateX(-100px) translateY(-20px);opacity:0;}\n.scene:nth-child(6).active .mat{transform:translateX(0) translateY(0);opacity:1;}\n.deco-arc{position:absolute;top:0;right:0;width:420px;height:420px;border-radius:0 0 0 420px;opacity:0.18;pointer-events:none;}\n.scene.s-morning .deco-arc{background:#E8C84A;}\n.scene.s-noon .deco-arc{background:#BBBBBB;}\n.scene.s-afternoon .deco-arc{background:#E8A0A8;}\n.scene.s-evening .deco-arc{background:#8AAAD8;}\n.scene.end .deco-arc{background:#8AAAD8;}\n.deco-circle{position:absolute;bottom:160px;right:60px;width:200px;height:200px;border-radius:50%;opacity:0.10;pointer-events:none;}\n.scene.s-morning .deco-circle{background:#C97B5A;}\n.scene.s-noon .deco-circle{background:#888;}\n.scene.s-afternoon .deco-circle{background:#C97B5A;}\n.scene.s-evening .deco-circle{background:#4A4A6A;}\n</style></head><body><main id=\"stage\">{{SCENES}}</main>{{PLAYER}}</body></html>",
+  "variants": [
+    {
+      "id": "warm-10",
+      "tone": "warm",
+      "lengthSec": 10,
+      "cta": {
+        "ko": "오늘도 찾아오세요",
+        "en": "Come visit us today",
+        "zh-Hans": "欢迎今天光临",
+        "zh-Hant": "歡迎今天光臨"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "clean-10",
+      "tone": "clean",
+      "lengthSec": 10,
+      "cta": {
+        "ko": "직접 확인해보세요",
+        "en": "See it for yourself",
+        "zh-Hans": "欢迎亲身体验",
+        "zh-Hant": "歡迎親身體驗"
+      },
+      "slots": [
+        "storeName",
+        "cta",
+        "menuName",
+        "feature",
+        "price",
+        "limitedOffer"
+      ]
+    },
+    {
+      "id": "warm-15",
+      "tone": "warm",
+      "lengthSec": 15,
+      "cta": {
+        "ko": "함께해요, 오늘도",
+        "en": "Join us again today",
+        "zh-Hans": "今天也欢迎您",
+        "zh-Hant": "今天也歡迎您"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "clean-15",
+      "tone": "clean",
+      "lengthSec": 15,
+      "cta": {
+        "ko": "공간을 느껴보세요",
+        "en": "Experience the space",
+        "zh-Hans": "感受这里的空间",
+        "zh-Hant": "感受這裡的空間"
+      },
+      "slots": [
+        "menuName",
+        "feature",
+        "price",
+        "storeName",
+        "limitedOffer",
+        "cta"
+      ]
+    },
+    {
+      "id": "warm-30",
+      "tone": "warm",
+      "lengthSec": 30,
+      "cta": {
+        "ko": "매일 기다리고 있어요",
+        "en": "We are here every day",
+        "zh-Hans": "每天都在等候您",
+        "zh-Hant": "每天都在等候您"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "clean-30",
+      "tone": "clean",
+      "lengthSec": 30,
+      "cta": {
+        "ko": "하루를 함께해요",
+        "en": "Share your day with us",
+        "zh-Hans": "与我们共度一天",
+        "zh-Hant": "與我們共度一天"
+      },
+      "slots": [
+        "storeName",
+        "cta",
+        "menuName",
+        "feature",
+        "price",
+        "limitedOffer"
+      ]
+    }
+  ]
+}

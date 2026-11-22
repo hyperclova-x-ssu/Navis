@@ -10,6 +10,7 @@ const CONTROL = /[\p{Cc}\p{Cf}\uFFFD]/u; // \n은 따로 허용. U+FFFD(깨진 �
 const HANGUL = /[ᄀ-ᇿ㄰-㆏ꥠ-꥿가-힯ힰ-퟿]/u;
 const HAN = /\p{Script=Han}/u;
 const SCRIPTS = { Hangul: HANGUL, Han: HAN };
+const REF1_REACTIONS = ['😮', '👀', '🏃', '😳', '🙌'];
 const EPS = 0.011;
 
 export function makeCounter(rules) {
@@ -101,7 +102,10 @@ export function checkStory(story, ctx) {
     const maxLines = t.textId === 'store-location' ? rules.ending.locationMaxLines : t.textId === 'store-name' ? rules.ending.storeNameMaxLines : role.maxLines;
     const lines = linesNeeded(t.text, per, s => count(s, locale));
     if (lines > maxLines) add(`${p}.text`, 'text.length', `${maxLines}×${per}`, `${lines} lines`);
-    if (EMOJI.test(t.text)) add(`${p}.text`, 'text.emoji', 'none', 'emoji');
+    const sceneIndex = story.chatCountdown?.reactions?.indexOf(t.textId) ?? -1;
+    const reaction = referenceId === 'ref-1' && sceneIndex >= 0 && t.role === 'label' && t.text === REF1_REACTIONS[sceneIndex]
+      && sceneRefs.length === 1 && sceneRefs[0] === story.scenes[sceneIndex]?.sceneId;
+    if (EMOJI.test(t.text) && !reaction) add(`${p}.text`, 'text.emoji', 'none', 'emoji');
     if (CONTROL.test(t.text.replaceAll('\n', ''))) add(`${p}.text`, 'text.control', 'none', 'control');
     if (!fixed) {
       const lang = rules.languages[locale] || {};
@@ -162,11 +166,13 @@ function checkSceneFit(story, ctx, texts, add) {
     const photos = (s.photoIds || []).filter(id => id !== exterior);
     const desc = id => { const m = getMeta(metas, id); return `${id}:${m?.menuShown ?? '?'}/${m?.amount ?? '?'}`; };
     const said = own.map(t => t.text).join('\n');
-    if (fit.soldOut?.test(said)) {
+    // D-440 permits using a selected fallback photo in the fixed, dramatized ref-1 countdown.
+    const checkStockPhoto = story.referenceId !== 'ref-1' || !story.chatCountdown?.photoFitFallbackScenes?.includes(s.sceneId);
+    if (checkStockPhoto && fit.soldOut?.test(said)) {
       const full = photos.filter(id => getMeta(metas, id)?.amount === 'many');
       if (full.length) add(`scenes[${i}].photoIds`, 'story.photoFit', 'sold-out scene: in-hand, empty or few-item photo (not a full showcase)', full.map(desc).join(','));
     }
-    if (photos.length && fit.remaining?.test(said)) { // 외관만 있는 장면(가게 앞에서 'N개 남음')은 허용
+    if (checkStockPhoto && photos.length && fit.remaining?.test(said)) { // 외관만 있는 장면(가게 앞에서 'N개 남음')은 허용
       const ok = photos.some(id => { const m = getMeta(metas, id); return m?.menuShown === 'main' && m?.amount !== 'none'; });
       if (!ok) add(`scenes[${i}].photoIds`, 'story.photoFit', 'count-left scene: photo whose main subject is the menu', photos.map(desc).join(','));
     }

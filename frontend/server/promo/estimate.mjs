@@ -21,7 +21,7 @@ export const DEFAULT_BASE = Object.freeze({
     code: { inA: 10000, inPerN: 320, outA: 2500, outPerL: 260 },
     fix: { inA: 14000, inPerN: 320, inPerL: 160, outA: 2500, outPerL: 260 },
   },
-  pricing: { model: 'claude-sonnet-5-5', inputUsdPerMTok: 2, outputUsdPerMTok: 10, source: 'https://platform.claude.com/docs/en/about-claude/pricing', checkedOn: '2026-11-10' },
+  pricing: { model: 'claude-opus-5-5', inputUsdPerMTok: 4, outputUsdPerMTok: 20, source: 'https://platform.claude.com/docs/en/about-claude/pricing', checkedOn: '2026-11-22' },
   krwPerUsd: 1400,
   fxCheckedOn: '2026-11-10',
 });

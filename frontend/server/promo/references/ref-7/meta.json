@@ -1,0 +1,120 @@
+{
+  "id": "ref-7",
+  "version": "1",
+  "nameKey": "promo.ref.ref-7.name",
+  "cardAspect": "9:16",
+  "previewFrom": 2.1,
+  "previewTo": 6.9,
+  "posterAt": 6.2,
+  "moods": [
+    "lively",
+    "warm"
+  ],
+  "concepts": [
+    "new-item",
+    "todays-deal"
+  ],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 5,
+        "max": 5
+      },
+      "photoSlots": {
+        "max": 2
+      }
+    },
+    "15": {
+      "sceneCount": {
+        "min": 5,
+        "max": 5
+      },
+      "photoSlots": {
+        "max": 3
+      }
+    },
+    "30": {
+      "sceneCount": {
+        "min": 5,
+        "max": 5
+      },
+      "photoSlots": {
+        "max": 5
+      }
+    }
+  },
+  "posterScene": "s2",
+  "motion": {
+    "id": "ref-7",
+    "key": "beat-cut",
+    "name": "비트 컷",
+    "order": 1,
+    "energy": "fast",
+    "previewMenuId": "m-coldbrew",
+    "layout": "풀블리드, 고대비, 진한 색",
+    "motion": "박자에 하드컷, 0.25s 펀치인(1→1.12) 후 정지, 한 사진 안에서 와이드→미디엄→접사",
+    "transition": "하드컷 + 가로 휩쓸기(140ms)",
+    "type": "초대형 굵은 고딕, 박자당 1~4자",
+    "cuts": {
+      "10": 6,
+      "15": 10,
+      "30": 18
+    },
+    "tempo": "업비트 120",
+    "colors": [
+      "#0B0B0B",
+      "#FFFFFF",
+      "#FF3B1F"
+    ],
+    "moves": [
+      "cut",
+      "punch",
+      "whip",
+      "kinetic",
+      "ramp"
+    ],
+    "framing": "Full-bleed, high contrast, deep color; hard cuts on beats (upbeat 120 BPM); 0.25s punch-in 1→1.12 then hold; wide→medium→macro crops inside one photo; cuts 6/10/18 as visual beats (minSceneSec 0.45 override allowed); preview menu: 콜드브루 (drink), real facts only",
+    "transitions": "Primary 70%: hard cut snapped to beat ±60ms (step, 0ms); secondary 30%: horizontal whip 140ms cubic-bezier(0.7,0,0.3,1) with 12px motion blur, no text mid-whip",
+    "typography": "Navis Sans 900 oversized, tracking -0.02em, 1–4 chars per beat; main/hook ≥52px; hard-cut entry exempt from 80–320ms rule; 0.5–0.9s cuts carry 0–4 chars",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": null,
+    "concepts": [
+      "todays-deal"
+    ],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 0.45
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 0.45
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 0.45
+      }
+    }
+  }
+}

@@ -68,10 +68,30 @@ export const STORY_SCHEMA = {
 export const SCENE_SCHEMA = { type: 'object', additionalProperties: false, required: ['html'], properties: { html: { type: 'string', minLength: 1, maxLength: 70000 } } };
 
 /** 사진이 등록된 메뉴 이름(영어)을 데이터로 넣는다. 메뉴가 주인공인지(menuShown)만 그 이름으로 판단한다. */
-export function photoMetaPrompt(menuName = '') { return fill(templates.photoMeta, { menuJson: json(menuName || 'unknown') }); }
+export function photoMetaPrompt(menuName = '', examples = []) {
+  const prompt = fill(templates.photoMeta, { menuJson: json(menuName || 'unknown') });
+  return examples.length ? `${prompt}\n\nValid example outputs (format only; extract observations from the current photo):\n${json(examples)}` : prompt;
+}
 
 const roleLimits = (rules, locale) => ROLES.filter(r => rules.roles[r]).map(r => `${r} ${locale === 'en' ? rules.roles[r].perLine.en : rules.roles[r].perLine.cjk}×${rules.roles[r].maxLines}`).join(', ');
 const roleSizes = rules => ROLES.filter(r => rules.roles[r]).map(r => `${r} ${rules.roles[r].fontPx}px`).join(', ');
+
+function exampleTiming(length, range) {
+  const count = range.sceneCount.min;
+  const minimums = Array.from({ length: count }, (_, i) => i === count - 1
+    ? range.endingSec : i === 0 ? range.minSceneSecFirst ?? range.minSceneSec : range.minSceneSec);
+  const available = length - minimums.reduce((sum, min) => sum + min, 0);
+  if (!Number.isFinite(available) || available < 0 || count < 2 || range.endingSec == null) return '';
+  const round = n => Math.round(n * 1000) / 1000;
+  let start = 0;
+  return json(minimums.map((min, i) => {
+    const end = i === count - 1 ? length
+      : i === count - 2 ? length - range.endingSec : round(start + min + available / (count - 1));
+    const scene = { start, duration: round(end - start) };
+    start = end;
+    return scene;
+  }));
+}
 
 /** ctx: {input, rules, range, store, photos[{photoId, menuName, width, height, meta}], exterior} */
 export function storyPrompt(ctx, rewrite) {
@@ -80,6 +100,7 @@ export function storyPrompt(ctx, rewrite) {
   const concepts = CONCEPTS.filter(c => input.concepts.includes(c)).map(c => `- ${conceptText[c]}`).join('\n');
   let text = fill(templates.story, {
     lengthSec: input.lengthSec, sceneMin: range.sceneCount.min, sceneMax: range.sceneCount.max, minSceneSec: range.minSceneSec, minSceneSecFirst: range.minSceneSecFirst ?? range.minSceneSec, endingSec: range.endingSec,
+    timingExample: exampleTiming(input.lengthSec, range),
     exteriorId: rules.photo.exteriorId, photoSlots: range.photoSlots, maxUses: rules.photo.maxUses,
     localeName: LOCALE_NAMES[input.locale], locale: input.locale, roleLimits: roleLimits(rules, input.locale),
     storeNameJson: json(store.name), storeLocationJson: json(store.location), referenceId: input.referenceId,
@@ -99,16 +120,25 @@ const photoList = ctx => json([...ctx.photos, ctx.exterior].map(p => ({ id: p.ph
 
 export function sceneCodePrompt(ctx, story) {
   const { rules, ref, contract } = ctx;
-  return fill(templates.sceneCode, {
-    contract, referenceId: ref.id, brief: ref.brief, exampleHtml: ref.exampleHtml, exampleStory: ref.exampleStory,
+  const creative = story.creative && ctx.designTemplate;
+  const prompt = fill(templates.sceneCode, {
+    contract, referenceId: ref.id, brief: creative ? creative.layout : ref.brief,
+    exampleInstruction: 'Example code that passes the checker (do NOT copy it; keep its rules and feeling, and make this video fit the plan below):',
+    exampleHtml: creative ? '' : ref.exampleHtml, exampleStory: creative ? '' : ref.exampleStory,
     safeX1: rules.safeBox.x1, safeX2: rules.safeBox.x2, safeY1: rules.safeBox.y1, safeY2: rules.safeBox.y2, minFontPx: rules.minFontPx,
     roleSizes: roleSizes(rules), storyJson: json(story), photosJson: photoList(ctx), lengthSec: story.lengthSec,
   });
+  if (!creative) return prompt;
+  const moves = Object.fromEntries(creative.moves.map(move => [move, ctx.vocabulary[move]]));
+  return `${prompt}\n\nClaude-authored design reference (the matching recipe is mandatory):\n${json(creative)}\n` +
+    `Use the designated motion recipe, direction, nonlinear easing and timing for each declared scene and in-scene edit beat. Main visual fills the frame at the hook; open directly on the design at high opacity. Use real mask/crop or panel change at in-scene editBeats. Avoid copying the same camera move. Mark independent moving background or decorative elements with data-motion-layer="overlay" or data-motion-layer="layout" (use stable unique ids). Keep unrelated movement on separate layers; use data-caption-block for adjacent text IDs which form one visual stack. Use only declared photos and exact captions; style Korean headings with the font slot only when there is one. Respect the approved 0.4s transition cap, photo zoom maximum 1.18 (1.25 for originals at least 1080px wide) and no linear motion. Actively move an image layer on the CTA while holding store name and other words stationary. Any style-specific ticker may show only declared text. Use paused WAAPI with explicit easing for every continuous move.\n` +
+    `Keep the page compact. Reuse markup classes and animation functions and return only the schema value.\nVocabulary: ${json(moves)}\nSelected mood and concept directions: ${json(ctx.visualDirections)}\nQuality metrics: ${ctx.motionMetrics}`;
 }
 
-export function sceneFixPrompt(ctx, story, previousHtml, violations) {
-  return fill(templates.sceneFix, {
+export function sceneFixPrompt(ctx, story, previousHtml, violations, attempt = 0) {
+  const prompt = fill(templates.sceneFix, {
     violationsJson: json(violations.slice(0, 60)), contract: ctx.contract, storyJson: json(story), photosJson: photoList(ctx), previousHtml,
     transitionMaxSec: ctx.rules?.transition?.maxSec ?? 0.4,
   });
+  return story.creative ? `${prompt}\nVisual retry seed: ${story.creative.seed}-${attempt}. For a motion violation choose a different approved direction, crop, or overlay for that shot. Preserve the shot timing, copy and required design.` : prompt;
 }

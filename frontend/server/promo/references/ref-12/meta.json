@@ -1,0 +1,115 @@
+{
+  "id": "ref-12",
+  "version": "1",
+  "nameKey": "promo.ref.ref-12.name",
+  "cardAspect": "9:16",
+  "previewFrom": 0,
+  "previewTo": 4,
+  "posterAt": 0.55,
+  "moods": [],
+  "concepts": [],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 7
+      },
+      "photoSlots": {
+        "max": 6
+      },
+      "minSceneSec": 1
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 10
+      },
+      "photoSlots": {
+        "max": 8
+      },
+      "minSceneSec": 1
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 16
+      },
+      "photoSlots": {
+        "max": 12
+      },
+      "minSceneSec": 1
+    }
+  },
+  "motion": {
+    "id": "ref-12",
+    "key": "ticker",
+    "name": "티커 헤드라인",
+    "order": 6,
+    "energy": "medium",
+    "previewMenuId": "m-saltbread",
+    "layout": "뉴스 하단 바, 빨강/검정, **실제 사실만** 흐르는 티커",
+    "motion": "빠른 푸시인, 티커 상시 이동",
+    "transition": "슬라이드 푸시, 바 와이프",
+    "type": "굵은 고딕 + 작은 티커",
+    "cuts": {
+      "10": 5,
+      "15": 8,
+      "30": 15
+    },
+    "tempo": "드라이빙 115",
+    "colors": [
+      "#0E0E0E",
+      "#FFFFFF",
+      "#E10600"
+    ],
+    "moves": [
+      "slide",
+      "wipe",
+      "kinetic",
+      "punch"
+    ],
+    "framing": "News lower bar red/black inside safe zone (y≤1620); ticker moves constantly carrying real facts only (replaces countdown); fast push-in on photos; driving 115 BPM; cuts 5/8/15; preview menu: 소금빵 (bread), real facts only",
+    "transitions": "Primary 70%: slide push 320ms cubic-bezier(0.22,1,0.36,1); secondary 30%: bar wipe 300ms cubic-bezier(0.65,0,0.35,1)",
+    "typography": "Bold Navis Sans 900 headline ≥52px + small Navis Sans 700 ticker ≥36px; numbers tabular-nums",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": null,
+    "concepts": [
+      "todays-deal"
+    ],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 1
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 1
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 1
+      }
+    }
+  }
+}

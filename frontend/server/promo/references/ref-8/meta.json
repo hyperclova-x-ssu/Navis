@@ -1,0 +1,121 @@
+{
+  "id": "ref-8",
+  "version": "1",
+  "nameKey": "promo.ref.ref-8.name",
+  "cardAspect": "1:1",
+  "previewFrom": 2.7,
+  "previewTo": 7,
+  "posterAt": 4.8,
+  "moods": [
+    "warm",
+    "clean"
+  ],
+  "concepts": [
+    "review-roundup",
+    "new-item"
+  ],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 6
+      },
+      "photoSlots": {
+        "max": 3
+      }
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 8
+      },
+      "photoSlots": {
+        "max": 4
+      }
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 14
+      },
+      "photoSlots": {
+        "max": 7
+      }
+    }
+  },
+  "posterScene": "s2",
+  "motion": {
+    "id": "ref-8",
+    "key": "lens",
+    "name": "줌 렌즈 투어",
+    "order": 2,
+    "energy": "fast",
+    "previewMenuId": "m-deep-choco",
+    "layout": "디테일 확대 → 전체로 빠지며 공개, 원형 돋보기(PiP)",
+    "motion": "매치 줌: 다음 컷이 디테일 크롭에서 시작해 풀아웃",
+    "transition": "줌 스루",
+    "type": "디테일에 핀+지시선 라벨",
+    "cuts": {
+      "10": 5,
+      "15": 8,
+      "30": 14
+    },
+    "tempo": "중간 100",
+    "colors": [
+      "#F5EFE6",
+      "#2A1A12",
+      "#C8553D"
+    ],
+    "moves": [
+      "loupe",
+      "pan",
+      "ramp",
+      "kinetic",
+      "badge"
+    ],
+    "framing": "Detail magnified, then pull-out reveals the whole dish; circular loupe PiP; match zoom: next cut starts on a detail crop and pulls out; zoom center photo.meta.focus; mid 100 BPM; cuts 5/8/14; preview menu: 딥초코 (dessert), real facts only",
+    "transitions": "Primary 70%: zoom-through 500ms cubic-bezier(0.83,0,0.17,1), scale 2.5→1 match zoom; secondary 30%: shorter zoom-through 350ms, same curve (single zoom-through family)",
+    "typography": "Navis Sans 700 pin labels with inline SVG pin + 3px leader line on details, 36–44px; titles Navis Sans 900 ≥52px; word reveal 70–120ms stagger",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": null,
+    "concepts": [
+      "behind-the-scenes",
+      "new-item"
+    ],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 1
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 1
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 1
+      }
+    }
+  }
+}

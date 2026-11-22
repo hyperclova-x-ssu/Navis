@@ -1,0 +1,46 @@
+{
+  "author": "claude-opus-5-5",
+  "version": 1,
+  "variants": [
+    {
+      "id": "meet-after-class",
+      "alert": "수업 끝나면 카페로 와",
+      "ready": "알겠어 바로 갈게",
+      "rush": "뛰어가는 중!",
+      "question": "벌써 줄 선 거야?",
+      "outside": "나 카페 앞이야",
+      "missed": "헐 너무 아쉽다",
+      "answer": "사실 내 마음만 샀어"
+    },
+    {
+      "id": "quick-reply",
+      "alert": "지금 카페 올 사람?",
+      "ready": "나 나 나!",
+      "rush": "오케이 출발",
+      "question": "와 진짜 벌써?",
+      "outside": "도착! 어디야?",
+      "missed": "아 속상해",
+      "answer": "농담이야 그냥 놀러와"
+    },
+    {
+      "id": "neighborhood-walk",
+      "alert": "산책 겸 카페 들를래?",
+      "ready": "좋아 운동화 신는다",
+      "rush": "골목 돌면 보여",
+      "question": "어 저기 사람 많다?",
+      "outside": "나무 옆에 있어",
+      "missed": "괜히 설렜잖아",
+      "answer": "산책한 걸로 치자"
+    },
+    {
+      "id": "save-a-seat",
+      "alert": "자리 맡아둘게 와",
+      "ready": "고마워 금방 가",
+      "rush": "신호만 바뀌면 돼",
+      "question": "자리 아직 있어?",
+      "outside": "문 앞이야 손 흔들어",
+      "missed": "에이 김샜다",
+      "answer": "자리는 지켰지롱"
+    }
+  ]
+}

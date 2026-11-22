@@ -60,6 +60,14 @@ test('promo runner maps the story schema and returns the validated plan and usag
   assert.doesNotMatch(JSON.stringify(schema), /"(?:pattern|additionalProperties|minLength|maxLength)"/);
 });
 
+test('promo runner forwards optional structured-output sampling controls', async () => {
+  const seen = [];
+  const runner = createHcxRunner({ transport: fakeClient(completion(JSON.stringify(plan)), seen) });
+  await runner.run({ prompt: messages[0].content, schema: STORY_SCHEMA, temperature: 0.1, seed: 436 });
+  assert.equal(seen[0].body.temperature, 0.1);
+  assert.equal(seen[0].body.seed, 436);
+});
+
 test('promo runner rejects malformed, truncated and off-schema model replies', async () => {
   const offSchema = change => {
     const output = globalThis.structuredClone(plan);

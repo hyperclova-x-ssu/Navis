@@ -10,11 +10,15 @@ import { rangeFor } from './references.mjs';
 import { photoAssets } from './renderer.mjs';
 import { META_SCHEMA_VERSION, MOODS, MOODS_FILE, PHOTO_META_SCHEMA, PROMPT_VERSION, SCENE_SCHEMA, STORY_SCHEMA, photoMetaPrompt, sceneCodePrompt, sceneFixPrompt, storyPrompt } from './prompts.mjs';
 import { validateSchema } from './schema.mjs';
+import { fillTemplate, loadPlanningTemplates, templateSlotRequest } from './templates/runtime.mjs';
+import { takeSeed } from './templates/creative.mjs';
+import { checkMotionPlan } from './check-motion.mjs';
+import { chatCountdownSceneRequest, chatCountdownSlotRequest, planChatCountdown, renderChatCountdown } from './templates/chat-countdown.mjs';
 
 export const MAX_STORY_REWRITES = 2;
 export const MAX_FIXES = 2;
 export const FAULT_CODES = Object.freeze({ look: 'AI_UNAVAILABLE', story: 'CAPTION_TOO_LONG', scenes: 'CODE_CHECK_FAILED', merge: 'ENCODE_FAILED' });
-const TIMEOUTS = { look: 60000, story: 120000, scenes: 180000 };
+const TIMEOUTS = { look: 60000, story: 120000, scenes: 300000 };
 
 export async function photoMetaInput(photoSource, photoId, model) {
   const photo = await photoSource.readPhoto(photoId);
@@ -63,6 +67,13 @@ const summarize = violations => {
   return counts;
 };
 
+function videoLocation(location) {
+  const annotation = /\s*\(([^()]*)가상\s*주소\s*\)\s*$/u.exec(location);
+  if (!annotation) return location;
+  const landmark = annotation[1].trim().replace(/[,·]\s*$/u, '').trim();
+  return landmark || location.slice(0, annotation.index).trim();
+}
+
 /**
  * deps: { runner, lookRunner, storyRunner, sceneRunner, lookModel, photoSource, references, music[], musicDir, cacheDir, model, fault,
  *         checkScene({html, story, rules, store, lengthSec, assets, fonts}) → {violations, checkMs},
@@ -94,11 +105,17 @@ export function createPipeline(deps) {
     const ref = references.refs.get(input.referenceId);
     if (!ref || !references.rules) throw new PromoError('AI_BAD_OUTPUT');
     const rules = references.rules;
-    const store = { name: catalog.store.name, location: catalog.store.location };
+    const store = { name: catalog.store.name, location: videoLocation(catalog.store.location) };
     const exteriorId = catalog.store.exteriorPhotoId;
+    const range = rangeFor(references.refs, rules, input.referenceId, input.lengthSec);
+    const chatCountdown = ref.meta.presentation === 'chat-countdown';
+    if (chatCountdown && input.menuIds.length > 1) range.photoSlots = Math.max(range.photoSlots, 4);
+    const motion = deps.templates && ref.meta.motion?.lengths[input.lengthSec];
+    if (motion) Object.assign(range, { sceneCount: motion.sceneCount, photoSlots: motion.photoSlots.max,
+      minSceneSec: motion.minSceneSec, minSceneSecFirst: motion.minSceneSec });
     return {
       input, rules, ref, store, catalog, exteriorId, contract: references.contract,
-      range: rangeFor(references.refs, rules, input.referenceId, input.lengthSec),
+      range, chatCountdown,
       fonts: references.fonts,
     };
   }
@@ -109,6 +126,7 @@ export function createPipeline(deps) {
     const cacheDir = join(deps.cacheDir, 'photo-meta');
     await mkdir(cacheDir, { recursive: true });
     const metas = await pool(job.input.photoIds, 2, async photoId => {
+      if (deps.readPhotoMeta) return { ...await deps.readPhotoMeta(photoId, signal), photoId };
       const { request, cacheKey } = await photoMetaInput(photoSource, photoId, deps.lookModel ?? deps.model);
       const file = join(cacheDir, `${cacheKey}.json`);
       try {
@@ -152,14 +170,38 @@ export function createPipeline(deps) {
     const ctx = context(job);
     const sizes = id => photoSource.photoInfo(id) || {};
     const metaById = new Map(metas.map(m => [m.photoId, m]));
+    const music = pickMusic(deps.music, job.input.moods);
+    const templates = deps.templates ?? (ctx.chatCountdown ? loadPlanningTemplates() : undefined);
+    const profile = templates?.creative.references.get(job.input.referenceId);
     const promptCtx = {
       ...ctx,
-      photos: job.input.photoIds.map(id => ({ photoId: id, menuName: ctx.catalog.menus.find(m => m.menuId === sizes(id).menuId)?.names[job.input.locale] ?? '', width: sizes(id).width, height: sizes(id).height, meta: metaById.get(id) })),
+      directives: templates?.directives, profile, music,
+      seed: profile && takeSeed(deps.storeId ?? ctx.store.name, job.input, job.takeIndex),
+      verifiedOffer: deps.promotionFacts,
+      photos: job.input.photoIds.map(id => {
+        const { menuId, width, height } = sizes(id);
+        return { photoId: id, menuId, menuName: ctx.catalog.menus.find(m => m.menuId === menuId)?.names[job.input.locale] ?? '', width, height, meta: metaById.get(id) };
+      }),
       exterior: { photoId: ctx.exteriorId, width: sizes(ctx.exteriorId).width, height: sizes(ctx.exteriorId).height, kind: 'exterior' },
     };
-    const music = pickMusic(deps.music, job.input.moods);
     const checkCtx = { rules: ctx.rules, range: ctx.range, lengthSec: job.input.lengthSec, locale: job.input.locale, referenceId: job.input.referenceId, selectedPhotoIds: job.input.photoIds, store: ctx.store,
       photoMeta: metaById, photoMenu: Object.fromEntries(job.input.photoIds.map(id => [id, sizes(id).menuId ?? null])), menus: ctx.catalog.menus };
+    if (templates) {
+      const template = templates.references.get(job.input.referenceId);
+      if (!template) throw new PromoError('AI_BAD_OUTPUT');
+      const request = ctx.chatCountdown ? chatCountdownSlotRequest(promptCtx) : templateSlotRequest(template, promptCtx);
+      const slots = await call(job, { ...request, timeoutMs: TIMEOUTS.story, signal }, storyRunner);
+      if (validateSchema(request.schema, slots).length) throw new PromoError('AI_BAD_OUTPUT');
+      const result = ctx.chatCountdown ? planChatCountdown(promptCtx, slots) : fillTemplate(template, promptCtx, slots).story;
+      result.musicTrackId = music?.trackId ?? null;
+      const violations = [...checkStory(result, checkCtx), ...checkMotionPlan(result)];
+      if (violations.length) {
+        job.checkSummary = { stage: 'story', rules: summarize(violations) };
+        throw new PromoError('CAPTION_TOO_LONG');
+      }
+      await writeJson(join(job.dir, 'story.json'), result);
+      return { story: result, promptCtx, music };
+    }
     let rewrite = null;
     for (let attempt = 0; ; attempt++) {
       const raw = await call(job, { prompt: storyPrompt(promptCtx, rewrite), schema: STORY_SCHEMA, timeoutMs: TIMEOUTS.story, signal }, storyRunner);
@@ -179,7 +221,7 @@ export function createPipeline(deps) {
     const violations = staticCheck(html, { story: storyJson, rules: ctx.rules });
     const staticPassed = violations.length === 0;
     // Do not send pilot HTML with prohibited code or resource URLs to Chrome.
-    const runtime = deps.sceneRunner && violations.some(v => v.rule.startsWith('static.')) ? null
+    const runtime = (deps.sceneRunner || deps.templates || storyJson.chatCountdown) && violations.some(v => v.rule.startsWith('static.')) ? null
       : await deps.checkScene({ html, story: storyJson, rules: ctx.rules, store: ctx.store, lengthSec: job.input.lengthSec, assets, fonts: ctx.fonts });
     if (runtime) violations.push(...runtime.violations);
     const checkMs = Date.now() - started;
@@ -198,9 +240,13 @@ export function createPipeline(deps) {
   /** 위반이 없어질 때까지 고치기(job.fixCount가 MAX_FIXES에 닿으면 CODE_CHECK_FAILED). */
   async function fixUntilPass(job, ctx, s, html, violations, assets, signal) {
     while (violations.length) {
-      if (job.fixCount >= MAX_FIXES) { job.checkSummary = { stage: job.stage, rules: summarize(violations) }; throw new PromoError('CODE_CHECK_FAILED'); }
+      if (s.story.chatCountdown || job.fixCount >= MAX_FIXES) {
+        job.checkSummary = { stage: job.stage, rules: summarize(violations) };
+        throw new PromoError('CODE_CHECK_FAILED');
+      }
       job.fixCount++;
-      const out = await call(job, { prompt: sceneFixPrompt(ctx, s.story, html, violations), schema: SCENE_SCHEMA, timeoutMs: TIMEOUTS.scenes, signal }, sceneRunner);
+      const out = await call(job, { prompt: sceneFixPrompt(ctx, s.story, html, violations, job.fixCount),
+        schema: SCENE_SCHEMA, timeoutMs: TIMEOUTS.scenes, signal }, sceneRunner);
       html = out.html;
       const version = await writeVersion(job, html);
       violations = await runChecks(job, ctx, s.story, html, assets, version);
@@ -213,10 +259,20 @@ export function createPipeline(deps) {
     faultAt('scenes');
     const ctx = { ...context(job), photos: s.promptCtx.photos, exterior: s.promptCtx.exterior };
     const assets = await photoAssets(photoSource, [...job.input.photoIds, ctx.exteriorId]);
-    const out = await call(job, { prompt: sceneCodePrompt(ctx, s.story), schema: SCENE_SCHEMA, timeoutMs: TIMEOUTS.scenes, signal }, sceneRunner);
-    const version = await writeVersion(job, out.html);
-    const violations = await runChecks(job, ctx, s.story, out.html, assets, version);
-    const html = await fixUntilPass(job, ctx, s, out.html, violations, assets, signal);
+    if (s.story.creative && deps.templates) {
+      ctx.designTemplate = deps.templates.creative.references.get(job.input.referenceId);
+      ctx.vocabulary = deps.templates.creative.vocabulary;
+      ctx.motionMetrics = deps.templates.creative.metrics;
+      const { moods, concepts } = deps.templates.directives;
+      ctx.visualDirections = [...job.input.moods.map(id => moods[id]?.visual), ...job.input.concepts.map(id => concepts[id]?.visual)].filter(Boolean);
+    }
+    const request = s.story.chatCountdown ? chatCountdownSceneRequest(s.story) : { prompt: sceneCodePrompt(ctx, s.story), schema: SCENE_SCHEMA };
+    const out = await call(job, { ...request, timeoutMs: TIMEOUTS.scenes, signal }, sceneRunner);
+    if (s.story.chatCountdown && validateSchema(request.schema, out).length) throw new PromoError('AI_BAD_OUTPUT');
+    const source = s.story.chatCountdown ? renderChatCountdown(s.story, ctx.ref.exampleHtml, out) : out.html;
+    const version = await writeVersion(job, source);
+    const violations = await runChecks(job, ctx, s.story, source, assets, version);
+    const html = await fixUntilPass(job, ctx, s, source, violations, assets, signal);
     return { html, ctx, assets };
   }
 

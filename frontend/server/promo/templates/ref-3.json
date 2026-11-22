@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "referenceId": "ref-3",
+  "author": "claude-sonnet-4-6",
+  "html": "<!doctype html><html lang=\"{{LOCALE}}\"><head><meta charset=\"utf-8\"><style>{{BASE_STYLE}} :root{--ink:#fff;--dim:rgba(0,0,0,.55);--sub-bg:rgba(0,0,0,.55);--line:#D9D9D9;--name-sp:.08em;--end-dim:rgba(0,0,0,.55)}*{box-sizing:border-box;margin:0;padding:0}#stage{width:1080px;height:1920px;position:relative;overflow:hidden;background:#0a0a0a}.scene{position:absolute;inset:0;opacity:0;transition:opacity 600ms ease}.scene.active{opacity:1;z-index:2}.scene.prev{opacity:0;z-index:1}.mat{position:absolute;inset:0;overflow:hidden}.mat::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.18) 0%,transparent 40%)}.copy{position:absolute;left:60px;right:60px}.sub-bar{position:absolute;left:0;right:0;height:160px;background:var(--sub-bg);bottom:360px}.sub-line{position:absolute;left:60px;right:60px;bottom:380px;font-size:48px;font-weight:500;color:#fff;line-height:1.2;opacity:0;transition:opacity 400ms ease;white-space:nowrap;overflow:hidden}.sub-line .w1{font-weight:800}.sub-line.show{opacity:1}.scene.end .mat::after{background:var(--end-dim)}.scene.end .copy{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:48px}.end-rule{width:120px;height:1px;background:var(--line);flex-shrink:0}.end-name{font-family:'Navis Serif',serif;color:#fff;font-size:88px;letter-spacing:var(--name-sp);text-align:center;font-weight:400}.end-cta{color:#fff;font-size:48px;font-weight:400;text-align:center;letter-spacing:.04em}.end-location{color:var(--line);font-size:40px;font-weight:300;text-align:center;letter-spacing:.06em}.scene:nth-child(1) .mat{background:#1a1612}.scene:nth-child(2) .mat{background:#181410}.scene:nth-child(3) .mat{background:#151311}.scene:nth-child(4) .mat{background:#131210}.scene:nth-child(5) .mat{background:#111010}.scene:nth-child(6) .mat{background:#0e0e0d}.scene:nth-child(7) .mat{background:#0a0a0a}</style></head><body><main id=\"stage\">{{SCENES}}</main>{{PLAYER}}</body></html>",
+  "variants": [
+    {
+      "id": "warm-10",
+      "tone": "warm",
+      "lengthSec": 10,
+      "cta": {
+        "ko": "메뉴를 만나보세요",
+        "en": "Come see the menu",
+        "zh-Hans": "探索我们的菜单",
+        "zh-Hant": "探索我們的菜單"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "clean-10",
+      "tone": "clean",
+      "lengthSec": 10,
+      "cta": {
+        "ko": "직접 확인해보세요",
+        "en": "See it for yourself",
+        "zh-Hans": "亲自来体验",
+        "zh-Hant": "親自來體驗"
+      },
+      "slots": [
+        "menuName",
+        "feature",
+        "price",
+        "storeName",
+        "limitedOffer",
+        "cta"
+      ]
+    },
+    {
+      "id": "warm-15",
+      "tone": "warm",
+      "lengthSec": 15,
+      "cta": {
+        "ko": "오늘 방문해보세요",
+        "en": "Visit us today",
+        "zh-Hans": "今日欢迎光临",
+        "zh-Hant": "今日歡迎光臨"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "clean-15",
+      "tone": "clean",
+      "lengthSec": 15,
+      "cta": {
+        "ko": "메뉴를 살펴보세요",
+        "en": "Browse our menu",
+        "zh-Hans": "了解我们的菜单",
+        "zh-Hant": "了解我們的菜單"
+      },
+      "slots": [
+        "menuName",
+        "feature",
+        "price",
+        "storeName",
+        "limitedOffer",
+        "cta"
+      ]
+    },
+    {
+      "id": "warm-30",
+      "tone": "warm",
+      "lengthSec": 30,
+      "cta": {
+        "ko": "함께해요",
+        "en": "Join us anytime",
+        "zh-Hans": "随时欢迎到来",
+        "zh-Hant": "隨時歡迎到來"
+      },
+      "slots": [
+        "storeName",
+        "cta",
+        "menuName",
+        "feature",
+        "price",
+        "limitedOffer"
+      ]
+    },
+    {
+      "id": "clean-30",
+      "tone": "clean",
+      "lengthSec": 30,
+      "cta": {
+        "ko": "공간을 경험하세요",
+        "en": "Experience the space",
+        "zh-Hans": "感受这里的空间",
+        "zh-Hant": "感受這裡的空間"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "id": "ref-16",
+  "version": "1",
+  "nameKey": "promo.ref.ref-16.name",
+  "cardAspect": "9:16",
+  "previewFrom": 0,
+  "previewTo": 4,
+  "posterAt": 0.55,
+  "moods": [],
+  "concepts": [],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 7
+      },
+      "photoSlots": {
+        "max": 6
+      },
+      "minSceneSec": 1
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 10
+      },
+      "photoSlots": {
+        "max": 8
+      },
+      "minSceneSec": 1
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 16
+      },
+      "photoSlots": {
+        "max": 12
+      },
+      "minSceneSec": 1
+    }
+  },
+  "motion": {
+    "id": "ref-16",
+    "key": "film",
+    "name": "필름 스트립",
+    "order": 10,
+    "energy": "calm",
+    "previewMenuId": "m-einspanner-choco",
+    "layout": "숯색 배경, 스프로킷 홀, 3프레임 세로 필름",
+    "motion": "연속 스크롤+이즈 정지, 활성 프레임 1.06 확대·옆 프레임 어둡게",
+    "transition": "연속(컷 없음)",
+    "type": "모노스페이스 날짜 도장 캡션",
+    "cuts": {
+      "10": 4,
+      "15": 6,
+      "30": 10
+    },
+    "tempo": "로파이 90",
+    "colors": [
+      "#2A2A2C",
+      "#EDE6DA",
+      "#F0B44C"
+    ],
+    "moves": [
+      "film",
+      "tilt",
+      "grain",
+      "kinetic"
+    ],
+    "framing": "Charcoal background, CSS sprocket holes, 3-frame vertical film strip; continuous scroll with ease-stop; active frame scales 1.06, side frames dimmed (brightness 0.55); lo-fi 90 BPM; cuts 4/6/10 as frame beats; preview menu: 아인슈페너 초코 (drink), real facts only",
+    "transitions": "Primary 100%: continuous scroll, no cuts, each frame advance 700ms cubic-bezier(0.65,0,0.35,1) ease-stop; secondary: none (continuous only per agreement)",
+    "typography": "Date-stamp caption emulating monospace with Navis Sans 500 tabular-nums + 0.12em tracking, ≥36px; dates only if real",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": null,
+    "concepts": [
+      "behind-the-scenes",
+      "day-at-shop"
+    ],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 1
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 1
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 1
+      }
+    }
+  }
+}

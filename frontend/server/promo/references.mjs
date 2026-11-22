@@ -3,10 +3,11 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PROMO_CONSENSUS_REFERENCE_IDS, PROMO_REFERENCE_GALLERY_VERSION, PROMO_REFERENCE_IDS } from '../../shared/promo-references.mjs';
 
 export const DEFAULT_REFERENCES_DIR = fileURLToPath(new URL('./references/', import.meta.url));
-export const REFERENCE_ID = /^ref-[1-6]$/;
-export const REFERENCE_IDS = ['ref-1', 'ref-2', 'ref-3', 'ref-4', 'ref-5', 'ref-6'];
+export const REFERENCE_ID = new RegExp(`^(?:${PROMO_REFERENCE_IDS.join('|')})$`);
+export const REFERENCE_IDS = PROMO_REFERENCE_IDS;
 const LENGTHS = ['10', '15', '30'];
 
 const readJson = file => JSON.parse(readFileSync(file, 'utf8'));
@@ -138,9 +139,10 @@ export function rangeFor(refs, rules, referenceId, lengthSec) {
   return {
     sceneCount: { min: num(fromMeta?.sceneCount?.min, base.sceneCount.min), max: num(fromMeta?.sceneCount?.max, base.sceneCount.max) },
     photoSlots: num(fromMeta?.photoSlots?.max, 99),
-    minSceneSec: num(rules.minSceneSecByRef[referenceId], base.minSceneSec),
+    minSceneSec: num(fromMeta?.minSceneSec, num(rules.minSceneSecByRef[referenceId], base.minSceneSec)),
     // ref-3처럼 첫 장면(시작 외관)에는 레퍼런스 최소 시간을 쓰지 않는 경우(T-084 rules 해석)
-    minSceneSecFirst: rules.minSceneSecByRefSkipFirst?.includes(referenceId) ? base.minSceneSec : num(rules.minSceneSecByRef[referenceId], base.minSceneSec),
+    minSceneSecFirst: rules.minSceneSecByRefSkipFirst?.includes(referenceId) ? base.minSceneSec
+      : num(fromMeta?.minSceneSec, num(rules.minSceneSecByRef[referenceId], base.minSceneSec)),
     endingSec: base.endingSec,
   };
 }
@@ -158,9 +160,12 @@ export function listReferences(loaded) {
       posterUrl: `/api/promo/references/${id}/poster.jpg`,
       previewUrl: `/api/promo/references/${id}/preview.mp4`,
       preview: { durationSec: Math.round((to - from) * 100) / 100, width: 360, height: 640, fps: 30, hasAudio: false },
-      moods: Array.isArray(m.moods) ? m.moods : [], concepts: Array.isArray(m.concepts) ? m.concepts : [],
-      lengths: m.lengths || {},
+      moods: m.motion ? ({ fast: ['lively'], medium: ['warm', 'clean'], calm: ['elegant', 'warm'] })[m.motion.energy]
+        : Array.isArray(m.moods) ? m.moods : [],
+      concepts: m.motion?.concepts ?? (Array.isArray(m.concepts) ? m.concepts : []),
+      lengths: m.motion?.lengths ?? m.lengths ?? {},
     });
   }
-  return { referenceVersion: loaded.version, references };
+  const version = PROMO_CONSENSUS_REFERENCE_IDS.every(id => loaded.refs.get(id)?.meta.motion) ? PROMO_REFERENCE_GALLERY_VERSION : loaded.version;
+  return { referenceVersion: version, references };
 }

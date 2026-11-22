@@ -1,0 +1,116 @@
+{
+  "id": "ref-15",
+  "version": "1",
+  "nameKey": "promo.ref.ref-15.name",
+  "cardAspect": "9:16",
+  "previewFrom": 0,
+  "previewTo": 4,
+  "posterAt": 0.55,
+  "moods": [],
+  "concepts": [],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 7
+      },
+      "photoSlots": {
+        "max": 6
+      },
+      "minSceneSec": 1
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 10
+      },
+      "photoSlots": {
+        "max": 8
+      },
+      "minSceneSec": 1
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 16
+      },
+      "photoSlots": {
+        "max": 12
+      },
+      "minSceneSec": 1
+    }
+  },
+  "motion": {
+    "id": "ref-15",
+    "key": "menu-board",
+    "name": "메뉴판",
+    "order": 9,
+    "energy": "medium",
+    "previewMenuId": "m-earlgrey-tea",
+    "layout": "칠판 또는 영수증지, 점선 구분",
+    "motion": "글자가 손으로 그려지듯 등장, 스탬프 쾅(1.5→1.0). **가격 없으면 메뉴명+가게명으로 자동 대체**",
+    "transition": "지우개 와이프, 종이 피드",
+    "type": "Navis Sans + SVG 획으로 분필 느낌, 숫자 tabular-nums",
+    "cuts": {
+      "10": 4,
+      "15": 6,
+      "30": 11
+    },
+    "tempo": "로파이 85",
+    "colors": [
+      "#1F2A24",
+      "#F4F1E8",
+      "#E8C547"
+    ],
+    "moves": [
+      "kinetic",
+      "badge",
+      "wipe",
+      "slide",
+      "grain"
+    ],
+    "framing": "Chalkboard or receipt paper with dotted dividers; text appears hand-drawn via SVG stroke-dashoffset; stamp slam 1.5→1.0 only for real price; no price → auto fallback to menu name + store name; lo-fi 85 BPM; cuts 4/6/11; preview menu: 얼그레이 티 (drink)",
+    "transitions": "Primary 70%: eraser wipe 380ms cubic-bezier(0.65,0,0.35,1); secondary 30%: paper feed 420ms cubic-bezier(0.22,1,0.36,1)",
+    "typography": "Navis Sans 700 + SVG strokes for chalk feel; stamp Navis Sans 900; numbers font-variant-numeric: tabular-nums; main ≥52px",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": "Navis Hand Brush",
+    "concepts": [
+      "todays-deal"
+    ],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 1
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 1
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 1
+      }
+    }
+  }
+}

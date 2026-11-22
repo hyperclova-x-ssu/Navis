@@ -1,0 +1,117 @@
+{
+  "id": "ref-9",
+  "version": "1",
+  "nameKey": "promo.ref.ref-9.name",
+  "cardAspect": "4:5",
+  "previewFrom": 1.8,
+  "previewTo": 5.7,
+  "posterAt": 5.7,
+  "moods": [
+    "elegant",
+    "clean"
+  ],
+  "concepts": [
+    "new-item",
+    "day-at-shop"
+  ],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 4
+      },
+      "photoSlots": {
+        "max": 2
+      }
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 5
+      },
+      "photoSlots": {
+        "max": 3
+      }
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 8
+      },
+      "photoSlots": {
+        "max": 5
+      }
+    }
+  },
+  "posterScene": "s2",
+  "motion": {
+    "id": "ref-9",
+    "key": "sticker",
+    "name": "스티커 팝",
+    "order": 3,
+    "energy": "medium",
+    "previewMenuId": "m-grapefruit-ade",
+    "layout": "파스텔 단색, 원/블롭 마스크 사진, 벡터 스티커(별·버스트)",
+    "motion": "탄성 스케일인, 박자에 통통",
+    "transition": "원형 아이리스, 스케일 스루",
+    "type": "Navis Sans 900 + 외곽선(둥근 느낌은 자간·SVG로)",
+    "cuts": {
+      "10": 7,
+      "15": 10,
+      "30": 20
+    },
+    "tempo": "우쿨렐레 110",
+    "colors": [
+      "#FFE3D8",
+      "#2B1B2E",
+      "#FF6F91"
+    ],
+    "moves": [
+      "badge",
+      "iris",
+      "punch",
+      "kinetic"
+    ],
+    "framing": "Pastel solid background; photos in circle/blob clip-path masks; inline geometric SVG star/burst stickers (no clip art, no external assets); elastic scale-in, bounce on beat 1→1.025→1 160ms; ukulele 110 BPM; cuts 7/10/20; preview menu: 자몽에이드 (drink), real facts only",
+    "transitions": "Primary 70%: circular iris clip-path 400ms cubic-bezier(0.65,0,0.35,1) from focus; secondary 30%: scale-through 350ms cubic-bezier(0.34,1.56,0.64,1)",
+    "typography": "Navis Sans 900 + 6px outline via paint-order stroke; rounded feel only through +0.02em tracking and SVG rounded shapes; main ≥52px",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": "Navis Hand Round",
+    "concepts": [],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 1
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 1
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 1
+      }
+    }
+  }
+}

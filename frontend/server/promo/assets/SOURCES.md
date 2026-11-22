@@ -41,4 +41,52 @@ FreePD.com은 2026-11-10에 확인한 결과 서비스를 종료해(첫 화면 �
 
 메뉴는 생성된 `history`와 `today`의 2026-08-20~2026-11-17 판매 수량을 합산해 상위 6개를 골랐습니다. 아메리카노 6,352잔, 카페라떼 2,746잔, 바닐라빈 라떼 2,038잔, 겉바속촉 버터 소금빵 1,288개, 연유 돌체라떼 1,108잔, 딥 초코 라떼 915잔입니다.
 
+2026-11-22에 공주 보늬밤 라떼 대표 사진을 포함해 AI 생성 사진 여섯 장을 추가했습니다. D-409로 메뉴 23종의 새 사진 92장과 기존 대표 사진 17장을 영상용 사진에 등록했습니다. 현재 메뉴 사진은 151장입니다. 기존 파일명과 겹치는 새 사진은 `photos/d409/`에 두고 별도의 카탈로그 ID로 등록했습니다. D-326 파일럿은 기존 39장과 그 순서를 사용합니다. [대표 사진과 추가 촬영 구도](../../../public/menu-photos/SOURCES.md)
+
 사진 파일별 체크섬은 [SHA256.md](SHA256.md)에 있습니다.
+
+## Promo handwriting fonts
+
+The renderer serves these Korean WOFF2 subsets from local files. Each subset has a new internal family name. The repertoire includes the source Hangul syllables, jamo and basic Latin/punctuation. Navis Sans remains the fallback.
+
+| Local family | Google Fonts source (pinned) | Bundled licence | Coverage and size |
+| --- | --- | --- | --- |
+| Navis Hand Pen | [Nanum Pen Script](https://github.com/google/fonts/blob/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/nanumpenscript/NanumPenScript-Regular.ttf) | [SIL OFL 1.1](../references/fonts/OFL-NavisHandPen.txt) | 11,172 Hangul syllables · 590,360 bytes |
+| Navis Hand Round | [Gaegu](https://github.com/google/fonts/blob/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/gaegu/Gaegu-Regular.ttf) | [SIL OFL 1.1](../references/fonts/OFL-NavisHandRound.txt) | 2,350 Hangul syllables · 283,528 bytes |
+| Navis Hand Brush | [Gamja Flower](https://github.com/google/fonts/blob/06bfe0d62a98375cb09c942fa18e68bd32cff057/ofl/gamjaflower/GamjaFlower-Regular.ttf) | [SIL OFL 1.1](../references/fonts/OFL-NavisHandBrush.txt) | 11,172 Hangul syllables · 847,616 bytes |
+
+## D-436 strawberry cake
+
+| File | Source |
+| --- | --- |
+| `cafe-strawberry-cake-01.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-strawberry-cake-02.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-strawberry-cake-03.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-strawberry-cake-04.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-strawberry-cake-05.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-strawberry-cake-06.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-strawberry-cake-07.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-strawberry-cake-08.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-strawberry-cake-09.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-strawberry-cake-10.jpeg` | AI-generated (stylised as customer photos) |
+
+## D-439 bakery photos for ref-1
+
+| File | Source |
+| --- | --- |
+| `cafe-saltbread-07.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-saltbread-08.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-saltbread-09.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-saltbread-10.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-bagel-plain-06.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-bagel-plain-07.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-bagel-plain-08.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-bagel-plain-09.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-basque-cake-06.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-basque-cake-07.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-basque-cake-08.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-basque-cake-09.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-cookie-choco-06.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-cookie-choco-07.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-cookie-choco-08.jpeg` | AI-generated (stylised as customer photos) |
+| `cafe-cookie-choco-09.jpeg` | AI-generated (stylised as customer photos) |

@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "referenceId": "ref-4",
+  "author": "claude-sonnet-4-6",
+  "html": "<!doctype html><html lang=\"{{LOCALE}}\"><head><meta charset=\"utf-8\"><style>{{BASE_STYLE}} :root{--ink-band:#000000;--ink-band-op:0.62;--accent:#FFD400;--end-bg:#1E1E23;--end-name-col:#FFFFFF;--end-cta-col:#FFD400;--end-loc-col:#9999A8;--radius-mat:0px;--shadow-mat:none;--band-h-hook:136px;--band-h-cap:96px}#stage{background:#111;overflow:hidden}#stage .scene{position:relative;width:100%;height:100%}#stage .scene .mat{position:absolute;inset:0;overflow:hidden;border-radius:var(--radius-mat);box-shadow:var(--shadow-mat)}#stage .scene .mat img{width:100%;height:100%;object-fit:cover;object-position:center center;animation:kb 4s linear forwards}@keyframes kb{from{transform:scale(1.00)}to{transform:scale(1.12)}}#stage .scene .copy{position:absolute;left:0;right:0}#stage .scene .copy .headline{display:block;font-family:\"Navis Serif\",serif;font-size:88px;font-weight:700;line-height:1.1;color:#FFFFFF;letter-spacing:-0.02em;padding:0 60px;animation:pop 200ms 50ms cubic-bezier(.34,1.56,.64,1) both}@keyframes pop{from{transform:scale(0.9);opacity:0}to{transform:scale(1.0);opacity:1}}#stage .scene .copy .headline .hl{color:var(--accent)}#stage .scene .copy .cap{display:block;font-family:\"Navis Serif\",serif;font-size:64px;font-weight:600;line-height:1.15;color:#FFFFFF;letter-spacing:-0.01em;padding:0 60px;text-align:center}#stage .scene .copy .cap .hl{color:var(--accent)}#stage .scene.hook .copy{top:140px;background:linear-gradient(0deg,transparent 0%,rgba(0,0,0,var(--ink-band-op)) 100%);padding:24px 0;min-height:var(--band-h-hook)}#stage .scene.cap-scene .copy{bottom:60px;background:rgba(0,0,0,var(--ink-band-op));padding:16px 0;min-height:var(--band-h-cap)}#stage .scene.end{background:var(--end-bg)}#stage .scene.end .mat{opacity:0.08}#stage .scene.end .copy{position:absolute;left:60px;right:60px;top:50%;transform:translateY(-50%);background:none;display:flex;flex-direction:column;align-items:flex-start;gap:28px}#stage .scene.end .copy .end-name{font-family:\"Navis Serif\",serif;font-size:72px;font-weight:700;color:var(--end-name-col);line-height:1.1;letter-spacing:-0.02em}#stage .scene.end .copy .end-cta{font-family:\"Navis Serif\",serif;font-size:52px;font-weight:500;color:var(--end-cta-col);line-height:1.2}#stage .scene.end .copy .end-location{font-family:\"Navis Serif\",serif;font-size:40px;font-weight:400;color:var(--end-loc-col);line-height:1.3}#stage .scene:nth-child(2) .mat img{object-position:center 30%}#stage .scene:nth-child(3) .mat img{object-position:center 50%}#stage .scene:nth-child(4) .mat img{object-position:center 60%}#stage .scene:nth-child(5) .mat img{object-position:center 40%}#stage .scene:nth-child(6) .mat img{object-position:center 50%}#stage .scene:nth-child(7) .mat img{object-position:center 50%}#stage .scene:nth-child(8) .mat img{object-position:center 50%}</style></head><body><main id=\"stage\">{{SCENES}}</main>{{PLAYER}}</body></html>",
+  "variants": [
+    {
+      "id": "warm-10",
+      "tone": "warm",
+      "lengthSec": 10,
+      "cta": {
+        "ko": "메뉴를 만나보세요",
+        "en": "Come explore our menu",
+        "zh-Hans": "欢迎品尝我们的菜单",
+        "zh-Hant": "歡迎品嚐我們的菜單"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "clean-10",
+      "tone": "clean",
+      "lengthSec": 10,
+      "cta": {
+        "ko": "메뉴를 확인하세요",
+        "en": "See what we have today",
+        "zh-Hans": "查看今日菜单",
+        "zh-Hant": "查看今日菜單"
+      },
+      "slots": [
+        "menuName",
+        "feature",
+        "price",
+        "storeName",
+        "limitedOffer",
+        "cta"
+      ]
+    },
+    {
+      "id": "warm-15",
+      "tone": "warm",
+      "lengthSec": 15,
+      "cta": {
+        "ko": "직접 맛보러 오세요",
+        "en": "Visit us and taste it",
+        "zh-Hans": "欢迎亲临体验",
+        "zh-Hant": "歡迎親臨體驗"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "clean-15",
+      "tone": "clean",
+      "lengthSec": 15,
+      "cta": {
+        "ko": "메뉴 전체 보기",
+        "en": "Browse our full menu",
+        "zh-Hans": "浏览完整菜单",
+        "zh-Hant": "瀏覽完整菜單"
+      },
+      "slots": [
+        "menuName",
+        "feature",
+        "price",
+        "storeName",
+        "limitedOffer",
+        "cta"
+      ]
+    },
+    {
+      "id": "warm-30",
+      "tone": "warm",
+      "lengthSec": 30,
+      "cta": {
+        "ko": "오늘 함께해요",
+        "en": "Join us today",
+        "zh-Hans": "今天来我们这里",
+        "zh-Hant": "今天來我們這裡"
+      },
+      "slots": [
+        "storeName",
+        "cta",
+        "menuName",
+        "feature",
+        "price",
+        "limitedOffer"
+      ]
+    },
+    {
+      "id": "clean-30",
+      "tone": "clean",
+      "lengthSec": 30,
+      "cta": {
+        "ko": "메뉴와 위치 보기",
+        "en": "See menu and location",
+        "zh-Hans": "查看菜单与位置",
+        "zh-Hant": "查看菜單與位置"
+      },
+      "slots": [
+        "menuName",
+        "feature",
+        "price",
+        "storeName",
+        "limitedOffer",
+        "cta"
+      ]
+    }
+  ]
+}

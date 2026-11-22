@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "referenceId": "ref-2",
+  "author": "claude-sonnet-4-6",
+  "html": "<!doctype html><html lang=\"{{LOCALE}}\"><head><meta charset=\"utf-8\"><style>{{BASE_STYLE}} :root{--bg-warm:#F7F3EE;--bg-clean:#F4F6F8;--card-r:48px;--white:#FFFFFF;--border:#E2DDD8;--border-clean:#D8DDE3;--accent-bg:#E4F6EA;--accent-fg:#006E38;--ink:#1A1A1A;--ink2:#555;--line:#C8C4BF;--line-clean:#BEC5CC}#stage{width:1080px;height:1920px;position:relative;overflow:hidden;background:var(--bg-warm)}#stage.clean{background:var(--bg-clean)}#stage.clean .bubble{border-color:var(--border-clean)}#stage.clean .bubble .kw{background:var(--accent-bg);color:var(--accent-fg)}#stage.clean .scene .mat{box-shadow:0 8px 40px rgba(60,80,100,.10)}#stage.clean .divider{background:var(--border-clean)}.scene{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;opacity:0;pointer-events:none}.scene.active{opacity:1;pointer-events:auto}.scene .mat{position:absolute;left:30px;right:30px;top:120px;height:1300px;border-radius:var(--card-r);overflow:hidden;background:#D4CFC9}.scene .mat img{width:100%;height:100%;object-fit:cover;animation:kb 7s ease-in-out both}@keyframes kb{from{transform:scale(1)}to{transform:scale(1.06)}}.scene .copy{position:absolute;left:60px;right:60px;top:1340px;bottom:60px}.scene .copy .headline{font-size:88px;font-weight:800;line-height:1.1;color:var(--ink);letter-spacing:-2px;margin:0 0 32px}.scene .copy .sub{font-size:48px;font-weight:400;line-height:1.3;color:var(--ink2);margin:0}.bubble{display:inline-flex;align-items:center;background:var(--white);border:1.5px solid var(--border);border-radius:40px;padding:18px 36px;font-size:48px;font-weight:400;color:var(--ink);line-height:1.3;margin:0 0 20px;opacity:0;transform:translateY(32px);transition:opacity .22s ease,transform .22s ease;max-width:900px}.bubble.show{opacity:1;transform:translateY(0)}.bubble .kw{display:inline;background:var(--accent-bg);color:var(--accent-fg);font-weight:700;border-radius:10px;padding:0 8px}.bubble-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:0;position:absolute;left:60px;right:60px;top:1350px}.bubble-wrap.right{align-items:flex-end}.bubble-wrap.center{align-items:center}.hook-title{position:absolute;left:60px;right:60px;top:1340px;font-size:88px;font-weight:800;line-height:1.1;color:var(--ink);letter-spacing:-2px;margin:0}.hook-sub{position:absolute;left:60px;right:60px;font-size:48px;font-weight:400;color:var(--ink2);line-height:1.4}.scene.end .mat{left:60px;right:60px;top:260px;height:820px;border-radius:var(--card-r)}.scene.end .mat.small{left:200px;right:200px;top:300px;height:680px;border-radius:var(--card-r)}.scene.end .copy{position:absolute;left:60px;right:60px;top:1120px;bottom:60px;display:flex;flex-direction:column;align-items:center;text-align:center}.scene.end .end-name{font-family:'Georgia',serif;font-size:96px;font-weight:400;letter-spacing:4px;color:var(--ink);margin:0 0 24px;line-height:1}.scene.end .end-cta{font-size:48px;font-weight:400;color:var(--ink2);margin:0 0 20px}.scene.end .end-location{font-size:40px;font-weight:300;color:var(--ink2);line-height:1.4;margin:0}.divider{width:120px;height:1.5px;background:var(--line);margin:20px auto}.scene:nth-child(2) .mat{object-position:center top}.scene:nth-child(3) .mat{left:40px;right:40px;top:120px;height:1290px}.scene:nth-child(4) .mat{left:20px;right:20px;top:120px;height:1310px;border-radius:60px}.scene:nth-child(5) .mat{left:50px;right:50px;top:120px;height:1300px}.scene:nth-child(6) .mat{left:30px;right:30px;top:120px;height:1300px}.scene:nth-child(7) .mat{left:40px;right:40px;top:120px;height:1300px}.scene:nth-child(8) .mat{left:20px;right:20px;top:120px;height:1310px}@keyframes fadeIn{from{opacity:0}to{opacity:1}}@keyframes fadeOut{from{opacity:1}to{opacity:0}}.scene.fade-in{animation:fadeIn .3s ease both}.scene.fade-out{animation:fadeOut .3s ease both}</style></head><body><main id=\"stage\">{{SCENES}}</main>{{PLAYER}}</body></html>",
+  "variants": [
+    {
+      "id": "warm-10",
+      "tone": "warm",
+      "lengthSec": 10,
+      "cta": {
+        "ko": "메뉴 보러 오세요",
+        "en": "Come see our menu",
+        "zh-Hans": "欢迎来探店",
+        "zh-Hant": "歡迎來探店"
+      },
+      "slots": [
+        "menuName",
+        "feature",
+        "price",
+        "storeName",
+        "limitedOffer",
+        "cta"
+      ]
+    },
+    {
+      "id": "clean-10",
+      "tone": "clean",
+      "lengthSec": 10,
+      "cta": {
+        "ko": "직접 확인해 보세요",
+        "en": "See it for yourself",
+        "zh-Hans": "欢迎亲身体验",
+        "zh-Hant": "歡迎親身體驗"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "warm-15",
+      "tone": "warm",
+      "lengthSec": 15,
+      "cta": {
+        "ko": "오늘 한번 들러요",
+        "en": "Stop by today",
+        "zh-Hans": "今天来坐坐吧",
+        "zh-Hant": "今天來坐坐吧"
+      },
+      "slots": [
+        "menuName",
+        "feature",
+        "price",
+        "storeName",
+        "limitedOffer",
+        "cta"
+      ]
+    },
+    {
+      "id": "clean-15",
+      "tone": "clean",
+      "lengthSec": 15,
+      "cta": {
+        "ko": "공간을 경험하세요",
+        "en": "Experience the space",
+        "zh-Hans": "感受一下空间",
+        "zh-Hant": "感受一下空間"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    },
+    {
+      "id": "warm-30",
+      "tone": "warm",
+      "lengthSec": 30,
+      "cta": {
+        "ko": "언제든 환영해요",
+        "en": "You're always welcome",
+        "zh-Hans": "随时欢迎您",
+        "zh-Hant": "隨時歡迎您"
+      },
+      "slots": [
+        "storeName",
+        "cta",
+        "menuName",
+        "feature",
+        "price",
+        "limitedOffer"
+      ]
+    },
+    {
+      "id": "clean-30",
+      "tone": "clean",
+      "lengthSec": 30,
+      "cta": {
+        "ko": "방문해 보세요",
+        "en": "Come visit us",
+        "zh-Hans": "欢迎前来参观",
+        "zh-Hant": "歡迎前來參觀"
+      },
+      "slots": [
+        "feature",
+        "menuName",
+        "limitedOffer",
+        "price",
+        "cta",
+        "storeName"
+      ]
+    }
+  ]
+}

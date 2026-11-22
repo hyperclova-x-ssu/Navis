@@ -6,7 +6,7 @@ Follow the contract exactly — an automatic checker in an isolated browser reje
 ## Design reference ({{referenceId}})
 Brief:
 {{brief}}
-Example code that passes the checker (do NOT copy it; keep its rules and feeling, and make this video fit the plan below):
+{{exampleInstruction}}
 ```html
 {{exampleHtml}}
 ```
@@ -23,3 +23,5 @@ Frame 1080×1920, text safe box x {{safeX1}}–{{safeX2}}, y {{safeY1}}–{{safe
 {{photosJson}}
 
 window.__duration must be {{lengthSec}}.
+
+The encoded video is checked at eight frames per second. Every 1.5 seconds must show meaningful image or layout movement, including during the final card. Keep the final words still and readable while the background or image framing moves. Use distinct eased moves and changes of direction. A single repeated push or a fade over a fixed layout is insufficient.

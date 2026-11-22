@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createClovaStudio } from '../clova-studio.mjs';
 import { privateOriginAllowed } from '../private-origin.mjs';
 import { availability, detectTools, readConfig } from './config.mjs';
-import { createClaudeApiRunner, createClaudeCliRunner } from './scene-provider.mjs';
+import { createClaudeApiRunner, createClaudeCliRunner, promoClaudeApiModel, readPromoKey } from './scene-provider.mjs';
 import { runSceneCheck } from './check-scene.mjs';
 import { buildEstimateModel, loadBase, readStats } from './estimate.mjs';
 import { createHcxRunner, HCX_PHOTO_MODEL } from './hcx-runner.mjs';
@@ -117,13 +117,17 @@ export function createPromoService(deps = {}) {
   const tools = () => (toolsPromise ??= deps.tools ? Promise.resolve(deps.tools) : (deps.detect || detectTools)({ env }));
   let videoRunner = deps.runner;
   const getVideoRunner = async () => (videoRunner ??= createClaudeCliRunner({ command: (await tools()).claude, model: config.model, spawnProcess: deps.spawnProcess, env }));
-  const transport = createClovaStudio({ apiKey: env.CLOVASTUDIO_API_KEY, baseUrl: env.CLOVASTUDIO_BASE_URL, fetchImpl: deps.fetchImpl });
-  const storyRunner = deps.storyRunner ?? deps.runner ?? createHcxRunner({ transport });
+  const transport = createClovaStudio({ apiKey: readPromoKey(env.CLOVASTUDIO_API_KEY_FILE, env.CLOVASTUDIO_API_KEY), baseUrl: env.CLOVASTUDIO_BASE_URL, fetchImpl: deps.fetchImpl });
+  const storyRunner = deps.storyRunner ?? deps.runner ?? createHcxRunner({ transport, retries: deps.pipeline?.templates ? 0 : 1 });
   const browserPath = async () => (await tools()).browser;
   const ffmpeg = async () => (await tools()).ffmpeg;
   // D-327 Q7: the default scene provider uses the pipeline's Claude CLI runner.
   const sceneRunner = config.sceneProvider === 'naver' ? createHcxRunner({ stage: 'scenes', transport })
-    : config.sceneProvider === 'claude-api' ? createClaudeApiRunner({ approved: config.claudeApiApproved, model: config.model })
+    : config.sceneProvider === 'claude-api' ? createClaudeApiRunner({
+      approved: config.claudeApiApproved,
+      apiKey: config.claudeApiApproved ? readPromoKey(env.ANTHROPIC_API_KEY_FILE, env.ANTHROPIC_API_KEY) : '',
+      model: promoClaudeApiModel(env), fetchImpl: deps.fetchImpl, video: true,
+    })
       : null;
   const requireClaude = config.sceneProvider === 'claude' || !config.hcxLookEnabled;
   const pipeline = createPipeline({

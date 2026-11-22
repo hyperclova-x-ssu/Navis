@@ -1,0 +1,118 @@
+{
+  "id": "ref-10",
+  "version": "1",
+  "nameKey": "promo.ref.ref-10.name",
+  "cardAspect": "9:16",
+  "previewFrom": 0,
+  "previewTo": 4,
+  "posterAt": 4.6,
+  "moods": [
+    "warm",
+    "lively"
+  ],
+  "concepts": [
+    "new-item",
+    "behind-the-scenes"
+  ],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 6
+      },
+      "photoSlots": {
+        "max": 3
+      }
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 8
+      },
+      "photoSlots": {
+        "max": 4
+      }
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 14
+      },
+      "photoSlots": {
+        "max": 7
+      }
+    }
+  },
+  "posterScene": "s2",
+  "motion": {
+    "id": "ref-10",
+    "key": "split-duo",
+    "name": "스플릿 듀오",
+    "order": 4,
+    "energy": "medium",
+    "previewMenuId": "m-bagel-plain",
+    "layout": "2~4분할/비대칭 벤토, 12px 거터",
+    "motion": "위/아래 반대 방향 슬라이드, 활성 칸 45→62% 확장, 칸별 반대 줌",
+    "transition": "clip-path 셔터, 칸 교체",
+    "type": "교차점 알약 배지",
+    "cuts": {
+      "10": 6,
+      "15": 9,
+      "30": 16
+    },
+    "tempo": "밝은 105",
+    "colors": [
+      "#FAFAF7",
+      "#111111",
+      "#2F6BFF"
+    ],
+    "moves": [
+      "split",
+      "grid",
+      "slide",
+      "badge",
+      "wipe"
+    ],
+    "framing": "2–4 split / asymmetric bento, 12px gutters; top/bottom cells slide in opposite directions; active cell expands 45→62%; opposite zoom per cell; bright 105 BPM; cuts 6/9/16 counting cells; preview menu: 베이글 (bread), optional 1 아메리카노 pair shot as support",
+    "transitions": "Primary 70%: clip-path shutter 360ms cubic-bezier(0.65,0,0.35,1); secondary 30%: cell swap 320ms cubic-bezier(0.22,1,0.36,1)",
+    "typography": "Navis Sans 800 pill badge at cell intersection, 36–44px, grounded fact only; main caption Navis Sans 900 ≥52px",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": null,
+    "concepts": [],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 1
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 1
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 1
+      }
+    }
+  }
+}

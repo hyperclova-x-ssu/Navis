@@ -1,0 +1,120 @@
+{
+  "id": "ref-13",
+  "version": "1",
+  "nameKey": "promo.ref.ref-13.name",
+  "cardAspect": "4:5",
+  "previewFrom": 2.7,
+  "previewTo": 7,
+  "posterAt": 7.2,
+  "moods": [
+    "warm",
+    "clean"
+  ],
+  "concepts": [
+    "day-at-shop",
+    "behind-the-scenes"
+  ],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 6
+      },
+      "photoSlots": {
+        "max": 2
+      }
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 8
+      },
+      "photoSlots": {
+        "max": 3
+      }
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 14
+      },
+      "photoSlots": {
+        "max": 5
+      }
+    }
+  },
+  "posterScene": "s3",
+  "motion": {
+    "id": "ref-13",
+    "key": "timeline",
+    "name": "하루 타임라인",
+    "order": 7,
+    "energy": "medium",
+    "previewMenuId": "m-cafe-latte",
+    "layout": "시간대별 색 변하는 종이 배경 + 세로 진행 바",
+    "motion": "카드 좌우 교차 슬라이드(2° 틸트), 진행선 연속 그려짐",
+    "transition": "카드 교체 + 배경 색 크로스",
+    "type": "좌상단 라벨 + 하단 캡션",
+    "cuts": {
+      "10": 4,
+      "15": 6,
+      "30": 10
+    },
+    "tempo": "어쿠스틱",
+    "colors": [
+      "#F6E9D2",
+      "#2B2118",
+      "#D9822B"
+    ],
+    "moves": [
+      "slide",
+      "tilt",
+      "wipe",
+      "kinetic",
+      "pan"
+    ],
+    "framing": "Paper background whose color shifts by time of day + vertical progress bar; cards slide in alternating left/right with 2° tilt; progress line draws continuously; acoustic track (pre-measured BPM); cuts 4/6/10; preview menu: 카페라떼 (drink), real facts/hours only",
+    "transitions": "Primary 70%: card swap 400ms cubic-bezier(0.22,1,0.36,1); secondary 30%: background color cross 600ms cubic-bezier(0.45,0,0.55,1)",
+    "typography": "Navis Sans 800 top-left label ≥36px (inside x60/y120) + Navis Sans 500 bottom caption ≥52px",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": null,
+    "concepts": [
+      "day-at-shop"
+    ],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 1
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 1
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 1
+      }
+    }
+  }
+}

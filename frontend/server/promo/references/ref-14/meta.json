@@ -1,0 +1,115 @@
+{
+  "id": "ref-14",
+  "version": "1",
+  "nameKey": "promo.ref.ref-14.name",
+  "cardAspect": "9:16",
+  "previewFrom": 0,
+  "previewTo": 4,
+  "posterAt": 0.55,
+  "moods": [],
+  "concepts": [],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 7
+      },
+      "photoSlots": {
+        "max": 6
+      },
+      "minSceneSec": 1
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 10
+      },
+      "photoSlots": {
+        "max": 8
+      },
+      "minSceneSec": 1
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 16
+      },
+      "photoSlots": {
+        "max": 12
+      },
+      "minSceneSec": 1
+    }
+  },
+  "motion": {
+    "id": "ref-14",
+    "key": "magazine",
+    "name": "타이포 포스터 / 매거진 커버",
+    "order": 8,
+    "energy": "medium",
+    "previewMenuId": "m-pumpkin-einspanner",
+    "layout": "글자가 곧 레이아웃, 아치/기하학 창(cutout) 사진 프레임 (글자 안 사진 마스크는 한글 가독성·검사기 충돌로 제외)",
+    "motion": "단어 단위 마스크 리빌(70ms 스태거), 아치 확장",
+    "transition": "아치/아이리스 clip-path",
+    "type": "Navis Sans 900 초대형 + 가는 서브",
+    "cuts": {
+      "10": 4,
+      "15": 7,
+      "30": 12
+    },
+    "tempo": "자신감 100",
+    "colors": [
+      "#F2EEE6",
+      "#141414",
+      "#B5462F"
+    ],
+    "moves": [
+      "kinetic",
+      "iris",
+      "wipe",
+      "pan"
+    ],
+    "framing": "Type is the layout; photo inside arch/geometric cutout window (no photo masked in glyphs); word-unit mask reveal 70ms stagger; arch expands; confident 100 BPM; cuts 4/7/12; preview menu: 단호박 아인슈페너 (drink), real facts only",
+    "transitions": "Primary 70%: arch clip-path 450ms cubic-bezier(0.65,0,0.35,1); secondary 30%: iris clip-path 400ms, same curve",
+    "typography": "Navis Sans 900 oversized title (≤35% frame area) + thin Navis Sans 200 sub ≥36px; word-level reveal only, no Korean per-glyph scatter",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": null,
+    "concepts": [
+      "new-item"
+    ],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 1
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 1
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 1
+      }
+    }
+  }
+}

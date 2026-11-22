@@ -1,0 +1,116 @@
+{
+  "id": "ref-18",
+  "version": "1",
+  "nameKey": "promo.ref.ref-18.name",
+  "cardAspect": "9:16",
+  "previewFrom": 0,
+  "previewTo": 4,
+  "posterAt": 0.55,
+  "moods": [],
+  "concepts": [],
+  "lengths": {
+    "10": {
+      "sceneCount": {
+        "min": 3,
+        "max": 7
+      },
+      "photoSlots": {
+        "max": 6
+      },
+      "minSceneSec": 1
+    },
+    "15": {
+      "sceneCount": {
+        "min": 4,
+        "max": 10
+      },
+      "photoSlots": {
+        "max": 8
+      },
+      "minSceneSec": 1
+    },
+    "30": {
+      "sceneCount": {
+        "min": 6,
+        "max": 16
+      },
+      "photoSlots": {
+        "max": 12
+      },
+      "minSceneSec": 1
+    }
+  },
+  "motion": {
+    "id": "ref-18",
+    "key": "moody-night",
+    "name": "무디 나이트 / 소프트포커스",
+    "order": 12,
+    "energy": "calm",
+    "previewMenuId": "m-basque-cake",
+    "layout": "에스프레소 블랙+앰버 또는 따뜻한 블룸·그레인 두 팔레트, 포커스 스포트라이트",
+    "motion": "아주 느린 푸시(1→1.08), 블러→선명(랙 포커스), CSS 김·빛",
+    "transition": "≤380ms 블러 디졸브(rules.json transition.maxSec 0.4), 대각 와이프",
+    "type": "가는 세리프, 중앙",
+    "cuts": {
+      "10": 3,
+      "15": 4,
+      "30": 7
+    },
+    "tempo": "앰비언트 70~80",
+    "colors": [
+      "#1A120D",
+      "#F3E6D3",
+      "#E0A040"
+    ],
+    "moves": [
+      "rack-focus",
+      "light-leak",
+      "grain",
+      "wipe",
+      "pan"
+    ],
+    "framing": "Espresso black + amber, or warm bloom + grain (seeded palette pick); focus spotlight; very slow push 1→1.08; blur→sharp rack focus; CSS steam/light; ambient 70–80 BPM; cuts 3/4/7; preview menu: 바스크 케이크 (dessert), real facts only",
+    "transitions": "Primary 70%: blur dissolve ≤380ms cubic-bezier(0.45,0,0.55,1) (rules.json transition.maxSec 0.4); secondary 30%: diagonal wipe 360ms cubic-bezier(0.65,0,0.35,1)",
+    "typography": "Navis Serif centered, thin feel via 0.1em tracking and soft cream tone (only ExtraBold bundled); main ≥52px",
+    "fonts": [
+      "Navis Sans",
+      "Navis Serif"
+    ],
+    "fontSlot": null,
+    "concepts": [
+      "new-item"
+    ],
+    "lengths": {
+      "10": {
+        "sceneCount": {
+          "min": 3,
+          "max": 7
+        },
+        "photoSlots": {
+          "max": 6
+        },
+        "minSceneSec": 1
+      },
+      "15": {
+        "sceneCount": {
+          "min": 4,
+          "max": 10
+        },
+        "photoSlots": {
+          "max": 8
+        },
+        "minSceneSec": 1
+      },
+      "30": {
+        "sceneCount": {
+          "min": 6,
+          "max": 16
+        },
+        "photoSlots": {
+          "max": 12
+        },
+        "minSceneSec": 1
+      }
+    }
+  }
+}

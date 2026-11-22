@@ -228,6 +228,7 @@ test('look-only options are validated before any call', async t => {
   const base = { transport, stages: ['look'], checkBrowser: async () => ({ violations: [] }), captureScreens: async () => {} };
   const attempt = async (name, extra) => runPilot({ ...base, outDir: join(await tempDir(t), name), ...extra });
   await assert.rejects(attempt('unknown', { photoIds: ['cafe-nope-01'], maxCalls: 1 }), { message: 'PILOT_USAGE' });
+  await assert.rejects(attempt('outside-d326', { photoIds: ['cafe-chestnut-latte-02'], maxCalls: 1 }), { message: 'PILOT_USAGE' });
   await assert.rejects(attempt('dup', { photoIds: ['cafe-storefront', 'cafe-storefront'], maxCalls: 2 }), { message: 'PILOT_USAGE' });
   await assert.rejects(attempt('few', { photoIds: ['cafe-storefront', 'cafe-interior-01'], maxCalls: 1 }), { message: 'PILOT_USAGE' });
   assert.equal(called, 0);

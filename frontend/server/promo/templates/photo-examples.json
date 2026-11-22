@@ -1,0 +1,195 @@
+{
+  "version": 1,
+  "author": "claude-opus-5-5",
+  "examples": [
+    {
+      "kind": "table",
+      "subject": "A latte in a cream cup topped with a glazed chestnut, crumbles and cocoa dusting, on a wooden table.",
+      "items": [
+        "cream ceramic cup of latte",
+        "saucer",
+        "metal teaspoon",
+        "glazed chestnut topping",
+        "crumble pieces",
+        "round wooden table",
+        "green velvet bench",
+        "window"
+      ],
+      "flavors": [
+        "chestnut",
+        "cocoa powder",
+        "crumble"
+      ],
+      "people": "none",
+      "textInImage": "",
+      "focus": {
+        "x": 0.55,
+        "y": 0.5
+      },
+      "captionHints": [
+        "Latte crowned with a glossy chestnut",
+        "Cocoa-dusted foam with chestnut topping",
+        "A cozy cup by the window",
+        "Chestnut and crumble on creamy foam"
+      ],
+      "quality": "good",
+      "menuShown": "main",
+      "amount": "one"
+    },
+    {
+      "kind": "table",
+      "subject": "An iced café latte in a tall glass on a cream saucer, layered milk and coffee on a wooden table.",
+      "items": [
+        "iced latte in tall glass",
+        "cream saucer",
+        "white ceramic cup on saucer",
+        "small spoon",
+        "empty plate with crumbs",
+        "wooden round table",
+        "green velvet bench",
+        "window with small flower vase"
+      ],
+      "flavors": [],
+      "people": "none",
+      "textInImage": "",
+      "focus": {
+        "x": 0.45,
+        "y": 0.57
+      },
+      "captionHints": [
+        "Iced latte with layered milk and coffee",
+        "A calm window-side table with an iced latte",
+        "Iced latte and a hot cup on a wooden table",
+        "Cool iced latte by the window"
+      ],
+      "quality": "good",
+      "menuShown": "main",
+      "amount": "few"
+    },
+    {
+      "kind": "table",
+      "subject": "Iced latte with visible vanilla bean specks in a glass on a white saucer on a wooden table",
+      "items": [
+        "iced latte in glass",
+        "white saucer",
+        "metal spoon",
+        "glass of water",
+        "plate with pastry slice",
+        "coffee cup on saucer",
+        "wooden round table",
+        "green bench seat"
+      ],
+      "flavors": [
+        "vanilla bean",
+        "espresso",
+        "milk"
+      ],
+      "people": "none",
+      "textInImage": "",
+      "focus": {
+        "x": 0.49,
+        "y": 0.5
+      },
+      "captionHints": [
+        "Iced latte with vanilla bean specks",
+        "Layers of espresso and milk over ice",
+        "Cool latte on a wooden table",
+        "A calm cafe corner with an iced latte"
+      ],
+      "quality": "good",
+      "menuShown": "main",
+      "amount": "few"
+    },
+    {
+      "kind": "table",
+      "subject": "A glossy golden salt butter roll topped with coarse salt crystals on a cream plate, coffee behind.",
+      "items": [
+        "salt butter roll",
+        "cream ceramic plate",
+        "paper napkin",
+        "glass of water",
+        "coffee cup on saucer",
+        "spoon",
+        "wooden table",
+        "green bench seating"
+      ],
+      "flavors": [
+        "coarse salt"
+      ],
+      "people": "none",
+      "textInImage": "",
+      "focus": {
+        "x": 0.5,
+        "y": 0.73
+      },
+      "captionHints": [
+        "Glossy salt roll with coffee",
+        "Golden roll topped with salt crystals",
+        "A calm cafe break: roll and coffee",
+        "Shiny, freshly baked salt roll"
+      ],
+      "quality": "good",
+      "menuShown": "main",
+      "amount": "one"
+    },
+    {
+      "kind": "table",
+      "subject": "A slice of cheesecake with a deeply caramelized, burnt top served on a cream plate on a wooden table.",
+      "items": [
+        "cheesecake slice",
+        "cream ceramic plate",
+        "round wooden table",
+        "green velvet bench",
+        "large window"
+      ],
+      "flavors": [
+        "caramelized top"
+      ],
+      "people": "none",
+      "textInImage": "",
+      "focus": {
+        "x": 0.5,
+        "y": 0.62
+      },
+      "captionHints": [
+        "Caramelized top, creamy center",
+        "A slice by the sunny window",
+        "Burnt top, soft custardy inside",
+        "Cheesecake on a wooden table"
+      ],
+      "quality": "good",
+      "menuShown": "main",
+      "amount": "one"
+    },
+    {
+      "kind": "inhand",
+      "subject": "A slice of Basque-style burnt cheesecake in an open kraft paper takeaway box held in a hand.",
+      "items": [
+        "slice of burnt cheesecake",
+        "kraft paper takeaway box",
+        "hand",
+        "cream knit sweater sleeve",
+        "green velvet sofa",
+        "window with trees"
+      ],
+      "flavors": [
+        "caramelized top"
+      ],
+      "people": "hands",
+      "textInImage": "",
+      "focus": {
+        "x": 0.56,
+        "y": 0.66
+      },
+      "captionHints": [
+        "Caramelized top, creamy center",
+        "A cheesecake slice to take away",
+        "Burnt top cheesecake in a kraft box",
+        "Creamy slice by the window"
+      ],
+      "quality": "good",
+      "menuShown": "main",
+      "amount": "one"
+    }
+  ]
+}

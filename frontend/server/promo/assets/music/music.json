@@ -10,6 +10,41 @@
     "durationSec": 60,
     "moods": [
       "활기찬"
+    ],
+    "bpm": 85.0,
+    "beatOffsetSec": 0.014,
+    "beatsPerBar": 4,
+    "energySections": [
+      {
+        "from": 0,
+        "to": 10,
+        "energy": "low"
+      },
+      {
+        "from": 10,
+        "to": 20,
+        "energy": "medium"
+      },
+      {
+        "from": 20,
+        "to": 30,
+        "energy": "high"
+      },
+      {
+        "from": 30,
+        "to": 40,
+        "energy": "high"
+      },
+      {
+        "from": 40,
+        "to": 50,
+        "energy": "medium"
+      },
+      {
+        "from": 50,
+        "to": 60,
+        "energy": "medium"
+      }
     ]
   },
   {
@@ -23,6 +58,41 @@
     "durationSec": 60,
     "moods": [
       "따뜻한"
+    ],
+    "bpm": 108.1,
+    "beatOffsetSec": 0.472,
+    "beatsPerBar": 4,
+    "energySections": [
+      {
+        "from": 0,
+        "to": 10,
+        "energy": "medium"
+      },
+      {
+        "from": 10,
+        "to": 20,
+        "energy": "medium"
+      },
+      {
+        "from": 20,
+        "to": 30,
+        "energy": "medium"
+      },
+      {
+        "from": 30,
+        "to": 40,
+        "energy": "medium"
+      },
+      {
+        "from": 40,
+        "to": 50,
+        "energy": "medium"
+      },
+      {
+        "from": 50,
+        "to": 60,
+        "energy": "low"
+      }
     ]
   },
   {
@@ -37,6 +107,41 @@
     "moods": [
       "고급스러운",
       "깔끔한"
+    ],
+    "bpm": 129.0,
+    "beatOffsetSec": 0.042,
+    "beatsPerBar": 4,
+    "energySections": [
+      {
+        "from": 0,
+        "to": 10,
+        "energy": "medium"
+      },
+      {
+        "from": 10,
+        "to": 20,
+        "energy": "high"
+      },
+      {
+        "from": 20,
+        "to": 30,
+        "energy": "high"
+      },
+      {
+        "from": 30,
+        "to": 40,
+        "energy": "low"
+      },
+      {
+        "from": 40,
+        "to": 50,
+        "energy": "medium"
+      },
+      {
+        "from": 50,
+        "to": 60,
+        "energy": "low"
+      }
     ]
   }
 ]

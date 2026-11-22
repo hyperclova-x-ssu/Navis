@@ -1,0 +1,516 @@
+{
+  "version": 3,
+  "author": "claude-opus-5-5",
+  "references": [
+    {
+      "id": "ref-7",
+      "key": "beat-cut",
+      "name": "비트 컷",
+      "order": 1,
+      "energy": "fast",
+      "previewMenuId": "m-coldbrew",
+      "layout": "풀블리드, 고대비, 진한 색",
+      "motion": "박자에 하드컷, 0.25s 펀치인(1→1.12) 후 정지, 한 사진 안에서 와이드→미디엄→접사",
+      "transition": "하드컷 + 가로 휩쓸기(140ms)",
+      "type": "초대형 굵은 고딕, 박자당 1~4자",
+      "cuts": {
+        "10": 6,
+        "15": 10,
+        "30": 18
+      },
+      "tempo": "업비트 120",
+      "colors": [
+        "#0B0B0B",
+        "#FFFFFF",
+        "#FF3B1F"
+      ],
+      "moves": [
+        "cut",
+        "punch",
+        "whip",
+        "kinetic",
+        "ramp"
+      ],
+      "framing": "Full-bleed, high contrast, deep color; hard cuts on beats (upbeat 120 BPM); 0.25s punch-in 1→1.12 then hold; wide→medium→macro crops inside one photo; cuts 6/10/18 as visual beats (minSceneSec 0.45 override allowed); preview menu: 콜드브루 (drink), real facts only",
+      "transitions": "Primary 70%: hard cut snapped to beat ±60ms (step, 0ms); secondary 30%: horizontal whip 140ms cubic-bezier(0.7,0,0.3,1) with 12px motion blur, no text mid-whip",
+      "typography": "Navis Sans 900 oversized, tracking -0.02em, 1–4 chars per beat; main/hook ≥52px; hard-cut entry exempt from 80–320ms rule; 0.5–0.9s cuts carry 0–4 chars",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": [
+        "todays-deal"
+      ]
+    },
+    {
+      "id": "ref-8",
+      "key": "lens",
+      "name": "줌 렌즈 투어",
+      "order": 2,
+      "energy": "fast",
+      "previewMenuId": "m-deep-choco",
+      "layout": "디테일 확대 → 전체로 빠지며 공개, 원형 돋보기(PiP)",
+      "motion": "매치 줌: 다음 컷이 디테일 크롭에서 시작해 풀아웃",
+      "transition": "줌 스루",
+      "type": "디테일에 핀+지시선 라벨",
+      "cuts": {
+        "10": 5,
+        "15": 8,
+        "30": 14
+      },
+      "tempo": "중간 100",
+      "colors": [
+        "#F5EFE6",
+        "#2A1A12",
+        "#C8553D"
+      ],
+      "moves": [
+        "loupe",
+        "pan",
+        "ramp",
+        "kinetic",
+        "badge"
+      ],
+      "framing": "Detail magnified, then pull-out reveals the whole dish; circular loupe PiP; match zoom: next cut starts on a detail crop and pulls out; zoom center photo.meta.focus; mid 100 BPM; cuts 5/8/14; preview menu: 딥초코 (dessert), real facts only",
+      "transitions": "Primary 70%: zoom-through 500ms cubic-bezier(0.83,0,0.17,1), scale 2.5→1 match zoom; secondary 30%: shorter zoom-through 350ms, same curve (single zoom-through family)",
+      "typography": "Navis Sans 700 pin labels with inline SVG pin + 3px leader line on details, 36–44px; titles Navis Sans 900 ≥52px; word reveal 70–120ms stagger",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": [
+        "behind-the-scenes",
+        "new-item"
+      ]
+    },
+    {
+      "id": "ref-9",
+      "key": "sticker",
+      "name": "스티커 팝",
+      "order": 3,
+      "energy": "medium",
+      "previewMenuId": "m-grapefruit-ade",
+      "layout": "파스텔 단색, 원/블롭 마스크 사진, 벡터 스티커(별·버스트)",
+      "motion": "탄성 스케일인, 박자에 통통",
+      "transition": "원형 아이리스, 스케일 스루",
+      "type": "Navis Sans 900 + 외곽선(둥근 느낌은 자간·SVG로)",
+      "cuts": {
+        "10": 7,
+        "15": 10,
+        "30": 20
+      },
+      "tempo": "우쿨렐레 110",
+      "colors": [
+        "#FFE3D8",
+        "#2B1B2E",
+        "#FF6F91"
+      ],
+      "moves": [
+        "badge",
+        "iris",
+        "punch",
+        "kinetic"
+      ],
+      "framing": "Pastel solid background; photos in circle/blob clip-path masks; inline geometric SVG star/burst stickers (no clip art, no external assets); elastic scale-in, bounce on beat 1→1.025→1 160ms; ukulele 110 BPM; cuts 7/10/20; preview menu: 자몽에이드 (drink), real facts only",
+      "transitions": "Primary 70%: circular iris clip-path 400ms cubic-bezier(0.65,0,0.35,1) from focus; secondary 30%: scale-through 350ms cubic-bezier(0.34,1.56,0.64,1)",
+      "typography": "Navis Sans 900 + 6px outline via paint-order stroke; rounded feel only through +0.02em tracking and SVG rounded shapes; main ≥52px",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": []
+    },
+    {
+      "id": "ref-10",
+      "key": "split-duo",
+      "name": "스플릿 듀오",
+      "order": 4,
+      "energy": "medium",
+      "previewMenuId": "m-bagel-plain",
+      "layout": "2~4분할/비대칭 벤토, 12px 거터",
+      "motion": "위/아래 반대 방향 슬라이드, 활성 칸 45→62% 확장, 칸별 반대 줌",
+      "transition": "clip-path 셔터, 칸 교체",
+      "type": "교차점 알약 배지",
+      "cuts": {
+        "10": 6,
+        "15": 9,
+        "30": 16
+      },
+      "tempo": "밝은 105",
+      "colors": [
+        "#FAFAF7",
+        "#111111",
+        "#2F6BFF"
+      ],
+      "moves": [
+        "split",
+        "grid",
+        "slide",
+        "badge",
+        "wipe"
+      ],
+      "framing": "2–4 split / asymmetric bento, 12px gutters; top/bottom cells slide in opposite directions; active cell expands 45→62%; opposite zoom per cell; bright 105 BPM; cuts 6/9/16 counting cells; preview menu: 베이글 (bread), optional 1 아메리카노 pair shot as support",
+      "transitions": "Primary 70%: clip-path shutter 360ms cubic-bezier(0.65,0,0.35,1); secondary 30%: cell swap 320ms cubic-bezier(0.22,1,0.36,1)",
+      "typography": "Navis Sans 800 pill badge at cell intersection, 36–44px, grounded fact only; main caption Navis Sans 900 ≥52px",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": []
+    },
+    {
+      "id": "ref-11",
+      "key": "scrapbook",
+      "name": "폴라로이드 스크랩북",
+      "order": 5,
+      "energy": "medium",
+      "previewMenuId": "m-cookie-choco",
+      "layout": "종이 질감, 폴라로이드+테이프",
+      "motion": "감쇠 스프링 낙하(±2.5°), 프레임 안 1→1.04 미세 드리프트",
+      "transition": "카드 겹쳐 쌓기/걷어내기",
+      "type": "Navis Sans 700 + 종이 카드 + 형광펜 스와이프",
+      "cuts": {
+        "10": 5,
+        "15": 7,
+        "30": 13
+      },
+      "tempo": "어쿠스틱 90",
+      "colors": [
+        "#F3EBDD",
+        "#2E2A24",
+        "#F2D84B"
+      ],
+      "moves": [
+        "stack",
+        "tilt",
+        "pan",
+        "grain",
+        "kinetic"
+      ],
+      "framing": "CSS paper texture (inline gradients/feTurbulence), polaroid frames + CSS tape strips; damped spring drop with ±2.5° rotation; in-frame micro drift 1→1.04; acoustic 90 BPM; cuts 5/7/13; preview menu: 쿠키 (dessert), real facts only",
+      "transitions": "Primary 70%: card stack-on 500ms damped spring cubic-bezier(0.34,1.4,0.64,1), overshoot ≤6%; secondary 30%: card peel-off 350ms cubic-bezier(0.55,0,1,0.45)",
+      "typography": "Navis Sans 700 on paper cards + highlighter swipe 300ms left→right behind words; main ≥52px, captions ≥36px",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": [
+        "review-roundup"
+      ]
+    },
+    {
+      "id": "ref-12",
+      "key": "ticker",
+      "name": "티커 헤드라인",
+      "order": 6,
+      "energy": "medium",
+      "previewMenuId": "m-saltbread",
+      "layout": "뉴스 하단 바, 빨강/검정, **실제 사실만** 흐르는 티커",
+      "motion": "빠른 푸시인, 티커 상시 이동",
+      "transition": "슬라이드 푸시, 바 와이프",
+      "type": "굵은 고딕 + 작은 티커",
+      "cuts": {
+        "10": 5,
+        "15": 8,
+        "30": 15
+      },
+      "tempo": "드라이빙 115",
+      "colors": [
+        "#0E0E0E",
+        "#FFFFFF",
+        "#E10600"
+      ],
+      "moves": [
+        "slide",
+        "wipe",
+        "kinetic",
+        "punch"
+      ],
+      "framing": "News lower bar red/black inside safe zone (y≤1620); ticker moves constantly carrying real facts only (replaces countdown); fast push-in on photos; driving 115 BPM; cuts 5/8/15; preview menu: 소금빵 (bread), real facts only",
+      "transitions": "Primary 70%: slide push 320ms cubic-bezier(0.22,1,0.36,1); secondary 30%: bar wipe 300ms cubic-bezier(0.65,0,0.35,1)",
+      "typography": "Bold Navis Sans 900 headline ≥52px + small Navis Sans 700 ticker ≥36px; numbers tabular-nums",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": [
+        "todays-deal"
+      ]
+    },
+    {
+      "id": "ref-13",
+      "key": "timeline",
+      "name": "하루 타임라인",
+      "order": 7,
+      "energy": "medium",
+      "previewMenuId": "m-cafe-latte",
+      "layout": "시간대별 색 변하는 종이 배경 + 세로 진행 바",
+      "motion": "카드 좌우 교차 슬라이드(2° 틸트), 진행선 연속 그려짐",
+      "transition": "카드 교체 + 배경 색 크로스",
+      "type": "좌상단 라벨 + 하단 캡션",
+      "cuts": {
+        "10": 4,
+        "15": 6,
+        "30": 10
+      },
+      "tempo": "어쿠스틱",
+      "colors": [
+        "#F6E9D2",
+        "#2B2118",
+        "#D9822B"
+      ],
+      "moves": [
+        "slide",
+        "tilt",
+        "wipe",
+        "kinetic",
+        "pan"
+      ],
+      "framing": "Paper background whose color shifts by time of day + vertical progress bar; cards slide in alternating left/right with 2° tilt; progress line draws continuously; acoustic track (pre-measured BPM); cuts 4/6/10; preview menu: 카페라떼 (drink), real facts/hours only",
+      "transitions": "Primary 70%: card swap 400ms cubic-bezier(0.22,1,0.36,1); secondary 30%: background color cross 600ms cubic-bezier(0.45,0,0.55,1)",
+      "typography": "Navis Sans 800 top-left label ≥36px (inside x60/y120) + Navis Sans 500 bottom caption ≥52px",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": [
+        "day-at-shop"
+      ]
+    },
+    {
+      "id": "ref-14",
+      "key": "magazine",
+      "name": "타이포 포스터 / 매거진 커버",
+      "order": 8,
+      "energy": "medium",
+      "previewMenuId": "m-pumpkin-einspanner",
+      "layout": "글자가 곧 레이아웃, 아치/기하학 창(cutout) 사진 프레임 (글자 안 사진 마스크는 한글 가독성·검사기 충돌로 제외)",
+      "motion": "단어 단위 마스크 리빌(70ms 스태거), 아치 확장",
+      "transition": "아치/아이리스 clip-path",
+      "type": "Navis Sans 900 초대형 + 가는 서브",
+      "cuts": {
+        "10": 4,
+        "15": 7,
+        "30": 12
+      },
+      "tempo": "자신감 100",
+      "colors": [
+        "#F2EEE6",
+        "#141414",
+        "#B5462F"
+      ],
+      "moves": [
+        "kinetic",
+        "iris",
+        "wipe",
+        "pan"
+      ],
+      "framing": "Type is the layout; photo inside arch/geometric cutout window (no photo masked in glyphs); word-unit mask reveal 70ms stagger; arch expands; confident 100 BPM; cuts 4/7/12; preview menu: 단호박 아인슈페너 (drink), real facts only",
+      "transitions": "Primary 70%: arch clip-path 450ms cubic-bezier(0.65,0,0.35,1); secondary 30%: iris clip-path 400ms, same curve",
+      "typography": "Navis Sans 900 oversized title (≤35% frame area) + thin Navis Sans 200 sub ≥36px; word-level reveal only, no Korean per-glyph scatter",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": [
+        "new-item"
+      ]
+    },
+    {
+      "id": "ref-15",
+      "key": "menu-board",
+      "name": "메뉴판",
+      "order": 9,
+      "energy": "medium",
+      "previewMenuId": "m-earlgrey-tea",
+      "layout": "칠판 또는 영수증지, 점선 구분",
+      "motion": "글자가 손으로 그려지듯 등장, 스탬프 쾅(1.5→1.0). **가격 없으면 메뉴명+가게명으로 자동 대체**",
+      "transition": "지우개 와이프, 종이 피드",
+      "type": "Navis Sans + SVG 획으로 분필 느낌, 숫자 tabular-nums",
+      "cuts": {
+        "10": 4,
+        "15": 6,
+        "30": 11
+      },
+      "tempo": "로파이 85",
+      "colors": [
+        "#1F2A24",
+        "#F4F1E8",
+        "#E8C547"
+      ],
+      "moves": [
+        "kinetic",
+        "badge",
+        "wipe",
+        "slide",
+        "grain"
+      ],
+      "framing": "Chalkboard or receipt paper with dotted dividers; text appears hand-drawn via SVG stroke-dashoffset; stamp slam 1.5→1.0 only for real price; no price → auto fallback to menu name + store name; lo-fi 85 BPM; cuts 4/6/11; preview menu: 얼그레이 티 (drink)",
+      "transitions": "Primary 70%: eraser wipe 380ms cubic-bezier(0.65,0,0.35,1); secondary 30%: paper feed 420ms cubic-bezier(0.22,1,0.36,1)",
+      "typography": "Navis Sans 700 + SVG strokes for chalk feel; stamp Navis Sans 900; numbers font-variant-numeric: tabular-nums; main ≥52px",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": [
+        "todays-deal"
+      ]
+    },
+    {
+      "id": "ref-16",
+      "key": "film",
+      "name": "필름 스트립",
+      "order": 10,
+      "energy": "calm",
+      "previewMenuId": "m-einspanner-choco",
+      "layout": "숯색 배경, 스프로킷 홀, 3프레임 세로 필름",
+      "motion": "연속 스크롤+이즈 정지, 활성 프레임 1.06 확대·옆 프레임 어둡게",
+      "transition": "연속(컷 없음)",
+      "type": "모노스페이스 날짜 도장 캡션",
+      "cuts": {
+        "10": 4,
+        "15": 6,
+        "30": 10
+      },
+      "tempo": "로파이 90",
+      "colors": [
+        "#2A2A2C",
+        "#EDE6DA",
+        "#F0B44C"
+      ],
+      "moves": [
+        "film",
+        "tilt",
+        "grain",
+        "kinetic"
+      ],
+      "framing": "Charcoal background, CSS sprocket holes, 3-frame vertical film strip; continuous scroll with ease-stop; active frame scales 1.06, side frames dimmed (brightness 0.55); lo-fi 90 BPM; cuts 4/6/10 as frame beats; preview menu: 아인슈페너 초코 (drink), real facts only",
+      "transitions": "Primary 100%: continuous scroll, no cuts, each frame advance 700ms cubic-bezier(0.65,0,0.35,1) ease-stop; secondary: none (continuous only per agreement)",
+      "typography": "Date-stamp caption emulating monospace with Navis Sans 500 tabular-nums + 0.12em tracking, ≥36px; dates only if real",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": [
+        "behind-the-scenes",
+        "day-at-shop"
+      ]
+    },
+    {
+      "id": "ref-17",
+      "key": "parallax",
+      "name": "패럴랙스 플로트 카드",
+      "order": 11,
+      "energy": "calm",
+      "previewMenuId": "m-jeju-matcha",
+      "layout": "부드러운 그라데이션, 흐린 확대 배경 + 선명한 둥근 카드",
+      "motion": "3층 깊이(배경 0.6x/카드 1x/글자 1.4x), 천천히 달리",
+      "transition": "스케일 크로스디졸브",
+      "type": "명조 계열, 넓은 자간",
+      "cuts": {
+        "10": 3,
+        "15": 5,
+        "30": 8
+      },
+      "tempo": "피아노 75",
+      "colors": [
+        "#EEF2E6",
+        "#1E2B1F",
+        "#6E8B3D"
+      ],
+      "moves": [
+        "parallax",
+        "pan",
+        "light-leak",
+        "kinetic"
+      ],
+      "framing": "Soft gradient; blurred enlarged background + sharp rounded card (24px radius); 3 depth layers bg 0.6x / card 1x / text 1.4x; slow dolly; review quote only if real; piano 75 BPM; cuts 3/5/8; preview menu: 제주 말차 (drink)",
+      "transitions": "Primary 70%: scale cross-dissolve 500ms cubic-bezier(0.45,0,0.55,1) (1.04→1); secondary 30%: shorter scale cross-dissolve 360ms, same family",
+      "typography": "Navis Serif (myeongjo) with wide tracking 0.08–0.12em, main ≥52px; sub Navis Sans 300 ≥36px",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": [
+        "review-roundup"
+      ]
+    },
+    {
+      "id": "ref-18",
+      "key": "moody-night",
+      "name": "무디 나이트 / 소프트포커스",
+      "order": 12,
+      "energy": "calm",
+      "previewMenuId": "m-basque-cake",
+      "layout": "에스프레소 블랙+앰버 또는 따뜻한 블룸·그레인 두 팔레트, 포커스 스포트라이트",
+      "motion": "아주 느린 푸시(1→1.08), 블러→선명(랙 포커스), CSS 김·빛",
+      "transition": "≤380ms 블러 디졸브(rules.json transition.maxSec 0.4), 대각 와이프",
+      "type": "가는 세리프, 중앙",
+      "cuts": {
+        "10": 3,
+        "15": 4,
+        "30": 7
+      },
+      "tempo": "앰비언트 70~80",
+      "colors": [
+        "#1A120D",
+        "#F3E6D3",
+        "#E0A040"
+      ],
+      "moves": [
+        "rack-focus",
+        "light-leak",
+        "grain",
+        "wipe",
+        "pan"
+      ],
+      "framing": "Espresso black + amber, or warm bloom + grain (seeded palette pick); focus spotlight; very slow push 1→1.08; blur→sharp rack focus; CSS steam/light; ambient 70–80 BPM; cuts 3/4/7; preview menu: 바스크 케이크 (dessert), real facts only",
+      "transitions": "Primary 70%: blur dissolve ≤380ms cubic-bezier(0.45,0,0.55,1) (rules.json transition.maxSec 0.4); secondary 30%: diagonal wipe 360ms cubic-bezier(0.65,0,0.35,1)",
+      "typography": "Navis Serif centered, thin feel via 0.1em tracking and soft cream tone (only ExtraBold bundled); main ≥52px",
+      "fonts": [
+        "Navis Sans",
+        "Navis Serif"
+      ],
+      "fontSlot": null,
+      "concepts": [
+        "new-item"
+      ]
+    }
+  ],
+  "vocabulary": {
+    "pan": "Translate 6–10% of frame (≥60px) over 2–3s, overscale 1.12 to hide edges, origin photo.meta.focus; easing cubic-bezier(0.45,0,0.55,1); bounds: never linear, no consecutive same direction, text stays x60..1020 y120..1620, WAAPI/__onFrame only, seeded values",
+    "parallax": "3 layers: bg 0.6x (blur 24px, scale 1.15), card 1x, text 1.4x moving opposite to photo; dolly 1→1.08 over shot; easing cubic-bezier(0.33,0,0.2,1); bounds: bg never exposes edges, text inside safe area, contrast ≥4.5:1, counts as 2 motion channels",
+    "wipe": "clip-path bar/diagonal/inset 280–400ms, slat blinds 45ms stagger; easing cubic-bezier(0.65,0,0.35,1); bounds: ≤380ms in moody-night, frame 0 ≥80% visible, last frame never mid-wipe, clip change ≥0.08 counts as change",
+    "split": "2/3/4 cells or 1+2 bento, 12px gutter, active cell 45→62% in 400ms, opposite per-cell zoom 1→1.06 / 1.06→1; easing cubic-bezier(0.22,1,0.36,1); bounds: photo.maxUses 2, noAdjacent, minSceneSec 1.0, cells count as visual beats",
+    "grid": "2x2 grid 12px gutter, cells reveal 80ms stagger 300ms each, each cell drift 1→1.04; easing cubic-bezier(0.22,1,0.36,1); bounds: photo.maxUses 2, no same photo in adjacent cells, ≤2 text blocks, text ≤35% area",
+    "stack": "Card drop from -120px with damped spring 500ms (overshoot ≤6%), rotation ±2.5°, in-frame drift 1→1.04, peel-off 350ms; easing cubic-bezier(0.34,1.4,0.64,1); bounds: ≤3 visible cards, rotation seeded within ±2.5°, text upright and readable",
+    "flip": "rotateY 0→180° over 400ms, perspective 1200px, backface hidden, swap content at 90°; easing cubic-bezier(0.65,0,0.35,1); bounds: no mirrored text, ≤1 flip per shot, not on final frame",
+    "punch": "Scale 1→1.12 in 250ms then hold; chain wide→medium→macro ≤3 steps within one photo around photo.meta.focus; easing cubic-bezier(0.2,0,0,1); bounds: snap to beat ±60ms, upscale never exceeds source sharpness, beat-cut minSceneSec 0.45 only",
+    "whip": "Horizontal translate 100% in 140ms + 12px motion blur; easing cubic-bezier(0.7,0,0.3,1); bounds: no text visible during whip, alternate direction each use, never on last frame",
+    "slide": "Push/slide 100% in 320ms; card alternate left/right with 2° tilt; easing cubic-bezier(0.22,1,0.36,1); bounds: no consecutive same direction, cards end inside safe area, displacement ≥60px",
+    "kinetic": "Word/phrase mask reveal 70–120ms stagger, entry 80–320ms, highlighter swipe 300ms, stamp slam 1.5→1.0 260ms, count-up only real numbers; easing cubic-bezier(0.22,1,0.36,1); bounds: no Korean per-glyph scatter, no photo-in-glyph masks, stamp only real price/badge, dwell ≥max(1.0,0.4+0.10×chars), ≤3.5s static, grounded text",
+    "badge": "Pill badge scale 0→1.08→1 in 260ms, micro accent 1→1.025→1 160ms on beat 1/CTA; easing cubic-bezier(0.34,1.56,0.64,1); bounds: grounded facts only, ≥36px text, contrast ≥4.5:1, inside safe area",
+    "light-leak": "CSS radial-gradient steam/rays/bokeh overlay, opacity 0→0.35, drift at 1.8x camera speed; easing cubic-bezier(0.45,0,0.55,1); bounds: under-text contrast stays ≥4.5:1, CSS only, no external assets",
+    "grain": "Inline SVG feTurbulence or CSS noise, opacity 0.06–0.12, offset stepped via __onFrame from seeded table at 1.8x speed; easing steps(8); bounds: no Math.random/rAF, not counted alone as a motion channel for sceneDisplacement",
+    "tilt": "Vertical translate 6–10% of height (≥60px) over 2–3s, or handheld micro drift ±1.2°; easing cubic-bezier(0.45,0,0.55,1); bounds: overscale ≥1.08 to hide edges, alternate up/down, rotation ≤1.2°",
+    "ramp": "Speed ramp slow→fast→slow: 30%/40%/30% of time covers 10%/80%/10% of travel, scale 1→1.15 or ≥60px move; easing cubic-bezier(0.83,0,0.17,1); bounds: linear forbidden, total duration within beat grid ±10%",
+    "rack-focus": "Blur 10px→0 over 500–700ms with scale 1→1.03 centered on photo.meta.focus; easing cubic-bezier(0.25,0.1,0.25,1); bounds: main visual opacity ≥0.85 at 0.05s, no black fade-in, blur dissolves ≤380ms",
+    "loupe": "Circular PiP 360px diameter at 2.5x on detail with pin + leader line; match zoom next cut starts at 2.5 detail crop and pulls to 1.0 over 600–800ms; easing cubic-bezier(0.83,0,0.17,1); bounds: loupe inside safe area, label text grounded, ≥36px",
+    "film": "3-frame vertical strip, CSS sprockets, advance one frame in 700ms with ease-stop hold ≤1.0s, active frame 1.06, neighbors brightness 0.55; easing cubic-bezier(0.65,0,0.35,1); bounds: lowEnergyStretch ≤1.0s, photo.maxUses 2, noAdjacent",
+    "iris": "Circle/arch clip-path from focus, 400–450ms, hook variant starts at radius covering ≥80% of frame; easing cubic-bezier(0.65,0,0.35,1); bounds: frame 0 ≥80% visible, last frame not mid-iris, clip change ≥0.08",
+    "cut": "Hard cut snapped to beat/half-beat grid ±60ms, minSceneSec 1.0 (beat-cut 0.45), micro accent 1→1.025→1 160ms; easing step; bounds: 0.5–0.9s cuts carry 0–4 chars, no equal-length splits, ≥80% cuts on beat"
+  },
+  "variation": "1. Seed = hash(storeId, menuIds, selected options, takeIndex); remake increments takeIndex for a different video, same take reproduces exactly; seed resolved pre-scene and embedded as a value table, no Math.random/rAF in scene code.\n2. Rhythm skeletons: 3–4 per (length, tempo) prewritten in directives and snapped to beat grid, e.g. 10s-burst [1.2,1.0,1.3,1.5,2.5,2.5], 10s-story [1.8,2.7,3.0,2.5], 10s-split [1.5,3.0,3.0,2.5]; seed picks one; equal splits forbidden.\n3. Shot order seeded from hero-first / journey-first (exterior→display→macro→hands) / grid-first; no two consecutive shots with same move and direction; alternate direction and zoom-in/zoom-out.\n4. Rotate the reference's 3–6 allowed moves in seeded order; transitions split primary 70% / secondary 30%.\n5. Parameter jitter: duration ±10% within beat grid, rotation ±2°, easing chosen from 3, accent colors max 2 from store palette, sub-palette 2–3 options, caption position 2–3 options.\n6. Copy angle rotation: 4–6 slot phrases per (concept, mood), e.g. menu name+type / menu name with observed ingredient / real benefit+menu name / store's menu name; fact gate: a slot is used only if its fact exists in the fact bundle; HCX only chooses enums and fills slots.\n7. Fixed: store name, per-reference font pair (Navis Sans / Navis Serif only, future font slot empty), safe margins, caption zone, grounded text only; no logo.",
+  "metrics": "1. Checker: extend check-scene.mjs browser probe (boxes, opacity, clip, text) sampled on a 0.25s grid; optional 2nd pass ffmpeg frame-diff on rendered mp4 for visible motion.\n2. lowEnergyStretch: no-change span (box ≥8px, opacity/clip ≥0.08, text change) ≤1.0s fast/mid, ≤1.5s calm; ending scene exempt.\n3. sceneDisplacement: every non-final scene photo/card scale ≥8% or move/clip ≥60px.\n4. moveVariety: ≥3 distinct moves, 0 consecutive identical (direction, move), no move >40% of shots.\n5. layeredMotion: ≥2 distinct channels (camera/text/overlay/layout) per scene except minimal references; 6% zoom alone fails.\n6. nonLinearEasing: ≥70% of animations non-linear; auxiliary only, never sole pass/fail.\n7. cutCount (visual beats; fast/mid/calm): 10s ≥5/4/3, 15s ≥8/5/4, 30s ≥14/8/6.\n8. rhythmVariance: with ≥3 scenes, non-final lengths must differ (max−min ≥0.4s) or fail.\n9. maxShotLen: 10s ≤3s, 15s ≤3.5s, 30s ≤4s; CTA hold ≤2.5s exception.\n10. hook.firstSecond: main visual opacity ≥0.85 at 0.05s, within 0–1s move ≥60px or ≥1 clip/text entry, frame0≠frame15.\n11. text.dwell: min max(1.0s, 0.4+0.10×chars), max 3.5s static unanimated text (ending exempt), entry 80–320ms (hard-cut references exempt), ≤2 simultaneous blocks, textless span ≤3s, text area ≤35% of frame.\n12. fast-text: 0.5–0.9s cuts carry 0–4 chars.\n13. contrast/safe area: contrast ≥4.5:1, text within x 60..1020 / y 120..1620, min 36px overall (rules.json), main caption/hook ≥52px; platform UI margins rechecked at implementation.\n14. beatAlign: ≥80% of cuts within ±60ms of a beat.\n15. CTA: store name visible in last 1.5s; last frame must not be mid-transition.\n16. grounding: all text present in fact bundle.\n17. On failure: auto-retry with a different seed (max 2), then fall back to the safest reference grammar."
+}
