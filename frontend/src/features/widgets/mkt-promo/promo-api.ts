@@ -4,6 +4,7 @@
  * (status 0 = network), never an unhandled rejection.
  */
 import type { PromoCatalogInput, PromoFailReason, PromoReferenceId, PromoStage, PromoStageState, PromoVideoInput, VideoConcept, VideoMood } from '../../../data/widget-data';
+import type { PortTransport } from '../../../data/reality/00';
 import { PROMO_REFERENCE_GALLERY_VERSION, PROMO_REFERENCE_IDS } from '../../../../shared/promo-references.mjs';
 
 export const PROMO_API = '/api/promo';
@@ -49,7 +50,7 @@ export interface PromoReference {
   readonly moods: readonly VideoMood[];
   readonly concepts: readonly VideoConcept[];
 }
-export interface ReferenceList { readonly referenceVersion: string; readonly references: readonly PromoReference[] }
+export interface ReferenceList { readonly referenceVersion: string; readonly references: readonly PromoReference[]; readonly storeId?: string }
 
 export class PromoHttpError extends Error {
   constructor(readonly status: number, readonly code: string, readonly activeJobId?: string) { super(`${status} ${code}`); this.name = 'PromoHttpError'; }
@@ -62,7 +63,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new PromoHttpError(0, 'NETWORK');
   }
-  let body: unknown = null;
+  let body: unknown;
   try { body = await response.json(); } catch { body = null; }
   if (!response.ok) {
     const b = (body ?? {}) as { code?: unknown; activeJobId?: unknown };
@@ -75,7 +76,8 @@ const post = <T>(path: string, body: unknown) => call<T>(path, { method: 'POST',
 
 export const getCatalog = () => call<PromoCatalogInput>('/catalog');
 export const getEstimateModel = () => call<EstimateModel>('/estimate-model');
-export async function getReferences(): Promise<ReferenceList> {
+export async function getReferences(transport?: PortTransport): Promise<ReferenceList> {
+  if (transport) return transport.request<ReferenceList>({ method: 'GET', path: '/promo/references' });
   try {
     return await call<ReferenceList>('/references');
   } catch (error) {

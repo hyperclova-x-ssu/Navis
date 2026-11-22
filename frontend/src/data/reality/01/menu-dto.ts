@@ -4,6 +4,7 @@ import type { DataCommand } from '../../commands/types';
 import type { BaseUnit } from '../../db/management-types';
 import type { DataTables, MenuItem } from '../../db/types';
 import { PortError, type CommandRequest } from '../00/port';
+import { photoContentPath, type CatalogPhoto } from '../16/photo-catalog';
 
 export type MenuCommand = Extract<DataCommand, { type: `menu.${string}` }>;
 
@@ -36,7 +37,19 @@ export interface MenuDto {
 export interface RealMenuItem extends MenuItem {
   readonly sourceCost: { readonly unitCost: number | null };
   readonly photoFileId: string | null;
+  readonly photoContent?: MenuPhotoContent;
   readonly soldToday: number | null;
+}
+
+export interface MenuPhotoContent {
+  readonly url: string;
+  readonly path?: string;
+  readonly width: number;
+  readonly height: number;
+}
+
+export function menuPhotoContent(menu: MenuItem): MenuPhotoContent | undefined {
+  return (menu as Partial<RealMenuItem>).photoContent;
 }
 
 export function menuPhotoFileId(menu: MenuItem): string | undefined {
@@ -50,14 +63,20 @@ export function menuLineCost(line: { readonly cost: number | null }): number | n
 
 const raw = (value: string) => ({ raw: value });
 
-export function projectMenuTables(items: readonly MenuDto[], asOf: string, sold?: ReadonlyMap<string, number>) {
+export function projectMenuTables(items: readonly MenuDto[], asOf: string, sold?: ReadonlyMap<string, number>,
+  catalog?: { readonly storeId: string; readonly photos: readonly CatalogPhoto[] }) {
+  const photos = new Map(catalog?.photos.map(photo => [photo.photoId, photo]));
   const menuItem = items.map((menu): RealMenuItem => {
     const category = normalizeMenuCategory(menu.category);
+    const photo = menu.photoFileId ? photos.get(menu.photoFileId) : undefined;
+    const photoContent = photo?.menuId === menu.menuId && catalog
+      ? { url: photo.contentUrl, path: photoContentPath(catalog.storeId, photo.contentUrl), width: photo.width, height: photo.height }
+      : undefined;
     return {
       menuId: menu.menuId, kind: 'menu', name: raw(menu.name), nameKey: 'data.management.customMenu',
       category, categoryKey: `data.management.category.${category}`, seasonal: menu.seasonal ?? null, price: menu.price,
       memo: menu.memo === null ? null : raw(menu.memo), prepMin: menu.prepMin, saleStatus: menu.saleStatus,
-      photoKey: menu.photoKey, photoFileId: menu.photoFileId, optionGroups: menu.groups,
+      photoKey: menu.photoKey, photoFileId: menu.photoFileId, ...(photoContent && { photoContent }), optionGroups: menu.groups,
       recipe: [], sourceCost: { unitCost: menu.unitCost }, soldToday: sold ? sold.get(menu.menuId) ?? 0 : null,
       costEffectiveFrom: asOf.slice(0, 10),
     };

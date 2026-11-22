@@ -10,7 +10,7 @@ import {StayCharts} from './StayCharts';
 import {drawBoxes} from './drawBoxes';
 import {FULL_OVERLAY} from './overlayLayout';
 import {usePictureRect} from './usePictureRect';
-import {useDetections} from './useDetections';
+import {useCctvSample} from './useCctvSample';
 import {useRunning} from './useRunning';
 import {viewFor} from './snapshotView';
 import './playback.css';
@@ -24,10 +24,16 @@ export interface CctvPlaybackProps {
 type VideoEl = HTMLVideoElement & {requestVideoFrameCallback?: (cb: () => void) => number; cancelVideoFrameCallback?: (n: number) => void};
 
 /** Mock playback (F-57, SCR-345/346): the analyzed store video and its per-frame overlays and numbers. */
-export function CctvPlayback({detectionsUrl, videoUrl = VIDEO_URL}: CctvPlaybackProps) {
+export function CctvPlayback({detectionsUrl, videoUrl}: CctvPlaybackProps) {
+  const sample = useCctvSample(videoUrl, detectionsUrl);
+  const useFixedSample = (videoUrl ?? VIDEO_URL) === VIDEO_URL && (detectionsUrl ?? DETECTIONS_URL) === DETECTIONS_URL;
+  return <CctvPlayer key={sample.scope} sample={sample} useFixedSample={useFixedSample}/>;
+}
+
+function CctvPlayer({sample, useFixedSample}: {sample: ReturnType<typeof useCctvSample>; useFixedSample: boolean}) {
   const {t} = useBundle(cctvBundle);
   const {reducedMotion} = useUi();
-  const {load, retry, attempt} = useDetections(detectionsUrl);
+  const {load, retry, attempt, src, failed: fetchFailed} = sample;
   const file = load.status === 'ready' ? load.file! : null;
   const jsonFailed = load.status === 'error';
   const rootRef = useRef<HTMLDivElement>(null);
@@ -35,7 +41,8 @@ export function CctvPlayback({detectionsUrl, videoUrl = VIDEO_URL}: CctvPlayback
   const stageRef = useRef<HTMLDivElement>(null);
   const readyRef = useRef(false); // numbers/boxes follow the video only after it is ready; before that the fixed scene shows
   const userPaused = useRef(false);
-  const [videoFailed, setVideoFailed] = useState(false);
+  const [decodeFailed, setVideoFailed] = useState(false);
+  const videoFailed = decodeFailed || fetchFailed;
   const [ready, setReady] = useState(false);
   const [slow, setSlow] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -122,7 +129,7 @@ export function CctvPlayback({detectionsUrl, videoUrl = VIDEO_URL}: CctvPlayback
   const reload = () => { readyRef.current = false; userPaused.current = false; setVideoFailed(false); setEnded(false); setReady(false); setSlow(false); setFrame(null); retry(); };
 
   const overlayOn = !!(file && frame && ready && !videoFailed);
-  const view = viewFor(overlayOn ? file : null, frame?.t ?? SAMPLE_START_TIME, videoUrl === VIDEO_URL && (detectionsUrl ?? DETECTIONS_URL) === DETECTIONS_URL);
+  const view = viewFor(overlayOn ? file : null, frame?.t ?? SAMPLE_START_TIME, useFixedSample);
   const overlay = {...FULL_OVERLAY, persons: showBoxes, cups: showBoxes};
   const label = ended ? t('cctv.player.replay') : playing ? t('cctv.player.pauseMock') : t('cctv.player.play');
   const shownTime = ready && !videoFailed ? time : 0;
@@ -136,7 +143,7 @@ export function CctvPlayback({detectionsUrl, videoUrl = VIDEO_URL}: CctvPlayback
           <p>{t('cctv.video.numbersKept')}</p>
           <button type="button" className="cctv-btn" onClick={reload}>{t('cctv.video.reload')}</button>
         </div> : <div ref={stageRef} className="cctv-stage" tabIndex={0} role="group" aria-label={t('cctv.a11y.video')}>
-          <video key={attempt} ref={videoRef} src={videoUrl} className="cctv-video" preload="metadata" muted playsInline loop={loop}
+          <video key={attempt} ref={videoRef} src={src} className="cctv-video" preload="metadata" muted playsInline loop={loop}
             onLoadedMetadata={onMeta} onError={() => { readyRef.current = false; setReady(false); setVideoFailed(true); setPlaying(false); }}
             onEnded={() => { setEnded(true); setPlaying(false); }}
             onPlay={() => { setPlaying(true); setEnded(false); }} onPause={() => { setPlaying(false); sync(); }} onSeeked={sync}/>

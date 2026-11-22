@@ -19,6 +19,7 @@ const item: MenuDto = {
 const loadingText = '메뉴를 불러오는 중이에요';
 const menuPath = `/api/v1/stores/${storeId}/inventory/menu`;
 const menuUrl = `${menuPath}?limit=50`;
+const photosUrl = `/api/v1/stores/${storeId}/marketing/photos`;
 const salesUrl = `/api/v1/stores/${storeId}/pos/coupon-sales?businessDate=${TODAY}&view=today`;
 const initialAuth = ['/api/v1/auth/refresh', '/api/v1/auth/demo'];
 const list = (items: readonly MenuDto[]) => ({ items, nextCursor: null, asOf: '2026-11-21T10:00:00Z', sourceRevision: 1 });
@@ -26,10 +27,13 @@ const list = (items: readonly MenuDto[]) => ({ items, nextCursor: null, asOf: '2
 function setup(mode: 'http' | 'fixture') {
   const readMenu = vi.fn<() => Promise<Response>>(async () => { throw new Error('Unexpected menu read'); });
   const writeMenu = vi.fn<(init?: RequestInit) => Promise<Response>>(async () => { throw new Error('Unexpected menu write'); });
+  const photoCatalog = vi.fn<(url: string) => Promise<Response>>(async () =>
+    Response.json({ code: 'NOT_FOUND', reason: 'NO_ROUTE' }, { status: 404 }));
   const fetcher = vi.fn<typeof fetch>(async (url, init) => {
     if (url === '/api/v1/auth/refresh') return Response.json({ code: 'UNAUTHENTICATED' }, { status: 401 });
     if (url === '/api/v1/auth/demo') return Response.json({ accessToken: 'demo-access', expiresIn: 600, storeId });
     if (url === menuUrl) return readMenu();
+    if (typeof url === 'string' && url.startsWith(photosUrl)) return photoCatalog(url);
     if (url === salesUrl) {
       return Response.json({ businessDate: TODAY, soldToday: [{ menuId: item.menuId, quantity: 12 }] });
     }
@@ -48,6 +52,7 @@ function setup(mode: 'http' | 'fixture') {
     fetcher,
     readMenu,
     writeMenu,
+    photoCatalog,
     reloadMenu: () => port.retry('menu'),
     renderPanel: () => renderWithKit(<MenuPanel {...props} width={2} height={2} shape="Q" presetId="A" editing={false} />, { store }),
     renderDetail: (itemId?: string) => renderWithKit(<MenuDetail {...props} detailRef={{ featureId: 'menu', itemId }} />, { store, reducedMotion: true }),
@@ -61,6 +66,49 @@ function holdResponse() {
 }
 
 afterEach(cleanup);
+
+it.each(['s3', 'off'] as const)('shows the catalog photo in the menu grid and editor with server storage %s', async mode => {
+  const ui = setup('http');
+  const photoId = '44444444-4444-4444-8444-444444444444';
+  const contentUrl = mode === 's3' ? `${photosUrl}/${photoId}/content` : '/menu-photos/api-returned.jpeg';
+  const displayed = mode === 's3' ? 'blob:menu-photo' : contentUrl;
+  const objectUrl = vi.fn(() => displayed);
+  const revoke = vi.fn();
+  const originalURL = globalThis.URL;
+  class TestURL extends URL {
+    static createObjectURL = objectUrl;
+    static revokeObjectURL = revoke;
+  }
+  globalThis.URL = TestURL;
+  try {
+    ui.readMenu.mockResolvedValue(Response.json(list([{ ...item, photoFileId: photoId }])));
+    ui.photoCatalog.mockImplementation(async url => url === photosUrl
+      ? Response.json({ items: [{ photoId, menuId: item.menuId, sha256: 'a'.repeat(64), width: 400, height: 600, contentUrl }], nextCursor: null })
+      : new Response('photo bytes', { headers: { 'content-type': 'image/jpeg' } }));
+    ui.renderDetail(item.menuId);
+
+    const cell = await screen.findByRole('gridcell', { name: /HTTP 아메리카노, 메뉴 사진/ });
+    const editor = await screen.findByRole('region', { name: '메뉴 사진' });
+    await waitFor(() => {
+      expect(cell.querySelector('img')).toHaveAttribute('src', displayed);
+      expect(editor.querySelector('img')).toHaveAttribute('src', displayed);
+    });
+    expect(ui.fetcher).toHaveBeenCalledWith(photosUrl, expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer demo-access' }) }));
+    if (mode === 's3') {
+      expect(ui.fetcher).toHaveBeenCalledWith(contentUrl, expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer demo-access' }) }));
+    } else {
+      expect(objectUrl).not.toHaveBeenCalled();
+    }
+    ui.readMenu.mockResolvedValue(Response.json(list([{ ...item, revision: 2 }])));
+    await act(async () => { await ui.reloadMenu(); });
+    expect(editor.querySelector('img')).toBeNull();
+    expect(cell).toHaveAccessibleName(/사진 없음/);
+    cleanup();
+    if (mode === 's3') expect(revoke).toHaveBeenCalledWith(displayed);
+  } finally {
+    globalThis.URL = originalURL;
+  }
+});
 
 it('keeps the same side panel DOM when the owner selects another menu row', async () => {
   const ui = setup('http');

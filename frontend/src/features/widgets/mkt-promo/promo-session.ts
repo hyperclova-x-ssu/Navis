@@ -150,7 +150,7 @@ function createSession(store: WidgetDataStore): PromoSession {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
   let scope = 0;
-  let hadReadModel = false;
+  let lastStoreId: string | undefined;
   let edited = false;
   let draftBase: PromoDraftDto | undefined;
   let unresolvedGeneration: CommandOf<'video.make' | 'video.retry'> | undefined;
@@ -158,14 +158,15 @@ function createSession(store: WidgetDataStore): PromoSession {
 
   function syncDraft() {
     const model = readModel();
-    if (!model && hadReadModel) {
+    if (lastStoreId && model?.storeId !== lastStoreId) {
       scope += 1;
       draftBase = undefined;
       unresolvedGeneration = undefined;
       edited = false;
-      set({ draft: EMPTY_DRAFT, writing: undefined, startedAt: {}, estimateAtStart: {}, saved: {}, savedName: {} });
+      set({ draft: EMPTY_DRAFT, references: { status: 'idle', value: null }, writing: undefined,
+        startedAt: {}, estimateAtStart: {}, saved: {}, savedName: {} });
     }
-    hadReadModel = model !== undefined;
+    lastStoreId = model?.storeId;
     const next = openDraft(model);
     if (next?.draftId === draftBase?.draftId && next?.revision === draftBase?.revision) return;
     if (edited) return;
@@ -294,11 +295,14 @@ function createSession(store: WidgetDataStore): PromoSession {
   async function load<K extends 'estimate' | 'references'>(key: K, fetcher: () => Promise<NonNullable<PromoSessionState[K]['value']>>, force: boolean): Promise<void> {
     const current = state[key];
     if (current.status === 'loading' || (current.status === 'ready' && !force)) return;
+    const started = scope;
     set({ [key]: { status: 'loading', value: current.value } } as Partial<PromoSessionState>);
     try {
       const value = await fetcher();
+      if (disposed || (key === 'references' && started !== scope)) return;
       set({ [key]: { status: 'ready', value } } as Partial<PromoSessionState>);
     } catch {
+      if (disposed || (key === 'references' && started !== scope)) return;
       set({ [key]: { status: 'error', value: current.value } } as Partial<PromoSessionState>);
     }
   }
@@ -334,7 +338,7 @@ function createSession(store: WidgetDataStore): PromoSession {
       }
     },
     loadEstimate: (force = false) => load('estimate', getEstimateModel, force),
-    loadReferences: (force = false) => load('references', getReferences, force),
+    loadReferences: (force = false) => load('references', () => getReferences(realPort(store)?.transport), force),
     saveDraft(locale) {
       return write('draft', async () => {
         if (realPort(store)) return persistDraft(draftInput(state.draft, locale), draftBase);

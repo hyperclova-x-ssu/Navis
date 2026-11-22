@@ -52,6 +52,7 @@ export interface PromoJobDto {
     readonly sizeBytes: number;
     readonly music: { readonly trackId: string; readonly title: string; readonly artist: string; readonly license: string } | null;
     readonly fileUrl?: string;
+    readonly posterUrl?: string;
   } | null;
 }
 export interface PromoReadModel {

@@ -2,6 +2,7 @@ import type { MarketingTables, PromoVideo, PromoVideoInput } from '../../marketi
 import { defineBinding, PortError, type CommandContext, type DomainAdapter, type ListPage, type PortReads } from '../00';
 import { isVideoInput, jobPath, openDraft, promoPath, publishPath, safeAttestationLink, safePostLink, sameInput, type PromoAssetsPage,
   type PromoDraftDto, type PromoJobDto, type PromoPublicationDto, type PromoReadModel } from './dto';
+import { readPhotoCatalog, type CatalogPhoto } from './photo-catalog';
 
 type WirePage<T> = Omit<ListPage<T>, 'sourceRevision'> & { readonly sourceRevision: string | number };
 
@@ -27,6 +28,29 @@ async function readPages<T, Extra extends object = object>(reads: PortReads, res
   return { ...first, items, nextCursor, sourceRevision };
 }
 
+function applyPhotoContent(assets: PromoAssetsPage, photos: readonly CatalogPhoto[]): PromoAssetsPage {
+  if (!photos.length) return assets;
+  const byId = new Map(photos.map(photo => [photo.photoId, photo]));
+  const byUrl = new Map(photos.map(photo => [photo.contentUrl, photo]));
+  const resolve = (id: string, menuId: string | null, url: string) => {
+    const sameId = byId.get(id);
+    return sameId?.menuId === menuId ? sameId : byUrl.get(url);
+  };
+  const store = assets.store;
+  const exterior = store && resolve(store.exteriorPhotoId, null, store.exteriorUrl);
+  return {
+    ...assets,
+    store: store && exterior ? { ...store, exteriorUrl: exterior.contentUrl } : store,
+    items: assets.items.map(asset => {
+      // The promo catalog owns eligibility and the IDs used by saved drafts and video commands.
+      const content = resolve(asset.photoId, asset.menuId, asset.url);
+      if (!content) return asset;
+      const { contentUrl, width, height } = content;
+      return { ...asset, url: contentUrl, width, height };
+    }),
+  };
+}
+
 function marketingRows(model: PromoReadModel | undefined): Pick<MarketingTables, 'promoStore' | 'promoMenu' | 'promoPhoto' | 'promoVideo' | 'promoDrafts'> {
   if (!model) return { promoStore: [], promoMenu: [], promoPhoto: [], promoVideo: [], promoDrafts: undefined };
   const { assets, drafts, publications, jobs } = model;
@@ -46,6 +70,7 @@ function marketingRows(model: PromoReadModel | undefined): Pick<MarketingTables,
       ...(posted && { publication: { channel: posted.channel, link: safePostLink(posted.link) ?? null } }),
       result: result ? { durationSec: result.durationSec, sizeBytes: result.sizeBytes, madeAt,
         fileUrl: `/api/v1/stores/${encodeURIComponent(model.storeId)}${jobPath(job.jobId)}/video.mp4`,
+        ...(result.posterUrl && { posterUrl: `/api/v1/stores/${encodeURIComponent(model.storeId)}${jobPath(job.jobId)}/poster.jpg` }),
         music: result.music ? { ...result.music, licenseLabel: result.music.license } : { trackId: '', title: '', artist: '', licenseLabel: '' },
       } : null,
     });
@@ -82,12 +107,15 @@ export const promoAdapter: DomainAdapter = {
     PROMO_NOT_READY: 'promo.error.notReady',
     BUSY: 'data.marketing.error.busy',
   },
-  async load({ reads, storeId, signal, snapshot }) {
-    const [assets, drafts, publications] = await Promise.all([
+  async load(context) {
+    const { reads, storeId, signal, snapshot } = context;
+    const [assetsPage, drafts, publications, photos] = await Promise.all([
       readPages<PromoAssetsPage['items'][number], Omit<PromoAssetsPage, keyof ListPage<unknown>>>(reads, 'promo.assets', `${promoPath}/assets`, signal),
       readPages<PromoDraftDto>(reads, 'promo.drafts', `${promoPath}/drafts`, signal),
       readPages<PromoPublicationDto, Pick<PromoReadModel, 'uploadTargets'>>(reads, 'promo.publications', `${promoPath}/publications`, signal),
+      readPhotoCatalog(context),
     ]);
+    const assets = applyPhotoContent(assetsPage, photos);
     const orderedDrafts = [...drafts.items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.draftId.localeCompare(a.draftId));
     const jobs: PromoJobDto[] = [];
     const previous = snapshot.tables.realPromo;

@@ -4,6 +4,12 @@ import {act, cleanup, fireEvent, render, screen, waitFor} from '@testing-library
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {CCTV_SNAPSHOT, HOURLY_DWELL, TODAY_AVG_DWELL_MIN, clearDetectionsCache, mockCctvView} from '../../../data/cctv';
 import type {CctvView, DetectionsFile} from '../../../data/cctv';
+import {createWidgetDataStore} from '../../../data/db/store';
+import {WidgetDataProvider} from '../../../data/react';
+import {createRealPort} from '../../../data/reality/00';
+import {fakeBackend, TEST_STORE_ID} from '../../../data/reality/00/testing';
+import {createPortTransport} from '../../../data/reality/00/transport';
+import {insightAdapter} from '../../../data/reality/10/adapter';
 import {screenPresets} from '../../../layout';
 import {UiProvider} from '../../../ui';
 import {CctvPlayback} from './CctvPlayback';
@@ -25,6 +31,64 @@ beforeEach(() => {
 afterEach(() => {cleanup(); vi.unstubAllGlobals();});
 
 describe('CctvPlayback', () => {
+  it('uses the authenticated store clip and frame timeline in HTTP mode', async () => {
+    const store = createWidgetDataStore();
+    const backend = fakeBackend();
+    const token = vi.fn();
+    const bundled = vi.fn(async () => new Response(null, {status: 404}));
+    vi.stubGlobal('fetch', bundled);
+    const source = `/api/v1/stores/${TEST_STORE_ID}/insight/cctv-samples/`;
+    store.bindReal(createRealPort({store, source: domain => domain === 'cctv' ? 'http' : 'fixture', adapters: [insightAdapter],
+      fetch: async (url, init) => {
+        if (!String(url).startsWith(source)) return backend.fetch(url, init);
+        token(String(url).slice(source.length), new Headers(init?.headers).get('authorization'));
+        return String(url).endsWith('.mp4') ? new Response('clip', {headers: {'content-type': 'video/mp4'}}) : Response.json(real);
+      }}));
+    const BaseURL = globalThis.URL;
+    vi.stubGlobal('URL', class extends BaseURL {
+      static createObjectURL = vi.fn(() => 'blob:cctv-proof');
+      static revokeObjectURL = vi.fn();
+    });
+    render(<UiProvider screenPreset={screenPresets.A} theme="light" reducedMotion><WidgetDataProvider store={store}>
+      <CctvPlayback/>
+    </WidgetDataProvider></UiProvider>);
+    await waitFor(() => expect(document.querySelector('video')?.getAttribute('src')).toBe('blob:cctv-proof'));
+    expect(token).toHaveBeenCalledWith('store-sample.mp4', expect.stringMatching(/^Bearer token-/));
+    expect(token).toHaveBeenCalledWith('store-sample-detections.json', expect.stringMatching(/^Bearer token-/));
+    expect(bundled).not.toHaveBeenCalled();
+  });
+
+  it('stops fetching on lost store access and resumes when a session is adopted', async () => {
+    const store = createWidgetDataStore();
+    const backend = fakeBackend();
+    const requested = vi.fn();
+    const transport = createPortTransport(async (url, init) => {
+      if (!String(url).includes('/insight/cctv-samples/')) return backend.fetch(url, init);
+      const bearer = new Headers(init?.headers).get('authorization');
+      requested(bearer);
+      if (bearer === 'Bearer initial-scope' && requested.mock.calls.length <= 2) {
+        return Response.json({code: 'STORE_FORBIDDEN'}, {status: 403});
+      }
+      return String(url).endsWith('.mp4') ? new Response('clip', {headers: {'content-type': 'video/mp4'}}) : Response.json(real);
+    });
+    transport.adopt({accessToken: 'initial-scope', expiresIn: 600, storeId: TEST_STORE_ID});
+    store.bindReal(createRealPort({store, transport, source: domain => domain === 'cctv' ? 'http' : 'fixture', adapters: [insightAdapter]}));
+    const BaseURL = globalThis.URL;
+    vi.stubGlobal('URL', class extends BaseURL {
+      static createObjectURL = vi.fn(() => 'blob:cctv-new-scope');
+      static revokeObjectURL = vi.fn();
+    });
+    render(<UiProvider screenPreset={screenPresets.A} theme="light" reducedMotion><WidgetDataProvider store={store}>
+      <CctvPlayback/>
+    </WidgetDataProvider></UiProvider>);
+    await waitFor(() => expect(screen.getByText('영상을 불러오지 못했어요')).toBeTruthy());
+    expect(requested).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('video')).toBeNull();
+    act(() => transport.adopt({accessToken: 'new-scope', expiresIn: 600, storeId: TEST_STORE_ID}));
+    await waitFor(() => expect(document.querySelector('video')?.getAttribute('src')).toBe('blob:cctv-new-scope'));
+    expect(requested.mock.calls.slice(2)).toEqual([['Bearer new-scope'], ['Bearer new-scope']]);
+  });
+
   it('shows the reviewed drink wait in the existing zone label and table state list after a seek', async () => {
     stubFetch();
     host();

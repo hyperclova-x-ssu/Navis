@@ -1,10 +1,10 @@
 import {useEffect, useRef, useState} from 'react';
-import {SAMPLE_START_TIME, VIDEO_URL, mockCctvView, pickFrame} from '../../../data/cctv';
+import {SAMPLE_START_TIME, mockCctvView, pickFrame} from '../../../data/cctv';
 import type {CctvView, DetectionFrame} from '../../../data/cctv';
 import {drawBoxes} from './drawBoxes';
 import {PANEL_OVERLAY} from './overlayLayout';
 import type {OverlayOptions} from './overlayLayout';
-import {useDetections} from './useDetections';
+import {useCctvSample} from './useCctvSample';
 import {usePictureRect} from './usePictureRect';
 import {useRunning} from './useRunning';
 
@@ -25,14 +25,22 @@ export interface PanelVideoProps {
 }
 
 /** API-13 v4.1/v4.2: silent looping video + thin boxes (persons only by default). Numbers live in the panel's number band. */
-export function PanelVideo({paused = false, reducedMotion = false, onFail, onView, overlay = PANEL_OVERLAY}: PanelVideoProps) {
-  const {load} = useDetections();
+export function PanelVideo(props: PanelVideoProps) {
+  const sample = useCctvSample();
+  return <PanelPlayer key={sample.scope} {...props} sample={sample}/>;
+}
+
+function PanelPlayer({paused = false, reducedMotion = false, onFail, onView, overlay = PANEL_OVERLAY, sample}: PanelVideoProps & {
+  sample: ReturnType<typeof useCctvSample>;
+}) {
+  const {load, src, failed} = sample;
   const file = load.status === 'ready' ? load.file! : null;
   const ref = useRef<HTMLDivElement>(null);
   const videoRef = useRef<VideoEl>(null);
   const [ready, setReady] = useState(false);
   const [frame, setFrame] = useState<DetectionFrame | null>(null);
   const running = useRunning(ref);
+  useEffect(() => { if (failed) onFail?.(); }, [failed, onFail]);
   const frames = file?.frames;
   const rect = usePictureRect(ref, videoRef, file ?? SIZE, ready);
 
@@ -70,7 +78,7 @@ export function PanelVideo({paused = false, reducedMotion = false, onFail, onVie
   };
 
   return <div ref={ref} className="panel-video" aria-hidden="true" data-testid="panel-video">
-    <video ref={videoRef} src={VIDEO_URL} className="panel-video__media" preload="metadata" muted loop playsInline
+    <video ref={videoRef} src={src} className="panel-video__media" preload="metadata" muted loop playsInline
       onLoadedMetadata={onMeta} onSeeked={pick} onError={() => onFail?.()}/>
     {view ? drawBoxes(view, rect, overlay) : null}
   </div>;

@@ -9,6 +9,7 @@ import { notifyInsight, useInsightCommand } from '../../../data/reality/11/use-i
 import { useI18n } from '../../../i18n';
 import { DetailState, PanelLayout, RowList, splitCount, StatePanel, text, useRowBudget, useT, type T } from './shared';
 import { ManualConfirmation } from './manuals.confirmation';
+import { ManualStepPhoto } from './manuals.photo';
 import { ValueSlot } from '../mgmt-money/value-slot';
 import { keepDots } from '../mgmt-money/fit';
 import { manualsGrantsDetailPrefill } from '../../assistant/domains/manuals-grants';
@@ -23,6 +24,7 @@ const storeInfoBody = (t: T, manual: ManualRow) => {
 };
 const doneOf = (m: ManualRow): number => m.steps.filter((s) => s.checkedToday).length;
 const CATEGORIES = ['opening', 'closing', 'recipe', 'cleaning', 'new-staff', 'hygiene'] as const;
+type ManualWithPhotos = Omit<ManualRow, 'steps'> & { readonly steps: readonly (ManualRow['steps'][number] & { readonly photoKey?: string })[] };
 const manualCautions = (t: T, manual: ManualRow) => {
   const value = text(t, manual.cautions);
   return value === '가상 교육용 매뉴얼' ? '' : value;
@@ -36,7 +38,8 @@ function useManualsView(condition: WidgetPanelProps['condition']) {
   const manuals = view.model.manuals.map(manual => {
     const day = businessDayForManual(snapshot, manual.manualId);
     const progress = new Set(snapshot.tables.checklistLog.filter(row => row.manualId === manual.manualId && row.date === day).map(row => row.stepNo));
-    return { ...manual, steps: manual.steps.map(step => ({ ...step, checkedToday: progress.has(step.stepNo) })) };
+    const photos = new Map(snapshot.tables.manualStep.filter(row => row.manualId === manual.manualId).map(row => [row.stepNo, row.photoKey]));
+    return { ...manual, steps: manual.steps.map(step => ({ ...step, checkedToday: progress.has(step.stepNo), photoKey: photos.get(step.stepNo) })) };
   });
   const todayChecklist = manuals.filter(manual => manual.checklist).map(manual => ({ manualId: manual.manualId, title: manual.title, done: doneOf(manual), total: manual.steps.length }));
   return { ...view, model: { ...view.model, manuals, todayChecklist } };
@@ -129,9 +132,13 @@ function DraftFace({ draft, host }: { readonly draft: ManualsModel['drafts'][num
   );
 }
 
-function ManualBody({ manual, host }: { readonly manual: ManualRow; readonly host: WidgetHost }) {
+function ManualBody({ manual, host }: { readonly manual: ManualWithPhotos; readonly host: WidgetHost }) {
   const t = useT();
   const { run, pending } = useInsightCommand(host);
+  const port = useRealPort();
+  const files = port?.mode('manuals') === 'http' ? port.files : undefined;
+  const photo = ({ photoKey, stepNo }: ManualWithPhotos['steps'][number]) => files && photoKey
+    ? <ManualStepPhoto key={photoKey} files={files} fileId={photoKey} stepNo={stepNo} /> : null;
   /** A check the data layer refused (NOT_CHECKLIST): said in words under that step, never as a saved toast. */
   const [stepError, setStepError] = useState<{ readonly stepNo: number; readonly message: string }>();
   const done = doneOf(manual);
@@ -162,13 +169,14 @@ function ManualBody({ manual, host }: { readonly manual: ManualRow; readonly hos
                       if (result.ok && checked && t.locale === 'ko') notifyInsight(host, result, { messageKey: 'data.management.notice.stepCompleted', params: { name: text(t, step.body) } });
                     }}>{text(t, step.body)}</ChecklistRow>
                   </ValueSlot>
+                  {photo(step)}
                   {stepError?.stepNo === step.stepNo ? <p className="ui-field__error" role="alert"><Icon name="error" />{stepError.message}</p> : null}
                 </div>
               ))}
             </div>
           ) : (
             <ol className="mgmt-steps mgmt-manual-steps">
-              {manual.steps.map((step) => <li key={step.stepNo}><div className="mgmt-manual-step">{text(t, step.body)}</div></li>)}
+              {manual.steps.map((step) => <li key={step.stepNo}><div className="mgmt-manual-step">{text(t, step.body)}{photo(step)}</div></li>)}
             </ol>
           )}
         </section>
@@ -433,7 +441,7 @@ function ManualDraftEditor({ initialSection, seed, focusTitle, host, button, onC
   );
 }
 
-function ManualEditor({ manual, focusTitle, host, onClose }: { manual: ManualRow; focusTitle: boolean; host: WidgetHost; onClose: () => void }) {
+function ManualEditor({ manual, focusTitle, host, onClose }: { manual: ManualWithPhotos; focusTitle: boolean; host: WidgetHost; onClose: () => void }) {
   const t = useT();
   const { run, pending } = useInsightCommand(host);
   const { section } = manual;
@@ -446,8 +454,18 @@ function ManualEditor({ manual, focusTitle, host, onClose }: { manual: ManualRow
   const [error, setError] = useState<string>();
   return <InlineForm footerActions title={t.t('widget.manuals.edit')} onClose={onClose} saving={pending} onSave={async () => {
     if (!title.trim()) { setError(t.t('widget.manuals.titleRequired')); return; }
-    const steps = section === 'store-info' ? (content.trim() ? [content.trim()] : []) : content.split('\n').map(s => s.trim()).filter(Boolean);
-    if (!steps.length) { setError(t.t('widget.manuals.contentRequired')); return; }
+    const lines = section === 'store-info' ? (content.trim() ? [content.trim()] : []) : content.split('\n').map(s => s.trim()).filter(Boolean);
+    if (!lines.length) { setError(t.t('widget.manuals.contentRequired')); return; }
+    const attached = manual.steps.some(step => step.photoKey);
+    const original = manual.steps.map(step => ({ body: text(t, step.body).trim(), photoKey: step.photoKey }));
+    const unchanged = attached && original.length === lines.length && original.every((step, index) => step.body === lines[index]);
+    const steps = unchanged ? undefined : lines.map(body => {
+      if (!attached) return body;
+      const match = original.findIndex(step => step.body === body);
+      if (match < 0) return body;
+      const [{ photoKey }] = original.splice(match, 1);
+      return photoKey ? { body, photoKey } : body;
+    });
     const result = await run({ type: 'manuals.update', manualId: manual.manualId, patch: { section, title: title.trim(), category, steps, cautions } });
     if (result?.ok) onClose(); else if (result) setError(t.t(result.messageKey));
   }}><TextField label={t.t('widget.manuals.draftTitle')} value={title} inputRef={titleInput} onValueChange={setTitle} error={error} /><ChipChoice label={t.t('widget.manuals.category')} value={category} onChange={setCategory} options={(section === 'store-info' ? ['store-info'] as const : ['opening', 'closing', 'recipe', 'cleaning', 'new-staff', 'hygiene'] as const).map(value => ({ value, label: value === 'cleaning' && t.locale === 'ko' ? '청소' : t.t(`data.manualCategory.${value}`) }))} /><Textarea label={t.t('widget.manuals.content')} value={content} onValueChange={setContent} /><Textarea label={t.t('widget.manuals.cautions')} value={cautions} onValueChange={setCautions} /></InlineForm>;

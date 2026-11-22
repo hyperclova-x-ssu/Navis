@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
+import { useId, useRef, useState, type ChangeEvent } from 'react';
 import type { WidgetHost } from '../../../contracts';
 import type { PosMenuPhotoDataUrl, PosMenuPhotoKey, PosMenuPhotoSelection } from '../../../contracts/pos';
-import { useRealPort } from '../../../data/react';
+import type { MenuPhotoContent } from '../../../data/reality/01/menu-dto';
 import { dataBundles } from '../../../data/widget-data';
 import { useBundle } from '../../../i18n';
-import { ActionButton, Icon, MenuPhoto } from '../../../ui';
+import { ActionButton, Icon } from '../../../ui';
+import { MenuPhotoImage } from './menu-photo-image';
 import { menuPhotoBundle, reportMenuResult } from './pos-menu-messages';
 import { onMenuResult, useMenuCommand } from './menu-controls';
 import './pos-menu.css';
@@ -37,48 +38,11 @@ interface MenuPhotoEditorProps {
   photoKey: PosMenuPhotoKey | null;
   customPhotoUrl: PosMenuPhotoDataUrl | null;
   photoFileId?: string | null;
+  photoContent?: MenuPhotoContent;
   host: WidgetHost;
 }
 
-export function MenuPhotoView({ photoFileId, size = 'preview', ...props }: Omit<MenuPhotoEditorProps, 'menuId' | 'host'> & { size?: 'preview' | 'thumbnail' }) {
-  const files = useRealPort()?.files;
-  const [photo, setPhoto] = useState<{ fileId: string; url: string }>();
-  const target = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (!photoFileId || !files || !target.current) return;
-    let active = true;
-    let url: string | undefined;
-    const read = async () => {
-      try {
-        url = await files.readUrl(photoFileId);
-        if (active) setPhoto({ fileId: photoFileId, url });
-        else URL.revokeObjectURL(url);
-      } catch {
-        // Keep the menu's fallback artwork if the attachment is unavailable.
-      }
-    };
-    const observer = typeof IntersectionObserver === 'undefined' ? undefined : new IntersectionObserver(entries => {
-      if (!entries.some(entry => entry.isIntersecting)) return;
-      observer?.disconnect();
-      void read();
-    });
-    if (observer) observer.observe(target.current);
-    else void read();
-    return () => {
-      active = false;
-      observer?.disconnect();
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [files, photoFileId]);
-  if (!photoFileId) return <MenuPhoto {...props} size={size} />;
-  return photo?.fileId === photoFileId
-    ? <span ref={target} aria-hidden="true" className={`ui-menu-photo${size === 'preview' ? ' menu-pos-photo' : ''}`} data-size={size}>
-      <img src={photo.url} alt="" decoding="async" />
-    </span>
-    : <span ref={target}><MenuPhoto {...props} size={size} /></span>;
-}
-
-export function MenuPhotoEditor({ menuId, name, photoKey, customPhotoUrl, photoFileId, host }: MenuPhotoEditorProps) {
+export function MenuPhotoEditor({ menuId, name, photoKey, customPhotoUrl, photoFileId, photoContent, host }: MenuPhotoEditorProps) {
   const { send, pending: saving } = useMenuCommand();
   const { t, locale } = useBundle(menuPhotoBundle, ...dataBundles);
   const errorId = useId();
@@ -138,7 +102,7 @@ export function MenuPhotoEditor({ menuId, name, photoKey, customPhotoUrl, photoF
 
   return <section className="menu-editor-section menu-photo-editor" aria-label={photoLabel} lang={locale}>
     <h4>{photoLabel}</h4>
-    <MenuPhotoView key={photoFileId} photoKey={photoKey} customPhotoUrl={customPhotoUrl} photoFileId={photoFileId} name={name} />
+    <MenuPhotoImage key={photoContent?.url ?? photoFileId} photoKey={photoKey} customPhotoUrl={customPhotoUrl} photoFileId={photoFileId} photoContent={photoContent} name={name} />
     {!hasPhoto && <span className="menu-photo-empty">{t('widget.menu.photo.none')}</span>}
     <div className="menu-pos-actions" aria-busy={pending || saving || undefined}>
       <ActionButton ref={uploadButton} variant="secondary" aria-disabled={pending || saving || undefined}

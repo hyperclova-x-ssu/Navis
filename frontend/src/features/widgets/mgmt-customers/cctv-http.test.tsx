@@ -40,6 +40,7 @@ function rig({ paired, roster = false }: { paired: boolean; roster?: boolean }) 
   for (const path of ['/insight/zones', '/insight/table-links', '/insight/cctv-reviews', '/insight/environment-readings', '/pos/tables'])
     backend.on('GET', path, () => page([]));
   backend.on('POST', '/insight/cctv-reviews', () => ({ resourceId: 'review', revision: 1, receiptId: 'receipt', undoUntil: '2026-11-17T06:50:00.000Z', affectedSources: ['cctv.reviews'] }));
+  backend.on('GET', /^\/insight\/cctv-samples\//, () => reply(404, { code: 'CCTV_SAMPLE_BUNDLED' }));
   const store = createWidgetDataStore();
   if (roster) {
     const { tables } = store.getSnapshot();

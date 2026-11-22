@@ -13,7 +13,7 @@ import { customAdapter } from '../../../data/reality/08/adapter';
 import { customService, textField } from '../../../data/reality/08/testing';
 import { renderWithKit } from '../../../ui/test-utils';
 import { CustomOrderProvider, type CustomOrderPort } from './port';
-import { ReferencePhotoPicker } from './reference-photos';
+import { ReferencePhotoPicker, ReferencePhotos } from './reference-photos';
 import { CustomOrderDetail } from './widget';
 import { useState } from 'react';
 
@@ -231,6 +231,31 @@ describe('member value on a custom order (B08-2)', () => {
 });
 
 describe('reference photos', () => {
+  it('drops the previous attachment URL when the authenticated file port changes', async () => {
+    const firstService = customService();
+    const first = session(firstService.backend);
+    const otherService = customService();
+    const second = session(otherService.backend);
+    const fileId = 'f18384ac-1ba0-4956-b267-678cd46537fa';
+    const path = `/files/${fileId}/content`;
+    firstService.backend.on('GET', path, () => 'first photo');
+    let finishRead: () => void = () => {};
+    const gate = new Promise<void>(resolve => { finishRead = resolve; });
+    otherService.backend.on('GET', path, async () => { await gate; return 'photo'; });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValueOnce('blob:previous-store').mockReturnValueOnce('blob:current-store');
+    const revoke = vi.spyOn(URL, 'revokeObjectURL');
+    const view = renderWithKit(<ReferencePhotos files={first.port.files} ids={[fileId]} />);
+    expect(await screen.findByRole('img', { name: '참고 사진 1' })).toHaveAttribute('src', 'blob:previous-store');
+    expect(firstService.backend.callsTo('GET', path)[0]?.headers.get('authorization')).toMatch(/^Bearer token-/);
+    view.rerender(<ReferencePhotos files={second.port.files} ids={[fileId]} />);
+    expect(screen.queryByRole('img', { name: '참고 사진 1' })).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('사진을 불러오고 있어요');
+    expect(revoke).toHaveBeenCalledWith('blob:previous-store');
+    finishRead();
+    expect(await screen.findByRole('img', { name: '참고 사진 1' })).toHaveAttribute('src', 'blob:current-store');
+    expect(otherService.backend.callsTo('GET', path)[0]?.headers.get('authorization')).toMatch(/^Bearer token-/);
+  });
+
   it('picks, shrinks and lists photos as data URLs and lets the owner take one out', async () => {
     vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 2000, height: 1000, close: vi.fn() })));
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: vi.fn() } as unknown as CanvasRenderingContext2D);

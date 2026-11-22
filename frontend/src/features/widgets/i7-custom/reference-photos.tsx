@@ -28,18 +28,19 @@ async function shrink(file: File): Promise<string> {
 
 /** A photo just picked is a data URL (shown as it is); a stored one is read through the authorized file read. */
 function usePhotoUrl(files: PortFiles, id: string) {
-  const [state, setState] = useState<{ readonly id: string; readonly url?: string; readonly failed?: boolean }>({ id: '' });
+  const [state, setState] = useState<{ readonly files: PortFiles; readonly id: string; readonly url?: string }>();
   useEffect(() => {
     if (id.startsWith('data:')) return;
     let active = true;
     let made: string | undefined;
     void files.readUrl(id).then(url => {
-      if (active) { made = url; setState({ id, url }); } else URL.revokeObjectURL(url);
-    }, () => { if (active) setState({ id, failed: true }); });
+      if (active) { made = url; setState({ files, id, url }); } else URL.revokeObjectURL(url);
+    }, () => { if (active) setState({ files, id }); });
     return () => { active = false; if (made) URL.revokeObjectURL(made); };
   }, [files, id]);
   if (id.startsWith('data:')) return { url: id, failed: false };
-  return state.id === id ? { url: state.url, failed: !!state.failed } : { url: undefined, failed: false };
+  if (state?.files === files && state.id === id) return { url: state.url, failed: !state.url };
+  return { url: undefined, failed: false };
 }
 
 function Photo({ files, id, label, onRemove }: { readonly files: PortFiles; readonly id: string; readonly label: string; readonly onRemove?: () => void }) {

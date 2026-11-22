@@ -1,5 +1,6 @@
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
+import { createHash } from 'node:crypto';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -13,7 +14,7 @@ import { DetailDialog } from '../../../ui';
 import { moneyDomain, projectMoneyFacts } from '../../assistant/domains/money';
 import { TaxDetail } from './tax';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const asOf = `${TODAY}T06:45:00Z`;
 const page = { asOf, sourceRevision: 19, nextCursor: null };
 const payment = {
@@ -78,6 +79,36 @@ it('shows the POS preview, uses its revision for export and sends the review exp
     from: `${TODAY.slice(0, 8)}01`, to: TODAY, expectedSourceRevision: 19,
   });
   expect(backend.callsTo('GET', '/pos/tax-exports/export-1/file')[0]?.query).toEqual({ format: 'csv' });
+});
+
+it('downloads the verified CSV returned by the authenticated POS export route', async () => {
+  const { store, backend } = session();
+  const content = Buffer.from('amount\r\n12000\r\n');
+  const file = { filename: 'tax.csv', contentType: 'text/csv', size: content.length, sha256: createHash('sha256').update(content).digest('hex') };
+  const path = '/pos/tax-exports/export-1/file';
+  backend.on('POST', '/pos/tax-exports', () => ({ resourceId: 'export-1', exportId: 'export-1', revision: 1,
+    receiptId: 'export-receipt', affectedSources: ['pos.tax-exports'], sourceRevision: 19, files: { csv: file } }));
+  backend.on('GET', path, () => ({ ...file, exportId: 'export-1', format: 'csv', contentBase64: content.toString('base64') }));
+  const downloads: { filename: string; href: string }[] = [];
+  const urls = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:tax-file');
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    downloads.push({ filename: this.download, href: this.href });
+  });
+  renderWithKit(<TaxDetail featureId="tax" condition={{ kind: 'default' }} detailRef={{ featureId: 'tax' }} host={host()} />, { store });
+
+  const download = await screen.findByRole('button', { name: '세무사 자료 받기' });
+  expect(backend.callsTo('POST', '/pos/tax-exports')).toHaveLength(0);
+  await userEvent.click(download);
+  expect(await screen.findByText('파일을 받았어요')).toBeVisible();
+  expect(backend.callsTo('GET', path)[0]?.headers.get('authorization')).toMatch(/^Bearer token-/);
+  expect(downloads).toEqual([{ filename: 'tax.csv', href: 'blob:tax-file' }]);
+  const blob = urls.mock.calls[0]?.[0] as Blob;
+  const data = await new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.readAsText(blob);
+  });
+  expect(data).toBe(content.toString());
 });
 
 it('waits for an explicit evidence submit and records only the verified Account file', async () => {

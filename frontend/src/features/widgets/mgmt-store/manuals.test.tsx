@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWidgetDataStore, koKey, koText, makeHost, manualsModel as model, renderDetail, renderPanel } from './test-helpers';
 import { draft, draftId, insight, insightSession, manual, manualId, updatedAt } from '../../../data/reality/11/testing';
 import { addDays, TODAY } from '../../../data/db/time';
+import { reply } from '../../../data/reality/00/testing';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 /** The first seed manual of a category (the cafe seed has one opening, one closing, three new-staff manuals). */
@@ -19,6 +20,62 @@ it('shows the legacy store information step when its body is empty', async () =>
   await userEvent.click(await screen.findByRole('tab', { name: '매장 정보 1개' }));
   expect(await screen.findByText('영업시간 08:00~20:00')).toBeVisible();
   expect(screen.queryByRole('list', { name: '오늘 체크리스트' })).toBeNull();
+});
+
+it('reads a saved manual attachment with the store bearer after reopening the manual in a new session', async () => {
+  const { backend, collections, newStore } = insightSession();
+  const fileId = '03e0ba67-9d10-4407-b19f-624e72080739';
+  const path = `/files/${fileId}/content`;
+  collections.set('manuals', [{ ...manual, steps: [{ body: '기기 전원을 꺼요', photoKey: fileId }] }]);
+  backend.on('GET', path, () => 'photo');
+  const objectUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:manual-photo');
+  const revoke = vi.spyOn(URL, 'revokeObjectURL');
+  for (let session = 0; session < 2; session += 1) {
+    const view = renderDetail('manuals', makeHost().host, { store: newStore() });
+    expect(await screen.findByRole('img', { name: '1단계 사진' })).toHaveAttribute('src', 'blob:manual-photo');
+    expect(screen.getByRole('link', { name: '1단계 사진 받기' })).toHaveAttribute('href', 'blob:manual-photo');
+    view.unmount();
+  }
+  const reads = backend.callsTo('GET', path);
+  expect(reads).toHaveLength(2);
+  for (const read of reads) expect(read.headers.get('authorization')).toMatch(/^Bearer token-/);
+  expect(objectUrl).toHaveBeenCalledTimes(2);
+  expect(revoke.mock.calls).toEqual([['blob:manual-photo'], ['blob:manual-photo']]);
+  expect(backend.calls.filter(call => call.method !== 'GET')).toEqual([]);
+});
+
+it('keeps the manual usable when its stored photo is missing', async () => {
+  const { backend, collections, newStore } = insightSession();
+  const fileId = '03e0ba67-9d10-4407-b19f-624e72080739';
+  collections.set('manuals', [{ ...manual, steps: [{ body: '기기 전원을 꺼요', photoKey: fileId }] }]);
+  backend.on('GET', `/files/${fileId}/content`, () => reply(404, { code: 'NOT_FOUND' }));
+  renderDetail('manuals', makeHost().host, { store: newStore() });
+  expect(await screen.findByRole('alert')).toHaveTextContent('단계 사진을 불러오지 못했어요');
+  expect(screen.getByRole('checkbox', { name: '기기 전원을 꺼요' })).toBeEnabled();
+  expect(screen.queryByRole('link', { name: '1단계 사진 받기' })).toBeNull();
+});
+
+it('retains saved step photos when the owner changes only the manual title', async () => {
+  const { backend, collections, newStore } = insightSession();
+  const fileId = '03e0ba67-9d10-4407-b19f-624e72080739';
+  const original = { ...manual, steps: [{ body: '기기 전원을 꺼요', photoKey: fileId }] };
+  const path = `${insight}/manuals/${manualId}`;
+  collections.set('manuals', [original]);
+  backend.on('GET', `/files/${fileId}/content`, () => 'photo');
+  backend.on('PATCH', path, call => {
+    const { patch } = call.body as { patch: Partial<typeof original> };
+    collections.set('manuals', [{ ...original, ...patch, revision: 2 }]);
+    return { resourceId: manualId, receiptId: 'manual-edit', revision: 2, affectedSources: ['manuals'] };
+  });
+  renderDetail('manuals', makeHost().host, { store: newStore() });
+  await userEvent.click(await screen.findByRole('button', { name: '매뉴얼 고치기' }));
+  fireEvent.change(screen.getByDisplayValue(manual.title), { target: { value: '마감 전원 점검' } });
+  await userEvent.click(screen.getByRole('button', { name: '저장하기' }));
+  expect(await screen.findByRole('heading', { name: '마감 전원 점검' })).toBeVisible();
+  expect(await screen.findByRole('img', { name: '1단계 사진' })).toBeVisible();
+  expect(backend.callsTo('PATCH', path)[0]?.body).toEqual({
+    expectedRevision: 1, patch: { section: 'handover', title: '마감 전원 점검', category: 'closing', cautions: '' },
+  });
 });
 
 it('publishes an Insight draft only after confirmation and re-reads a checked step in a fresh session', async () => {

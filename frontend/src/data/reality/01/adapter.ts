@@ -1,6 +1,7 @@
 import type { CouponSales } from '../../../../../backend/services/pos/reality/02/coupon-sales';
 import { TODAY } from '../../db/time';
 import { defineBinding, PortError, type DomainAdapter } from '../00/port';
+import { readPhotoCatalog } from '../16/photo-catalog';
 import { menuCommandRequest, menuPath, projectMenuTables, type MenuCommand, type MenuDto } from './menu-dto';
 
 const receiptBase = '/inventory';
@@ -33,7 +34,8 @@ export const menuAdapter: DomainAdapter = {
     STALE_REVISION: 'data.management.error.STALE_REVISION',
     IDEMPOTENCY_MISMATCH: 'data.management.error.IDEMPOTENCY_MISMATCH',
   },
-  async load({ reads, signal }) {
+  async load(context) {
+    const { reads, signal, storeId } = context;
     const { items, asOf, sourceRevision, complete } = await reads.all<MenuDto>(
       { resource: 'menu', path: menuPath, query: { limit: 50 } }, { signal },
     );
@@ -50,9 +52,15 @@ export const menuAdapter: DomainAdapter = {
         if (signal.aborted || !(error instanceof PortError) || error.status === 401 || error.status === 403) throw error;
       }
     }
+    // Only the catalog entry linked to the current inventory selection can replace its account URL.
+    // Keep the menu and its existing attachments usable if the separate marketing service is down.
+    const photos = items.some(item => item.photoFileId) ? await readPhotoCatalog(context).catch(error => {
+      if (signal.aborted || !(error instanceof PortError) || error.status === 401 || error.status === 403) throw error;
+      return [];
+    }) : [];
     return {
       asOf, sourceRevision, complete,
-      tables: projectMenuTables(items, asOf, sold),
+      tables: projectMenuTables(items, asOf, sold, { storeId, photos }),
       revisions: Object.fromEntries(items.map(menu => [`menu:${menu.menuId}`, menu.revision])),
     };
   },

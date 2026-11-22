@@ -7,7 +7,7 @@ import type { MessageBundle } from '../../../i18n';
 import { useKitT } from '../../../ui/kit-i18n';
 import { dataBundles, resolveDataText } from '../../../data/widget-data';
 import { useDomainState, useRealPort, useRealRetry, useWidgetView } from '../../../data/react';
-import { menuLineCost, menuPhotoFileId, type MenuCommand } from '../../../data/reality/01/menu-dto';
+import { menuLineCost, menuPhotoContent, menuPhotoFileId, type MenuCommand } from '../../../data/reality/01/menu-dto';
 import { fromBase, toBase } from '../../../data/derive/common';
 import { ActionButton, ChipChoice, DataGrid, DetailDialog, DetailSidePanel, DetailTabs, IconButton, InlineForm, TextField, NumberField, Textarea, StatusChip, SegmentedControl, Spinner, menuPhotos, type GridColumn, type GridFocus, type GridSort, type DataGridHandle } from '../../../ui';
 import { Body, DetailState, Kpi, ListBlock, Notes, PanelFrame, Row, StatePanel, reportResult, useT } from '../mgmt-customers/shared';
@@ -15,7 +15,8 @@ import { Body, DetailState, Kpi, ListBlock, Notes, PanelFrame, Row, StatePanel, 
 import { FitMiniTable, ValueSlot, restoreGrid } from '../mgmt-customers/workspace';
 
 import { MenuOptions } from './pos-menu';
-import { MenuPhotoEditor, MenuPhotoView } from './menu-photos';
+import { MenuPhotoEditor } from './menu-photos';
+import { MenuPhotoImage } from './menu-photo-image';
 import { menuError, menuPhotoBundle, menuPosKo, reportMenuResult } from './pos-menu-messages';
 import { menuGridResult, onMenuResult, useMenuCommand, useMenuIngredients } from './menu-controls';
 
@@ -225,7 +226,7 @@ function MenuEditor({ row, host, requestDelete, entryView, entryFocus, place }: 
       <summary ref={entryView === 'options' ? entryFocus : undefined}>{menuPosKo.options}</summary>
       <MenuOptions menuId={row.menuId} name={menuName} groups={row.optionGroups} host={host} />
     </details>
-    <MenuPhotoEditor menuId={row.menuId} name={menuName} photoKey={row.photoKey} photoFileId={menuPhotoFileId(row)} customPhotoUrl={row.customPhotoUrl} host={host} />
+    <MenuPhotoEditor menuId={row.menuId} name={menuName} photoKey={row.photoKey} photoFileId={menuPhotoFileId(row)} photoContent={menuPhotoContent(row)} customPhotoUrl={row.customPhotoUrl} host={host} />
     <section className="menu-editor-section">
       <div className="menu-editor-memo-heading">
         <h4>{t.t('widget.menu.memo')}</h4>
@@ -314,7 +315,8 @@ export function MenuDetail({condition,host,detailRef}:WidgetDetailProps) {
     value:r=>menuPhotos.find(p=>p.key===r.photoKey)?.name??t.t(r.customPhotoUrl||menuPhotoFileId(r)?'widget.menu.photo.custom':'widget.menu.photo.none'),
     render:r=>{
       const fileId=menuPhotoFileId(r);
-      return r.photoKey||r.customPhotoUrl||fileId ? <MenuPhotoView key={fileId} photoKey={r.photoKey} photoFileId={fileId} customPhotoUrl={r.customPhotoUrl} name={name(t,r)} size="thumbnail" /> : null;
+      const content=menuPhotoContent(r);
+      return r.photoKey||r.customPhotoUrl||fileId ? <MenuPhotoImage key={content?.url ?? fileId} photoKey={r.photoKey} photoFileId={fileId} photoContent={content} customPhotoUrl={r.customPhotoUrl} name={name(t,r)} size="thumbnail" /> : null;
     }},
   {id:'category',header:t.t('widget.menu.category'),kind:'text',value:r=>t.t(`widget.menu.${menuCategory(r)}`),
     accessibleValue:r=>[t.t(`widget.menu.${menuCategory(r)}`), r.seasonal && t.t('widget.menu.seasonal')].filter(Boolean).join(' · '),

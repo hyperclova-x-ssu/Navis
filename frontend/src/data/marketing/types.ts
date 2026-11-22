@@ -109,6 +109,7 @@ export interface PromoVideoResult {
   readonly durationSec: number;
   readonly music: { readonly trackId: string; readonly title: string; readonly artist: string; readonly licenseLabel: string };
   readonly fileUrl: string;
+  readonly posterUrl?: string;
   readonly sizeBytes: number;
   readonly madeAt: string;
 }

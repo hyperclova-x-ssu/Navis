@@ -1,6 +1,6 @@
 /**
  * ③ 디자인 갤러리 (SCR-54, D-85, D-347). The reference list supplies the numbered designs and matching tags.
- * Cards on screen play the bundled café previews silently on a loop, several at once (muted,
+ * Cards on screen play the café previews silently on a loop, several at once (muted,
  * playsInline, loop); cards scrolled out of view, a hidden page or a reduced-motion setting leave only the poster.
  * Pressing a card chooses it (one at a time, no separate button); a video that cannot load keeps the poster and the
  * card still chooses.
@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 
 import { ActionButton, Icon, StatusBadge, useUi } from '../../../ui';
 import type { PromoReference } from './promo-api';
 import { masonryColumns, POSTER_HEIGHT } from './promo-gallery-layout';
+import { usePromoMedia } from './promo-media';
 import type { PromoSession, PromoSessionState } from './promo-session';
 import { useT } from './shared';
 
@@ -21,6 +22,8 @@ export function ReferenceGallery({ session, state, headingRef }: { readonly sess
   const reduced = ui.reducedMotion;
   const draft = state.draft;
   const list = state.references.value?.references ?? null;
+  const authenticated = session.store.real?.mode('promo') === 'http';
+  const storeId = authenticated ? state.references.value?.storeId ?? session.store.getSnapshot().tables.realPromo?.storeId : undefined;
   const cardRefs = useRef(new Map<string, HTMLButtonElement>());
   const [hidden, setHidden] = useState(() => typeof document !== 'undefined' && document.visibilityState === 'hidden');
 
@@ -60,7 +63,8 @@ export function ReferenceGallery({ session, state, headingRef }: { readonly sess
             <div className="pv-gallery__col" key={c}>
               {col.map(({ ref, index }) => (
                 <ReferenceCard
-                  key={ref.id} reference={ref} index={index} chosen={draft.referenceId === ref.id} fit={fits(ref)} autoplay={!reduced && !hidden}
+                  key={`${storeId ?? ''}:${ref.id}`} reference={ref} index={index} chosen={draft.referenceId === ref.id} fit={fits(ref)} autoplay={!reduced && !hidden}
+                  authenticated={authenticated} storeId={storeId}
                   onChoose={() => session.setDraft({ referenceId: ref.id })}
                   cardRef={(el) => { if (el) cardRefs.current.set(ref.id, el); else cardRefs.current.delete(ref.id); }}
                   onArrow={moveFocus}
@@ -80,12 +84,14 @@ interface CardProps {
   readonly chosen: boolean;
   readonly fit: boolean;
   readonly autoplay: boolean;
+  readonly authenticated: boolean;
+  readonly storeId?: string;
   readonly onChoose: () => void;
   readonly cardRef: (el: HTMLButtonElement | null) => void;
   readonly onArrow: (event: KeyboardEvent<HTMLButtonElement>, index: number) => void;
 }
 
-function ReferenceCard({ reference, index, chosen, fit, autoplay, onChoose, cardRef, onArrow }: CardProps) {
+function ReferenceCard({ reference, index, chosen, fit, autoplay, authenticated, storeId, onChoose, cardRef, onArrow }: CardProps) {
   const t = useT();
   const name = t.t(reference.nameKey);
   const suffix = fit ? t.t('promo.ref.fitSuffix') : '';
@@ -93,7 +99,9 @@ function ReferenceCard({ reference, index, chosen, fit, autoplay, onChoose, card
   const [visible, setVisible] = useState(typeof IntersectionObserver === 'undefined');
   const [failed, setFailed] = useState(false);
   const height = POSTER_HEIGHT[reference.cardAspect] ?? 520;
-  const poster = new URL(`../../../../server/promo/references/${reference.id}/poster.jpg`, import.meta.url).href;
+  const poster = usePromoMedia(storeId ? reference.posterUrl : undefined, storeId);
+  const posterUrl = authenticated ? poster.src
+    : new URL(`../../../../server/promo/references/${reference.id}/poster.jpg`, import.meta.url).href;
 
   // Only cards at least a quarter on screen play; the video is dropped when the card leaves the view.
   useEffect(() => {
@@ -115,9 +123,9 @@ function ReferenceCard({ reference, index, chosen, fit, autoplay, onChoose, card
         onClick={onChoose} onKeyDown={(event) => onArrow(event, index)}
       >
         <span className="pv-ref__media" style={{ height }}>
-          <img className="pv-ref__img" src={poster} alt="" draggable={false} />
+          {posterUrl ? <img className="pv-ref__img" src={posterUrl} alt="" draggable={false} /> : null}
           {autoplay && visible && !failed ? (
-            <GalleryPreview referenceId={reference.id} onError={() => setFailed(true)} />
+            <GalleryPreview reference={reference} authenticated={authenticated} storeId={storeId} onError={() => setFailed(true)} />
           ) : null}
           {fit ? <span className="pv-ref__fit"><StatusBadge semantic="recommend" label={t.t('promo.ref.fit')} /></span> : null}
           {chosen ? <span className="pv-ref__check" aria-hidden="true"><Icon name="check" /></span> : null}
@@ -128,9 +136,14 @@ function ReferenceCard({ reference, index, chosen, fit, autoplay, onChoose, card
   );
 }
 
-function GalleryPreview({ referenceId, onError }: { readonly referenceId: PromoReference['id']; readonly onError: () => void }) {
+function GalleryPreview({ reference, authenticated, storeId, onError }: {
+  readonly reference: PromoReference; readonly authenticated: boolean; readonly storeId?: string; readonly onError: () => void;
+}) {
   const [playing, setPlaying] = useState(false);
-  const source = new URL(`../../../../server/promo/references/${referenceId}/preview.mp4`, import.meta.url).href;
+  const media = usePromoMedia(storeId ? reference.previewUrl : undefined, storeId);
+  const source = authenticated ? media.src
+    : new URL(`../../../../server/promo/references/${reference.id}/preview.mp4`, import.meta.url).href;
+  if (!source) return null;
   return (
     <video
       className="pv-ref__video" src={source} muted playsInline autoPlay loop preload="auto" aria-hidden="true" tabIndex={-1}

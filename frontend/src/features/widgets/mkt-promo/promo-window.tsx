@@ -609,6 +609,7 @@ function Done({ model, video, session, state, host, onClose }: { readonly model:
   const result = video.result;
   const storeId = session.store.getSnapshot().tables.realPromo?.storeId;
   const media = usePromoMedia(result?.fileUrl, storeId);
+  const poster = usePromoMedia(result?.posterUrl, storeId);
   const place = state.draft.place;
   const posted = video.status === 'posted';
   const saved = state.saved[video.videoId] ?? 'idle';
@@ -635,7 +636,7 @@ function Done({ model, video, session, state, host, onClose }: { readonly model:
   const postedLine = `${t.t('promo.posted.line', { n: model.postedCount, place: t.t(`promo.place.${postedRoute ?? 'clip'}`) })}${postedRoute === 'clip' ? t.t('widget.promo-video.counting') : ''}`;
   return (
     <section className="pv-done" data-slot="promo-video.done" data-posted={posted ? 'true' : undefined}>
-      {media.src ? <PromoPlayer src={media.src} name={t.t('promo.player.name', { s: seconds })} /> : <div role="status" className="pv-caption">
+      {media.src ? <PromoPlayer src={media.src} poster={poster.src} name={t.t('promo.player.name', { s: seconds })} /> : <div role="status" className="pv-caption">
         {t.t(media.failed ? 'data.real.error' : 'data.real.loading')}
         {media.failed ? <ActionButton variant="link" onClick={media.retry}>{t.t('common.retry')}</ActionButton> : null}
       </div>}

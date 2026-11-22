@@ -1,9 +1,13 @@
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import { createWidgetDataStore } from '../../../data/db/store';
+import { createRealPort } from '../../../data/reality/00';
 import { createPortTransport } from '../../../data/reality/00/transport';
 import { fakeBackend, reply } from '../../../data/reality/00/testing';
+import { menuAdapter } from '../../../data/reality/01/adapter';
+import { promoAdapter } from '../../../data/reality/16/adapter';
 import { renderWithKit } from '../../../ui/test-utils';
 import { CommerceStock } from '../mgmt-supply/stock-grid-commerce';
 import { SupplierMessage } from '../mgmt-supply/purchase-message';
@@ -69,6 +73,40 @@ it('previews only changed venue fields and reads provider state again after conf
   fireEvent.click(confirm);
   expect(await screen.findByDisplayValue('안성')).toBeInTheDocument();
   expect(backend.callsTo('GET', path)).toHaveLength(2);
+});
+
+it.each(['http', 'fixture'] as const)('shows the Place venue photo from the current source in %s mode', async mode => {
+  const backend = fakeBackend();
+  const path = '/marketing/photos/44ce6212-5f16-42b9-873e-2a5fad58752f/content';
+  const contentUrl = `/api/v1/stores/${backend.storeId}${path}`;
+  const photoId = 'cafe-storefront';
+  const displayed = mode === 'http' ? 'blob:place-photo' : `/api/promo/photos/${photoId}`;
+  const store = createWidgetDataStore();
+  const page = { items: [], nextCursor: null, asOf: '2026-11-22T00:00:00Z', sourceRevision: 1 };
+  backend.on('GET', '/inventory/place/venue', () => ({ name: '카페', address: '서울', phone: '021234567', keywords: [], photos: [photoId] }));
+  backend.on('GET', '/marketing/promo/assets', () => ({ ...page, items: [{ photoId, menuId: null, fileId: null, url: contentUrl, width: 120, height: 90 }], store: null, menus: [], eligiblePhotoCount: 0 }));
+  backend.on('GET', '/marketing/promo/drafts', () => page);
+  backend.on('GET', '/marketing/promo/publications', () => page);
+  backend.on('GET', '/marketing/photos', () => ({ items: [], nextCursor: null }));
+  backend.on('GET', path, () => 'bytes');
+  const port = createRealPort({ store, fetch: backend.fetch, source: () => mode, adapters: [menuAdapter, promoAdapter] });
+  store.bindReal(port);
+  const originalURL = globalThis.URL;
+  globalThis.URL = class extends originalURL {
+    static createObjectURL = () => displayed;
+    static revokeObjectURL = vi.fn();
+  };
+  try {
+    const { unmount } = renderWithKit(<VenuePlace transport={port.transport} />, { store });
+    fireEvent.click(screen.getByRole('button', { name: '업체 정보' }));
+    const label = await screen.findByText('매장 앞 사진');
+    await waitFor(() => expect(label.closest('p')?.querySelector('img')).toHaveAttribute('src', displayed));
+    if (mode === 'http') expect(backend.callsTo('GET', path)[0].headers.get('authorization')).toMatch(/^Bearer token-/);
+    else expect(backend.callsTo('GET', '/marketing/promo/assets')).toHaveLength(0);
+    unmount();
+  } finally {
+    globalThis.URL = originalURL;
+  }
 });
 
 it('reads online stock back after confirmation and omits the store transfer for a linked product', async () => {

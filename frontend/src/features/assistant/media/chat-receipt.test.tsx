@@ -149,6 +149,24 @@ it('leaves unread optional fields blank on a partial receipt', async () => {
   expect(save()).toBeEnabled();
 });
 
+it('revokes the local thumbnail after removal and sends the photo only to OCR', async () => {
+  const fetcher = vi.fn().mockResolvedValue(response());
+  const revoke = vi.fn();
+  vi.stubGlobal('fetch', fetcher);
+  vi.stubGlobal('URL', class extends URL {
+    static createObjectURL = () => 'blob:receipt-preview';
+    static revokeObjectURL = revoke;
+  });
+  const view = setup();
+  attach(view);
+  await screen.findByRole('textbox', { name: '거래처' });
+  expect(view.container.querySelector('.ai-photo__thumb img')).toHaveAttribute('src', 'blob:receipt-preview');
+  fireEvent.click(button('사진 빼기'));
+  expect(view.container.querySelector('.ai-photo__thumb img')).toBeNull();
+  expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:receipt-preview');
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/navis/media/receipt-ocr', expect.objectContaining({ body: photo }));
+});
+
 it.each(['stop', 'send', 'hide', 'close', 'layer change'] as const)('discards a late OCR result after %s', async action => {
   let resolve!: (value: Response) => void;
   const fetcher = vi.fn<(url: string, options: RequestInit) => Promise<Response>>(

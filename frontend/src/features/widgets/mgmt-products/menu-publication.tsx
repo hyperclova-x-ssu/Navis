@@ -1,13 +1,15 @@
 import './menu-publication.css';
 import { usePublicationText } from './menu-publication-text';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { PlaceMenuInput, PlaceMenuPreview, PlaceVenueInput, PlaceVenuePreview } from '../../../../../backend/services/inventory/reality/01/publication-dto';
 import type { MenuItem, Venue } from '../../../../../backend/packages/naver/contracts/pn01/wire';
 import type { PortFiles, PortTransport } from '../../../data/reality/00/port';
 import { usePublication } from '../../../data/reality/01/use-publication';
+import { useWidgetDataStore } from '../../../data/react';
 import { useBundle, useI18n, type MessageBundle } from '../../../i18n';
 import { ActionButton, Checkbox, DetailSidePanel, TextField } from '../../../ui';
 import { PublicationCard, PublicationChanges, PublicationReadState } from './menu-publication-card';
+import { usePromoMedia } from '../mkt-promo/promo-media';
 
 const bundle: MessageBundle<string> = {
   id: 'gap-inv.place',
@@ -77,6 +79,7 @@ export function VenuePlace({ transport, files, open, onOpenChange }: { transport
 }
 
 const venuePath = '/inventory/place/venue';
+const isVenueSeedPhoto = (photo: string) => /^cafe-(?:storefront|interior-\d+)$/.test(photo);
 function VenuePlaceForm({ transport, files }: { transport: PortTransport; files?: PortFiles }) {
   const { t } = useBundle(bundle);
   const cardText = usePublicationText();
@@ -92,6 +95,15 @@ function VenuePlaceForm({ transport, files }: { transport: PortTransport; files?
   const fileInput = useRef<HTMLInputElement>(null);
   const view = flow.attempt?.diff;
   const current = flow.data;
+  const data = useWidgetDataStore();
+  const port = data.real;
+  const http = port?.mode('menu') === 'http';
+  const photos = draft.photos ?? current?.photos ?? [];
+  const needsCatalog = http && photos.some(isVenueSeedPhoto);
+  const promo = useSyncExternalStore(data.subscribe, () => data.getSnapshot().tables.realPromo);
+  useEffect(() => {
+    if (needsCatalog) void port?.load('promo');
+  }, [needsCatalog, port]);
   const confirm = (requireExtra: boolean) => flow.confirm(requireExtra, () => {
     setDraft({});
     setKeywords(undefined);
@@ -101,7 +113,6 @@ function VenuePlaceForm({ transport, files }: { transport: PortTransport; files?
     {flow.readError && <a href="https://new.smartplace.naver.com/" target="_blank" rel="noreferrer">{t('open')}</a>}
   </>;
 
-  const photos = draft.photos ?? current.photos;
   const photoName = (ref: string, index: number) => fileNames[ref] ?? (ref === 'cafe-storefront' ? '매장 앞 사진' :
     ref.startsWith('cafe-interior-') ? `매장 안 사진 ${Number(ref.split('-').at(-1))}` : `${t('photos')} ${index + 1}`);
   const confirmedPatch = flow.confirmedPreview?.patch;
@@ -140,7 +151,9 @@ function VenuePlaceForm({ transport, files }: { transport: PortTransport; files?
       <fieldset disabled={disabled}>
         <legend>{t('photos')}</legend>
         {photos.map((photo, index) => <p className="menu-venue-photo" key={photo}>
-          <VenueThumbnail photo={photo} files={files} /><span>{photoName(photo, index)}</span>
+          <VenueThumbnail photo={photo} files={files} example={!http} storeId={promo?.storeId}
+            contentUrl={promo?.assets.items.find(asset => asset.photoId === photo && asset.menuId === null)?.url} />
+          <span>{photoName(photo, index)}</span>
           <ActionButton type="button" variant="ghost" onClick={() => setDraft(previous =>
             ({ ...previous, photos: photos.filter(ref => ref !== photo) }))}>{t('photoRemove')}</ActionButton>
         </p>)}
@@ -166,8 +179,12 @@ function VenuePlaceForm({ transport, files }: { transport: PortTransport; files?
   </>;
 }
 
-function VenueThumbnail({ photo, files }: { photo: string; files?: PortFiles }) {
-  const seeded = /^cafe-(?:storefront|interior-\d+)$/.test(photo);
+function VenueThumbnail({ photo, files, example, storeId, contentUrl }: {
+  photo: string; files?: PortFiles; example: boolean; storeId?: string; contentUrl?: string;
+}) {
+  const seeded = isVenueSeedPhoto(photo);
+  const seedUrl = example ? `/api/promo/photos/${encodeURIComponent(photo)}` : contentUrl;
+  const { src } = usePromoMedia(seeded ? seedUrl : undefined, storeId);
   const [source, setSource] = useState<{ photo: string; url: string }>();
   useEffect(() => {
     if (!files || seeded) return;
@@ -180,6 +197,6 @@ function VenueThumbnail({ photo, files }: { photo: string; files?: PortFiles }) 
     }).catch(() => undefined);
     return () => { active = false; if (url) URL.revokeObjectURL(url); };
   }, [files, photo, seeded]);
-  const url = seeded ? `/api/promo/photos/${encodeURIComponent(photo)}` : source?.photo === photo ? source.url : undefined;
+  const url = seeded ? src : source?.photo === photo ? source.url : undefined;
   return url ? <img src={url} alt="" loading="lazy" /> : null;
 }

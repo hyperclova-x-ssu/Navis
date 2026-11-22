@@ -18,7 +18,7 @@ function SpeakerIcon({ muted }: { readonly muted: boolean }) {
   );
 }
 
-export function PromoPlayer({ src, name }: { readonly src: string; readonly name: string }) {
+export function PromoPlayer({ src, poster, name }: { readonly src: string; readonly poster?: string; readonly name: string }) {
   const t = useT();
   const ui = useUi();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -63,7 +63,7 @@ export function PromoPlayer({ src, name }: { readonly src: string; readonly name
     <div className="pv-player" role="group" aria-label={name} data-preset={preset} data-slot="promo-video.player">
       <div className="pv-player__frame">
         <video
-          ref={videoRef} className="pv-player__video" src={src} preload="metadata" playsInline muted={muted}
+          ref={videoRef} className="pv-player__video" src={src} poster={poster} preload="metadata" playsInline muted={muted}
           onPlay={() => { setPlaying(true); setEnded(false); }} onPause={() => setPlaying(false)}
           onEnded={() => { setPlaying(false); setEnded(true); }}
           onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)} onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}

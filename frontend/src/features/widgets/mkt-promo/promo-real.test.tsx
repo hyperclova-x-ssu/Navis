@@ -5,11 +5,11 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createWidgetDataStore } from '../../../data/db/store';
 import { catalogForSource } from '../../../data/marketing/promo';
 import { createRealPort } from '../../../data/reality/00';
-import { fakeBackend, reply } from '../../../data/reality/00/testing';
+import { fakeBackend, reply, TEST_STORE_ID } from '../../../data/reality/00/testing';
 import { promoAdapter } from '../../../data/reality/16/adapter';
 import { renderWithKit } from '../../../ui/test-utils';
 import { PromoVideoDetail, PromoVideoPanel } from './promo-video';
-import { cafeCatalog, createFakeServer, syncedCafeStore } from './promo-test-server';
+import { cafeCatalog, createFakeServer, fakeReferences, syncedCafeStore } from './promo-test-server';
 import { makeHost } from './test-helpers';
 
 const promo = '/marketing/promo';
@@ -18,7 +18,8 @@ const page = <T,>(items: readonly T[]) => ({ items, asOf, sourceRevision: 1, nex
 const photoIds = ['photo-1', 'photo-2', 'photo-3', 'photo-4', 'photo-5'];
 const input = { menuIds: ['latte'], photoIds, moods: ['warm'], concepts: ['new-item'], memo: '점주가 남긴 메모', referenceId: 'ref-1', lengthSec: 15, locale: 'ko' };
 
-function open(finished: boolean, placeNews: () => unknown = () => reply(409, { code: 'CONFLICT', reason: 'MANUAL_UPLOAD_REQUIRED' }), photos = finished ? photoIds.length : 0, fixture = false, panel = false) {
+function open(finished: boolean, placeNews: () => unknown = () => reply(409, { code: 'CONFLICT', reason: 'MANUAL_UPLOAD_REQUIRED' }), photos = finished ? photoIds.length : 0, fixture = false, panel = false,
+  photoRequest?: (url: string, init?: RequestInit) => Promise<Response> | undefined) {
   const backend = fakeBackend();
   const owned = photoIds.slice(0, photos);
   backend.on('GET', `${promo}/assets`, () => ({ ...page(owned.map(photoId => ({ photoId, menuId: 'latte', url: `/owner/${photoId}.jpg`, fileId: null, width: 180, height: 300 }))),
@@ -26,10 +27,12 @@ function open(finished: boolean, placeNews: () => unknown = () => reply(409, { c
   backend.on('GET', `${promo}/drafts`, () => page(finished ? [{ draftId: 'draft', revision: 2, input, jobId: 'job', updatedAt: asOf }] : []));
   backend.on('GET', `${promo}/publications`, () => ({ ...page([]), uploadTargets: { 'place-news': 'https://new.smartplace.naver.com/' } }));
   backend.on('GET', '/promo/jobs/job', () => ({ jobId: 'job', startedAt: asOf, status: 'done', stage: 'merge', stageState: 'done', result: { durationSec: 15, sizeBytes: 123, music: null } }));
+  backend.on('GET', '/promo/references', () => fakeReferences());
   backend.on('POST', `${promo}/jobs/job/place-news`, placeNews);
   backend.on('POST', `${promo}/jobs/job/attest`, () => ({ resourceId: 'post', revision: 1, receiptId: 'receipt', affectedSources: ['promo'] }));
   const store = createWidgetDataStore();
-  const port = createRealPort({ store, fetch: backend.fetch, source: () => 'http', adapters: [promoAdapter], reconcileDelaysMs: [] });
+  const port = createRealPort({ store, fetch: (url, init) => photoRequest?.(String(url), init) ?? backend.fetch(url, init),
+    source: () => 'http', adapters: [promoAdapter], reconcileDelaysMs: [] });
   if (fixture) syncedCafeStore(store); else store.bindReal(port);
   const host = makeHost();
   renderWithKit(<>
@@ -40,6 +43,95 @@ function open(finished: boolean, placeNews: () => unknown = () => reply(409, { c
 }
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+it('uses store-authorized reference list and poster bytes in the live gallery', async () => {
+  const path = `/api/v1/stores/${TEST_STORE_ID}/promo/references`;
+  const headers = vi.fn();
+  const originalURL = globalThis.URL;
+  class TestURL extends URL {
+    static createObjectURL = vi.fn(() => 'blob:gallery-media');
+    static revokeObjectURL = vi.fn();
+  }
+  globalThis.URL = TestURL;
+  try {
+    open(false, undefined, 5, false, false, (url, init) => {
+      if (url !== path && !url.startsWith(`${path}/ref-1/`)) return;
+      headers(url, new Headers(init?.headers).get('authorization'));
+      if (url !== path) return Promise.resolve(new Response('media', { headers: { 'content-type': url.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg' } }));
+      return Promise.resolve(Response.json({ referenceVersion: 'proof', references: [{
+        ...fakeReferences().references[0], posterUrl: `${path}/ref-1/poster.jpg`, previewUrl: `${path}/ref-1/preview.mp4`,
+      }] }));
+    });
+    const tabs = await screen.findAllByRole('tab');
+    fireEvent.click(tabs[2]);
+    const card = await screen.findByRole('radio');
+    await waitFor(() => expect(card.querySelector('img')).toHaveAttribute('src', 'blob:gallery-media'));
+    expect(headers).toHaveBeenCalledWith(path, expect.stringMatching(/^Bearer token-/));
+    expect(headers).toHaveBeenCalledWith(`${path}/ref-1/poster.jpg`, expect.stringMatching(/^Bearer token-/));
+    cleanup();
+  } finally { globalThis.URL = originalURL; }
+});
+
+it('uses the authenticated poster from a finished job', async () => {
+  const path = `/api/v1/stores/${TEST_STORE_ID}/promo/jobs/job`;
+  const originalURL = globalThis.URL;
+  class TestURL extends URL {
+    static createObjectURL = (blob: Blob) => `blob:promo-${blob.type.endsWith('jpeg') ? 'poster' : 'video'}`;
+    static revokeObjectURL = vi.fn();
+  }
+  globalThis.URL = TestURL;
+  try {
+    const readPoster = vi.fn();
+    open(true, undefined, 5, false, false, (url, init) => {
+      if (url === path) return Promise.resolve(Response.json({ jobId: 'job', startedAt: asOf, status: 'done', stage: 'merge', stageState: 'done',
+        result: { durationSec: 15, sizeBytes: 123, music: null, posterUrl: `${path}/poster.jpg` } }));
+      if (url === `${path}/poster.jpg`) {
+        readPoster(new Headers(init?.headers).get('authorization'));
+        return Promise.resolve(new Response('poster', { headers: { 'content-type': 'image/jpeg' } }));
+      }
+      if (url === `${path}/video.mp4`) return Promise.resolve(new Response('video', { headers: { 'content-type': 'video/mp4' } }));
+    });
+    await waitFor(() => expect(document.querySelector('.pv-player video')).toHaveAttribute('poster', 'blob:promo-poster'));
+    expect(readPoster).toHaveBeenCalledWith(expect.stringMatching(/^Bearer token-/));
+    cleanup();
+  } finally { globalThis.URL = originalURL; }
+});
+
+it.each(['s3', 'off'] as const)('shows API-returned photo URLs and retains selection IDs with server storage %s', async mode => {
+  const listUrl = `/api/v1/stores/${TEST_STORE_ID}/marketing/photos`;
+  const contentUrl = mode === 's3' ? `${listUrl}/${photoIds[0]}/content` : '/menu-photos/from-api.jpeg';
+  const displayed = mode === 's3' ? 'blob:promo-photo' : contentUrl;
+  const createObjectURL = vi.fn(() => displayed);
+  const originalURL = globalThis.URL;
+  class TestURL extends URL {
+    static createObjectURL = createObjectURL;
+    static revokeObjectURL = vi.fn();
+  }
+  globalThis.URL = TestURL;
+  try {
+    const mediaHeaders = vi.fn();
+    open(false, undefined, 5, false, false, (url, init) => {
+      if (url === listUrl) return Promise.resolve(Response.json({
+        items: [{ photoId: photoIds[0], menuId: 'latte', sha256: 'a'.repeat(64), width: 180, height: 300, contentUrl }], nextCursor: null,
+      }));
+      if (url === contentUrl && mode === 's3') {
+        mediaHeaders(new Headers(init?.headers).get('authorization'));
+        return Promise.resolve(new Response('photo bytes', { headers: { 'content-type': 'image/jpeg' } }));
+      }
+    });
+    fireEvent.click(await screen.findByRole('checkbox', { name: /^라테\s·\s사진 5장$/ }));
+    const tile = screen.getByRole('checkbox', { name: /^라테 사진 1/ });
+    await waitFor(() => expect(tile.querySelector('img')).toHaveAttribute('src', displayed));
+    fireEvent.click(tile);
+    expect(tile).toHaveAttribute('data-photo', photoIds[0]);
+    expect(tile).toHaveAttribute('aria-checked', 'true');
+    if (mode === 's3') expect(mediaHeaders).toHaveBeenCalledWith(expect.stringMatching(/^Bearer token-/));
+    else expect(createObjectURL).not.toHaveBeenCalled();
+    cleanup();
+  } finally {
+    globalThis.URL = originalURL;
+  }
+});
 
 it.each(['example', 'http'] as const)('offers the chestnut and D-409 menu photos in %s mode', async (mode) => {
   const catalog = catalogForSource('cafe');
