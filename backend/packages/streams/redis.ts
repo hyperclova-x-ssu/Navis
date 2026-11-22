@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createClient } from 'redis';
 import type { EventProducer } from '../contracts/events.ts';
 import { readSecret } from '../db/index.ts';
@@ -11,6 +11,7 @@ const appendAtEpoch = `
 `;
 
 export type RedisDelivery = { id: string; message: Record<string, string> };
+const groupSignature = (groups: readonly string[]) => createHash('sha256').update(JSON.stringify([...groups].sort())).digest('base64url');
 
 export class RedisStreams {
   private readonly client: ReturnType<typeof redisClient>;
@@ -19,13 +20,14 @@ export class RedisStreams {
     this.client = client;
   }
 
-  async readyEpoch(producer: EventProducer): Promise<string | null> {
+  async readyEpoch(producer: EventProducer, groups?: readonly string[]): Promise<string | null> {
     const epoch = await this.client.get(epochKey(producer));
-    return epoch?.startsWith('ready:') && await this.client.exists(streamKey(producer)) ? epoch : null;
+    const prefix = groups ? `ready:${groupSignature(groups)}:` : 'ready:';
+    return epoch?.startsWith(prefix) && await this.client.exists(streamKey(producer)) ? epoch : null;
   }
 
   async beginRebuild(producer: EventProducer, groups: readonly string[]): Promise<string> {
-    const token = `rebuilding:${randomUUID()}`;
+    const token = `rebuilding:${groupSignature(groups)}:${randomUUID()}`;
     await this.client.eval(`
       redis.call('SET', KEYS[1], ARGV[1])
       redis.call('DEL', KEYS[2])
@@ -94,7 +96,7 @@ export class RedisStreams {
   }
 }
 
-type RedisIdentity = 'relay' | 'inventory' | 'customer' | 'pos';
+type RedisIdentity = 'relay' | 'inventory' | 'customer' | 'pos' | 'marketing';
 
 function redisClient(identity: RedisIdentity) {
   return createClient({

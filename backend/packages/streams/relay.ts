@@ -1,18 +1,21 @@
 import pg, { type Pool, type PoolClient } from 'pg';
 import type { EventProducer } from '../contracts/events.ts';
-import { readSecret } from '../db/index.ts';
+import { dbRoleName, readSecret } from '../db/index.ts';
 import { parseEnvelope, type StreamEnvelope } from './envelope.ts';
 import type { RedisStreams } from './redis.ts';
 import { backoffMs, schemaName, transact } from './transaction.ts';
 
 export const localStreamGroups = {
-  pos: ['inventory', 'customer'],
-  inventory: ['pos'],
+  pos: ['inventory', 'customer', 'insight', 'insight-tables', 'marketing'],
+  inventory: ['pos', 'customer'],
+  insight: ['customer'],
+  marketing: ['customer'],
+  customer: ['marketing'],
 } as const;
 export type RelayDatabase = 'pos' | 'inventory' | 'customer';
 
 export function relayDbPool(database: RelayDatabase): Pool {
-  const user = `${database}_relay`;
+  const user = dbRoleName(database, 'relay');
   const pool = new pg.Pool({
     host: process.env.NAVIS_DB_HOST ?? 'db',
     port: 5432, database, user,
@@ -52,7 +55,7 @@ interface RelayOptions {
   producer: EventProducer;
   database: Pool;
   redis: RedisStreams;
-  groups: readonly { name: RelayDatabase; database: Pool }[];
+  groups: readonly { name: string; schema?: EventProducer; database: Pool }[];
   /** Test seam for process termination after Redis has accepted the event. */
   afterAppend?: (event: StreamEnvelope) => void | Promise<void>;
 }
@@ -60,18 +63,20 @@ interface RelayOptions {
 export class OutboxRelay {
   private readonly options: RelayOptions;
   private readonly outbox: string;
+  private readonly groupNames: readonly string[];
 
   constructor(options: RelayOptions) {
     if (!options.groups.length) throw new Error('A relay requires at least one recovery group');
     this.options = options;
     this.outbox = `${schemaName(options.producer)}.outbox`;
+    this.groupNames = options.groups.map(({ name }) => name);
   }
 
   async step(): Promise<'idle' | 'published' | 'retry' | 'rebuilt'> {
     const { database, redis, producer, afterAppend } = this.options;
     const result = await transact(database, async db => {
       await db.query("SELECT pg_advisory_xact_lock_shared(hashtextextended('navis:stream:' || $1, 0))", [producer]);
-      const epoch = await redis.readyEpoch(producer);
+      const epoch = await redis.readyEpoch(producer, this.groupNames);
       if (!epoch) return 'rebuild' as const;
 
       const { rows: [row] } = await db.query<OutboxRow>(`
@@ -113,15 +118,15 @@ export class OutboxRelay {
     const { database, redis, producer, groups } = this.options;
     await transact(database, async db => {
       await db.query("SELECT pg_advisory_xact_lock(hashtextextended('navis:stream:' || $1, 0))", [producer]);
-      if (await redis.readyEpoch(producer)) return;
+      if (await redis.readyEpoch(producer, this.groupNames)) return;
 
-      const checkpoints = await Promise.all(groups.map(async ({ name, database: groupDb }) => {
+      const checkpoints = await Promise.all(groups.map(async ({ name, schema, database: groupDb }) => {
         const { rows } = await groupDb.query<{ scope_key: string; last_seq: string }>(`
-          SELECT scope_key, last_seq FROM ${schemaName(name)}.stream_checkpoint
+          SELECT scope_key, last_seq FROM ${schemaName(schema ?? name)}.stream_checkpoint
           WHERE consumer_group = $1 AND producer = $2`, [name, producer]);
         return new Map(rows.map(row => [row.scope_key, BigInt(row.last_seq)]));
       }));
-      const token = await redis.beginRebuild(producer, groups.map(group => group.name));
+      const token = await redis.beginRebuild(producer, this.groupNames);
       await this.replayPublished(db, token, checkpoints);
       if (!await redis.finishRebuild(producer, token)) throw new Error('Redis changed during stream rebuild');
     });

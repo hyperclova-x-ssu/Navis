@@ -1,7 +1,19 @@
 import type { PosCatalogItem } from '../../../frontend/src/contracts/pos.ts';
+import type { DashboardLayerId, FeatureId, MenuCategory } from '../../../frontend/src/contracts/index.ts';
+
+export const boardWidgetLayers = {
+  menu: 'management', 'custom-order': 'management', 'inventory-booking': 'management', suppliers: 'management',
+  ledger: 'management', margin: 'management', tax: 'management', 'credit-receivable': 'management', members: 'management',
+  'customer-analysis': 'management', 'store-environment': 'management', manuals: 'management', grants: 'management',
+  'staff-schedule': 'management', calendar: 'management', 'voice-booking': 'management', briefing: 'management',
+  'local-changes': 'marketing', 'trade-area': 'marketing', 'local-trends': 'marketing', 'ai-response': 'marketing',
+  community: 'marketing', 'marketing-today': 'marketing', 'slot-coupon': 'marketing', 'expiry-coupon': 'marketing',
+  'promo-video': 'marketing', 'notice-send': 'marketing', 'coupon-status': 'marketing', 'customer-groups': 'marketing',
+} as const satisfies Record<Exclude<FeatureId, 'marketing-performance'>, DashboardLayerId>; // D-365: 마케팅 성과 left the board catalog (its model stays a data id), so a board can no longer hold it
 
 export type CatalogItem = Pick<PosCatalogItem, 'menuId' | 'name' | 'price' | 'saleStatus'> & {
-  readonly category: 'drink' | 'dessert';
+  readonly category: MenuCategory;
+  readonly seasonal?: string;
 };
 export interface CatalogResponse {
   readonly items: readonly CatalogItem[];
@@ -13,7 +25,7 @@ export interface AccessTokenResponse {
 }
 
 const errorCodes = [
-  'INVALID_REQUEST', 'UNAUTHENTICATED', 'TOKEN_EXPIRED', 'STORE_FORBIDDEN', 'SERVICE_UNAVAILABLE',
+  'INVALID_REQUEST', 'UNAUTHENTICATED', 'TOKEN_EXPIRED', 'STORE_FORBIDDEN', 'NOT_FOUND', 'SERVICE_UNAVAILABLE',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
@@ -44,7 +56,8 @@ export const catalogResponseSchema = {
         properties: {
           menuId: uuid,
           name: { type: 'string', minLength: 1 },
-          category: { type: 'string', enum: ['drink', 'dessert'] },
+          category: { type: 'string', enum: ['coffee', 'tea', 'beverage', 'dessert'] },
+          seasonal: { type: 'string', minLength: 1 },
           price: { type: 'integer', minimum: 1 },
           saleStatus: { type: 'string', enum: ['selling', 'sold_out'] },
         },

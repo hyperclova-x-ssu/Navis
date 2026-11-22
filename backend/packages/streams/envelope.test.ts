@@ -22,7 +22,7 @@ describe('stream envelope', () => {
   });
 
   it.each([
-    { storeSeq: 9007199254740993 }, { storeSeq: '092' }, { storeSeq: '9223372036854775808' },
+    { storeSeq: Number.MAX_SAFE_INTEGER + 1 }, { storeSeq: '092' }, { storeSeq: '9223372036854775808' },
     { storeSeq: '0' }, { scopeKey: 'other' }, { eventType: 'inventory.receipt_recorded.v1' },
     { schemaVersion: 2 }, { eventId: 'not-an-id' }, { payload: [] },
   ])('rejects mismatched or invalid envelope fields %j', (patch) => {
@@ -33,5 +33,20 @@ describe('stream envelope', () => {
     const receipt = { ...envelope, producer: 'inventory', eventType: 'inventory.receipt_recorded.v1' };
     expect(() => parseEnvelope(receipt, 'pos')).toThrow('Invalid stream envelope');
     expect(parseEnvelope(receipt, 'inventory').eventType).toBe(receipt.eventType);
+  });
+
+  it('keeps the persisted board and feature identifiers on Account envelopes', () => {
+    const panel = {
+      ...envelope, producer: 'account', eventType: 'account.panel_changed.v1', aggregateId: 'management',
+      payload: { storeId, boardId: 'management', revision: 1 },
+    };
+    const widget = {
+      ...panel, eventType: 'account.widget_changed.v1', aggregateId: 'inventory-booking',
+      payload: { ...panel.payload, pageId: 'page-1', featureId: 'inventory-booking' },
+    };
+    expect(parseEnvelope(panel, 'account').aggregateId).toBe('management');
+    expect(parseEnvelope(widget, 'account').aggregateId).toBe('inventory-booking');
+    expect(() => parseEnvelope({ ...widget, aggregateId: 'members' }, 'account')).toThrow('Invalid stream envelope');
+    expect(() => parseEnvelope({ ...envelope, aggregateId: 'management' }, 'pos')).toThrow('Invalid stream envelope');
   });
 });
