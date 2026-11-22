@@ -36,6 +36,10 @@ x-node: &node
     timeout: 5s
     retries: 12
 
+x-phase3: &phase3
+  NAVIS_PHASE3_FIXTURES: ${NAVIS_PHASE3_FIXTURES:-0}
+  NAVIS_FIXTURE_SMS_ENABLED: ${NAVIS_FIXTURE_SMS_ENABLED:-0}
+
 x-provider: &provider
   <<: *node
   depends_on:
@@ -64,6 +68,9 @@ services:
       target: frontend
       args:
         VITE_NAVIS_DATA_SOURCE: ${VITE_NAVIS_DATA_SOURCE:-placeholder}
+        VITE_NAVIS_CLOCK: ${VITE_NAVIS_CLOCK:-}
+        VITE_NAVIS_POS_CLOCK: ${VITE_NAVIS_POS_CLOCK:-}
+        VITE_NAVIS_FIXTURE_END_DATE: ${VITE_NAVIS_FIXTURE_END_DATE:-}
     networks: [web]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/readyz"]
@@ -71,84 +78,434 @@ services:
       timeout: 3s
       retries: 12
 
+  insight-navis:
+    build: { <<: *build, target: insight-navis }
+    networks: [navis-api]
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=128m,mode=1777"]
+    environment:
+      NAVIS_ALLOWED_ORIGINS: ${NAVIS_BROWSER_API_ORIGIN:-http://127.0.0.1:18180}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/readyz', {signal: AbortSignal.timeout(4000)}).then(r => { if (!r.ok) process.exitCode = 1 }, () => { process.exitCode = 1 })"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   api-gateway:
     <<: *node
     build: { <<: *build, target: api-gateway }
-    networks: [api, workloads]
+    networks: [api, workloads, navis-api]
     depends_on:
       account: { condition: service_healthy }
       inventory: { condition: service_healthy }
+      pos: { condition: service_healthy }
+      insight: { condition: service_healthy }
+      marketing: { condition: service_healthy }
     environment:
+      <<: *phase3
+      NAVIS_ACCOUNT_PUBLIC_ORIGIN: ${NAVIS_BROWSER_API_ORIGIN:-http://127.0.0.1:18180}
+      NAVIS_HOSTED_DEMO_AUTH: ${NAVIS_HOSTED_DEMO_AUTH:-0}
+      NAVIS_EDGE_DEMO_PROOF_FILE: /run/navis-edge-demo/proof
+      NAVIS_INSIGHT_NAVIS_URL: http://insight-navis:8787
+      NAVIS_INSIGHT_BASE_URL: http://insight:3000
+      NAVIS_MARKETING_BASE_URL: http://marketing:3000
+      NAVIS_GATEWAY_INSIGHT_TOKEN_FILE: /run/secrets/gateway_insight_token
+      NAVIS_GATEWAY_MARKETING_TOKEN_FILE: /run/secrets/gateway_marketing_token
+      NAVIS_GATEWAY_MARKETING_LOCAL_COMMAND_TOKEN_FILE: /run/secrets/gateway_marketing_local_command_token
+      NAVIS_GATEWAY_SMS_CONFIRM_TOKEN_FILE: /run/secrets/gateway_sms_confirm_token
       NAVIS_ACCOUNT_URL: http://account:3000
       NAVIS_POS_URL: http://pos:3000
+      NAVIS_POS_FIXTURE_NOW: ${NAVIS_POS_FIXTURE_NOW:-}
       NAVIS_INVENTORY_URL: http://inventory:3000
+      NAVIS_CUSTOMER_URL: http://customer:3000
       NAVIS_GATEWAY_ACCOUNT_TOKEN_FILE: /run/secrets/gateway_account_token
       NAVIS_GATEWAY_INVENTORY_TOKEN_FILE: /run/secrets/gateway_inventory_token
       NAVIS_GATEWAY_POS_TOKEN_FILE: /run/secrets/gateway_pos_token
       NAVIS_GATEWAY_CUSTOMER_TOKEN_FILE: /run/secrets/gateway_customer_token
-    secrets: [gateway_account_token, gateway_inventory_token, gateway_pos_token, gateway_customer_token]
+    secrets: [gateway_account_token, gateway_inventory_token, gateway_pos_token, gateway_customer_token,
+      gateway_insight_token, gateway_marketing_token, gateway_marketing_local_command_token, gateway_sms_confirm_token]
 
   account:
     <<: *provider
     build: { <<: *build, target: account }
+    networks: [workloads, data, naver-virtual-api]
     environment:
       <<: *runtime-db-env
+      NAVIS_NAVER_VIRTUAL_ORIGIN: http://naver-virtual:3000
+      NAVIS_NAVER_VIRTUAL_TOKEN_FILE: /run/secrets/nvirtual_account_token
+      NAVIS_NAVER_VIRTUAL_PROVIDER_CREDENTIALS_DIR: /run/secrets
       NAVIS_BACKEND_DEMO_AUTH: ${NAVIS_BACKEND_DEMO_AUTH:-0}
+      NAVIS_HOSTED_DEMO_AUTH: ${NAVIS_HOSTED_DEMO_AUTH:-0}
+      NAVIS_ACCOUNT_PUBLIC_ORIGIN: ${NAVIS_BROWSER_API_ORIGIN:-http://127.0.0.1:18180}
+      NAVIS_MARKETING_ACCOUNT_TOKEN_FILE: /run/secrets/marketing_account_token
+      NAVIS_MARKETING_COMMUNITY_ACCOUNT_TOKEN_FILE: /run/secrets/marketing_community_account_token
+      NAVIS_ACCOUNT_COMMUNITY_PAIRS: ${NAVIS_ACCOUNT_COMMUNITY_PAIRS:-[]}
+      NAVIS_ACCOUNT_PROMO_STORAGE_DIR: /var/lib/navis/promo
       NAVIS_ACCOUNT_SIGNING_KEY_FILE: /run/secrets/account_signing_key.pem
       NAVIS_GATEWAY_ACCOUNT_TOKEN_FILE: /run/secrets/gateway_account_token
+      NAVIS_INVENTORY_ACCOUNT_TOKEN_FILE: /run/secrets/inventory_account_token
+      NAVIS_POS_ACCOUNT_TOKEN_FILE: /run/secrets/pos_account_token
+      NAVIS_INSIGHT_ACCOUNT_TOKEN_FILE: /run/secrets/insight_account_token
     secrets:
-      - account_runtime_password
+      - account_run_password
+      - nvirtual_account_token
       - source: account_signing_key
         target: account_signing_key.pem
       - gateway_account_token
+      - marketing_account_token
+      - marketing_community_account_token
+      - inventory_account_token
+      - pos_account_token
+      - insight_account_token
+      - nvirtual_account_storage_id
+      - nvirtual_account_storage_key
+      - nvirtual_account_storage_prefix
+      - nvirtual_login_id
+      - nvirtual_login_secret
+      - nvirtual_storage_bucket
+    volumes: [promo-files:/var/lib/navis/promo]
 
   pos:
     <<: *provider
     build: { <<: *build, target: pos }
-    networks: [workloads, data, cache]
+    networks: [workloads, data, cache, naver-virtual-api]
+    environment:
+      <<: *runtime-db-env
+      NAVIS_NAVER_VIRTUAL_ORIGIN: http://naver-virtual:3000
+      NAVIS_NAVER_VIRTUAL_TOKEN_FILE: /run/secrets/nvirtual_pos_token
+      NAVIS_NAVER_VIRTUAL_CLOCK: ${NAVIS_NAVER_VIRTUAL_CLOCK:-fixed}
+      NAVIS_NAVER_VIRTUAL_ACCOUNT_ID: ansungjalbu-cafe
+      NAVIS_NAVER_VIRTUAL_STORE_ID: c05409a6-f082-5964-a787-c1ed3184988b
+      NAVIS_NAVER_VIRTUAL_PROVIDER_CREDENTIALS_DIR: /run/secrets
+      NAVIS_REDIS_URL: redis://redis:6379
+      NAVIS_POS_FIXTURE_NOW: ${NAVIS_POS_FIXTURE_NOW:-}
+      NAVIS_GATEWAY_POS_TOKEN_FILE: /run/secrets/gateway_pos_token
+      NAVIS_CUSTOMER_POS_TOKEN_FILE: /run/secrets/customer_pos_token
+      NAVIS_POS_INVENTORY_URL: http://inventory:3000
+      NAVIS_POS_INVENTORY_TOKEN_FILE: /run/secrets/pos_inventory_token
+      NAVIS_CUSTOMER_URL: http://customer:3000
+      NAVIS_POS_CUSTOMER_TOKEN_FILE: /run/secrets/pos_customer_token
+      NAVIS_POS_ACCOUNT_URL: http://account:3000
+      NAVIS_POS_ACCOUNT_TOKEN_FILE: /run/secrets/pos_account_token
+      NAVIS_INSIGHT_POS_READ_TOKEN_FILE: /run/secrets/insight_pos_read_token
+      NAVIS_MARKETING_POS_TOKEN_FILE: /run/secrets/marketing_pos_token
+    secrets:
+      - pos_run_password
+      - insight_pos_read_token
+      - marketing_pos_token
+      - gateway_pos_token
+      - customer_pos_token
+      - pos_redis_password
+      - pos_inventory_token
+      - pos_customer_token
+      - pos_account_token
+      - nvirtual_pos_token
+      - nvirtual_commerce_seller
+      - nvirtual_pay_chain
+      - nvirtual_pay_id
+      - nvirtual_pay_secret
+      - nvirtual_pos_commerce_id
+      - nvirtual_pos_commerce_salt
+
+  pos-receipt-worker:
+    build: { <<: *build, target: pos }
+    command: [node, workers/pos-receipts/index.ts]
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      relay: { condition: service_started }
+    networks: [data, cache]
     environment:
       <<: *runtime-db-env
       NAVIS_REDIS_URL: redis://redis:6379
-      NAVIS_POS_FIXTURE_NOW: ${NAVIS_POS_FIXTURE_NOW:-}
-      NAVIS_GATEWAY_POS_TOKEN_FILE: ${NAVIS_GATEWAY_POS_TOKEN_FILE:-}
-      NAVIS_CUSTOMER_POS_TOKEN_FILE: ${NAVIS_CUSTOMER_POS_TOKEN_FILE:-}
-    secrets: [pos_runtime_password, gateway_pos_token, customer_pos_token, pos_redis_password]
+    secrets: [pos_wrk_password, pos_redis_password]
 
   inventory:
     <<: *provider
     build: { <<: *build, target: inventory }
     environment:
       <<: *runtime-db-env
+      NAVIS_NAVER_VIRTUAL_ORIGIN: http://naver-virtual:3000
+      NAVIS_NAVER_VIRTUAL_TOKEN_FILE: /run/secrets/nvirtual_inventory_token
+      NAVIS_NAVER_VIRTUAL_ACCOUNT_ID: ansungjalbu-cafe
+      NAVIS_NAVER_VIRTUAL_STORE_ID: c05409a6-f082-5964-a787-c1ed3184988b
+      NAVIS_NAVER_VIRTUAL_CLOCK: ${NAVIS_NAVER_VIRTUAL_CLOCK:-fixed}
+      NAVIS_MARKETING_WORKER_INVENTORY_TOKEN_FILE: /run/secrets/marketing_worker_inventory_token
+      NAVIS_NAVER_VIRTUAL_PROVIDER_CREDENTIALS_DIR: /run/secrets
       NAVIS_GATEWAY_INVENTORY_TOKEN_FILE: /run/secrets/gateway_inventory_token
+      NAVIS_FORECAST_INVENTORY_TOKEN_FILE: /run/secrets/forecast_inventory_token
+      NAVIS_INVENTORY_ACCOUNT_URL: http://account:3000
+      NAVIS_INVENTORY_ACCOUNT_TOKEN_FILE: /run/secrets/inventory_account_token
+      NAVIS_INSIGHT_INVENTORY_READ_TOKEN_FILE: /run/secrets/insight_inventory_read_token
+      NAVIS_MARKETING_INVENTORY_TOKEN_FILE: /run/secrets/marketing_inventory_token
+      NAVIS_POS_INVENTORY_TOKEN_FILE: /run/secrets/pos_inventory_token
+      NAVIS_POS_FIXTURE_NOW: ${NAVIS_POS_FIXTURE_NOW:-}
       NAVIS_REDIS_URL: redis://redis:6379
-    networks: [workloads, data, cache]
-    secrets: [inventory_runtime_password, gateway_inventory_token, inventory_redis_password]
+    networks: [workloads, data, cache, naver-virtual-api]
+    secrets:
+      - inventory_run_password
+      - insight_inventory_read_token
+      - marketing_inventory_token
+      - gateway_inventory_token
+      - inventory_redis_password
+      - forecast_inventory_token
+      - pos_inventory_token
+      - inventory_account_token
+      - nvirtual_inventory_token
+      - marketing_worker_inventory_token
+      - nvirtual_commerce_seller
+      - nvirtual_inventory_commerce_id
+      - nvirtual_inventory_commerce_salt
+
+  inventory-stock-worker:
+    build: { <<: *build, target: inventory }
+    command: [node, services/inventory/stock-worker.ts]
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      relay: { condition: service_started }
+    networks: [data, cache]
+    environment:
+      <<: *runtime-db-env
+      NAVIS_REDIS_URL: redis://redis:6379
+    secrets: [inventory_wrk_password, inventory_redis_password]
 
   customer:
     <<: *provider
     build: { <<: *build, target: customer }
-    networks: [workloads, data, cache]
+    networks: [workloads, data, cache, naver-virtual-api]
     environment:
       <<: *runtime-db-env
+      NAVIS_NAVER_VIRTUAL_ORIGIN: http://naver-virtual:3000
+      NAVIS_NAVER_VIRTUAL_TOKEN_FILE: /run/secrets/nvirtual_customer_token
+      NAVIS_MARKETING_CUSTOMER_SMS_TOKEN_FILE: /run/secrets/marketing_customer_sms_token
+      NAVIS_NAVER_VIRTUAL_ACCOUNT_ID: ansungjalbu-cafe
+      NAVIS_NAVER_VIRTUAL_STORE_ID: c05409a6-f082-5964-a787-c1ed3184988b
+      NAVIS_NAVER_VIRTUAL_AICALL_CALLBACK_TOKEN_FILE: /run/secrets/nvirtual_aicall_customer_token
+      NAVIS_NAVER_VIRTUAL_PROVIDER_CREDENTIALS_DIR: /run/secrets
       NAVIS_POS_URL: http://pos:3000
       NAVIS_GATEWAY_CUSTOMER_TOKEN_FILE: /run/secrets/gateway_customer_token
       NAVIS_CUSTOMER_POS_TOKEN_FILE: /run/secrets/customer_pos_token
+      NAVIS_POS_CUSTOMER_TOKEN_FILE: /run/secrets/pos_customer_token
+      NAVIS_INSIGHT_CUSTOMER_READ_TOKEN_FILE: /run/secrets/insight_customer_read_token
+      NAVIS_MARKETING_CUSTOMER_READ_TOKEN_FILE: /run/secrets/marketing_customer_read_token
+      NAVIS_MARKETING_CUSTOMER_TOKEN_FILE: /run/secrets/marketing_customer_token
       NAVIS_REDIS_URL: redis://redis:6379
-    secrets: [customer_runtime_password, gateway_customer_token, customer_pos_token, customer_redis_password]
+    secrets:
+      - customer_run_password
+      - insight_customer_read_token
+      - marketing_customer_read_token
+      - marketing_customer_token
+      - gateway_customer_token
+      - customer_pos_token
+      - customer_redis_password
+      - pos_customer_token
+      - nvirtual_customer_token
+      - marketing_customer_sms_token
+      - nvirtual_aicall_customer_token
+      - nvirtual_works_read
+      - nvirtual_works_write
 
   marketing:
     <<: *provider
     build: { <<: *build, target: marketing }
-    secrets: [marketing_runtime_password]
+    networks: [api, workloads, data, cache, naver-virtual-api]
+    environment:
+      <<: [*runtime-db-env, *phase3]
+      NAVIS_TALKTALK_STORE_ID: ${NAVIS_TALKTALK_STORE_ID:-c05409a6-f082-5964-a787-c1ed3184988b}
+      NAVIS_TALKTALK_WEBHOOK_TOKEN: ${NAVIS_TALKTALK_WEBHOOK_TOKEN:-}
+      NAVIS_TALKTALK_SEND_KEY: ${NAVIS_TALKTALK_SEND_KEY:-}
+      NAVIS_NAVER_VIRTUAL_ORIGIN: http://naver-virtual:3000
+      NAVIS_NAVER_VIRTUAL_TOKEN_FILE: /run/secrets/nvirtual_marketing_token
+      NAVIS_MARKETING_CUSTOMER_SMS_TOKEN_FILE: /run/secrets/marketing_customer_sms_token
+      NAVIS_MARKETING_SMS_WORKER_TOKEN_FILE: /run/secrets/marketing_sms_worker_token
+      NAVIS_NAVER_VIRTUAL_TALKTALK_CALLBACK_TOKEN_FILE: /run/secrets/nvirtual_talktalk_marketing_token
+      NAVIS_NAVER_VIRTUAL_ACCOUNT_ID: ansungjalbu-cafe
+      NAVIS_NAVER_VIRTUAL_STORE_ID: c05409a6-f082-5964-a787-c1ed3184988b
+      NAVIS_NAVER_VIRTUAL_PROVIDER_CREDENTIALS_DIR: /run/secrets
+      NAVIS_ACCOUNT_BASE_URL: http://account:3000
+      NAVIS_MARKETING_ACCOUNT_TOKEN_FILE: /run/secrets/marketing_account_token
+      NAVIS_MARKETING_COMMUNITY_ACCOUNT_TOKEN_FILE: /run/secrets/marketing_community_account_token
+      NAVIS_MARKETING_CUSTOMER_URL: http://customer:3000
+      NAVIS_MARKETING_CUSTOMER_READ_TOKEN_FILE: /run/secrets/marketing_customer_read_token
+      NAVIS_MARKETING_CUSTOMER_TOKEN_FILE: /run/secrets/marketing_customer_token
+      NAVIS_MARKETING_INVENTORY_URL: http://inventory:3000
+      NAVIS_MARKETING_INVENTORY_TOKEN_FILE: /run/secrets/marketing_inventory_token
+      NAVIS_MARKETING_POS_URL: http://pos:3000
+      NAVIS_MARKETING_POS_TOKEN_FILE: /run/secrets/marketing_pos_token
+      NAVIS_INSIGHT_MARKETING_READ_TOKEN_FILE: /run/secrets/insight_marketing_read_token
+      NAVIS_REDIS_URL: redis://redis:6379
+      NAVIS_INSIGHT_MARKETING_TOKEN_FILE: /run/secrets/insight_marketing_token
+      NAVIS_GATEWAY_MARKETING_TOKEN_FILE: /run/secrets/gateway_marketing_token
+      NAVIS_GATEWAY_MARKETING_LOCAL_COMMAND_TOKEN_FILE: /run/secrets/gateway_marketing_local_command_token
+      NAVIS_GATEWAY_SMS_CONFIRM_TOKEN_FILE: /run/secrets/gateway_sms_confirm_token
+      NAVIS_FIXTURE_SMS_KEY_FILE: /run/secrets/fixture_sms_key
+    secrets:
+      - marketing_run_password
+      - marketing_redis_password
+      - marketing_community_account_token
+      - marketing_customer_read_token
+      - marketing_customer_token
+      - marketing_inventory_token
+      - marketing_pos_token
+      - insight_marketing_read_token
+      - gateway_marketing_local_command_token
+      - marketing_account_token
+      - insight_marketing_token
+      - gateway_marketing_token
+      - gateway_sms_confirm_token
+      - fixture_sms_key
+      - nvirtual_marketing_token
+      - marketing_customer_sms_token
+      - marketing_sms_worker_token
+      - nvirtual_marketing_studio_key
+      - nvirtual_talktalk_marketing_token
+      - nvirtual_ads_customer
+      - nvirtual_ads_id
+      - nvirtual_ads_key
+      - nvirtual_hub_id
+      - nvirtual_hub_key
+      - nvirtual_maps_id
+      - nvirtual_maps_key
+      - nvirtual_talktalk
 
   insight:
     <<: *provider
     build: { <<: *build, target: insight }
-    secrets: [insight_runtime_password]
+    networks: [workloads, data, cache, naver-virtual-api]
+    environment:
+      <<: *runtime-db-env
+      NAVIS_NAVER_VIRTUAL_ORIGIN: http://naver-virtual:3000
+      NAVIS_NAVER_VIRTUAL_TOKEN_FILE: /run/secrets/nvirtual_insight_token
+      NAVIS_NAVER_VIRTUAL_CLOCK: ${NAVIS_NAVER_VIRTUAL_CLOCK:-fixed}
+      NAVIS_NAVER_VIRTUAL_ACCOUNT_ID: ansungjalbu-cafe
+      NAVIS_NAVER_VIRTUAL_STORE_ID: c05409a6-f082-5964-a787-c1ed3184988b
+      NAVIS_INSIGHT_ADS_RECORD: cmp-a001-01-000000000000001
+      NAVIS_INSIGHT_POS_URL: http://pos:3000
+      NAVIS_INSIGHT_POS_READ_TOKEN_FILE: /run/secrets/insight_pos_read_token
+      NAVIS_INSIGHT_INVENTORY_URL: http://inventory:3000
+      NAVIS_INSIGHT_INVENTORY_READ_TOKEN_FILE: /run/secrets/insight_inventory_read_token
+      NAVIS_INSIGHT_CUSTOMER_URL: http://customer:3000
+      NAVIS_INSIGHT_CUSTOMER_READ_TOKEN_FILE: /run/secrets/insight_customer_read_token
+      NAVIS_INSIGHT_MARKETING_URL: http://marketing:3000
+      NAVIS_INSIGHT_MARKETING_READ_TOKEN_FILE: /run/secrets/insight_marketing_read_token
+      NAVIS_NAVER_VIRTUAL_PROVIDER_CREDENTIALS_DIR: /run/secrets
+      NAVIS_REDIS_URL: redis://redis:6379
+      NAVIS_INSIGHT_REDIS_PASSWORD_FILE: /run/secrets/insight_redis_password
+      NAVIS_GATEWAY_INSIGHT_TOKEN_FILE: /run/secrets/gateway_insight_token
+      NAVIS_INSIGHT_ACCOUNT_URL: http://account:3000
+      NAVIS_INSIGHT_ACCOUNT_TOKEN_FILE: /run/secrets/insight_account_token
+      NAVIS_PHASE3_FIXTURES: ${NAVIS_PHASE3_FIXTURES:-0}
+      NAVIS_INSIGHT_CCTV_ENABLED: ${NAVIS_PHASE3_FIXTURES:-0}
+      NAVIS_INSIGHT_FIXTURE_NOW: ${NAVIS_INSIGHT_FIXTURE_NOW:-}
+    secrets:
+      - insight_run_password
+      - insight_pos_read_token
+      - insight_inventory_read_token
+      - insight_customer_read_token
+      - insight_marketing_read_token
+      - gateway_insight_token
+      - forecast_insight_token
+      - promo_insight_token
+      - insight_marketing_token
+      - insight_account_token
+      - insight_redis_password
+      - nvirtual_insight_token
+      - nvirtual_ads_customer
+      - nvirtual_ads_id
+      - nvirtual_ads_key
+      - nvirtual_insight_studio_key
+      - nvirtual_ocr_domain
+      - nvirtual_ocr_invoke
+      - nvirtual_ocr_secret
+      - nvirtual_speech_secret
+
+  marketing-worker:
+    profiles: [phase3]
+    build: { <<: *build, target: marketing-worker }
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      account: { condition: service_healthy }
+      insight: { condition: service_healthy }
+      marketing: { condition: service_healthy }
+    networks: [workloads, data, cache, naver-virtual-api]
+    environment:
+      <<: [*runtime-db-env, *phase3]
+      NAVIS_NAVER_VIRTUAL_ORIGIN: http://naver-virtual:3000
+      NAVIS_NAVER_VIRTUAL_TOKEN_FILE: /run/secrets/nvirtual_marketing_worker_token
+      NAVIS_MARKETING_BASE_URL: http://marketing:3000
+      NAVIS_MARKETING_SMS_WORKER_TOKEN_FILE: /run/secrets/marketing_sms_worker_token
+      NAVIS_NAVER_VIRTUAL_ACCOUNT_ID: ansungjalbu-cafe
+      NAVIS_NAVER_VIRTUAL_STORE_ID: c05409a6-f082-5964-a787-c1ed3184988b
+      NAVIS_NAVER_VIRTUAL_CLOCK: ${NAVIS_NAVER_VIRTUAL_CLOCK:-fixed}
+      NAVIS_MARKETING_WORKER_INVENTORY_TOKEN_FILE: /run/secrets/marketing_worker_inventory_token
+      NAVIS_SUPPLIER_INVENTORY_URL: http://inventory:3000
+      NAVIS_NAVER_VIRTUAL_PROVIDER_CREDENTIALS_DIR: /run/secrets
+      NAVIS_REDIS_URL: redis://redis:6379
+      NAVIS_MARKETING_REDIS_PASSWORD_FILE: /run/secrets/marketing_worker_redis_password
+      NAVIS_ACCOUNT_BASE_URL: http://account:3000
+      NAVIS_MARKETING_ACCOUNT_TOKEN_FILE: /run/secrets/marketing_account_token
+      NAVIS_INSIGHT_BASE_URL: http://insight:3000
+      NAVIS_PROMO_INSIGHT_TOKEN_FILE: /run/secrets/promo_insight_token
+      NAVIS_FIXTURE_SMS_KEY_FILE: /run/secrets/fixture_sms_key
+      NAVIS_FIXTURE_SMS_STATE_DIR: /var/lib/navis/fake-sens
+      NAVIS_PROMO_SCENE_PROVIDER: ${NAVIS_PROMO_SCENE_PROVIDER:-claude}
+      NAVIS_PROMO_FIXTURE_STAGE_INTERVAL_MS: ${NAVIS_PROMO_FIXTURE_STAGE_INTERVAL_MS:-250}
+    secrets:
+      - marketing_wrk_password
+      - marketing_worker_redis_password
+      - marketing_account_token
+      - promo_insight_token
+      - fixture_sms_key
+      - nvirtual_marketing_worker_token
+      - marketing_sms_worker_token
+      - marketing_worker_inventory_token
+      - nvirtual_alimtalk_id
+      - nvirtual_alimtalk_key
+      - nvirtual_alimtalk_service
+      - nvirtual_brand_consent
+      - nvirtual_brand_friends
+      - nvirtual_brandmessage_id
+      - nvirtual_brandmessage_key
+      - nvirtual_brandmessage_service
+      - nvirtual_mail_id
+      - nvirtual_mail_key
+      - nvirtual_mail_sender
+      - nvirtual_mail_service
+      - nvirtual_promo_storage_id
+      - nvirtual_promo_storage_key
+      - nvirtual_promo_storage_prefix
+      - nvirtual_sms_id
+      - nvirtual_sms_key
+      - nvirtual_sms_sender
+      - nvirtual_sms_service
+      - nvirtual_storage_bucket
+      - nvirtual_talk_channel
+      - nvirtual_talk_template
+      - nvirtual_talktalk
+      - nvirtual_worker_studio_key
+    volumes: [fake-sens-state:/var/lib/navis/fake-sens]
+
+  forecast-cron:
+    profiles: [forecast]
+    build: { <<: *build, target: forecast-cron }
+    networks: [workloads]
+    depends_on:
+      insight: { condition: service_healthy }
+      inventory: { condition: service_healthy }
+    environment:
+      NAVIS_INSIGHT_BASE_URL: http://insight:3000
+      NAVIS_INVENTORY_BASE_URL: http://inventory:3000
+      NAVIS_FORECAST_INSIGHT_TOKEN_FILE: /run/secrets/forecast_insight_token
+      NAVIS_FORECAST_INVENTORY_TOKEN_FILE: /run/secrets/forecast_inventory_token
+      NAVIS_FORECAST_STORE_ID: ${NAVIS_FORECAST_STORE_ID:-c05409a6-f082-5964-a787-c1ed3184988b}
+      NAVIS_FORECAST_FIXTURE_NOW: ${NAVIS_FORECAST_FIXTURE_NOW:-}
+    secrets: [forecast_insight_token, forecast_inventory_token]
 
   db:
     <<: *postgres
-    networks: [data]
+    networks: [data, naver-virtual-data]
     environment: *db-env
     secrets: [db_bootstrap_password]
     volumes:
@@ -164,12 +521,47 @@ services:
         read_only: true
         bind: { create_host_path: false }
 
+  naver-virtual:
+    <<: *node
+    build: { <<: *build, target: naver-virtual }
+    depends_on:
+      db: { condition: service_healthy }
+    networks: [naver-virtual-api, naver-virtual-data]
+    environment:
+      <<: *runtime-db-env
+      NAVIS_NAVER_VIRTUAL_CLOCK: ${NAVIS_NAVER_VIRTUAL_CLOCK:-fixed}
+      NAVIS_NAVER_VIRTUAL_GRANTS_FILE: /etc/navis/naver-virtual-grants.json
+      NAVIS_NAVER_VIRTUAL_REQUIRED_CAPABILITIES:
+      NAVIS_NAVER_VIRTUAL_TALKTALK_CALLBACK_URL: http://marketing:3000/internal/v1/naver/talktalk/webhook
+      NAVIS_NAVER_VIRTUAL_AICALL_CALLBACK_URL:
+    configs:
+      - { source: naver_virtual_grants, target: /etc/navis/naver-virtual-grants.json }
+    volumes:
+      - type: bind
+        source: ./.secrets/local/naver-virtual-provider
+        target: /run/navis-naver-virtual/provider
+        read_only: true
+        bind: { create_host_path: false }
+    secrets: [nvirtual_run_password, nvirtual_account_token, nvirtual_pos_token, nvirtual_inventory_token,
+      nvirtual_customer_token, nvirtual_marketing_token, nvirtual_insight_token, nvirtual_marketing_worker_token, nvirtual_talktalk_marketing_token]
+
+  naver-virtual-tools:
+    profiles: [tools]
+    build: { <<: *build, target: tools }
+    depends_on:
+      db: { condition: service_healthy }
+    command: [node, --experimental-transform-types, services/naver-virtual/migrate.ts]
+    networks: [naver-virtual-data]
+    environment:
+      <<: *runtime-db-env
+      NAVIS_NAVER_VIRTUAL_SEED_INSTANT:
+    secrets: [nvirtual_mig_password]
+
   redis:
     <<: *redis
     networks: [cache]
 
   relay:
-    profiles: [streams]
     build: { <<: *build, target: relay }
     depends_on:
       db: { condition: service_healthy }
@@ -178,14 +570,27 @@ services:
     environment:
       <<: *runtime-db-env
       NAVIS_REDIS_URL: redis://redis:6379
-    secrets: [pos_relay_password, inventory_relay_password, customer_relay_password, relay_redis_password]
+      NAVIS_PHASE3_FIXTURES: ${NAVIS_PHASE3_FIXTURES:-0}
+    secrets: [pos_rly_password, inventory_rly_password, customer_rly_password, marketing_rly_password,
+      insight_rly_password, relay_redis_password]
 
   tools:
     profiles: [tools]
     build: { <<: *build, target: tools }
     networks: [data, test-data]
-    environment: *runtime-db-env
-    secrets: [account_migrate_password, inventory_migrate_password, pos_migrate_password, customer_migrate_password]
+    environment:
+      <<: [*runtime-db-env, *phase3]
+      NAVIS_NAVER_VIRTUAL_SEED_INSTANT:
+      NAVIS_FIXTURE_CCTV_TOKEN_FILE: /run/secrets/fixture_cctv_token
+      NAVIS_INSIGHT_TEST_REDIS_URL: redis://test-redis:6379/1
+      NAVIS_PROMO_TEST_REDIS_URL: redis://test-redis:6379/2
+      NAVIS_SENS_TEST_REDIS_URL: redis://test-redis:6379/3
+      NAVIS_FORECAST_TEST_REDIS_URL: redis://test-redis:6379/4
+    secrets: [account_mig_password, inventory_mig_password, pos_mig_password, customer_mig_password,
+      marketing_mig_password, insight_mig_password, fixture_cctv_token,
+      { source: test_pos_rly_password, target: pos_rly_password },
+      { source: test_inventory_rly_password, target: inventory_rly_password },
+      { source: test_customer_rly_password, target: customer_rly_password }]
     volumes:
       - type: bind
         source: ./.secrets/test/db
@@ -214,6 +619,18 @@ services:
         read_only: true
         bind: { create_host_path: false }
 
+  test-redis:
+    profiles: [test]
+    image: redis:8.2.9-alpine@sha256:30abb90e62f14b737010746def3ba99cc79fe19dcdb3d37b41f21fc62e7da19d
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [test-data]
+    tmpfs: [/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+
   streams-test-db:
     <<: *test-postgres
     profiles: [streams-test]
@@ -233,14 +650,14 @@ services:
       NAVIS_DB_HOST: streams-test-db
       NAVIS_REDIS_URL: redis://streams-test-redis:6379
     secrets:
-      - { source: test_pos_migrate_password, target: pos_migrate_password }
-      - { source: test_inventory_migrate_password, target: inventory_migrate_password }
-      - { source: test_pos_runtime_password, target: pos_runtime_password }
-      - { source: test_inventory_runtime_password, target: inventory_runtime_password }
-      - { source: test_customer_runtime_password, target: customer_runtime_password }
-      - { source: test_pos_relay_password, target: pos_relay_password }
-      - { source: test_inventory_relay_password, target: inventory_relay_password }
-      - { source: test_customer_relay_password, target: customer_relay_password }
+      - { source: test_pos_mig_password, target: pos_mig_password }
+      - { source: test_inventory_mig_password, target: inventory_mig_password }
+      - { source: test_pos_run_password, target: pos_run_password }
+      - { source: test_inventory_run_password, target: inventory_run_password }
+      - { source: test_customer_run_password, target: customer_run_password }
+      - { source: test_pos_rly_password, target: pos_rly_password }
+      - { source: test_inventory_rly_password, target: inventory_rly_password }
+      - { source: test_customer_rly_password, target: customer_rly_password }
       - relay_redis_password
       - inventory_redis_password
       - customer_redis_password
@@ -248,50 +665,604 @@ services:
 
 volumes:
   db-data:
+    name: navis-backend-local_db-data${NAVIS_LOCAL_VOLUME_SUFFIX:-}
+  promo-files:
+    name: navis-backend-local_promo-files${NAVIS_LOCAL_VOLUME_SUFFIX:-}
+  fake-sens-state:
+    name: navis-backend-local_fake-sens-state${NAVIS_LOCAL_VOLUME_SUFFIX:-}
 
 networks:
   loopback: {}
   web: { internal: true }
   api: { internal: true }
+  navis-api: { internal: true }
   workloads: { internal: true }
   data: { internal: true }
   cache: { internal: true }
+  naver-virtual-api: { internal: true }
+  naver-virtual-data: { internal: true }
   test-data: { internal: true }
   streams-test-data: { internal: true }
   streams-test-cache: { internal: true }
 
+configs:
+  naver_virtual_grants:
+    content: |
+      [
+        {
+          "workload": "account",
+          "accountId": "ansungjalbu-cafe",
+          "tokenFile": "/run/secrets/nvirtual_account_token",
+          "operations": [
+            "pn01.place.read",
+            "pn01.place.update",
+            "pn11.authorize",
+            "pn11.token",
+            "pn11.profile",
+            "pn16.object.put",
+            "pn16.object.get",
+            "pn16.object.delete"
+          ],
+          "providerCredentialFiles": {
+            "pn11.authorize": {
+              "clientId": "/run/navis-naver-virtual/provider/login-id"
+            },
+            "pn11.token": {
+              "clientId": "/run/navis-naver-virtual/provider/login-id",
+              "clientSecret": "/run/navis-naver-virtual/provider/login-secret"
+            },
+            "pn16.object.put": {
+              "accessKeyId": "/run/navis-naver-virtual/provider/account-storage-id",
+              "secretAccessKey": "/run/navis-naver-virtual/provider/account-storage-key",
+              "bucket": "/run/navis-naver-virtual/provider/storage-bucket",
+              "keyPrefix": "/run/navis-naver-virtual/provider/account-storage-prefix"
+            },
+            "pn16.object.get": {
+              "accessKeyId": "/run/navis-naver-virtual/provider/account-storage-id",
+              "secretAccessKey": "/run/navis-naver-virtual/provider/account-storage-key",
+              "bucket": "/run/navis-naver-virtual/provider/storage-bucket",
+              "keyPrefix": "/run/navis-naver-virtual/provider/account-storage-prefix"
+            },
+            "pn16.object.delete": {
+              "accessKeyId": "/run/navis-naver-virtual/provider/account-storage-id",
+              "secretAccessKey": "/run/navis-naver-virtual/provider/account-storage-key",
+              "bucket": "/run/navis-naver-virtual/provider/storage-bucket",
+              "keyPrefix": "/run/navis-naver-virtual/provider/account-storage-prefix"
+            }
+          }
+        },
+        {
+          "workload": "inventory",
+          "accountId": "ansungjalbu-cafe",
+          "tokenFile": "/run/secrets/nvirtual_inventory_token",
+          "operations": [
+            "pn01.menu.read",
+            "pn01.menu.update",
+            "pn16.commerce.token",
+            "pn16.commerce.products.search",
+            "pn16.commerce.options.update",
+            "pn01.place.read",
+            "pn01.place.update",
+            "pn16.commerce.products.read"
+          ],
+          "providerCredentialFiles": {
+            "pn16.commerce.token": {
+              "clientId": "/run/navis-naver-virtual/provider/inventory-commerce-id",
+              "sellerId": "/run/navis-naver-virtual/provider/commerce-seller",
+              "clientSecret": "/run/navis-naver-virtual/provider/inventory-commerce-salt"
+            },
+            "pn16.commerce.products.search": {
+              "clientId": "/run/navis-naver-virtual/provider/inventory-commerce-id",
+              "sellerId": "/run/navis-naver-virtual/provider/commerce-seller"
+            },
+            "pn16.commerce.options.update": {
+              "clientId": "/run/navis-naver-virtual/provider/inventory-commerce-id",
+              "sellerId": "/run/navis-naver-virtual/provider/commerce-seller"
+            },
+            "pn16.commerce.products.read": {
+              "clientId": "/run/navis-naver-virtual/provider/inventory-commerce-id",
+              "sellerId": "/run/navis-naver-virtual/provider/commerce-seller"
+            }
+          }
+        },
+        {
+          "workload": "customer",
+          "accountId": "ansungjalbu-cafe",
+          "tokenFile": "/run/secrets/nvirtual_customer_token",
+          "operations": [
+            "pn01.hours.read",
+            "pn01.hours.update",
+            "pn02.bookings.list",
+            "pn02.bookings.read",
+            "pn02.bookings.change",
+            "pn02.bookings.confirm",
+            "pn02.bookings.cancel",
+            "pn02.booking-products.list",
+            "pn08.smartcall.settings",
+            "pn08.smartcall.calls",
+            "pn11.calendar.create",
+            "pn11.works.list",
+            "pn11.works.create",
+            "pn11.works.read",
+            "pn11.works.update",
+            "pn11.works.delete",
+            "pn11.fixture.owner-grant"
+          ],
+          "providerCredentialFiles": {
+            "pn11.works.list": {
+              "readToken": "/run/navis-naver-virtual/provider/works-read",
+              "writeToken": "/run/navis-naver-virtual/provider/works-write"
+            },
+            "pn11.works.create": {
+              "readToken": "/run/navis-naver-virtual/provider/works-read",
+              "writeToken": "/run/navis-naver-virtual/provider/works-write"
+            },
+            "pn11.works.read": {
+              "readToken": "/run/navis-naver-virtual/provider/works-read",
+              "writeToken": "/run/navis-naver-virtual/provider/works-write"
+            },
+            "pn11.works.update": {
+              "readToken": "/run/navis-naver-virtual/provider/works-read",
+              "writeToken": "/run/navis-naver-virtual/provider/works-write"
+            },
+            "pn11.works.delete": {
+              "readToken": "/run/navis-naver-virtual/provider/works-read",
+              "writeToken": "/run/navis-naver-virtual/provider/works-write"
+            },
+            "pn11.fixture.owner-grant": {
+              "storeId": "/run/navis-naver-virtual/provider/owner-store-id",
+              "actorId": "/run/navis-naver-virtual/provider/owner-actor-id",
+              "scopes": "/run/navis-naver-virtual/provider/calendar-owner-scope"
+            }
+          }
+        },
+        {
+          "workload": "pos",
+          "accountId": "ansungjalbu-cafe",
+          "tokenFile": "/run/secrets/nvirtual_pos_token",
+          "operations": [
+            "pn02.orders.list",
+            "pn02.orders.read",
+            "pn02.orders.prepare",
+            "pn02.orders.pickup",
+            "pn09.pay.approve",
+            "pn09.pay.cancel",
+            "pn09.pay.settlement",
+            "pn16.commerce.token",
+            "pn16.commerce.orders.detail"
+          ],
+          "providerCredentialFiles": {
+            "pn09.pay.approve": {
+              "clientId": "/run/navis-naver-virtual/provider/pay-id",
+              "clientSecret": "/run/navis-naver-virtual/provider/pay-secret",
+              "chainId": "/run/navis-naver-virtual/provider/pay-chain"
+            },
+            "pn09.pay.cancel": {
+              "clientId": "/run/navis-naver-virtual/provider/pay-id",
+              "clientSecret": "/run/navis-naver-virtual/provider/pay-secret",
+              "chainId": "/run/navis-naver-virtual/provider/pay-chain"
+            },
+            "pn09.pay.settlement": {
+              "clientId": "/run/navis-naver-virtual/provider/pay-id",
+              "clientSecret": "/run/navis-naver-virtual/provider/pay-secret",
+              "chainId": "/run/navis-naver-virtual/provider/pay-chain"
+            },
+            "pn16.commerce.token": {
+              "clientId": "/run/navis-naver-virtual/provider/pos-commerce-id",
+              "sellerId": "/run/navis-naver-virtual/provider/commerce-seller",
+              "clientSecret": "/run/navis-naver-virtual/provider/pos-commerce-salt"
+            },
+            "pn16.commerce.orders.detail": {
+              "clientId": "/run/navis-naver-virtual/provider/pos-commerce-id",
+              "sellerId": "/run/navis-naver-virtual/provider/commerce-seller"
+            }
+          }
+        },
+        {
+          "workload": "marketing",
+          "accountId": "ansungjalbu-cafe",
+          "tokenFile": "/run/secrets/nvirtual_marketing_token",
+          "operations": [
+            "pn03.reviews.list",
+            "pn03.reviews.get",
+            "pn03.stats.read",
+            "pn03.reply.create",
+            "pn03.reply.update",
+            "pn03.reply.delete",
+            "pn03.reply.draft",
+            "pn04.news.list",
+            "pn04.news.get",
+            "pn04.news.create",
+            "pn04.news.update",
+            "pn04.news.delete",
+            "pn05.coupons.list",
+            "pn05.coupons.create",
+            "pn05.coupons.delete",
+            "pn05.issues.list",
+            "pn05.issues.update",
+            "pn05.promotions.list",
+            "pn05.promotions.create",
+            "pn05.promotions.extend",
+            "pn05.promotions.end",
+            "pn05.membership.list",
+            "pn06.consultations.list",
+            "pn06.consultations.get",
+            "pn06.chatbot.send",
+            "pn07.audiences.list",
+            "pn07.sends.create",
+            "pn10.blog",
+            "pn10.cafearticle",
+            "pn10.local",
+            "pn10.news",
+            "pn10.trend",
+            "pn10.geocode",
+            "pn12.clip.create",
+            "pn12.clip.read",
+            "pn12.place",
+            "pn12.blog",
+            "pn12.clip",
+            "pn12.ads",
+            "pn17.article.create",
+            "pn11.fixture.owner-grant",
+            "pn14.chat"
+          ],
+          "providerCredentialFiles": {
+            "pn06.chatbot.send": {
+              "talktalkAuthorization": "/run/navis-naver-virtual/provider/talktalk",
+              "talktalkCallbackToken": "/run/secrets/nvirtual_talktalk_marketing_token"
+            },
+            "pn10.blog": {
+              "keyId": "/run/navis-naver-virtual/provider/hub-id",
+              "key": "/run/navis-naver-virtual/provider/hub-key"
+            },
+            "pn10.cafearticle": {
+              "keyId": "/run/navis-naver-virtual/provider/hub-id",
+              "key": "/run/navis-naver-virtual/provider/hub-key"
+            },
+            "pn10.local": {
+              "keyId": "/run/navis-naver-virtual/provider/hub-id",
+              "key": "/run/navis-naver-virtual/provider/hub-key"
+            },
+            "pn10.news": {
+              "keyId": "/run/navis-naver-virtual/provider/hub-id",
+              "key": "/run/navis-naver-virtual/provider/hub-key"
+            },
+            "pn10.trend": {
+              "keyId": "/run/navis-naver-virtual/provider/hub-id",
+              "key": "/run/navis-naver-virtual/provider/hub-key"
+            },
+            "pn10.geocode": {
+              "keyId": "/run/navis-naver-virtual/provider/maps-id",
+              "key": "/run/navis-naver-virtual/provider/maps-key"
+            },
+            "pn12.ads": {
+              "customerId": "/run/navis-naver-virtual/provider/ads-customer",
+              "keyId": "/run/navis-naver-virtual/provider/ads-id",
+              "key": "/run/navis-naver-virtual/provider/ads-key"
+            },
+            "pn11.fixture.owner-grant": {
+              "storeId": "/run/navis-naver-virtual/provider/owner-store-id",
+              "actorId": "/run/navis-naver-virtual/provider/owner-actor-id",
+              "scopes": "/run/navis-naver-virtual/provider/cafe-owner-scope"
+            },
+            "pn14.chat": {
+              "apiKey": "/run/navis-naver-virtual/provider/marketing-studio-key"
+            }
+          }
+        },
+        {
+          "workload": "insight",
+          "accountId": "ansungjalbu-cafe",
+          "tokenFile": "/run/secrets/nvirtual_insight_token",
+          "operations": [
+            "pn03.reviews.list",
+            "pn03.reviews.get",
+            "pn03.stats.read",
+            "pn08.smartcall.calls",
+            "pn09.financial-center.list",
+            "pn09.financial-center.read",
+            "pn12.place",
+            "pn12.blog",
+            "pn12.clip",
+            "pn12.ads",
+            "pn14.chat",
+            "pn14.tokenize",
+            "pn15.speech",
+            "pn15.receipt"
+          ],
+          "providerCredentialFiles": {
+            "pn12.ads": {
+              "customerId": "/run/navis-naver-virtual/provider/ads-customer",
+              "keyId": "/run/navis-naver-virtual/provider/ads-id",
+              "key": "/run/navis-naver-virtual/provider/ads-key"
+            },
+            "pn14.chat": {
+              "apiKey": "/run/navis-naver-virtual/provider/insight-studio-key"
+            },
+            "pn14.tokenize": {
+              "apiKey": "/run/navis-naver-virtual/provider/insight-studio-key"
+            },
+            "pn15.speech": {
+              "secret": "/run/navis-naver-virtual/provider/speech-secret"
+            },
+            "pn15.receipt": {
+              "secret": "/run/navis-naver-virtual/provider/ocr-secret",
+              "domainId": "/run/navis-naver-virtual/provider/ocr-domain",
+              "invokeKey": "/run/navis-naver-virtual/provider/ocr-invoke"
+            }
+          }
+        },
+        {
+          "workload": "marketing-worker",
+          "accountId": "ansungjalbu-cafe",
+          "tokenFile": "/run/secrets/nvirtual_marketing_worker_token",
+          "operations": [
+            "pn06.chatbot.send",
+            "pn07.audiences.list",
+            "pn07.sends.create",
+            "pn13.sms.send",
+            "pn13.sms.list",
+            "pn13.sms.get",
+            "pn13.alimtalk.send",
+            "pn13.alimtalk.list",
+            "pn13.alimtalk.get",
+            "pn13.brandmessage.send",
+            "pn13.brandmessage.list",
+            "pn13.brandmessage.get",
+            "pn13.mail.send",
+            "pn13.mail.list",
+            "pn13.mail.get",
+            "pn13.mail.request",
+            "pn13.mail.mails",
+            "pn14.chat",
+            "pn14.tokenize",
+            "pn16.object.put",
+            "pn16.object.get",
+            "pn16.object.delete"
+          ],
+          "providerCredentialFiles": {
+            "pn06.chatbot.send": {
+              "talktalkAuthorization": "/run/navis-naver-virtual/provider/talktalk",
+              "talktalkCallbackToken": "/run/secrets/nvirtual_talktalk_marketing_token"
+            },
+            "pn13.sms.send": {
+              "accessKey": "/run/navis-naver-virtual/provider/sms-id",
+              "secretKey": "/run/navis-naver-virtual/provider/sms-key",
+              "serviceId": "/run/navis-naver-virtual/provider/sms-service",
+              "sender": "/run/navis-naver-virtual/provider/sms-sender"
+            },
+            "pn13.sms.list": {
+              "accessKey": "/run/navis-naver-virtual/provider/sms-id",
+              "secretKey": "/run/navis-naver-virtual/provider/sms-key",
+              "serviceId": "/run/navis-naver-virtual/provider/sms-service"
+            },
+            "pn13.sms.get": {
+              "accessKey": "/run/navis-naver-virtual/provider/sms-id",
+              "secretKey": "/run/navis-naver-virtual/provider/sms-key",
+              "serviceId": "/run/navis-naver-virtual/provider/sms-service"
+            },
+            "pn13.alimtalk.send": {
+              "accessKey": "/run/navis-naver-virtual/provider/alimtalk-id",
+              "secretKey": "/run/navis-naver-virtual/provider/alimtalk-key",
+              "serviceId": "/run/navis-naver-virtual/provider/alimtalk-service",
+              "plusFriendId": "/run/navis-naver-virtual/provider/talk-channel",
+              "templateCode": "/run/navis-naver-virtual/provider/talk-template"
+            },
+            "pn13.alimtalk.list": {
+              "accessKey": "/run/navis-naver-virtual/provider/alimtalk-id",
+              "secretKey": "/run/navis-naver-virtual/provider/alimtalk-key",
+              "serviceId": "/run/navis-naver-virtual/provider/alimtalk-service"
+            },
+            "pn13.alimtalk.get": {
+              "accessKey": "/run/navis-naver-virtual/provider/alimtalk-id",
+              "secretKey": "/run/navis-naver-virtual/provider/alimtalk-key",
+              "serviceId": "/run/navis-naver-virtual/provider/alimtalk-service"
+            },
+            "pn13.brandmessage.send": {
+              "accessKey": "/run/navis-naver-virtual/provider/brandmessage-id",
+              "secretKey": "/run/navis-naver-virtual/provider/brandmessage-key",
+              "serviceId": "/run/navis-naver-virtual/provider/brandmessage-service",
+              "plusFriendId": "/run/navis-naver-virtual/provider/talk-channel",
+              "consentedRecipients": "/run/navis-naver-virtual/provider/brand-consent",
+              "channelFriends": "/run/navis-naver-virtual/provider/brand-friends"
+            },
+            "pn13.brandmessage.list": {
+              "accessKey": "/run/navis-naver-virtual/provider/brandmessage-id",
+              "secretKey": "/run/navis-naver-virtual/provider/brandmessage-key",
+              "serviceId": "/run/navis-naver-virtual/provider/brandmessage-service"
+            },
+            "pn13.brandmessage.get": {
+              "accessKey": "/run/navis-naver-virtual/provider/brandmessage-id",
+              "secretKey": "/run/navis-naver-virtual/provider/brandmessage-key",
+              "serviceId": "/run/navis-naver-virtual/provider/brandmessage-service"
+            },
+            "pn13.mail.send": {
+              "accessKey": "/run/navis-naver-virtual/provider/mail-id",
+              "secretKey": "/run/navis-naver-virtual/provider/mail-key",
+              "serviceId": "/run/navis-naver-virtual/provider/mail-service",
+              "sender": "/run/navis-naver-virtual/provider/mail-sender"
+            },
+            "pn13.mail.list": {
+              "accessKey": "/run/navis-naver-virtual/provider/mail-id",
+              "secretKey": "/run/navis-naver-virtual/provider/mail-key",
+              "serviceId": "/run/navis-naver-virtual/provider/mail-service"
+            },
+            "pn13.mail.get": {
+              "accessKey": "/run/navis-naver-virtual/provider/mail-id",
+              "secretKey": "/run/navis-naver-virtual/provider/mail-key",
+              "serviceId": "/run/navis-naver-virtual/provider/mail-service"
+            },
+            "pn13.mail.request": {
+              "accessKey": "/run/navis-naver-virtual/provider/mail-id",
+              "secretKey": "/run/navis-naver-virtual/provider/mail-key",
+              "serviceId": "/run/navis-naver-virtual/provider/mail-service"
+            },
+            "pn13.mail.mails": {
+              "accessKey": "/run/navis-naver-virtual/provider/mail-id",
+              "secretKey": "/run/navis-naver-virtual/provider/mail-key",
+              "serviceId": "/run/navis-naver-virtual/provider/mail-service"
+            },
+            "pn14.chat": {
+              "apiKey": "/run/navis-naver-virtual/provider/worker-studio-key"
+            },
+            "pn14.tokenize": {
+              "apiKey": "/run/navis-naver-virtual/provider/worker-studio-key"
+            },
+            "pn16.object.put": {
+              "accessKeyId": "/run/navis-naver-virtual/provider/promo-storage-id",
+              "secretAccessKey": "/run/navis-naver-virtual/provider/promo-storage-key",
+              "bucket": "/run/navis-naver-virtual/provider/storage-bucket",
+              "keyPrefix": "/run/navis-naver-virtual/provider/promo-storage-prefix"
+            },
+            "pn16.object.get": {
+              "accessKeyId": "/run/navis-naver-virtual/provider/promo-storage-id",
+              "secretAccessKey": "/run/navis-naver-virtual/provider/promo-storage-key",
+              "bucket": "/run/navis-naver-virtual/provider/storage-bucket",
+              "keyPrefix": "/run/navis-naver-virtual/provider/promo-storage-prefix"
+            },
+            "pn16.object.delete": {
+              "accessKeyId": "/run/navis-naver-virtual/provider/promo-storage-id",
+              "secretAccessKey": "/run/navis-naver-virtual/provider/promo-storage-key",
+              "bucket": "/run/navis-naver-virtual/provider/storage-bucket",
+              "keyPrefix": "/run/navis-naver-virtual/provider/promo-storage-prefix"
+            }
+          }
+        }
+      ]
+
 secrets:
   db_bootstrap_password: { file: ./.secrets/local/db_bootstrap_password }
   test_db_bootstrap_password: { file: ./.secrets/test/db_bootstrap_password }
-  account_runtime_password: { file: ./.secrets/local/db/account_runtime_password }
-  pos_runtime_password: { file: ./.secrets/local/db/pos_runtime_password }
-  inventory_runtime_password: { file: ./.secrets/local/db/inventory_runtime_password }
-  customer_runtime_password: { file: ./.secrets/local/db/customer_runtime_password }
-  marketing_runtime_password: { file: ./.secrets/local/db/marketing_runtime_password }
-  insight_runtime_password: { file: ./.secrets/local/db/insight_runtime_password }
-  account_migrate_password: { file: ./.secrets/local/db/account_migrate_password }
-  inventory_migrate_password: { file: ./.secrets/local/db/inventory_migrate_password }
+  nvirtual_mig_password: { file: ./.secrets/local/db/nvirtual_mig_password }
+  nvirtual_run_password: { file: ./.secrets/local/db/nvirtual_run_password }
+  nvirtual_account_token: { file: ./.secrets/local/nvirtual_account_token }
+  nvirtual_pos_token: { file: ./.secrets/local/nvirtual_pos_token }
+  nvirtual_inventory_token: { file: ./.secrets/local/nvirtual_inventory_token }
+  nvirtual_customer_token: { file: ./.secrets/local/nvirtual_customer_token }
+  nvirtual_marketing_token: { file: ./.secrets/local/nvirtual_marketing_token }
+  nvirtual_insight_token: { file: ./.secrets/local/nvirtual_insight_token }
+  nvirtual_marketing_worker_token: { file: ./.secrets/local/nvirtual_marketing_worker_token }
+  nvirtual_account_storage_id: { file: ./.secrets/local/naver-virtual-provider/account-storage-id }
+  nvirtual_account_storage_key: { file: ./.secrets/local/naver-virtual-provider/account-storage-key }
+  nvirtual_account_storage_prefix: { file: ./.secrets/local/naver-virtual-provider/account-storage-prefix }
+  nvirtual_ads_customer: { file: ./.secrets/local/naver-virtual-provider/ads-customer }
+  nvirtual_ads_id: { file: ./.secrets/local/naver-virtual-provider/ads-id }
+  nvirtual_ads_key: { file: ./.secrets/local/naver-virtual-provider/ads-key }
+  nvirtual_alimtalk_id: { file: ./.secrets/local/naver-virtual-provider/alimtalk-id }
+  nvirtual_alimtalk_key: { file: ./.secrets/local/naver-virtual-provider/alimtalk-key }
+  nvirtual_alimtalk_service: { file: ./.secrets/local/naver-virtual-provider/alimtalk-service }
+  nvirtual_brand_consent: { file: ./.secrets/local/naver-virtual-provider/brand-consent }
+  nvirtual_brand_friends: { file: ./.secrets/local/naver-virtual-provider/brand-friends }
+  nvirtual_brandmessage_id: { file: ./.secrets/local/naver-virtual-provider/brandmessage-id }
+  nvirtual_brandmessage_key: { file: ./.secrets/local/naver-virtual-provider/brandmessage-key }
+  nvirtual_brandmessage_service: { file: ./.secrets/local/naver-virtual-provider/brandmessage-service }
+  nvirtual_commerce_seller: { file: ./.secrets/local/naver-virtual-provider/commerce-seller }
+  nvirtual_hub_id: { file: ./.secrets/local/naver-virtual-provider/hub-id }
+  nvirtual_hub_key: { file: ./.secrets/local/naver-virtual-provider/hub-key }
+  nvirtual_marketing_studio_key: { file: ./.secrets/local/naver-virtual-provider/marketing-studio-key }
+  nvirtual_insight_studio_key: { file: ./.secrets/local/naver-virtual-provider/insight-studio-key }
+  nvirtual_inventory_commerce_id: { file: ./.secrets/local/naver-virtual-provider/inventory-commerce-id }
+  nvirtual_inventory_commerce_salt: { file: ./.secrets/local/naver-virtual-provider/inventory-commerce-salt }
+  nvirtual_login_id: { file: ./.secrets/local/naver-virtual-provider/login-id }
+  nvirtual_login_secret: { file: ./.secrets/local/naver-virtual-provider/login-secret }
+  nvirtual_mail_id: { file: ./.secrets/local/naver-virtual-provider/mail-id }
+  nvirtual_mail_key: { file: ./.secrets/local/naver-virtual-provider/mail-key }
+  nvirtual_mail_sender: { file: ./.secrets/local/naver-virtual-provider/mail-sender }
+  nvirtual_mail_service: { file: ./.secrets/local/naver-virtual-provider/mail-service }
+  nvirtual_maps_id: { file: ./.secrets/local/naver-virtual-provider/maps-id }
+  nvirtual_maps_key: { file: ./.secrets/local/naver-virtual-provider/maps-key }
+  nvirtual_ocr_domain: { file: ./.secrets/local/naver-virtual-provider/ocr-domain }
+  nvirtual_ocr_invoke: { file: ./.secrets/local/naver-virtual-provider/ocr-invoke }
+  nvirtual_ocr_secret: { file: ./.secrets/local/naver-virtual-provider/ocr-secret }
+  nvirtual_pay_chain: { file: ./.secrets/local/naver-virtual-provider/pay-chain }
+  nvirtual_pay_id: { file: ./.secrets/local/naver-virtual-provider/pay-id }
+  nvirtual_pay_secret: { file: ./.secrets/local/naver-virtual-provider/pay-secret }
+  nvirtual_pos_commerce_id: { file: ./.secrets/local/naver-virtual-provider/pos-commerce-id }
+  nvirtual_pos_commerce_salt: { file: ./.secrets/local/naver-virtual-provider/pos-commerce-salt }
+  nvirtual_promo_storage_id: { file: ./.secrets/local/naver-virtual-provider/promo-storage-id }
+  nvirtual_promo_storage_key: { file: ./.secrets/local/naver-virtual-provider/promo-storage-key }
+  nvirtual_promo_storage_prefix: { file: ./.secrets/local/naver-virtual-provider/promo-storage-prefix }
+  nvirtual_sms_id: { file: ./.secrets/local/naver-virtual-provider/sms-id }
+  nvirtual_sms_key: { file: ./.secrets/local/naver-virtual-provider/sms-key }
+  nvirtual_sms_sender: { file: ./.secrets/local/naver-virtual-provider/sms-sender }
+  nvirtual_sms_service: { file: ./.secrets/local/naver-virtual-provider/sms-service }
+  nvirtual_speech_secret: { file: ./.secrets/local/naver-virtual-provider/speech-secret }
+  nvirtual_storage_bucket: { file: ./.secrets/local/naver-virtual-provider/storage-bucket }
+  nvirtual_talk_channel: { file: ./.secrets/local/naver-virtual-provider/talk-channel }
+  nvirtual_talk_template: { file: ./.secrets/local/naver-virtual-provider/talk-template }
+  nvirtual_talktalk: { file: ./.secrets/local/naver-virtual-provider/talktalk }
+  nvirtual_worker_studio_key: { file: ./.secrets/local/naver-virtual-provider/worker-studio-key }
+  nvirtual_works_read: { file: ./.secrets/local/naver-virtual-provider/works-read }
+  nvirtual_works_write: { file: ./.secrets/local/naver-virtual-provider/works-write }
+  account_run_password: { file: ./.secrets/local/db/account_run_password }
+  pos_run_password: { file: ./.secrets/local/db/pos_run_password }
+  inventory_run_password: { file: ./.secrets/local/db/inventory_run_password }
+  customer_run_password: { file: ./.secrets/local/db/customer_run_password }
+  marketing_run_password: { file: ./.secrets/local/db/marketing_run_password }
+  insight_run_password: { file: ./.secrets/local/db/insight_run_password }
+  account_mig_password: { file: ./.secrets/local/db/account_mig_password }
+  inventory_mig_password: { file: ./.secrets/local/db/inventory_mig_password }
   account_signing_key: { file: ./.secrets/local/account_signing_key.pem }
   gateway_account_token: { file: ./.secrets/local/gateway_account_token }
   gateway_inventory_token: { file: ./.secrets/local/gateway_inventory_token }
-  pos_migrate_password: { file: ./.secrets/local/db/pos_migrate_password }
-  customer_migrate_password: { file: ./.secrets/local/db/customer_migrate_password }
+  inventory_account_token: { file: ./.secrets/local/inventory_account_token }
+  marketing_worker_inventory_token: { file: ./.secrets/local/marketing_worker_inventory_token }
+  marketing_customer_sms_token: { file: ./.secrets/local/marketing_customer_sms_token }
+  marketing_sms_worker_token: { file: ./.secrets/local/marketing_sms_worker_token }
+  pos_inventory_token: { file: ./.secrets/local/pos_inventory_token }
+  pos_mig_password: { file: ./.secrets/local/db/pos_mig_password }
+  customer_mig_password: { file: ./.secrets/local/db/customer_mig_password }
   gateway_pos_token: { file: ./.secrets/local/gateway_pos_token }
   gateway_customer_token: { file: ./.secrets/local/gateway_customer_token }
   customer_pos_token: { file: ./.secrets/local/customer_pos_token }
-  pos_relay_password: { file: ./.secrets/local/db/pos_relay_password }
-  inventory_relay_password: { file: ./.secrets/local/db/inventory_relay_password }
-  customer_relay_password: { file: ./.secrets/local/db/customer_relay_password }
+  pos_customer_token: { file: ./.secrets/local/pos_customer_token }
+  pos_account_token: { file: ./.secrets/local/pos_account_token }
+  nvirtual_aicall_customer_token: { file: ./.secrets/local/nvirtual_aicall_customer_token }
+  nvirtual_talktalk_marketing_token: { file: ./.secrets/local/nvirtual_talktalk_marketing_token }
+  insight_account_token: { file: ./.secrets/local/insight_account_token }
+  gateway_marketing_local_command_token: { file: ./.secrets/local/gateway_marketing_local_command_token }
+  marketing_community_account_token: { file: ./.secrets/local/marketing_community_account_token }
+  marketing_customer_read_token: { file: ./.secrets/local/marketing_customer_read_token }
+  marketing_customer_token: { file: ./.secrets/local/marketing_customer_token }
+  marketing_inventory_token: { file: ./.secrets/local/marketing_inventory_token }
+  marketing_pos_token: { file: ./.secrets/local/marketing_pos_token }
+  insight_marketing_read_token: { file: ./.secrets/local/insight_marketing_read_token }
+  marketing_redis_password: { file: ./.secrets/local/marketing_redis_password }
+  insight_pos_read_token: { file: ./.secrets/local/insight_pos_read_token }
+  insight_inventory_read_token: { file: ./.secrets/local/insight_inventory_read_token }
+  insight_customer_read_token: { file: ./.secrets/local/insight_customer_read_token }
+  pos_rly_password: { file: ./.secrets/local/db/pos_rly_password }
+  inventory_rly_password: { file: ./.secrets/local/db/inventory_rly_password }
+  inventory_wrk_password: { file: ./.secrets/local/db/inventory_wrk_password }
+  pos_wrk_password: { file: ./.secrets/local/db/pos_wrk_password }
+  customer_rly_password: { file: ./.secrets/local/db/customer_rly_password }
   redis_acl: { file: ./.secrets/local/redis_acl }
   relay_redis_password: { file: ./.secrets/local/relay_redis_password }
   pos_redis_password: { file: ./.secrets/local/pos_redis_password }
   inventory_redis_password: { file: ./.secrets/local/inventory_redis_password }
   customer_redis_password: { file: ./.secrets/local/customer_redis_password }
-  test_pos_migrate_password: { file: ./.secrets/test/db/pos_migrate_password }
-  test_inventory_migrate_password: { file: ./.secrets/test/db/inventory_migrate_password }
-  test_pos_runtime_password: { file: ./.secrets/test/db/pos_runtime_password }
-  test_inventory_runtime_password: { file: ./.secrets/test/db/inventory_runtime_password }
-  test_customer_runtime_password: { file: ./.secrets/test/db/customer_runtime_password }
-  test_pos_relay_password: { file: ./.secrets/test/db/pos_relay_password }
-  test_inventory_relay_password: { file: ./.secrets/test/db/inventory_relay_password }
-  test_customer_relay_password: { file: ./.secrets/test/db/customer_relay_password }
+  test_pos_mig_password: { file: ./.secrets/test/db/pos_mig_password }
+  test_inventory_mig_password: { file: ./.secrets/test/db/inventory_mig_password }
+  test_pos_run_password: { file: ./.secrets/test/db/pos_run_password }
+  test_inventory_run_password: { file: ./.secrets/test/db/inventory_run_password }
+  test_customer_run_password: { file: ./.secrets/test/db/customer_run_password }
+  test_pos_rly_password: { file: ./.secrets/test/db/pos_rly_password }
+  test_inventory_rly_password: { file: ./.secrets/test/db/inventory_rly_password }
+  test_customer_rly_password: { file: ./.secrets/test/db/customer_rly_password }
+  marketing_mig_password: { file: ./.secrets/local/db/marketing_mig_password }
+  insight_mig_password: { file: ./.secrets/local/db/insight_mig_password }
+  marketing_wrk_password: { file: ./.secrets/local/db/marketing_wrk_password }
+  marketing_rly_password: { file: ./.secrets/local/db/marketing_rly_password }
+  insight_rly_password: { file: ./.secrets/local/db/insight_rly_password }
+  gateway_insight_token: { file: ./.secrets/local/gateway_insight_token }
+  gateway_marketing_token: { file: ./.secrets/local/gateway_marketing_token }
+  gateway_sms_confirm_token: { file: ./.secrets/local/gateway_sms_confirm_token }
+  marketing_account_token: { file: ./.secrets/local/marketing_account_token }
+  insight_marketing_token: { file: ./.secrets/local/insight_marketing_token }
+  forecast_insight_token: { file: ./.secrets/local/forecast_insight_token }
+  forecast_inventory_token: { file: ./.secrets/local/forecast_inventory_token }
+  promo_insight_token: { file: ./.secrets/local/promo_insight_token }
+  fixture_cctv_token: { file: ./.secrets/local/fixture_cctv_token }
+  fixture_sms_key: { file: ./.secrets/local/fixture_sms_key }
+  insight_redis_password: { file: ./.secrets/local/insight_redis_password }
+  marketing_worker_redis_password: { file: ./.secrets/local/marketing-worker_redis_password }

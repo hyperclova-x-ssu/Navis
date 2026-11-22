@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit --jsx react-jsx --types node,vite/client",
     "test": "vitest run",
     "migrate": "node packages/db/cli.ts migrate",
-    "seed": "node packages/db/cli.ts seed"
+    "seed": "node --experimental-transform-types --disable-warning=ExperimentalWarning packages/db/cli.ts seed"
   },
   "dependencies": {
     "fastify": "5.12.8",

@@ -1,0 +1,17 @@
+# Use this override only for the owner-approved live Navis chat.
+services:
+  insight-navis:
+    environment:
+      NAVIS_AGENT_PROVIDER: ${NAVIS_AGENT_PROVIDER:?export NAVIS_AGENT_PROVIDER=live before using this override}
+      CLOVASTUDIO_BASE_URL: ${CLOVASTUDIO_BASE_URL:-https://clovastudio.stream.ntruss.com}
+      NAVIS_AGENT_MODEL: ${NAVIS_AGENT_MODEL:-HCX-005}
+    volumes:
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/CLOVASTUDIO_API_KEY
+        target: /run/secrets/CLOVASTUDIO_API_KEY
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [navis-live-egress]
+
+networks:
+  navis-live-egress: {}

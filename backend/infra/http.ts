@@ -39,7 +39,7 @@ export function createApp(name: Service | 'api-gateway', checkReady: Probe, logg
     if (typeof status === 'number' && status >= 400 && status < 500) {
       return reply.code(status).send({ code: 'INVALID_REQUEST' });
     }
-    req.log.error('Request handler failed');
+    req.log.error({ route: req.routeOptions.url, code: 'SERVICE_UNAVAILABLE' }, 'Request handler failed');
     return reply.code(503).send({ code: 'SERVICE_UNAVAILABLE' });
   });
 

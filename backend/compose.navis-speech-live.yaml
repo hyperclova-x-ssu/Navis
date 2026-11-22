@@ -1,0 +1,20 @@
+# Add to compose.yaml for live CLOVA Speech short-sentence recognition.
+services:
+  insight-navis:
+    environment:
+      NAVIS_CLOVASPEECH_PROVIDER: live
+    volumes:
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_CLOVASPEECH_INVOKE_URL
+        target: /run/secrets/NCP_CLOVASPEECH_INVOKE_URL
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_CLOVASPEECH_SECRET
+        target: /run/secrets/NCP_CLOVASPEECH_SECRET
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [navis-live-egress]
+
+networks:
+  navis-live-egress: {}

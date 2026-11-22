@@ -1,0 +1,20 @@
+# Add to compose.yaml for live CLOVA Document OCR (Receipt KR).
+services:
+  insight-navis:
+    environment:
+      NAVIS_CLOVA_OCR_PROVIDER: live
+    volumes:
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_CLOVA_OCR_URL
+        target: /run/secrets/NCP_CLOVA_OCR_URL
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_CLOVA_OCR_SECRET
+        target: /run/secrets/NCP_CLOVA_OCR_SECRET
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [navis-live-egress]
+
+networks:
+  navis-live-egress: {}
