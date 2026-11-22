@@ -42,6 +42,10 @@ const rows = [
   // Pages
   ['ui.page.barLabel', '페이지', 'Pages', '页面', '頁面'],
   ['ui.page.addWithText', '페이지 추가하기', 'Add page', '添加页面', '新增頁面'],
+  ['ui.page.remove', '페이지 지우기', 'Delete page', '删除页面', '刪除頁面'],
+  ['ui.page.removeTitle', '이 페이지를 지울까요?', 'Delete this page?', '要删除这个页面吗？', '要刪除這個頁面嗎？'],
+  ['ui.page.removeWidgetCount', '위젯 {n}개는 서랍으로 돌아가요', '{n, plural, one {# widget will return to the drawer} other {# widgets will return to the drawer}}', '{n} 个小组件将返回抽屉', '{n} 個小工具會回到抽屜'],
+  ['ui.page.removed', '페이지를 지웠어요', 'Page deleted', '页面已删除', '頁面已刪除'],
   ['ui.edge.chip', '{n}페이지로 이동', 'Go to page {n}', '前往第 {n} 页', '前往第 {n} 頁'],
   // Help and coach
   ['ui.help.panelHidden', '편집 중에는 설명 버튼이 숨겨져요', 'The help button is hidden while editing', '编辑时隐藏说明按钮', '編輯時隱藏說明按鈕'],

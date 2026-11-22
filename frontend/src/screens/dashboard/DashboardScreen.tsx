@@ -67,6 +67,7 @@ function DashboardContent({run,ready=true,manageTimers=true,posBusy=false,render
  if(!transform)throw new Error('Dashboard requires a positive canvas transform');
  const boardVisible=s.screen==='dashboard'&&s.layer!=='orders-payment';
  const layer=s.activeBoard,board=s.boards[layer],pageIndex=board.currentPage,pageCount=board.pages.length,boardEmpty=board.pages.every(page=>!page.panels.length);
+ const currentPage=board.pages[pageIndex];
  const [coordinates]=useState(()=>coordinateReader(transform)),readRect=coordinates.rect;
  const [gridNode,setGridNode]=useState<HTMLDivElement|null>(null);const searchRef=useRef<HTMLInputElement>(null),startSlot=useRef<HTMLButtonElement|null>(null),[recommendNode,setRecommendNode]=useState<HTMLButtonElement|null>(null);
  const gridRef=useMemo(()=>stateSlot<HTMLDivElement>(setGridNode),[]),recommendRef=useMemo(()=>stateSlot<HTMLButtonElement>(setRecommendNode),[]),startRef=useCallback((node:HTMLButtonElement|null)=>{if(!node)return;startSlot.current=node;return()=>{if(startSlot.current===node)startSlot.current=null;};},[]);
@@ -191,7 +192,7 @@ function DashboardContent({run,ready=true,manageTimers=true,posBusy=false,render
    if(event.defaultPrevented||event.isComposing||event.repeat||event.altKey||event.ctrlKey||event.metaKey)return;
    const state=run.getState();if(state.screen!=='dashboard'||state.layer!==state.activeBoard||state.idle.mode==='idle'||state.gesturePreview||state.edit.gesture)return;
    if(state.overlay.type!=='none'&&state.overlay.type!=='drawer')return;
-   if(isTextInput(event.target)||(event.target instanceof Element&&event.target.closest('#dashboard-navis,.ui-drawer,.ui-popover')))return;
+   if(isTextInput(event.target)||(event.target instanceof Element&&event.target.closest('#dashboard-navis,.ui-drawer,.ui-popover,[role="alertdialog"]')))return;
    const current=state.boards[state.activeBoard].currentPage;
    const page=event.key==='ArrowLeft'||event.key==='PageUp'?-1:event.key==='ArrowRight'||event.key==='PageDown'?1:0;if(!page)return;
    const editing=state.edit.mode==='edit',arrow=event.key.startsWith('Arrow');
@@ -231,7 +232,10 @@ function DashboardContent({run,ready=true,manageTimers=true,posBusy=false,render
     </div>
    </div>
    <IdleChrome idle={isIdle}><aside ref={railRef} className="dashboard-rail ui-glass-card"><nav aria-label={t('dashboard.rail.label')}><FunctionRailItem label={t('common.search')} aria-label={t('app.features.searchAction')} icon="search" selected={Boolean(drawer&&searchMode)} expanded={Boolean(drawer&&searchMode)} onClick={()=>{if(drawer&&searchMode)run.actions.closeOverlay('button');else{setSearchMode(true);run.actions.openDrawer('recommended','');}}}/>{getLayerGroups(layer).map(group=><FunctionRailItem key={group} data-template-group={group} ref={group==='recommended'?recommendRef:undefined} groupId={group} label={t(`group.${group}`)} shortLabel={t(`group.rail.${group}`)} icon={group} selected={Boolean(drawer&&!searchMode&&drawer.group===group)} expanded={Boolean(drawer&&!searchMode&&drawer.group===group)} iconSlot={group==='recommended'?<FirstUseHint play={hint}><Icon name="recommended"/></FirstUseHint>:undefined} onClick={()=>openGroup(group)}/>)}</nav></aside></IdleChrome>
-   <PageBar placement="canvas" total={pageCount} current={pageIndex} hidden={isIdle||pageCount===1&&boardEmpty} onSelect={index=>run.actions.goToPage(index)} onAdd={()=>run.actions.addPage()} onLimit={()=>run.actions.addPage()}/>
+   <PageBar placement="canvas" total={pageCount} current={pageIndex} hidden={isIdle||pageCount===1&&boardEmpty} onSelect={index=>run.actions.goToPage(index)} onAdd={()=>run.actions.addPage()} onLimit={()=>run.actions.addPage()}
+    removal={s.edit.mode==='edit'?{pageId:currentPage.pageId,revision:s.layoutRevision,widgetCount:currentPage.panels.length,
+      onConfirm:()=>{const removed=(run as PresentationRunStore).actions.removePage(currentPage,s.layoutRevision);if(removed)setTools(null);return removed;},
+      onFocusFallback:()=>gridNode?.focus({preventScroll:true})}:undefined}/>
    <EdgeZoneBand side="left" targetPage={edge?.side==='left'?edge.targetPage:Math.max(1,pageIndex)} visible={edge?.side==='left'}/>
    <EdgeZoneBand side="right" targetPage={edge?.side==='right'?edge.targetPage:pageIndex+2} visible={edge?.side==='right'}/>
    <p className="ui-sr-only" role="status" aria-live="polite">{announcement}</p>

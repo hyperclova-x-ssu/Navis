@@ -36,6 +36,36 @@ const key=(node:Element|Document,k:string,init:KeyboardEventInit={})=>{fireEvent
 const ledger={featureId:'ledger',column:0,row:0,width:1,height:1} as const;
 
 describe('page bar (SCR-24, AC-181~185)',()=>{
+ it('offers deletion in edit mode on a later page and returns its widgets to the drawer only after confirmation',async()=>{
+  const {run,page}=mount({panels:[ledger],pages:2});
+  await act(async()=>{run.actions.goToPage(1);run.actions.applyLayoutIntent({type:'add-tap',featureId:'calendar'});});
+  const remove=()=>screen.queryByRole('button',{name:'페이지 지우기'});
+  const user=userEvent.setup();
+  expect(remove()).toBeNull();
+  act(()=>{run.actions.enterEditing();run.actions.goToPage(0);});
+  expect(remove()).toBeNull();
+  act(()=>{run.actions.goToPage(1);});
+  await user.click(screen.getByRole('button',{name:'페이지 지우기'}));
+  const dialog=screen.getByRole('alertdialog',{name:'이 페이지를 지울까요?'});
+  expect(dialog).toHaveAccessibleDescription('위젯 1개는 서랍으로 돌아가요');
+  expect(run.getState().boards.management.pages).toHaveLength(2);
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(remove()).toHaveFocus();
+  expect(findPlacement(run.getState(),'calendar')?.pageIndex).toBe(1);
+
+  await user.click(remove()!);
+  await user.click(within(screen.getByRole('alertdialog')).getByRole('button',{name:'페이지 지우기'}));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(remove()).toBeNull();
+  expect(page()).toBe(0);
+  expect(findPlacement(run.getState(),'calendar')).toBeNull();
+  await waitFor(()=>expect(screen.getByRole('button',{name:'페이지 추가하기'})).toHaveFocus());
+  await user.click(screen.getByRole('button',{name:'기능 검색하기'}));
+  const search=await screen.findByRole('searchbox');
+  await user.type(search,'캘린더');
+  expect(await screen.findByRole('button',{name:/^캘린더$/u})).toBeEnabled();
+ });
  it('is hidden on the first empty screen, shows a text add button for one page, then dots and arrows',async()=>{
   const {run}=mount();await act(async()=>{});
   expect(screen.queryByRole('navigation',{name:'페이지'})).toBeNull();

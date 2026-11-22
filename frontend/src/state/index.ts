@@ -59,6 +59,7 @@ export interface AccountRestore {
 }
 export interface RunPresentationActions extends RunActions {
   readonly commitNavisLayout: (plan: NavisLayoutPlan, options?: { readonly deferNotice?: boolean }) => CommandResult;
+  readonly removePage: (page: DashboardPage, expectedLayoutRevision: number) => boolean;
   /** Replace theme, language, settings, onboarding state and both boards with the stored account state. Returns false when it is invalid for this run (the run is left untouched). */
   readonly restoreAccount:(restore:AccountRestore)=>boolean;
   readonly restartOnboarding:()=>boolean;
@@ -106,6 +107,16 @@ function emptyGuidance():GuidanceProgress{
   return {firstHintSeen:false,coach:{'choose-feature':'unseen','resize-panel':'unseen','move-panel':'unseen'},active:null,targetFeatureId:null,queue:[],panelMilestones:{first:false,second:false},nextCoachAt:Infinity,dashboardReady:false,visualPending:false,widgetCoach:{},widgetQueue:[],activeWidget:null};
 }
 const pageId=(layer:DashboardLayerId,index:number)=>`${layer}-${index+1}`;
+function pageIdAllocator(board:DashboardBoard):()=>string{
+  const occupied=new Set(board.pages.map(page=>page.pageId));
+  if(board.undo?.removedPageId)occupied.add(board.undo.removedPageId);
+  let index=board.pages.length;
+  return ()=>{
+    let id=pageId(board.layerId,index++);
+    while(occupied.has(id))id=pageId(board.layerId,index++);
+    return id;
+  };
+}
 function newBoard(layerId:DashboardLayerId):DashboardBoard{
   return {layerId,pages:[{pageId:pageId(layerId,0),panels:[]}],currentPage:0,revision:0,guidance:emptyGuidance(),starter:'ready',undo:null,notice:null};
 }
@@ -833,8 +844,9 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
       if (changed !== Boolean(plan.undoKind)) return rejected('INTERNAL_LAYOUT_ERROR');
       if (!changed && plan.pages.length === board.pages.length) return response({ ...checks[plan.page], status: 'unchanged' });
       const oldIds = new Set(board.pages.flatMap(page => page.panels.map(panel => panel.featureId)));
+      const nextPageId = pageIdAllocator(board);
       const pages = plan.pages.map((panels, index) => board.pages[index]?.panels === panels ? board.pages[index]
-        : { pageId: board.pages[index]?.pageId ?? pageId(plan.layer, index), panels: checks[index].panels });
+        : { pageId: board.pages[index]?.pageId ?? nextPageId(), panels: checks[index].panels });
       const undoKind = plan.undoKind;
       update((current, t) => {
         const pageChanged = plan.page !== board.currentPage;
@@ -988,6 +1000,7 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
       const layer=dashboardLayers.find(l=>s.boards[l].undo?.token===token);
       const board=layer?s.boards[layer]:null,undo=board?.undo??null;
       if(!layer||!board||s.idle.wakeInputToken||s.closingInput||!undo||undo.token!==token||undo.consumed||undo.appliedRevision!==board.revision||!undo.pausedReasons.length&&layoutTime(layer,now())>=undo.expiresAt)return rejected('UNDO_UNAVAILABLE');
+      if(undo.removedPageId&&board.pages.length>=PAGE_LIMIT)return rejected('UNDO_UNAVAILABLE');
       adapter.cancel();
       // Consume before restore so a second call can never apply the same snapshot.
       update(s=>writeBoard({...s,gesturePreview:null,edit:{...s.edit,gesture:null,gestureToken:null}},layer,{undo:null}));
@@ -995,10 +1008,13 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
       const invalid=restored.find(r=>!r.valid);if(invalid)return rejected(invalid.code!);
       update((s,t)=>{
         const current=s.boards[layer];
-        // Pages added after the change are left as they are; pages are append-only so indexes stay valid.
-        const pages=current.pages.map((page,i)=>i<restored.length?{...page,panels:restored[i].panels}:page);
+        const restoredOrder=undo.removedPageId
+          ? [...current.pages.slice(0,undo.pageIndex),{pageId:undo.removedPageId,panels:undo.beforePanels},...current.pages.slice(undo.pageIndex)]
+          : current.pages;
+        const pages=restoredOrder.map((page,i)=>i<restored.length?{...page,panels:restored[i].panels}:page);
         const empty=pages.every(p=>!p.panels.length);
-        return writeBoard({...s,layoutRevision:s.layoutRevision+1},layer,{pages,currentPage:Math.min(undo.pageIndex,pages.length-1),revision:current.revision+1,starter:empty&&!(layer==='management'&&s.onboarding.applyToken)?'ready':'completed',guidance:layer===s.activeBoard?{...current.guidance,visualPending:true}:current.guidance,notice:{id:unique(),kind:'complete',messageKey:'undo-complete',expiresAt:t+options.time.completeMs,layerId:layer}});
+        const edit=undo.removedPageId&&layer===s.activeBoard?{...s.edit,selectedFeatureId:null}:s.edit;
+        return writeBoard({...s,edit,layoutRevision:s.layoutRevision+1},layer,{pages,currentPage:Math.min(undo.pageIndex,pages.length-1),revision:current.revision+1,starter:empty&&!(layer==='management'&&s.onboarding.applyToken)?'ready':'completed',guidance:layer===s.activeBoard?{...current.guidance,visualPending:true}:current.guidance,notice:{id:unique(),kind:'complete',messageKey:'undo-complete',expiresAt:t+options.time.completeMs,layerId:layer}});
       });
       return response(restored[undo.pageIndex]??currentLayout());
     },
@@ -1016,7 +1032,14 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
     selectPanel(featureId){const s=store.getState();if(s.edit.mode!=='edit'||!s.panels.some(p=>p.featureId===featureId))return false;update(s=>({...s,edit:{...s.edit,selectedFeatureId:featureId}}));return true;},
     finishEditing(){
       if(store.getState().gesturePreview||store.getState().edit.gesture)return false;
-      update((s,t)=>{if(s.edit.mode==='view')return s;const changed=editStartRevision!==null&&s.layoutRevision!==editStartRevision;editStartRevision=null;const next={...s,edit:{mode:'view' as const,gesture:null,gestureToken:null,selectedFeatureId:null}};return changed?writeActive(next,{notice:{id:unique(),kind:'complete',messageKey:'edit-complete',expiresAt:t+options.time.completeMs,layerId:s.activeBoard}}):next;});return true;
+      update((s,t)=>{
+        if(s.edit.mode==='view')return s;
+        const changed=editStartRevision!==null&&s.layoutRevision!==editStartRevision;
+        const canUndoPageRemoval=s.undo?.kind==='remove-page'&&s.notice?.undoToken===s.undo.token;
+        editStartRevision=null;
+        const next={...s,edit:{mode:'view' as const,gesture:null,gestureToken:null,selectedFeatureId:null}};
+        return changed&&!canUndoPageRemoval?writeActive(next,{notice:{id:unique(),kind:'complete',messageKey:'edit-complete',expiresAt:t+options.time.completeMs,layerId:s.activeBoard}}):next;
+      });return true;
     },
     openDrawer(group,query=''){
       if(!canOpen())return false;
@@ -1145,8 +1168,31 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
       const s=store.getState(),board=s.boards[s.activeBoard];
       if(board.pages.length>=PAGE_LIMIT){errorNotice('PAGE_LIMIT');return {ok:false,code:'PAGE_LIMIT'};}
       const index=board.pages.length;
-      update((s,t)=>changePage(writeActive(s,{pages:[...s.boards[s.activeBoard].pages,{pageId:pageId(s.activeBoard,index),panels:[]}]}),index,t));
+      const nextPageId=pageIdAllocator(board);
+      update((s,t)=>changePage(writeActive(s,{pages:[...board.pages,{pageId:nextPageId(),panels:[]}]}),index,t));
       return {ok:true,index};
+    },
+    removePage(page,expectedLayoutRevision){
+      const s=store.getState(),board=s.boards[s.activeBoard],index=board.currentPage;
+      if(disposed||s.screen!=='dashboard'||s.layer!==s.activeBoard||s.edit.mode!=='edit'||index===0
+        ||board.pages[index]!==page||s.layoutRevision!==expectedLayoutRevision||!canOpen()
+        ||(s.overlay.type!=='none'&&s.overlay.type!=='drawer'))return false;
+      const pages=board.pages.filter((_,i)=>i!==index),revision=board.revision+1;
+      const beforePages=snapshotPages(board.pages);
+      adapter.cancel();
+      update((current,t)=>{
+        const undo:UndoEntry={token:unique(),kind:'remove-page',removedPageId:page.pageId,layerId:board.layerId,
+          pageIndex:index,beforePages,beforePanels:beforePages[index],appliedRevision:revision,
+          remainingMs:options.time.undoMs,expiresAt:t+options.time.undoMs,
+          pausedReasons:current.pageHidden?['page-hidden']:[],consumed:false};
+        const notice:Notice={id:unique(),kind:'success',messageKey:'ui.page.removed',undoToken:undo.token,
+          expiresAt:undo.expiresAt,layerId:board.layerId};
+        const moved=changePage(current,index-1,t);
+        const starter=pages.every(p=>!p.panels.length)&&!(board.layerId==='management'&&current.onboarding.applyToken)?'ready':board.starter;
+        return writeActive({...moved,layoutRevision:current.layoutRevision+1},{pages,revision,starter,undo,notice,
+          guidance:{...moved.guidance,visualPending:true}});
+      });
+      return true;
     },
     openWidgetHelp(featureId,origin,returnFocusKey){
       const s=store.getState();
@@ -1280,8 +1326,8 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
   };
   const commandActions=new Set<keyof RunPresentationActions>(['applyLayoutIntent','commitAssistantBatch','commitNavisLayout','startWithThree','startWithPreset','applyManagementTemplate','commitPreview','movePanelToPage','undo','updatePreview']);
   const booleanActions=new Set<keyof RunPresentationActions>(['setPosUi','setOnboardingAnswer','onboardingBack','updateOnboardingTableDraft','saveOnboardingTables','skipOnboardingTables','selectStartTemplate','startEmpty','templateAssembled','restoreAccount','nextTemplateTour','closeTemplateTour','openClosing','selectPanel','finishEditing','openDrawer','openSettings','openDetail','openDetailRef','dismissCoach','coachedAction','markFirstHintSeen','inputStarted','inputEnded','consumeInput','switchLayer','goToPage','openWidgetHelp','closeWidgetHelp','openLinkedDetail','detailBack','setLocale','rememberDetailState']);
-  for(const action of ['restartOnboarding','chooseDemoLayout','finishDemoRestart'] as const)booleanActions.add(action);
-  const tourBlockedActions=new Set<keyof RunPresentationActions>(['applyLayoutIntent','commitAssistantBatch','commitNavisLayout','startWithThree','startWithPreset','beginPreview','updatePreview','commitPreview','movePanelToPage','undo','enterEditing','selectPanel','finishEditing','openDrawer','openSettings','openDetail','openDetailRef','openClosing','dismissCoach','coachedAction','skipWidgetCoaches','markFirstHintSeen','switchLayer','goToPage','addPage','flipPageDuringGesture','openWidgetHelp','openLinkedDetail','acknowledgeBriefing','rememberDetailState']);
+  for(const action of ['restartOnboarding','chooseDemoLayout','finishDemoRestart','removePage'] as const)booleanActions.add(action);
+  const tourBlockedActions=new Set<keyof RunPresentationActions>(['applyLayoutIntent','commitAssistantBatch','commitNavisLayout','startWithThree','startWithPreset','beginPreview','updatePreview','commitPreview','movePanelToPage','undo','enterEditing','selectPanel','finishEditing','openDrawer','openSettings','openDetail','openDetailRef','openClosing','dismissCoach','coachedAction','skipWidgetCoaches','markFirstHintSeen','switchLayer','goToPage','addPage','removePage','flipPageDuringGesture','openWidgetHelp','openLinkedDetail','acknowledgeBriefing','rememberDetailState']);
   const guardedActions=new Map<keyof RunPresentationActions,(...args:unknown[])=>unknown>();
   // One entrance guard also covers synchronous re-entry through any public action.
   const actions:RunPresentationActions=new Proxy(actionImpl,{get(target,key: keyof RunPresentationActions){

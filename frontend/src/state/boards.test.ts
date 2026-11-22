@@ -4,12 +4,12 @@ import type { DashboardLayerId, FeatureId, LayoutAdapter, LayoutWorkerRequest, L
 import { getCatalog, getRegistry } from '../catalog';
 import { preview, screenPresets } from '../layout';
 import { testTime } from '../layout/test-policy';
-import { createRunStore, findPlacement, PAGE_LIMIT, selectBoardPanels, selectCommonNotice } from './index';
+import { createRunStore, findPlacement, PAGE_LIMIT, selectBoardPanels, selectCommonNotice, type PresentationRunStore } from './index';
 import stateSource from './index.ts?raw';
 
 const preset = screenPresets.A;
 let now = 0;
-let run: RunStore;
+let run: PresentationRunStore;
 let violations: string[] = [];
 const solve = (request: LayoutWorkerRequest): LayoutWorkerResponse => ({ ...request, result: preview(request.beforePanels, request.intent, screenPresets[request.presetId].grid, getCatalog(request.presetId)) });
 /** Worker stand-in: answers synchronously (sync) or on the next microtask (async). */
@@ -40,7 +40,7 @@ function checkMirror(s: RunState): void {
     if (new Set(b.pages.map(page => page.pageId)).size !== b.pages.length) fail('page ids');
   }
 }
-function setup(catalog: RunStore['catalog'] = getRegistry('A'), layoutAdapter: LayoutAdapter = adapter('sync')): RunStore {
+function setup(catalog: RunStore['catalog'] = getRegistry('A'), layoutAdapter: LayoutAdapter = adapter('sync')): PresentationRunStore {
   const store = createRunStore({ screenPreset: preset, catalog, time: testTime, clock: () => now, theme: 'light', layoutAdapter });
   checkMirror(store.getState());
   store.subscribe(checkMirror);
@@ -80,6 +80,58 @@ describe('v4 RunState shape and new run (DATA_MODEL 10.2, AC-195·216)', () => {
 });
 
 describe('pages and selection functions (F-20, AC-181~185)', () => {
+  it.each([
+    ['management', 'ledger', 'calendar'],
+    ['marketing', 'community', 'ai-response'],
+  ] as const)('removes the current %s page and restores its layout through Undo', (layer, removed, shifted) => {
+    enter();
+    if (layer === 'marketing') run.actions.switchLayer(layer);
+    run.actions.addPage();
+    expect(run.actions.applyLayoutIntent({ type: 'add-tap', featureId: removed }).status).toBe('accepted');
+    run.actions.addPage();
+    expect(run.actions.applyLayoutIntent({ type: 'add-tap', featureId: shifted }).status).toBe('accepted');
+    run.actions.goToPage(1);
+    run.actions.enterEditing();
+    run.actions.selectPanel(removed);
+    const before = run.getState();
+    const pages = board().pages;
+    const otherLayer = layer === 'management' ? 'marketing' : 'management';
+
+    expect(run.actions.removePage(pages[1], before.layoutRevision)).toBe(true);
+
+    expect(board()).toMatchObject({ pages: [pages[0], pages[2]], currentPage: 0, revision: before.boards[layer].revision + 1 });
+    expect(run.getState().layoutRevision).toBe(before.layoutRevision + 1);
+    expect(run.getState().edit.selectedFeatureId).toBeNull();
+    expect(run.getState().boards[otherLayer]).toBe(before.boards[otherLayer]);
+    expect(findPlacement(run.getState(), removed)).toBeNull();
+    expect(findPlacement(run.getState(), shifted)?.pageIndex).toBe(1);
+
+    const token = board().undo!.token;
+    run.actions.finishEditing();
+    expect(board().notice?.undoToken).toBe(token);
+    expect(run.actions.addPage().ok).toBe(true);
+    const appended = board().pages.at(-1);
+    expect(run.actions.undo(token).status).toBe('accepted');
+    expect(board()).toMatchObject({ pages: [...pages, appended], currentPage: 1 });
+    expect(run.actions.undo(token).status).toBe('rejected');
+  });
+  it('rejects first-page, view-mode, and stale confirmation requests', () => {
+    enter();
+    run.actions.addPage();
+    const viewed = run.getState();
+    const second = board().pages[1];
+    expect(run.actions.removePage(second, viewed.layoutRevision)).toBe(false);
+    run.actions.enterEditing();
+    run.actions.goToPage(0);
+    expect(run.actions.removePage(board().pages[0], viewed.layoutRevision)).toBe(false);
+    expect(run.actions.removePage(second, viewed.layoutRevision)).toBe(false);
+    run.actions.goToPage(1);
+    run.actions.applyLayoutIntent({ type: 'add-tap', featureId: 'ledger' });
+    expect(run.actions.removePage(second, viewed.layoutRevision)).toBe(false);
+    expect(board().pages).toHaveLength(2);
+    expect(run.actions.removePage(board().pages[1], run.getState().layoutRevision)).toBe(true);
+    expect(board().pages).toHaveLength(1);
+  });
   it('adds pages up to five without touching revisions or undo, then refuses with PAGE_LIMIT', () => {
     enter(); expect(run.actions.applyLayoutIntent({ type: 'add-tap', featureId: 'ledger' }).status).toBe('accepted');
     const before = run.getState();

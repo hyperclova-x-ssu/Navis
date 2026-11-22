@@ -100,7 +100,8 @@ export function createInputGate(run: RunStore, onInput: () => void = () => { }, 
                     event.preventDefault();
                     if(candidate)event.stopPropagation();
                 }
-                else if (event.key === 'Escape' && run.getState().edit.mode === 'edit' && run.getState().overlay.type === 'none') {
+                else if (event.key === 'Escape' && run.getState().edit.mode === 'edit' && run.getState().overlay.type === 'none'
+                    && !(event.target instanceof Element && event.target.closest('[role="alertdialog"]'))) {
                     run.actions.finishEditing();
                     event.preventDefault();
                 }
