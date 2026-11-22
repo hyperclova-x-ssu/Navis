@@ -1,0 +1,78 @@
+.mkt-trend-panel-row .mkt-row__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+[data-feature-id="local-trends"] .ui-panel-body[data-shape="L"] .mkt-trend-hero .ui-metric-fit__value {
+  font-size: max(44px, var(--type-metric));
+}
+
+.mkt-trend-candidates > summary {
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+  font-weight: var(--weight-bold);
+}
+
+.mkt-trend-candidates > summary:focus-visible {
+  outline: var(--stroke-focus) solid var(--ring);
+  outline-offset: var(--focus-offset);
+}
+
+.mkt-trend-candidates .mkt-row {
+  flex-wrap: wrap;
+}
+
+.mkt-card.mkt-trend-chart {
+  align-items: stretch;
+}
+
+.mkt-trend-chart__plot {
+  position: relative;
+  width: 100%;
+  height: clamp(160px, 22vh, var(--chart-plot-min-height));
+}
+
+.mkt-trend-chart__plot .ui-line-plot {
+  inset-inline: var(--space-2);
+  width: calc(100% - 2 * var(--space-2));
+}
+
+.mkt-trend-chart__plot .ui-line-plot circle { display: none; }
+
+.mkt-trend-chart__marker-track {
+  position: absolute;
+  inset: 0 var(--space-2) var(--leading-caption);
+  pointer-events: none;
+}
+
+.mkt-trend-chart__marker {
+  position: absolute;
+  inset-inline-end: 0;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--card);
+  border-radius: 50%;
+  background: var(--chart-1);
+  transform: translate(50%, -50%);
+}
+
+.mkt-trend-comparison {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.mkt-trend-comparison dt { color: var(--muted-foreground); }
+.mkt-trend-comparison dd { margin: 0; font-weight: var(--weight-bold); }
+.mkt-trend-chart .mkt-touch-link { align-self: start; }
+.mkt-detail [data-slot="local-trends.list"] { gap: var(--space-2); }
+.mkt-trend-keyword .mkt-pick { padding-block: var(--space-2); }
+.mkt-trend-keyword__details { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); }
+.mkt-trend-keyword .mkt-pick__badges { align-items: center; }
+.mkt-trend-recommendations > ul { width: 100%; }

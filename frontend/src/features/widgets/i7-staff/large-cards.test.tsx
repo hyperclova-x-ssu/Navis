@@ -39,7 +39,7 @@ describe('직원 스케줄표 on large cards (D-333)', () => {
     expect(container.querySelector('.staff-metrics')).toHaveTextContent('교대');
     expect(container.querySelector('.staff-metrics')).toHaveTextContent('17:30');
     expect(container.querySelector('.staff-break')).toHaveTextContent('휴게 60분');
-    expect(container.querySelector('.staff-week-total')).toHaveTextContent('주간 총 1건 · 휴무 1건');
+    expect(container.querySelector('.staff-week-total')).toHaveTextContent('이번 주 근무 1건 · 휴무 1건');
     expect(container.querySelector('.staff-recent')).toHaveTextContent('최근 변경 · 박민수 · ');
     expect(container.querySelector('.staff-recent')).toHaveTextContent('09:00~18:00 · 휴게 30분');
   });

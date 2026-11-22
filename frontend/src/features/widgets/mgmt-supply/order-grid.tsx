@@ -1,20 +1,21 @@
-import { useId, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import type { WidgetDetailProps } from '../../../contracts';
 import type { SupplierOrderForm } from '../../assistant/domains/suppliers';
 import { useRealPort, useWidgetDataStore } from '../../../data/react';
 import { isIsoDate } from '../../../data/db/time';
+import { seedCatalog } from '../../../data/db/generated/catalog';
 import { TODAY, deriveOpenOrders, deriveStock, deriveSuggestions, type SuppliersModel } from '../../../data/widget-data';
 import { useBundle } from '../../../i18n';
 import { ActionButton, AnchoredPopover, DateStepper, DataGrid, DetailTabs, FieldFrame, Icon, InlineForm, NumberField, QuantityStepper, Spinner, StatusChip, useKitT, type GridColumn, type GridFocus, type GridSort } from '../../../ui';
 import { SupplierMessage } from './purchase-message';
 import { PurchaseGrid, SupplierGrid } from './purchase-grid';
 import { notifyPurchase, useFormClose, usePurchaseCommand, usePurchaseKey } from './purchase-grid.commands';
-import { Flash, GridValueSlot, addIsoDays, byNearestDue, sortGridRows, unitLabel, useSupplyText, useTextScale, useViewMemory } from './shared';
+import { Flash, GridValueSlot, addIsoDays, byNearestDue, sortGridRows, unitLabel, useSupplyText, useTextScale, useViewMemory , supplyQuantity } from './shared';
 type OrderRow = ReturnType<typeof deriveOpenOrders>['orders'][number];
 const ko={'supply.order.orderAnyway':'그래도 발주하기','supply.order.suggestions':'발주 제안','supply.order.none':'지금 발주할 품목이 없어요','supply.order.covered':'모자란 품목은 이미 발주했어요 · 입고 대기 {n}건','supply.order.order':'발주하기','supply.order.items':'발주 품목','supply.order.suppliers':'발주사','supply.order.orders':'발주 내역','supply.order.date':'발주 일자','supply.order.item':'발주 품목','supply.order.qty':'주문 수량','supply.order.total':'총 주문 금액','supply.order.due':'입고 예정일','supply.order.remaining':'받은·남은 수량','supply.order.status':'발주 상태','supply.order.received':'받은 수량','supply.order.record':'입고 기록하기','supply.order.cancel':'발주 취소하기','supply.order.add':'발주 추가하기','supply.order.minimum':'최소 주문 수량','supply.order.price':'단가','supply.order.step':'주문 단위','supply.order.lead':'입고 예정','supply.order.contact':'담당','supply.order.phone':'연락처','supply.order.memo':'메모','supply.order.invalid':'0보다 큰 숫자를 넣어 주세요','supply.order.search':'발주 품목 이름으로 찾아보세요','supply.order.empty':'등록된 발주 내역이 없어요','supply.order.close':'닫기','supply.order.pending':'입고 대기','supply.order.partial':'일부 입고','supply.order.complete':'입고 완료','supply.order.canceled':'취소','supply.order.issue':'입고 확인 필요','supply.order.minimumError':'최소 {n}{unit}부터 주문할 수 있어요','supply.order.stepError':'{n}{unit} 단위로 주문해 주세요','supply.order.expected':'도착 예정','supply.order.maxReason':'남은 수량보다 많이 기록할 수 없어요','supply.order.noResults':'찾는 항목이 없어요','supply.order.changeDue':'{name} 입고 예정일 바꾸기','supply.order.day':'날짜'} as const;
 const bundle={id:'widget.mgmt-supply.orders-v5',ko:{...ko,
  'supply.order.cancelPrompt':'남은 입고를 취소할까요?', 'supply.order.cancelConfirm':'발주 취소 확인',
- 'supply.order.saving':'저장하는 중이에요', 'supply.order.saveOrder':'예정 발주 기록',
+ 'supply.order.saving':'저장하는 중이에요', 'supply.order.saveOrder':'발주 기록하기', 'supply.order.noResults':'찾는 항목이 없어요',
  },en:{'supply.order.cancelPrompt':'Cancel the outstanding delivery?', 'supply.order.cancelConfirm':'Confirm cancellation',
  'supply.order.saving':'Saving', 'supply.order.saveOrder':'Record planned order'},'zh-Hans':{},'zh-Hant':{}};
 export function useOrderText(){return useBundle(bundle);}
@@ -56,7 +57,7 @@ function Receipt({order,host,reviewingMessage=false}:{order:OrderRow;host:Widget
  }
 
  return <div>
-  <QuantityStepper label={t('supply.order.received')} value={quantity} onChange={v=>{setTouched(true);setQty(v);}} min={1} max={line.remaining} unit={unitLabel(x,line.unit)} maxReason={touched?t('supply.order.maxReason'):undefined} remaining={`${t('supply.order.remaining')} ${x.format.quantity(line.remaining,line.unit)}`}/>
+  <QuantityStepper label={t('supply.order.received')} value={quantity} onChange={v=>{setTouched(true);setQty(v);}} min={1} max={line.remaining} unit={unitLabel(x,line.unit)} maxReason={touched?t('supply.order.maxReason'):undefined} remaining={`${t('supply.order.remaining')} ${supplyQuantity(x, line.remaining,line.unit)}`}/>
   <ActionButton variant={reviewingMessage?'secondary':'default'} disabled={done||cancelRevision!==undefined||quantity<1} loading={pending&&cancelRevision===undefined} onClick={()=>recordReceipt(line.polId)}>{t('supply.order.record')}</ActionButton>
   {cancelRevision===undefined ? <ActionButton variant="ghost" disabled={pending} onClick={()=>{setError('');setCancelRevision(store.getSnapshot().revision);}}>{t('supply.order.cancel')}</ActionButton>
    : <div role="group" aria-label={t('supply.order.cancelConfirm')}>
@@ -73,12 +74,12 @@ function minimumOrder(item: { minimumQty: number; orderStep: number }) {
 }
 
 function AddOrder({purchaseItemId,qty:initial,dueDate,suggestionItemId,host,onClose}:{purchaseItemId:string;qty:number;dueDate?:string;suggestionItemId?:string;host:WidgetDetailProps['host'];onClose:()=>void}){
- const {t}=useBundle(bundle),x=useSupplyText(),kit=useKitT(),{http,pending,run}=usePurchaseCommand(),store=useWidgetDataStore();
+ const {t}=useBundle(bundle),x=useSupplyText(),kit=useKitT(),{pending,run}=usePurchaseCommand(),store=useWidgetDataStore();
  const itemField = useId();
  const [id,setId]=useState(purchaseItemId),[qty,setQty]=useState<number | null>(initial),[error,setError]=useState(''),[quantityError,setQuantityError]=useState(''),[again,setAgain]=useState(false);
  const snapshot=store.getSnapshot();
  const purchase=snapshot.tables.purchaseItem.find(p=>p.purchaseItemId===id),item=snapshot.tables.inventoryItem.find(i=>i.itemId===purchase?.itemId),unitCode=purchase?.purchaseUnit??item?.unit;
- const formatQuantity = (value: number) => unitCode ? x.format.quantity(value, unitCode) : x.format.number(value);
+ const formatQuantity = (value: number) => unitCode ? supplyQuantity(x, value, unitCode) : x.format.number(value);
  const step = purchase?.orderStep ?? 1;
  const key=usePurchaseKey('order');
  const activeDueDate = id === purchaseItemId ? dueDate : undefined;
@@ -103,7 +104,7 @@ function AddOrder({purchaseItemId,qty:initial,dueDate,suggestionItemId,host,onCl
   });
  };
  const adjust = (delta: number) => changeQuantity(Math.max(0, Number(((qty ?? 0) + delta).toPrecision(15))));
- return <div ref={node=>{const form=node?.querySelector('form'); if(form)form.noValidate=true;}}><InlineForm title={t('supply.order.add')} onClose={close} closeLabel={t('supply.order.close')} saveLabel={http?t('supply.order.saveOrder'):x.t('common.saveAction')} saving={pending} saveDisabled={!purchase} onSave={()=>submit(false)}>
+ return <div ref={node=>{const form=node?.querySelector('form'); if(form)form.noValidate=true;}}><InlineForm title={t('supply.order.add')} onClose={close} closeLabel={t('supply.order.close')} saveLabel={t('supply.order.saveOrder')} saving={pending} saveDisabled={!purchase} onSave={()=>submit(false)}>
   <div className="ms-order-fields">
    <FieldFrame label={t('supply.order.item')} fieldId={itemField}>
     <select id={itemField} className="ui-text-input" value={id} disabled={pending} onChange={event=>{
@@ -135,7 +136,7 @@ function DueDateCell({order,host}:{order:OrderRow;host:WidgetDetailProps['host']
  const [open,setOpen]=useState(false),[date,setDate]=useState(order.dueDate??TODAY),[error,setError]=useState('');
  const close=()=>{if(!active.current)return;active.current=false;setOpen(false);anchor.current?.closest<HTMLElement>('[role="gridcell"]')?.focus({preventScroll:true});};
  if(!order.open)return order.dueDate?(x.locale==='ko'?x.format.date(order.dueDate,'short'):order.dueDate):'—';
- return <><button ref={anchor} className="ms-order-due-date" type="button" disabled={pending} aria-label={t('supply.order.changeDue',{name:order.lines.map(l=>x.text(l.itemName??{key:l.itemNameKey})).join(' · ')})} onClick={event=>{event.stopPropagation();setDate(order.dueDate??TODAY);setError('');active.current=true;setOpen(true);}}>{order.dueDate?(x.locale==='ko'?x.format.date(order.dueDate,'short'):order.dueDate):'—'}</button>
+ return <><button ref={anchor} className="ms-order-due-date" type="button" disabled={pending} aria-label={t('supply.order.changeDue',{name:order.lines.map(l=>x.text(l.itemName??{key:l.itemNameKey})).join(' · ')})} onClick={event=>{event.stopPropagation();setDate(order.dueDate??TODAY);setError('');active.current=true;setOpen(true);}}>{order.dueDate?(x.locale==='ko'?x.format.date(order.dueDate,'short'):order.dueDate):(x.locale === 'ko' ? '날짜 미정' : 'Date pending')}</button>
  <AnchoredPopover open={open} anchorRef={anchor} onClose={close} focusOnOpen side="bottom" label={t('supply.order.due')}><div onClick={e=>e.stopPropagation()}><InlineForm title={t('supply.order.due')} onClose={close} saveLabel={x.t('common.saveAction')} closeLabel={x.t('common.close')} saving={pending} onSave={()=>{
  run({type:'suppliers.changeDueDate',poId:order.poId,date},result=>{
   if(!result.ok){if(active.current)setError(x.tk(result.messageKey));return;}
@@ -148,18 +149,30 @@ export function OrderWorkspace({ model, host, initialTab, initialOrder, initialP
  initialPurchaseItem?: string; initialSupplier?: string; initialSupplierAdd?: boolean; initialOrderAdd?: boolean; initialOrderForm?: SupplierOrderForm;
 }){
  const {t}=useBundle(bundle),x=useSupplyText(),{http,pending,run}=usePurchaseCommand(),store=useWidgetDataStore(),snapshot=useSyncExternalStore(store.subscribe,store.getSnapshot,store.getSnapshot),scale=useTextScale();
- const transport=useRealPort()?.transport;
+ const real=useRealPort();
+ const transport=http ? real?.transport : undefined;
+ const [storeName, setStoreName]=useState<string>();
+ useEffect(() => {
+  if (!transport) return;
+  const controller = new AbortController();
+  void transport.request<{ name: string }>({ method: 'GET', path: '/profile', signal: controller.signal })
+   .then(profile => { if (!controller.signal.aborted) setStoreName(profile.name); }).catch(() => undefined);
+  return () => controller.abort();
+ }, [transport]);
  const orderActions=(order:OrderRow)=>{
-  if(!http||!transport)return <Receipt order={order} host={host}/>;
   const supplier=snapshot.tables.supplier.find(row=>row.supplierId===order.supplierId);
-  const channels: ('sms'|'mail')[]=[];
-  if(supplier?.phone && /^[0-9]{8,11}$/.test(supplier.phone.replace(/[- ]/g,'')))channels.push('sms');
-  if(supplier?.contact && /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(x.text(supplier.contact).trim()))channels.push('mail');
+  const phone=supplier?.phone?.replace(/[- ]/g,'');
+  const contact=supplier?.contact && x.text(supplier.contact).trim();
+  const email=contact && /^[^\s@]{1,64}@[^\s@]{1,190}\.[A-Za-z]{2,}$/.test(contact) ? contact : undefined;
   const reference=`PO-${order.poId.replaceAll('-','').slice(0,12).toUpperCase()}`;
-  const copyText=[t('supply.order.order'), ...order.lines.map(line=>
-   x.text(line.itemName??{key:line.itemNameKey})+' '+x.format.quantity(line.ordered,line.unit)),
-   ...(order.dueDate?[t('supply.order.due')+' '+x.format.date(order.dueDate,'short')]:[]), reference].join('\n');
-  return <SupplierMessage transport={transport} poId={order.poId} channels={channels}
+  const due=order.dueDate ? `${x.format.date(order.dueDate,'short')}${order.expectedTime ? ` ${x.format.time(order.expectedTime)}` : ''}` : '날짜 미정';
+  const copyText=['발주 요청', `발주 번호: ${reference}`, ...order.lines.map(line=>
+   x.text(line.itemName??{key:line.itemNameKey})+' '+supplyQuantity(x, line.ordered,line.unit)),
+   `납기: ${due}`, transport ? storeName : seedCatalog.store.name].filter(Boolean).join('\n');
+  return <SupplierMessage transport={transport} scope={store} poId={order.poId}
+    supplierName={x.text(order.supplierName??{key:order.supplierNameKey})}
+    phone={phone && /^[0-9]{8,11}$/.test(phone) ? phone : undefined}
+    email={email && /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(email) ? email : undefined}
     sendable={order.status==='scheduled'&&order.lines.length>0} copyText={copyText}
     beforeActions={reviewing=><Receipt order={order} host={host} reviewingMessage={reviewing}/>}/>;
  };
@@ -169,7 +182,7 @@ export function OrderWorkspace({ model, host, initialTab, initialOrder, initialP
  const restock=deriveStock(snapshot,{date:TODAY}).rows.filter(r=>r.needsRestock),open=deriveOpenOrders(snapshot,{date:TODAY}).open;
  const allCovered=restock.length>0&&restock.every(r=>open.some(o=>o.lines.some(l=>l.itemId===r.itemId&&l.remaining>0)));
  const name=(o:OrderRow)=>o.lines.map(l=>x.text(l.itemName??{key:l.itemNameKey})).join(', ');
- const columns:GridColumn<OrderRow>[]=[{id:'date',header:t('supply.order.date'),kind:'text',minWidth:150,value:r=>r.orderedOn??'',render:r=>r.orderedOn?(x.locale==='ko'?x.format.date(r.orderedOn,'short'):r.orderedOn):'—',accessibleValue:r=>r.orderedOn?(x.locale==='ko'?x.format.date(r.orderedOn,'short'):r.orderedOn):'—',sortable:true},{id:'item',header:t('supply.order.item'),kind:'text',minWidth:260,value:name,render:r=><Lines wrap items={r.lines.map(l=>x.text(l.itemName??{key:l.itemNameKey}))}/>,sortable:true},{id:'qty',header:t('supply.order.qty'),kind:'computed',minWidth:150,value:r=>r.lines.map(l=>x.format.quantity(l.ordered,l.unit)).join(', '),render:r=><Lines items={r.lines.map(l=>x.format.quantity(l.ordered,l.unit))}/>},{id:'total',header:t('supply.order.total'),kind:'computed',minWidth:160,value:r=>r.total,render:r=>x.format.money(r.total,'full')},{id:'due',header:t('supply.order.due'),kind:'text',minWidth:160,value:r=>r.dueDate??'',accessibleValue:r=>r.dueDate?(x.locale==='ko'?x.format.date(r.dueDate,'short'):r.dueDate):'—',editable:r=>r.open,sortable:true,render:r=><DueDateCell order={r} host={host}/>},{id:'remaining',header:t('supply.order.remaining'),kind:'computed',minWidth:160,value:r=>r.lines.map(l=>`${x.format.quantity(l.received,l.unit)} / ${x.format.quantity(l.remaining,l.unit)}`).join(', '),render:r=><Flash slot={`suppliers:order:${r.poId}:remaining`} value={r.lines.map(l=>[l.received,l.remaining])}><Lines items={r.lines.map(l=>`${x.format.quantity(l.received,l.unit)} / ${x.format.quantity(l.remaining,l.unit)}`)}/></Flash>},
+ const columns:GridColumn<OrderRow>[]=[{id:'date',header:t('supply.order.date'),kind:'text',minWidth:150,value:r=>r.orderedOn??'',render:r=>r.orderedOn?(x.locale==='ko'?x.format.date(r.orderedOn,'short'):r.orderedOn):'—',accessibleValue:r=>r.orderedOn?(x.locale==='ko'?x.format.date(r.orderedOn,'short'):r.orderedOn):'—',sortable:true},{id:'item',header:t('supply.order.item'),kind:'text',minWidth:260,value:name,render:r=><Lines wrap items={r.lines.map(l=>x.text(l.itemName??{key:l.itemNameKey}))}/>,sortable:true},{id:'qty',header:t('supply.order.qty'),kind:'computed',minWidth:150,value:r=>r.lines.map(l=>supplyQuantity(x, l.ordered,l.unit)).join(', '),render:r=><Lines items={r.lines.map(l=>supplyQuantity(x, l.ordered,l.unit))}/>},{id:'total',header:t('supply.order.total'),kind:'computed',minWidth:160,value:r=>r.total,render:r=>x.format.money(r.total,'full')},{id:'due',header:t('supply.order.due'),kind:'text',minWidth:160,value:r=>r.dueDate??'',accessibleValue:r=>r.dueDate?(x.locale==='ko'?x.format.date(r.dueDate,'short'):r.dueDate):'—',editable:r=>r.open,sortable:true,render:r=><DueDateCell order={r} host={host}/>},{id:'remaining',header:t('supply.order.remaining'),kind:'computed',minWidth:160,value:r=>r.lines.map(l=>`${supplyQuantity(x, l.received,l.unit)} / ${supplyQuantity(x, l.remaining,l.unit)}`).join(', '),render:r=><Flash slot={`suppliers:order:${r.poId}:remaining`} value={r.lines.map(l=>[l.received,l.remaining])}><Lines items={r.lines.map(l=>`${supplyQuantity(x, l.received,l.unit)} / ${supplyQuantity(x, l.remaining,l.unit)}`)}/></Flash>},
   // At 125%, reserve room for two chips, their icons and the cell padding.
   {id:'status',header:t('supply.order.status'),kind:'status',minWidth:scale===125?328:264,render:r=><Flash slot={`suppliers:order:${r.poId}:status`} value={`${r.status}:${r.overdue}`}><StatusChip tone={r.status==='complete'?'success':r.status==='partial'?'warning':'neutral'}>{t(r.status==='scheduled'?'supply.order.pending':r.status==='partial'?'supply.order.partial':r.status==='complete'?'supply.order.complete':'supply.order.canceled')}</StatusChip>{r.overdue?<StatusChip tone="warning">{t('supply.order.issue')}</StatusChip>:null}</Flash>,value:r=>`${t(r.status==='scheduled'?'supply.order.pending':r.status==='partial'?'supply.order.partial':r.status==='complete'?'supply.order.complete':'supply.order.canceled')}${r.overdue?` · ${t('supply.order.issue')}`:''}`}];
  // The rows are the widget model's orders: the same ones the panel counts, including the overdue example of the 특수 preview.
@@ -179,8 +192,8 @@ export function OrderWorkspace({ model, host, initialTab, initialOrder, initialP
   {pending?<p role="status"><Spinner /> {t('supply.order.saving')}</p>:null}
   <DataGrid id="orders-grid" label={t('supply.order.orders')} rows={rows} getRowId={r=>r.poId} getRowLabel={name} columns={columns}
    query={query} searchLabel={x.locale==='ko'?t('supply.order.search'):undefined} searchPlaceholder={x.locale==='ko'?t('supply.order.search'):undefined} onQueryChange={setQuery}
-   sort={sort} onSortChange={setSort} focus={focus} onFocusChange={setFocus} selectedRowId={[...expanded][0]??null} expandedRowIds={expanded}
-   onExpandedChange={setExpanded} onSelectionChange={id=>setExpanded(id?new Set([id]):new Set())} renderExpanded={r=><div key={r.poId}>{orderActions(r)}</div>}
+   sort={sort} onSortChange={setSort} focus={focus} onFocusChange={setFocus} selectedRowId={[...expanded][0]??null} expandedRowIds={new Set([...expanded].filter(id => rows.some(row => row.poId === id && row.open)))}
+   onExpandedChange={setExpanded} onSelectionChange={id=>setExpanded(id && rows.some(row => row.poId === id && row.open) ? new Set([id]) : new Set())} renderExpanded={r=><div key={r.poId}>{orderActions(r)}</div>}
    addAction={{id:'add',label:t('supply.order.add'),disabled:!snapshot.tables.purchaseItem.length,onPress:()=>{
     const item=snapshot.tables.purchaseItem[0];
     if (item) setForm({id:item.purchaseItemId,qty:minimumOrder(item)});
@@ -204,5 +217,12 @@ export function OrderWorkspace({ model, host, initialTab, initialOrder, initialP
  </>;
  const items=<PurchaseGrid host={host} initialRowId={initialPurchaseItem}/>;
  const suppliers=<SupplierGrid host={host} initialAdd={initialSupplierAdd} initialRowId={initialSupplier}/>;
- return <><section><h3>{t('supply.order.suggestions')}</h3>{suggestions.length?suggestions.map(s=>{const item=snapshot.tables.inventoryItem.find(i=>i.itemId===s.itemId),supplier=model.suppliers.find(v=>v.supplierId===s.supplierId);return <div key={s.itemId}>{item?x.text(item.name??{key:item.nameKey}):''} {x.format.quantity(s.qty,s.unit)} · {x.format.number(s.total)}원 · {supplier?x.text(supplier.name??{key:supplier.nameKey}):''} · {x.locale==='ko'?x.format.date(s.dueDate,'short'):s.dueDate} <ActionButton onClick={()=>{setTab('orders');setForm({id:s.purchaseItemId,qty:s.qty,suggestionItemId:s.itemId});}}>{t('supply.order.order')}</ActionButton></div>}):<p>{allCovered&&x.locale==='ko'?t('supply.order.covered',{n:open.length}):t('supply.order.none')}</p>}</section><DetailTabs label={t('supply.order.orders')} value={tab} onValueChange={setTab} tabs={[{value:'items',label:t('supply.order.items')},{value:'suppliers',label:t('supply.order.suppliers')},{value:'orders',label:t('supply.order.orders')}]} panels={{orders:grid,items,suppliers}}/></>;
+ const suggestionSection = <section><h3>{t('supply.order.suggestions')}</h3>{suggestions.length ? suggestions.map(s => {
+  const item = snapshot.tables.inventoryItem.find(i => i.itemId === s.itemId);
+  const supplier = model.suppliers.find(v => v.supplierId === s.supplierId);
+  return <div key={s.itemId}>{item ? x.text(item.name ?? { key: item.nameKey }) : ''} {supplyQuantity(x, s.qty, s.unit)} · {x.format.money(s.total, 'full')} · {supplier ? x.text(supplier.name ?? { key: supplier.nameKey }) : ''} · {x.format.date(s.dueDate, 'short')} <ActionButton onClick={() => setForm({ id: s.purchaseItemId, qty: s.qty, suggestionItemId: s.itemId })}>{t('supply.order.order')}</ActionButton></div>;
+ }) : <p>{allCovered && x.locale === 'ko' ? t('supply.order.covered', { n: open.length }) : t('supply.order.none')}</p>}</section>;
+ return <DetailTabs label={t('supply.order.orders')} value={tab} onValueChange={setTab}
+  tabs={[{value:'items',label:t('supply.order.items')},{value:'suppliers',label:t('supply.order.suppliers')},{value:'orders',label:t('supply.order.orders')}]}
+  panels={{orders:<>{suggestionSection}{grid}</>,items,suppliers}}/>;
 }

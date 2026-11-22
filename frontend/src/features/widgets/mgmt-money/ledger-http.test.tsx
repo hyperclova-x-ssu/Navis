@@ -1,13 +1,17 @@
 // REAL-PLAN F09: over HTTP the ledger form waits for the finance service's receipt, and the grid re-reads what the service stored.
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithKit } from '../../../ui/test-utils';
 import { TODAY } from '../../../data/widget-data';
 import type { WidgetHost } from '../../../contracts';
-import { session, withoutMethods, YESTERDAY } from '../../../data/reality/09/testing';
+import { AS_OF, session, withoutMethods, YESTERDAY } from '../../../data/reality/09/testing';
+import { reply } from '../../../data/reality/00/testing';
+import { createRealPort } from '../../../data/reality/00';
+import { moneyAdapter } from '../../../data/reality/09/adapter';
+import { createWidgetDataStore } from '../../../data/db/store';
 import type { ReactElement } from 'react';
 import type { ExpenseDto } from '../../../data/reality/09/dto';
 import { selectAccountingPresentation } from '../../../data/pos/projection';
@@ -84,9 +88,11 @@ it('lists the day\'s sales by card, easy pay and cash, charge and receivable, an
   const settlement = screen.getByRole('table', { name: '정산 유형별 매출' });
   expect(within(settlement).getByRole('row', { name: /충전금 사용액.*2,000원/ })).toBeInTheDocument();
   expect(within(settlement).getByRole('row', { name: /외상 발생액.*0원/ })).toBeInTheDocument();
-  const overlap = screen.getByRole('table', { name: /겹치는 소계/ });
-  expect(within(overlap).getByRole('row', { name: /섞어 낸 결제.*5,000원/ })).toBeInTheDocument();
-  expect(within(overlap).getByRole('row', { name: /주문제작 수령 매출.*0원/ })).toBeInTheDocument();
+  // PAR-1: the original settlement rows are all there; the finance service does not split sales by membership source, so those say so instead of 0원.
+  expect(within(settlement).getByRole('row', { name: /주문제작 수령 매출.*0원/ })).toBeInTheDocument();
+  for (const label of ['횟수권 이용분', '구독권 기간분', '기한 만료 매출']) expect(within(settlement).getByRole('row', { name: new RegExp(`${label}.*아직 기록 없음`) })).toBeInTheDocument();
+  const overlap = screen.getByRole('table', { name: /다른 항목과 겹치는 금액/ });
+  expect(within(overlap).getByRole('row', { name: /복합 결제.*5,000원/ })).toBeInTheDocument();
   // The headline stays the service's recognized sales: tender rows are never added to it.
   expect(screen.getAllByText(/9,000/).length).toBeGreaterThan(0);
 }, 30_000);
@@ -97,9 +103,9 @@ it('says the split is not available, with no zero amounts, when the service send
   await port.retry('money');
   renderWithKit(withPresentation(store, ledgerDetail()), { store, reducedMotion: true });
   const methods = await screen.findByRole('table', { name: '판매분 결제 수단' });
-  expect(within(methods).getByRole('row', { name: /집계 없음/ })).toBeInTheDocument();
+  expect(within(methods).getByRole('row', { name: /아직 기록 없음/ })).toBeInTheDocument();
   expect(within(methods).queryByText(/0원/)).not.toBeInTheDocument();
-  expect(screen.queryByRole('table', { name: /겹치는 소계/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('table', { name: /다른 항목과 겹치는 금액/ })).not.toBeInTheDocument();
 }, 30_000);
 
 it('shows an archived closing that predates the field as not available, never as zeros', async () => {
@@ -113,12 +119,12 @@ it('shows an archived closing that predates the field as not available, never as
   const live = history.find(view => view.period.start === TODAY)!;
   const { rerender } = renderWithKit(<SalesDepositSplitCard stacked view={old} />, { store, reducedMotion: true });
   const methods = screen.getByRole('table', { name: '판매분 결제 수단' });
-  expect(within(methods).getByRole('row', { name: /집계 없음/ })).toBeInTheDocument();
+  expect(within(methods).getByRole('row', { name: /아직 기록 없음/ })).toBeInTheDocument();
   expect(within(methods).queryByText(/0원/)).not.toBeInTheDocument();
   // The frozen snapshot of the closed day carries the split: the same rows a new session shows.
   rerender(<SalesDepositSplitCard stacked view={live} />);
   expect(within(screen.getByRole('table', { name: '판매분 결제 수단' })).getByRole('row', { name: /카드 판매분.*3,000원/ })).toBeInTheDocument();
-  expect(within(screen.getByRole('table', { name: /겹치는 소계/ })).getByRole('row', { name: /섞어 낸 결제.*5,000원/ })).toBeInTheDocument();
+  expect(within(screen.getByRole('table', { name: /다른 항목과 겹치는 금액/ })).getByRole('row', { name: /복합 결제.*5,000원/ })).toBeInTheDocument();
 }, 30_000);
 
 it('shows the same tender split for the margin period, from the service rows', async () => {
@@ -128,3 +134,17 @@ it('shows the same tender split for the margin period, from the service rows', a
   expect(within(methods).getByRole('row', { name: /카드 판매분.*3,000원/ })).toBeInTheDocument();
   expect(within(methods).getByRole('row', { name: /현금 판매분.*4,000원/ })).toBeInTheDocument();
 }, 30_000);
+it('retries the HTTP ledger read from the error state', async () => {
+  const { backend, fake } = await session();
+  backend.on('GET', '/pos/ledger', () => reply(503, {}));
+  const fresh = createWidgetDataStore();
+  const freshPort = createRealPort({ store: fresh, adapters: [moneyAdapter], source: domain => domain === 'money' ? 'http' : 'fixture', fetch: backend.fetch });
+  fresh.bindReal(freshPort);
+  renderWithKit(ledgerDetail(), { store: fresh, reducedMotion: true });
+  expect(await screen.findByText('손익을 불러오지 못했어요')).toBeVisible();
+  backend.on('GET', '/pos/ledger', () => ({ from: TODAY, to: TODAY, totals: fake.totals().today,
+    days: [{ businessDate: TODAY, ...fake.totals().today }], hours: [], asOf: AS_OF, sourceRevision: 9 }));
+  fireEvent.click(screen.getByRole('button', { name: '다시 시도하기' }));
+  await waitFor(() => expect(freshPort.state('money').status).toBe('ready'));
+  expect(backend.callsTo('GET', '/pos/ledger')).toHaveLength(3);
+});

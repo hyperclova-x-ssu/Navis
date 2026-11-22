@@ -46,13 +46,13 @@ describe('재고 4×4 (D-333)', () => {
   it('re-shows the nearest incoming delivery line only when an order is open', () => {
     const staged = shortage(withRetail().store).store;
     panel('inventory-booking', 4, 4, staged);
-    expect(document.querySelector('[data-widget="inventory-booking"]')).toHaveTextContent('오늘 12 L 입고 예정');
+    expect(document.querySelector('[data-widget="inventory-booking"]')).toHaveTextContent('목장 1등급 우유 · 입고 예정 12L · 오늘');
     cleanup();
     panel('inventory-booking', 4, 4, createWidgetDataStore());
     expect(document.querySelector('[data-widget="inventory-booking"]')).not.toHaveTextContent('입고 예정');
     cleanup();
     panel('inventory-booking', 4, 2, staged);
-    expect(document.querySelector('[data-widget="inventory-booking"]')).not.toHaveTextContent('오늘 12 L 입고 예정');
+    expect(document.querySelector('[data-widget="inventory-booking"]')).not.toHaveTextContent('오늘 12L 입고 예정');
   });
   it('keeps the stock rows in the order of the data (shortage first)', () => {
     const staged = shortage(withRetail().store).store;

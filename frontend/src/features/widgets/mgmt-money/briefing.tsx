@@ -2,9 +2,11 @@
 import { useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { QueryCondition, WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../../contracts';
 import { useWidgetDataStore, useWidgetView } from '../../../data/react';
-import { TODAY, posFacts, resolveDataText, type BriefingModel } from '../../../data/widget-data';
+import { selectReservations } from '../../../data/derive/reservations';
+import { bookingPartyText, unknownPartyRows } from '../mgmt-customers/voice-booking';
+import { TODAY, resolveDataText, type BriefingModel } from '../../../data/widget-data';
 import { ActionButton, DetailTabs, Icon, StatusBadge } from '../../../ui';
-import { DetailViewState, Kpi, MoneyPanel, NoteLine, ViewState, addIsoDays, splitMoney, useMoneyT, useSizeCtx, type RowData, type T } from './shared';
+import { DetailViewState, Kpi, MoneyPanel, NoteLine, ViewState, splitMoney, useMoneyT, useSizeCtx, type RowData, type T } from './shared';
 import { useBundle } from '../../../i18n';
 import { posBundle } from '../../../i18n/messages/pos';
 import { posDataBundle } from '../../../data/messages/pos';
@@ -13,13 +15,33 @@ import { orderStatusRuntime } from '../../../pos/runtime';
 import { ValueSlot } from './value-slot';
 import { keepDots } from './fit';
 import { briefingBundle } from '../../../screens/briefing/messages';
-import { accountingForPeriod, SalesDepositSplitCard, useAccountingPresentation } from './ledger';
+import { selectAccountingPresentation } from '../../../data/pos/projection';
+import { accountingForPeriod, useAccountingPresentation } from './ledger';
 import { briefingIsReal, recordBriefingAcknowledgement } from '../../../data/reality/12/ack';
 import { sectionWithheld, withheldNote, type SectionId } from '../../../data/reality/12/overlay';
 import { kstLocal } from '../../../data/reality/02/clock';
-import { SourcesCard, WithheldLines, type BriefingCopy } from '../../../screens/briefing/real';
+import { sourceLabel, WithheldLines, type BriefingCopy } from '../../../screens/briefing/real';
+import { exampleBriefingSources } from '../../../screens/briefing/example-sources';
+import { useBriefingValues } from './briefing.values';
 
 const ID = 'briefing' as const;
+const exampleSources = exampleBriefingSources();
+
+function BriefingSources({ model, t }: { model: BriefingModel; t: T }) {
+  const copy = copyOf(t);
+  const sources = model.real?.sources ?? exampleSources;
+  const problems = sources.filter(source => source.state !== 'ready');
+  const readyCount = sources.length - problems.length;
+  const title = copy.t('briefing.sources.title');
+  return <section className="mm-card mm-briefing-card" data-slot="briefing.sources" aria-label={title}>
+    <h3 className="mm-card__title">{title}</h3>
+    {readyCount > 0 && <p className="mm-muted">{t('widget.briefing.loadedSources', { n: readyCount })}</p>}
+    {problems.length > 0 && <ul className="briefing-sources">{problems.map(source => <li key={source.key} className="briefing-sources__row" data-source={source.key} data-state={source.state}>
+      <span>{sourceLabel(copy, source.key)}</span>
+      <StatusBadge semantic={source.state === 'not-connected' ? 'waiting' : 'warning'} label={copy.t(`briefing.state.${source.state}`)} />
+    </li>)}</ul>}
+  </section>;
+}
 function useBriefingMoneyT(): T {
   const base = useMoneyT(), pos = useBundle(posDataBundle, posBundle, briefingBundle);
   return Object.assign((key: string, params?: Parameters<T>[1]) => pos.has(key) ? keepDots(pos.t(key as keyof typeof posDataBundle.ko | keyof typeof posBundle.ko | keyof typeof briefingBundle.ko, params)) : base(key, params), { format: base.format, locale: base.locale });
@@ -49,7 +71,7 @@ function useAlertText(t: T) {
     if (item.id.startsWith('stock:') && stock.status === 'ready') { const out = stock.model.ingredients.find(i => i.outOfStock); if (out) return t('widget.briefing.stockItem', { count: stock.model.restockCount, name: out.name ? resolveDataText(t, out.name) : t(out.nameKey) }); }
     if (item.id.startsWith('grant:') && grants.status === 'ready') { const grant = grants.model.notices.find(n => n.noticeId === ref.itemId); if (grant) return t('widget.briefing.grantItem', { name: t(grant.titleKey), date: t.format.date(grant.applyEndDate, 'short') }); }
     if (item.id.startsWith('closure:') && typeof item.params?.date === 'string') return t(item.messageKey, { ...item.params, date: t.format.date(closureDate(item.params.date), 'short') });
-    return t(item.messageKey, item.params);
+    return item.id.startsWith('manual:') && typeof item.params?.done === 'number' ? t(item.messageKey, item.params).replace(` ${item.params.done}/${item.params.total}`, '') : t(item.messageKey, item.params);
   };
   const daysLeft = (iso: string): Trailing => { const n = dayDiff(TODAY, iso); return { kind: 'chip', semantic: 'waiting', text: n <= 0 ? t('widget.briefing.dueToday') : t('widget.briefing.daysLeft', { n }) }; };
   const needsCheck: Trailing = { kind: 'chip', semantic: 'warning', text: t('widget.briefing.needsCheck') };
@@ -81,8 +103,10 @@ export function BriefingPanel(props: WidgetPanelProps) {
   const ctx = useSizeCtx(props);
   const view = useWidgetView(ID, props.condition);
   const alertText = useAlertText(t);
+  const store = useWidgetDataStore();
   if (view.status !== 'ready') return <ViewState view={view} ctx={ctx} host={props.host} featureId={ID} t={t} />;
   const { importantAlerts } = view.model;
+  const missing = unavailableSources(t, view.model);
   const groupRows: RowData[] = importantAlerts.groups.map(group => ({ id: group.id, name: groupName(t, group.id), value: group.items.map(alertText).join('\u00a0·\u00a0'), semanticValue: JSON.stringify(group.items.map(alertText.meaning)) }));
   /** D-333: from 3x3 up each summary row also lists what it counts (today's entries, the reservation times, the order-pickup follow-ups), as the detail window does. */
   const large = ctx.shape === 'L' && ctx.width >= 3 && ctx.height >= 3;
@@ -90,16 +114,17 @@ export function BriefingPanel(props: WidgetPanelProps) {
   /** The items already hold dots (‘17:30 1건 · 3명’), so the lists are separated by commas. */
   const dot = ', ';
   const scheduleDetail = schedules.todayEntries.map(entry => `${entry.time ? `${t.format.time(entry.time)} ` : ''}${resolveDataText(t, entry.title)}`).join(dot);
-  const reservationDetail = [...reservations.timeGroups.map(group => t('widget.briefing.timeGroup', { time: group.time, count: group.count, people: group.partyTotal })), ...(reservations.completedCount > 0 ? [t('data.pos.completedVisits', { n: reservations.completedCount })] : []), ...(reservations.changes > 0 ? [t('widget.briefing.changes', { n: reservations.changes })] : [])].join(dot);
+  const parties = bookingPeople(store.getSnapshot(), view.model.real?.businessDay ?? TODAY, t.format);
+  const reservationDetail = [...reservations.timeGroups.map(group => `${group.time} ${t.format.count(group.count, 'count')} · ${parties(group.count, group.partyTotal, group.time)}`), ...(reservations.completedCount > 0 ? [t('data.pos.completedVisits', { n: reservations.completedCount })] : []), ...(reservations.changes > 0 ? [t('widget.briefing.changes', { n: reservations.changes })] : [])].join(dot);
   const customDetail = custom.summary.approvalPending > 0 || custom.summary.todayNotComplete > 0 ? t('briefing.customPending', { n: custom.summary.approvalPending, m: custom.summary.todayNotComplete }) : '';
   const heldSchedule = withheldValue(t, view.model, 'schedule'), heldReservations = withheldValue(t, view.model, 'reservations'), heldPickups = withheldValue(t, view.model, 'pickups');
   const rows: RowData[] = ctx.shape === 'S' || ctx.shape === 'L' ? [
     { id: 'schedules', name: t('widget.briefing.schedule'), value: heldSchedule ?? `${t('widget.briefing.todaySchedule', { n: view.model.schedules.todayCount })} · ${t(view.model.staff.today.nextHandoffAt ? 'briefing.staffHandoff' : 'briefing.staffCount', { n: view.model.staff.today.workingCount, time: view.model.staff.today.nextHandoffAt ?? '' })}`, semanticValue: heldSchedule ?? `${view.model.schedules.todayCount}/${view.model.staff.today.workingCount}/${view.model.staff.today.nextHandoffAt ?? ''}`, detail: large && !heldSchedule && scheduleDetail ? scheduleDetail : undefined },
-    { id: 'reservations', name: t('widget.briefing.reservations'), value: heldReservations ?? t('widget.briefing.todayReservations', { count: view.model.reservations.count, people: view.model.reservations.partyTotal }), semanticValue: heldReservations ?? `${view.model.reservations.count}/${view.model.reservations.partyTotal}`, detail: large && !heldReservations && reservationDetail ? reservationDetail : undefined },
+    { id: 'reservations', name: t('widget.briefing.reservations'), value: heldReservations ?? `오늘 ${t.format.count(reservations.count, 'count')} · ${parties(reservations.count, reservations.partyTotal)}`, semanticValue: heldReservations ?? `${view.model.reservations.count}/${view.model.reservations.partyTotal}`, detail: large && !heldReservations && reservationDetail ? reservationDetail : undefined },
     { id: 'pickups', name: t('widget.custom-order.title'), value: heldPickups ?? t('briefing.pickupToday', { n: view.model.custom.summary.todayPickup }), semanticValue: heldPickups ?? view.model.custom.summary.todayPickup, detail: large && !heldPickups && customDetail ? customDetail : undefined },
     ...groupRows,
   ] : groupRows;
-  return <MoneyPanel spec={{ slot: ID, label: t('widget.briefing.alerts'), value: importantAlerts.count ? String(importantAlerts.count) : t('data.state.briefing.none'), semanticValue: importantAlerts.count, unit: importantAlerts.count ? t('widget.briefing.unit', { n: importantAlerts.count }) : undefined, textValue: !importantAlerts.count, inlineUnit: true, rows, status: <NoteLine notes={view.notes} t={t} /> }} ctx={ctx} />;
+  return <MoneyPanel spec={{ slot: ID, label: t('widget.briefing.alerts'), value: importantAlerts.count ? String(importantAlerts.count) : t('data.state.briefing.none'), semanticValue: importantAlerts.count, unit: importantAlerts.count ? t('widget.briefing.unit', { n: importantAlerts.count }) : undefined, textValue: !importantAlerts.count, inlineUnit: true, rows, status: missing.length ? <p className="mm-muted">{missing.join(' · ')} 자료를 모두 불러오지 못했어요</p> : <NoteLine notes={view.notes?.filter(note => note.messageKey !== 'data.real.partial')} t={t} /> }} ctx={ctx} />;
 }
 export function useBriefingSummary({ condition }: { featureId: unknown; condition: QueryCondition }): string {
   const t = useBriefingMoneyT();
@@ -127,17 +152,29 @@ function SourceRow({ host, target, children, trailing }: { host: WidgetDetailPro
 
 /** Entries of other days that belong in the schedule card: not shifts, pickups or reservations (they have their own cards). */
 const PLANNED_SOURCES = new Set(['delivery', 'deadline', 'direct']);
-function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailProps['host']; t: T }) {
+function bookingPeople(snapshot: ReturnType<ReturnType<typeof useWidgetDataStore>['getSnapshot']>, date: string, format: T['format']) {
+  const unknown = unknownPartyRows(selectReservations(snapshot, { date }).rows, snapshot.tables.realBooking?.meta);
+  return (count: number, total: number, time?: string) => bookingPartyText(format, count, total, time ? unknown.filter(row => row.time === time).length : unknown.length);
+}
+function unavailableSources(t: T, model: BriefingModel) {
+  return model.real?.notes.map(note => sourceLabel(copyOf(t), note.key)) ?? [];
+}
+function Arrival({ model, host, t, snapshot }: { model: BriefingModel; host: WidgetDetailProps['host']; t: T; snapshot: ReturnType<ReturnType<typeof useWidgetDataStore>['getSnapshot']> }) {
   const alertText = useAlertText(t);
+  const values = useBriefingValues(t, snapshot);
   const tax = useWidgetView('tax');
   const { schedules, reservations, importantAlerts } = model;
   const { workingCount } = model.staff.today;
-  const weekEnd = addIsoDays(TODAY, 7);
-  const ahead = schedules.monthEntries.filter(entry => entry.date > TODAY && PLANNED_SOURCES.has(entry.source)).sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? ''));
-  const planned = ahead.filter(entry => entry.date <= weekEnd).slice(0, 3);
+  const today = model.real?.businessDay ?? TODAY;
+  const parties = bookingPeople(snapshot, today, t.format);
+  const alertSources = new Set(importantAlerts.groups.flatMap(group => group.items.flatMap(item => 'itemId' in item.ref && item.ref.itemId ? [item.ref.itemId] : [])));
+  const ahead = schedules.monthEntries.filter(entry => entry.date > today && PLANNED_SOURCES.has(entry.source) && !alertSources.has(entry.sourceId));
   // Over HTTP the schedule never borrows a tax payment the service has no tax source for (the seed would still hold one).
-  const nextTax = tax.status === 'ready' && !sectionWithheld(model, 'tax') ? tax.model.payments.filter(p => p.status === 'unpaid' && p.dueOn > TODAY).sort((a, b) => a.dueOn.localeCompare(b.dueOn))[0] : undefined;
-  const later = ahead.filter(entry => entry.date > weekEnd).slice(0, nextTax ? 2 : 3);
+  const nextTax = tax.status === 'ready' && !sectionWithheld(model, 'tax') ? tax.model.payments.filter(p => p.status === 'unpaid' && p.dueOn > today && !alertSources.has(p.taxPaymentId)).sort((a, b) => a.dueOn.localeCompare(b.dueOn))[0] : undefined;
+  const upcoming = ahead.map(entry => ({ id: entry.sourceId, date: entry.date, title: resolveDataText(t, entry.title), ref: entry.ref }));
+  if (nextTax && !upcoming.some(entry => entry.id === nextTax.taxPaymentId)) upcoming.push({ id: nextTax.taxPaymentId, date: nextTax.dueOn,
+    title: resolveDataText(t, nextTax.type), ref: { featureId: 'tax', itemId: nextTax.taxPaymentId } });
+  upcoming.sort((a, b) => a.date.localeCompare(b.date));
   const copy = copyOf(t), heldSchedule = sectionWithheld(model, 'schedule'), heldReservations = sectionWithheld(model, 'reservations'), heldPickups = sectionWithheld(model, 'pickups');
   return <>
     <section className="mm-card mm-briefing-card">
@@ -151,7 +188,7 @@ function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailP
           </ValueSlot>
         </SourceRow>
         <BriefingRow lang="ko">{t('briefing.staffCount', { n: workingCount })}</BriefingRow>
-        {schedules.todayEntries.map(entry => {
+        {schedules.todayEntries.filter(entry => !alertSources.has(entry.sourceId)).map(entry => {
           const label = `${entry.time ? `${t.format.time(entry.time)} ` : ''}${resolveDataText(t, entry.title)}`;
           // A due date from another service (tax, grant) arrives with only a generic title: it gets its status chip and a link to its source (G-13).
           if (entry.source !== 'deadline' || !entry.ref) return <BriefingRow key={entry.id}>{label}</BriefingRow>;
@@ -161,17 +198,13 @@ function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailP
           </SourceRow>;
         })}
       </ul>
-      {planned.length ? <>
-        <h4 className="mm-card__subtitle">{t('widget.briefing.scheduleUpcoming')}</h4>
-        <ul className="mm-briefing-list" role="list" data-slot="briefing.planned">
-          {planned.map(entry => <BriefingRow key={entry.id}>{t.format.date(entry.date, 'short')} {resolveDataText(t, entry.title)}</BriefingRow>)}
-        </ul>
-      </> : null}
-      {nextTax || later.length ? <>
+      {upcoming.length ? <>
         <h4 className="mm-card__subtitle">{t('widget.briefing.scheduleLater')}</h4>
-        <ul className="mm-briefing-list" role="list" data-slot="briefing.later">
-          {nextTax ? <SourceRow host={host} target={{ featureId: 'tax', itemId: nextTax.taxPaymentId }}>{t('widget.briefing.taxItem', { name: resolveDataText(t, nextTax.type), amount: t.format.money(nextTax.amount, 'compact'), date: t.format.date(nextTax.dueOn, 'short') })}</SourceRow> : null}
-          {later.map(entry => <BriefingRow key={entry.id}>{t.format.date(entry.date, 'short')} {resolveDataText(t, entry.title)}</BriefingRow>)}
+        <ul className="mm-briefing-list" role="list" data-slot="briefing.planned">
+          {upcoming.slice(0, 6).map(entry => {
+            const label = `${t.format.date(entry.date, 'short')} ${entry.title}`;
+            return entry.ref ? <SourceRow key={entry.id} host={host} target={entry.ref}>{label}</SourceRow> : <BriefingRow key={entry.id}>{label}</BriefingRow>;
+          })}
         </ul>
       </> : null}
       </>}
@@ -182,7 +215,7 @@ function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailP
         {heldReservations ? null : <>
         <SourceRow host={host} target={{ featureId: 'voice-booking' }}>
           <ValueSlot slotId="briefing.detail.reservations" featureId={ID} scope="detail" semanticValue={`${reservations.count}/${reservations.partyTotal}`}>
-            {t('widget.briefing.todayReservations', { count: reservations.count, people: reservations.partyTotal })}
+            {`오늘 ${t.format.count(reservations.count, 'count')} · ${parties(reservations.count, reservations.partyTotal)}`}
           </ValueSlot>
         </SourceRow>
         {reservations.completedCount > 0 ? <BriefingRow lang="ko">{t('data.pos.completedVisits', { n: reservations.completedCount })}</BriefingRow> : null}
@@ -197,12 +230,18 @@ function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailP
         {heldReservations ? null : reservations.timeGroups.map(group => (
           <BriefingRow key={group.time}>
             <ValueSlot slotId={`briefing.detail.time.${group.time}`} featureId={ID} scope="detail" semanticValue={`${group.count}/${group.partyTotal}`}>
-              {t('widget.briefing.timeGroup', { time: group.time, count: group.count, people: group.partyTotal })}
+              {`${group.time} ${t.format.count(group.count, 'count')} · ${parties(group.count, group.partyTotal, group.time)}`}
             </ValueSlot>
           </BriefingRow>
         ))}
       </ul>
       <WithheldLines copy={copy} model={model} sections={['reservations', 'pickups']} />
+    </section>
+    <section className="mm-card mm-briefing-card" data-slot="briefing.values">
+      <h3 className="mm-card__title">{t('briefing.values.title')}</h3>
+      <ul className="mm-briefing-list" role="list">
+        {values.map(row => <SourceRow key={row.id} host={host} target={row.target} trailing={row.trailing}>{row.label}{row.id === 'reviews' && <small className="mm-muted"> · 이틀 전까지의 자료예요</small>}</SourceRow>)}
+      </ul>
     </section>
     <section className="mm-card mm-briefing-card">
       <h3 className="mm-card__title">
@@ -226,7 +265,7 @@ function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailP
       ))}
       <WithheldLines copy={copy} model={model} sections={['purchasing', 'stock', 'tax', 'tasks']} />
     </section>
-    {model.real ? <SourcesCard copy={copy} real={model.real} /> : null}
+    <BriefingSources model={model} t={t} />
   </>;
 }
 /**
@@ -242,10 +281,11 @@ function useAcknowledge(host: WidgetDetailProps['host'], store: ReturnType<typeo
     locked.current = true;
     setState({ pending: true, error: null });
     void recordBriefingAcknowledgement(store).then(result => {
-      locked.current = false;
       if (!result || result.ok) host.acknowledgeBriefing();
       if (active.current) setState({ pending: false, error: result && !result.ok ? result.messageKey : null });
-    });
+    }, () => {
+      if (active.current) setState({ pending: false, error: 'briefing.error.notRecorded' });
+    }).finally(() => { locked.current = false; });
   };
   return { ...state, press };
 }
@@ -255,11 +295,11 @@ export function BriefingDetail({ condition, host, detailRef }: WidgetDetailProps
   const t = useBriefingMoneyT();
   const presentation = useAccountingPresentation();
   const store = useWidgetDataStore(), snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  const orderCount = posFacts(snapshot).find(fact => fact.key === 'orders.today.count')?.value ?? 0;
   const view = useWidgetView(ID, condition);
   // N19 deep link: a chat hand-off opens the 퇴근 tab ('closing') or the 출근 tab ('alerts', the default).
   const [tab, setTab] = useState<'arrival' | 'closing'>(detailRef?.view === 'closing' ? 'closing' : 'arrival');
   const [pressed, setPressed] = useState(false);
+  const scroll = useRef<HTMLDivElement>(null);
   // The run's briefing flag wins over this component's own press: the chat can acknowledge while this detail is open (D-327).
   const tracked = host.briefingAcknowledged ?? NOT_TRACKED;
   const acknowledgedInRun = useSyncExternalStore(tracked.subscribe, tracked.getSnapshot, tracked.getSnapshot);
@@ -268,54 +308,45 @@ export function BriefingDetail({ condition, host, detailRef }: WidgetDetailProps
   const serverAck = snapshot.tables.realBriefing?.acknowledgement ?? null;
   const acknowledged = real ? serverAck !== null : pressed || acknowledgedInRun;
   if (view.status !== 'ready') return <div className="mm-detail" data-widget={ID}><DetailViewState view={view} host={host} t={t} /></div>;
-  const model = view.model, sales = splitMoney(t, model.closingSummary.salesSnapshot.net), profit = splitMoney(t, model.closingSummary.netProfit);
-  const accounting = accountingForPeriod(presentation, { start: TODAY, end: TODAY });
-  const tomorrow = model.tomorrowReservations;
-  const copy = copyOf(t), heldClosing = sectionWithheld(model, 'closing'), heldSchedule = sectionWithheld(model, 'schedule'), heldReservations = sectionWithheld(model, 'reservations'), heldPickups = sectionWithheld(model, 'pickups');
+  const model = view.model;
+  const { closingSummary } = model;
+  const businessDay = model.real?.businessDay ?? TODAY;
+  const accounting = tab === 'closing'
+    ? accountingForPeriod(presentation ?? selectAccountingPresentation(snapshot), { start: businessDay, end: businessDay })
+    : undefined;
+  const deposits = accounting?.status === 'ready' && accounting.depositCoverage?.complete !== false ? accounting.summary.deposits.total : null;
+  const closingAmounts = [
+    { id: 'sales', label: t('widget.ledger.todaySales'), amount: closingSummary.salesSnapshot.net },
+    { id: 'deposits', label: t('widget.briefing.actualDeposits'), amount: deposits },
+    { id: 'remaining', label: t('widget.briefing.profit'), amount: closingSummary.netProfit },
+  ];
+  const heldClosing = sectionWithheld(model, 'closing');
+  const missing = unavailableSources(t, model);
   return <div className="mm-detail mm-briefing-detail" data-widget={ID}>
-    <DetailTabs value={tab} onValueChange={setTab} label={t('widget.briefing.tabs')} tabs={[{ value: 'arrival', label: t('widget.briefing.tabArrival') }, { value: 'closing', label: t('widget.briefing.tabClosing') }]} />
-    <NoteLine notes={view.notes} t={t} />
-    <div className="mm-briefing-body" tabIndex={0} role="region" aria-label={t(tab === 'arrival' ? 'widget.briefing.tabArrival' : 'widget.briefing.tabClosing')}>
-      <Arrival model={model} host={host} t={t} />
-      {tab === 'closing' ? <section className="mm-card mm-briefing-card" data-slot="briefing.closing">
+    <DetailTabs value={tab} onValueChange={next => { setTab(next); if (scroll.current) scroll.current.scrollTop = 0; }} label={t('widget.briefing.tabs')} tabs={[{ value: 'arrival', label: t('widget.briefing.tabArrival') }, { value: 'closing', label: t('widget.briefing.tabClosing') }]} />
+    <NoteLine notes={view.notes?.filter(note => note.messageKey !== 'data.real.partial')} t={t} />
+    {tab === 'arrival' && missing.length > 0 && <p className="mm-muted" role="status">{missing.join(' · ')} 자료를 모두 불러오지 못했어요</p>}
+    <div ref={scroll} className="mm-briefing-body" tabIndex={0} role="region" aria-label={t(tab === 'arrival' ? 'widget.briefing.tabArrival' : 'widget.briefing.tabClosing')}>
+      {tab === 'arrival' ? <>
+        <Arrival model={model} host={host} t={t} snapshot={snapshot} />
+        <ActionButton disabled={acknowledged || ack.pending} onClick={() => { if (real) ack.press(); else { setPressed(true); host.acknowledgeBriefing(); } }}>{t('widget.briefing.done')}</ActionButton>
+        {acknowledged ? <p role="status">{t('widget.briefing.acknowledged')}</p> : null}
+        {serverAck ? <p className="briefing-ack-status">{t('briefing.ack.at', { time: t.format.time(kstLocal(serverAck.acknowledgedAt).slice(11, 16)) })}</p> : null}
+        {ack.pending ? <p role="status">{t('briefing.ack.pending')}</p> : null}
+        {ack.error ? <p role="alert">{t(ack.error)}</p> : null}
+      </> : <section className="mm-card mm-briefing-card" data-slot="briefing.closing">
         <h3 className="mm-card__title">{t('widget.briefing.closingTitle')}</h3>
-        {accounting && !heldClosing && <SalesDepositSplitCard view={accounting} onRetry={presentation?.onRetry} />}
-        {heldClosing ? <WithheldLines copy={copy} model={model} sections={['closing']} /> : <div className="mm-kpis">
-          {!accounting && <Kpi slot="briefing.kpi.sales" label={t('widget.ledger.todaySales')} value={sales.value} unit={sales.unit} semanticValue={model.closingSummary.salesSnapshot.net} />}
-          <Kpi slot="briefing.kpi.remaining" label={t('widget.briefing.profit')} value={profit.value} unit={profit.unit} semanticValue={model.closingSummary.netProfit} />
-        </div>}
-        <ul className="mm-briefing-list" role="list">
-          {heldClosing ? null : <>
-          <BriefingRow>
-            <ValueSlot slotId="briefing.detail.closing.status" featureId={ID} scope="detail" semanticValue={model.closingSummary.status}>{t(model.closingSummary.status === 'closed' ? 'widget.briefing.closed' : 'widget.briefing.notClosed')}</ValueSlot>
-          </BriefingRow>
-          <BriefingRow>
-            <ValueSlot slotId="briefing.detail.closing.payments" featureId={ID} scope="detail" semanticValue={model.closingSummary.salesSnapshot.paymentCount}>{t('widget.briefing.paymentCount', { n: model.closingSummary.salesSnapshot.paymentCount })}</ValueSlot>
-          </BriefingRow>
-          <BriefingRow lang="ko">
-            <ValueSlot slotId="briefing.detail.closing.orders" featureId={ID} scope="detail" semanticValue={orderCount}>{t('widget.briefing.orderCount', { n: orderCount })}</ValueSlot>
-          </BriefingRow>
-          {model.closingSummary.drawer ? <BriefingRow lang="ko"><ValueSlot slotId="briefing.detail.closing.cash" featureId={ID} scope="detail" semanticValue={model.closingSummary.drawer.difference === null ? `${model.closingSummary.status}:unchecked` : model.closingSummary.drawer.difference}>{t(model.closingSummary.drawer.difference === null ? model.closingSummary.status === 'closed' ? 'pos.cashUnchecked' : 'pos.cashBefore' : model.closingSummary.drawer.difference === 0 ? 'pos.cashMatch' : model.closingSummary.drawer.difference < 0 ? 'pos.cashShort' : 'pos.cashOver', { amount: t.format.money(Math.abs(model.closingSummary.drawer.difference ?? 0), 'full') })}</ValueSlot></BriefingRow> : null}
-          {model.closingSummary.status === 'closed' && !accounting ? (['card', 'easy_pay', 'cash'] as const).map(method => (
-            <BriefingRow key={method}>
-              <span>{t(`widget.ledger.method.${method === 'easy_pay' ? 'easyPay' : method}`)} <ValueSlot slotId={`briefing.detail.closing.method.${method}`} featureId={ID} scope="detail" semanticValue={model.closingSummary.salesSnapshot.byMethod[method]}>{t.format.money(model.closingSummary.salesSnapshot.byMethod[method], 'compact')}</ValueSlot></span>
-            </BriefingRow>
-          )) : null}</>}
-          {heldSchedule ? null : <>
-          <SourceRow host={host} target={{ featureId: 'calendar' }}>{t('widget.briefing.tomorrowSchedule')}</SourceRow>
-          {model.schedules.entries.filter(entry => entry.date === addIsoDays(TODAY, 1)).map(entry => <BriefingRow key={entry.id}>{resolveDataText(t, entry.title)}</BriefingRow>)}</>}
-          {heldReservations ? null : <SourceRow host={host} target={{ featureId: 'voice-booking', date: addIsoDays(TODAY, 1) }}>
-            <ValueSlot slotId="briefing.detail.tomorrow.reservations" featureId={ID} scope="detail" semanticValue={`${tomorrow.count}/${tomorrow.partyTotal}`}>{t('widget.briefing.tomorrowReservations', { count: tomorrow.count, people: tomorrow.partyTotal })}</ValueSlot>
-          </SourceRow>}
-          {heldPickups ? null : <BriefingRow lang="ko">{t('briefing.pickupTomorrow', { n: model.custom.summary.tomorrowPickup })}</BriefingRow>}
-        </ul>
-        <ActionButton id="briefing.closing" data-focus-key="briefing.closing" variant="secondary" onClick={() => host.openClosing('briefing.closing')}>{t('widget.briefing.closingAction')}</ActionButton>
-      </section> : null}
-      <ActionButton disabled={acknowledged || ack.pending} onClick={() => { if (real) ack.press(); else { setPressed(true); host.acknowledgeBriefing(); } }}>{t('widget.briefing.done')}</ActionButton>
-      {acknowledged ? <p role="status">{t('widget.briefing.acknowledged')}</p> : null}
-      {serverAck ? <p className="briefing-ack-status">{t('briefing.ack.at', { time: t.format.time(kstLocal(serverAck.acknowledgedAt).slice(11, 16)) })}</p> : null}
-      {ack.pending ? <p role="status">{t('briefing.ack.pending')}</p> : null}
-      {ack.error ? <p role="alert">{t(ack.error)}</p> : null}
+        {heldClosing ? <WithheldLines copy={copyOf(t)} model={model} sections={['closing']} /> : <>
+          <div className="mm-kpis">{closingAmounts.map(item => {
+            const formatted = item.amount === null ? { value: t('briefing.state.unavailable'), unit: '' } : splitMoney(t, item.amount);
+            return <Kpi key={item.id} slot={`briefing.kpi.${item.id}`} label={item.label} value={formatted.value} unit={formatted.unit} semanticValue={item.amount} />;
+          })}</div>
+          <ul className="mm-briefing-list" role="list"><BriefingRow>
+            <ValueSlot slotId="briefing.detail.closing.status" featureId={ID} scope="detail" semanticValue={closingSummary.status}>{t(closingSummary.status === 'closed' ? 'widget.briefing.closed' : 'widget.briefing.notClosed')}</ValueSlot>
+          </BriefingRow></ul>
+        </>}
+        <ActionButton id="briefing.closing" data-focus-key="briefing.closing" onClick={() => host.openClosing('briefing.closing')}>{t('widget.briefing.closingAction')}</ActionButton>
+      </section>}
     </div>
   </div>;
 }

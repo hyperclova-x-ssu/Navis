@@ -8,6 +8,7 @@ import { createWidgetDataStore } from '../../../data/db/store';
 import { selectCustomOrderRead } from '../../../data/pos/projection';
 import { WidgetDataProvider } from '../../../data/react';
 import { createRealPort, type PortFiles } from '../../../data/reality/00';
+import { reply } from '../../../data/reality/00/testing';
 import { customAdapter } from '../../../data/reality/08/adapter';
 import { customService, textField } from '../../../data/reality/08/testing';
 import { renderWithKit } from '../../../ui/test-utils';
@@ -53,6 +54,24 @@ async function open(svc: Awaited<ReturnType<typeof approvedOrder>>) {
 }
 
 describe('custom orders in the browser on an HTTP build', () => {
+  it('shows loading until the first read settles and retries a failed read from the detail', async () => {
+    const svc = customService();
+    const { store } = session(svc.backend);
+    let release = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    svc.backend.on('GET', '/pos/custom-orders', async () => { await gate; return reply(503, {}); });
+    const base: CustomOrderPort = { read: () => selectCustomOrderRead(store.getSnapshot()), subscribe: store.subscribe,
+      dispatch: vi.fn(() => ({ ok: false })), openSettlement: vi.fn(), openReversal: vi.fn() };
+    renderWithKit(<CustomOrderProvider port={base}><CustomOrderDetail {...props} /></CustomOrderProvider>, { store });
+    expect(screen.getByText('주문제작을 불러오는 중이에요')).toBeVisible();
+    expect(screen.queryByText('주문 접수하기')).not.toBeInTheDocument();
+    release();
+    const retry = await screen.findByRole('button', { name: /다시 시도하기/ });
+    svc.backend.on('GET', '/pos/custom-orders', () => ({ items: [], nextCursor: null, asOf: '2026-11-21T08:00:00Z', sourceRevision: 1 }));
+    fireEvent.click(retry);
+    expect(await screen.findByText('아직 등록한 주문제작이 없어요')).toBeVisible();
+    expect(svc.backend.callsTo('GET', '/pos/custom-orders')).toHaveLength(2);
+  });
   it('records a cash deposit through the service, never through the simulated terminal, and the new session shows it paid', async () => {
     const svc = await approvedOrder();
     const { base } = await open(svc);

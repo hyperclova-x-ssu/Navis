@@ -2,10 +2,12 @@ import { useBundle } from '../../../i18n';
 
 const rows = {
   'promo.real.photoFile': ['사진 파일', 'Photo file', '照片文件', '照片檔案'],
+  'promo.real.choosePhoto': ['사진 고르기', 'Choose photo', '选择照片', '選擇照片'],
   'promo.real.photoMenu': ['사진에 나온 메뉴', 'Menu item in the photo', '照片中的菜单项', '照片中的菜單項目'],
   'promo.real.pickMenu': ['메뉴를 골라 주세요', 'Choose a menu item', '请选择菜单项', '請選擇菜單項目'],
   'promo.real.rights': ['이 사진을 홍보에 쓸 권리가 있어요', 'I have the right to use this photo for promotion', '我有权使用这张照片作推广', '我有權使用這張照片作推廣'],
   'promo.real.upload': ['사진 올리기', 'Upload photo', '上传照片', '上傳照片'],
+  'promo.real.closeUpload': ['사진 올리기 닫기', 'Close photo upload', '关闭照片上传', '關閉照片上傳'],
   'promo.real.photoSaved': ['영상에 쓸 사진을 올렸어요', 'Photo added for videos', '已上传影片用照片', '已上傳影片用照片'],
   'promo.real.saveDraft': ['초안 저장하기', 'Save draft', '保存草稿', '儲存草稿'],
   'promo.real.draftSaved': ['초안을 저장했어요', 'Draft saved', '已保存草稿', '已儲存草稿'],

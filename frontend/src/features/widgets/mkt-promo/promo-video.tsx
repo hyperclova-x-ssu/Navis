@@ -7,11 +7,12 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { FitProbe, PROMO_FIT } from './fit';
 import { isLargeCard } from '../mkt-local/fit';
 import type { FeatureId, QueryCondition, WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../../contracts';
-import type { PromoStage, PromoVideoModel } from '../../../data/widget-data';
+import type { PromoMenuModel, PromoStage, PromoVideoModel } from '../../../data/widget-data';
 import { useDomainState, useRealRetry, useWidgetView } from '../../../data/react';
 import { validateAgentPrefill } from '../../../../shared/navis-agent-schema.mjs';
 import { ActionButton, Icon, MetricFit, PanelAction, PanelState } from '../../../ui';
 import { usePromoSession } from './promo-hooks';
+import { usePromoMedia } from './promo-media';
 import { STAGES } from './promo-session';
 import { PromoWindow } from './promo-window';
 import { PromoPhotoUpload } from './promo-real-actions';
@@ -44,12 +45,22 @@ function placeName(t: ReturnType<typeof useT>, route: string | null): string {
   return t.t(`promo.place.${route ?? 'clip'}`);
 }
 
+function PanelPhoto({ menu, storeId }: { readonly menu: PromoMenuModel; readonly storeId?: string }) {
+  const t = useT();
+  const name = text(t, menu.name);
+  const { src } = usePromoMedia(menu.photos[0]?.url, storeId);
+  return <figure className="pv-panel__preview">
+    {src ? <img src={src} alt="" loading="lazy" /> : null}
+    <figcaption title={name}>{name}</figcaption>
+  </figure>;
+}
+
 export function PromoVideoPanel({ featureId, condition, shape, width, height, host }: WidgetPanelProps) {
   const t = useT();
   const realText = usePromoRealText();
   const domain = useDomainState('promo');
   const retry = useRealRetry('promo');
-  usePromoSession();
+  const [session] = usePromoSession();
   const view = useWidgetView(FEATURE_ID, condition);
   const fit = useFit();
   const reasonId = useId();
@@ -64,9 +75,10 @@ export function PromoVideoPanel({ featureId, condition, shape, width, height, ho
       <div className="mp-root pv-panel" data-widget={featureId} data-shape={shape} data-state="empty" data-promo-state="few-photos" data-slot="promo-video.empty">
         <PanelState shape={shape} message={t.t(view.messageKey)} shortMessage={view.messageKey === 'data.state.promo-video.few-photos' ? t.t('widget.promo-video.state.few-photos.short') : undefined}>
           <span className="ui-sr-only" lang={t.locale} id={reasonId}>{t.t(view.messageKey)}</span>
-          <div className="ui-panel-action-slot">{domain.mode === 'http' && view.messageKey === 'data.state.promo-video.few-photos'
-            ? <ActionButton variant="secondary" className="ui-panel-action" onClick={open}>{realText.t('promo.real.upload')}</ActionButton>
-            : <ActionButton variant="secondary" className="ui-panel-action" disabled aria-disabled="true" aria-describedby={reasonId}>{t.t('marketing.makeVideo')}</ActionButton>}</div>
+          <div className="ui-panel-action-slot">
+            <ActionButton variant="secondary" className="ui-panel-action" disabled aria-disabled="true" aria-describedby={reasonId}>{t.t('marketing.makeVideo')}</ActionButton>
+            {view.messageKey === 'data.state.promo-video.few-photos' && <ActionButton variant="secondary" className="ui-panel-action" onClick={open}>{realText.t('promo.real.upload')}</ActionButton>}
+          </div>
         </PanelState>
       </div>
     );
@@ -75,15 +87,22 @@ export function PromoVideoPanel({ featureId, condition, shape, width, height, ho
   /** A cafe has dozens of menus: the roomy panel lists the ones with photos first, a few rows, then `외 n개` (SCREENS 3.1 row limit). */
   const catalogMenus = [...model.menus].sort((a, b) => Number(b.hasPhotos) - Number(a.hasPhotos));
   const wide = shape !== 'Q';
-  const roomy = width >= 3 && height >= 2 && t.locale === 'ko';
+  const expanded = height >= 2;
+  const roomy = expanded && width >= 2;
+  const previewMenus = expanded ? catalogMenus.filter(menu => menu.hasPhotos).slice(0, width === 1 ? height - 1 : (height - 1) * 2) : [];
+  const storeId = session.store.getSnapshot().tables.realPromo?.storeId;
   const rowLimit = catalogRows(height);
   /** D-333: the 4-high card also says how many photos each menu that has some holds (the catalog's own photo list). */
   const photoCounts = isLargeCard(shape, height);
   const minStage = fit.large && shape === 'Q' ? 1 : 0;
   const root = (state: string, body: ReactNode, action: ReactNode, extra?: Record<string, string>) => (
-    <div className={`mp-root pv-panel ${wide ? 'pv-panel--wide' : ''}`} data-widget={featureId} data-shape={shape} data-state="ready" data-promo-state={state} data-roomy={roomy ? 'true' : undefined} {...extra}>
+    <div className={`mp-root pv-panel ${wide ? 'pv-panel--wide' : ''}`} data-widget={featureId} data-shape={shape} data-state="ready" data-promo-state={state} data-expanded={expanded || undefined} data-roomy={roomy || undefined} {...extra}>
       <FitProbe order={PROMO_FIT} />
-      <div className="pv-panel__body" lang="ko">{body}</div>
+      <div className="pv-panel__body" lang="ko">{body}
+        {previewMenus.length ? <div className="pv-panel__previews" data-slot="promo-video.photo-preview" lang={t.locale}>
+          {previewMenus.map(menu => <PanelPhoto key={menu.menuId} menu={menu} storeId={storeId} />)}
+        </div> : null}
+      </div>
       {roomy ? <section className="pv-panel__catalog" data-slot="promo-video.catalog" aria-label={t.t('promo.sum.menu')}>
         {state !== 'before' ? <p className="pv-panel__catalog-count">{t.t('widget.promo-video.materials.sr', { n: model.photoCount })}</p> : null}
         <p className="pv-panel__label">{t.t('promo.sum.menu')}</p>
@@ -143,7 +162,7 @@ export function PromoVideoPanel({ featureId, condition, shape, width, height, ho
             <span className="pv-panel__label" aria-hidden="true">{t.t('widget.promo-video.materials.label')}</span>
             <span className="ui-sr-only">{t.t('widget.promo-video.materials.sr', { n: model.materialsCount })}</span>
           </span>
-          {wide && !roomy && model.firstMenu ? <p className="pv-panel__desc mp-desc" data-slot="promo-video.ready">{t.t('widget.promo-video.ready', { n: model.photoCount, menu: text(t, model.firstMenu.name) })}</p> : null}
+          {wide && !expanded && model.firstMenu ? <p className="pv-panel__desc mp-desc" data-slot="promo-video.ready">{t.t('widget.promo-video.ready', { n: model.photoCount, menu: text(t, model.firstMenu.name) })}</p> : null}
         </>
       ), <PanelAction label={t.t('marketing.makeVideo')} widgetName={name} onPress={open} />);
   }
@@ -186,10 +205,11 @@ export function PromoVideoDetail({ condition, detailRef, host }: WidgetDetailPro
   }, [detailRef.focus, wantedTab, state.draft.tab, view.status]);
   if (view.status === 'error') return <div className="mp-detail" data-widget="promo-video" data-state="error"><PanelState tone="error" message={t.locale === 'ko' ? t.t('widget.promo-video.state.error.short') : t.t(view.messageKey)} action={{ label: t.t('common.retry'), widgetName: t.t('widget.promo-video.title'), onPress: domain.mode === 'http' ? retry : () => host.resetPreview() }} /></div>;
   if (view.status === 'empty') {
-    const store = session.store.getSnapshot().tables.realPromo;
+    const { realPromo, marketing } = session.store.getSnapshot().tables;
+    const menus = realPromo?.assets.menus ?? marketing.promoMenu;
     return <div className="mp-detail pv-win" data-widget="promo-video" data-state="empty"><p className="pv-empty" role="status">{t.t(view.messageKey)}</p>
-      {domain.mode === 'http' && store && view.messageKey === 'data.state.promo-video.few-photos' ? <PromoPhotoUpload session={session}
-        menus={store.assets.menus.map(menu => ({ ...menu, name: { raw: menu.names[t.locale] }, hasPhotos: menu.photoIds.length > 0, photos: [] }))} /> : null}
+      {view.messageKey === 'data.state.promo-video.few-photos' ? <PromoPhotoUpload session={session}
+        menus={menus.map(menu => ({ menuId: menu.menuId, names: menu.names, name: { raw: menu.names[t.locale] }, hasPhotos: false, photos: [] }))} /> : null}
     </div>;
   }
   return <PromoWindow model={view.model} host={host} domainNote={domain.mode === 'http' && (domain.status === 'stale' || !domain.complete)

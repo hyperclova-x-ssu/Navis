@@ -126,7 +126,7 @@
 .i7-environment-detail .i7-environment-trend .ui-chart-endpoints { display: none; }
 .i7-environment-trend-axis { display: flex; justify-content: space-between; gap: var(--space-2); margin-inline-end: calc(var(--space-16) + var(--space-2)); font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
 /* DS 12.1 Table: the kit gives the 48 sticky header and right-aligned data-numeric cells; the rows are 56 (64 at 125%). No column stretches to the window. */
-.i7-environment-table { width: auto; margin-top: var(--space-6); }
+.i7-environment-table { width: 100%; margin-top: var(--space-6); }
 .i7-environment-table :is(th, td) { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .i7-environment-table :is(th, td):first-child { min-width: calc(var(--space-16) * 1.75); }
 .i7-environment-table :is(th, td):not(:first-child) { min-width: calc(var(--space-16) * 2); }
@@ -183,9 +183,10 @@
 .i7-environment-manual { display: grid; justify-items: start; gap: var(--space-3); margin-top: var(--space-4); }
 .i7-environment-manual-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .i7-environment-manual-form { display: grid; justify-items: start; gap: var(--space-3); }
+.i7-environment-manual-form[hidden] { display: none; }
 .i7-environment-manual-form fieldset {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
   margin: 0;
   padding: 0;

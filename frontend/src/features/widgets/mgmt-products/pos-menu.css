@@ -37,6 +37,12 @@
 /* New-menu row: name, price and category side by side (they were three full-width fields, 424px tall). */
 .menu-add-fields { display: grid; grid-template-columns: minmax(0, 1fr) 220px 200px; gap: var(--space-4); align-items: start; }
 .menu-add-fields > .ui-field { min-width: 0; }
+[data-feature-id='menu'][data-width='1'] .mc-row { flex-wrap: nowrap; }
+[data-feature-id='menu'][data-width='1'] .mc-row__label {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere; word-break: keep-all;
+}
+[data-feature-id='menu'][data-width='1'] .mc-row__value { white-space: nowrap; }
 
 .menu-editor-recipe-grid > .ui-data-grid { height: auto; }
 .menu-editor-recipe-grid .ui-data-grid__scroll { flex: none; min-height: 0; }
@@ -74,6 +80,9 @@
   mask-image: linear-gradient(to right, black calc(100% - var(--space-4)), transparent);
 }
 .menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll .ui-data-grid__cell { cursor: pointer; }
+.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid .ui-data-grid__table [data-grid-row] {
+  box-shadow: inset 0 calc(-1 * var(--stroke-hairline)) var(--border);
+}
 
 .menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll .ui-data-grid__cell[data-first] .ui-data-grid__value {
   min-width: 0;

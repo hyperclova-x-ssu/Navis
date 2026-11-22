@@ -332,6 +332,8 @@ describe('margin detail', () => {
     detail('margin', { store });
     expect(screen.queryByRole('radio', { name: '이익 큰 순' })).toBeNull();
     const grid = screen.getByRole('grid', { name: '품목 표' });
+    expect(within(grid).getByRole('gridcell', { name: /^아메리카노, 판매량, .*잔$/ })).toBeInTheDocument();
+    expect(within(grid).getByRole('gridcell', { name: /^겉바속촉 버터 소금빵, 판매량, .*개$/ })).toBeInTheDocument();
     expect(within(grid).getByRole('columnheader', { name: /마진율/ })).toHaveAttribute('aria-sort', 'ascending');
     fireEvent.click(within(grid).getByRole('button', { name: /^마진(?!율)/ }));
     const header = within(grid).getByRole('columnheader', { name: /^마진(?!율)/ });
@@ -400,7 +402,7 @@ describe('grants detail', () => {
     const rows = Array.from(document.querySelectorAll('[data-slot="grants.list"] li')).map((r) => r.getAttribute('data-row-id'));
     expect(rows).toEqual(grantIds());
     fireEvent.click(screen.getByRole('button', { name: '공식 공고 보기' }));
-    expect(slot('grants.official')).toHaveTextContent('앱 밖으로 나가지 않는');
+    expect(slot('grants.official')).toHaveTextContent('최종 자격은 기관의 공식 공고에서 확인해요');
     fireEvent.click(screen.getByRole('button', { name: '검토 완료로 표시하기' }));
     expect(host.calls.notify[0]).toMatchObject({ messageKey: 'data.notice.grantReviewed' });
     expect(screen.queryByRole('button', { name: '검토 완료로 표시하기' })).toBeNull();

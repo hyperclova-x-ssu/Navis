@@ -4,6 +4,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import { afterEach, expect, it, vi } from 'vitest';
 import type { CellSpan, WidgetHost } from '../../../contracts';
 import { defineBinding, type DomainAdapter } from '../../../data/reality/00';
+import { createWidgetDataStore } from '../../../data/widget-data';
 import { NAVER_BENEFIT_ADMIN_URL } from '../../../data/reality/19/dto';
 import { groupsService, groupsSession, ids, person } from '../../../data/reality/19/testing';
 import { renderWithKit } from '../../../ui/test-utils';
@@ -21,7 +22,7 @@ afterEach(cleanup);
 
 const seed = {
   customers: {
-    'churn-risk': [person(ids.stale), person(ids.refused, { displayName: '박○○', marketingAllowed: false, selectable: false, blockedReason: 'NO_MARKETING_CONSENT' as const, lastVisitOn: '2026-10-05', daysSinceLast: 47 })],
+    'churn-risk': [person(ids.stale, { memberCode: 'M-0008' }), person(ids.refused, { displayName: '박○○', marketingAllowed: false, selectable: false, blockedReason: 'NO_MARKETING_CONSENT' as const, lastVisitOn: '2026-10-05', daysSinceLast: 47 })],
     'first-visit': [person(ids.first, { groupId: 'first-visit' as const, displayName: '이○○', visitCount: 1, usualCycleDays: null, lastVisitOn: '2026-11-20', daysSinceLast: 1 })],
     regular: [person(ids.regular, { groupId: 'regular' as const, displayName: '최○○', visitCount: 9, recentVisits: 5, usualCycleDays: 3, lastVisitOn: '2026-11-19', daysSinceLast: 2 })],
   },
@@ -40,6 +41,33 @@ function panel(session: ReturnType<typeof groupsSession>, width: number, height:
   return widgetHost;
 }
 const posts = (session: ReturnType<typeof groupsSession>, path: string | RegExp) => session.service.backend.callsTo('POST', path);
+
+it('keeps the group panel, NAVER link, coverage row and cohort tabs in both modes', async () => {
+  async function structure(store: ReturnType<typeof createWidgetDataStore>) {
+    const Detail = module.Detail!, Panel = module.Panel;
+    const widgetHost = host();
+    const { container } = renderWithKit(<>
+      <Panel featureId="customer-groups" condition={{ kind: 'default' }} width={3} height={3} shape="S" presetId="A" editing={false} host={widgetHost} />
+      <Detail featureId="customer-groups" condition={{ kind: 'default' }} detailRef={{ featureId: 'customer-groups' }} host={widgetHost} />
+    </>, { modules: widgets, store });
+    const tabs = await screen.findAllByRole('tab');
+    const list = screen.getByRole('tablist');
+    const guide = screen.getByRole('link', { name: '네이버에서 관리하기' });
+    expect(list.compareDocumentPosition(guide) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const panelActions = Array.from(container.querySelectorAll('.mkt-panel button'), el => el.textContent?.trim().replace(/\d+/gu, ''));
+    const views = tabs.map(tab => {
+      fireEvent.click(tab);
+      return { tab: tab.textContent?.trim().replace(/\d+$/u, ''), link: screen.queryByRole('link', { name: '네이버에서 관리하기' })?.getAttribute('href'),
+        coverage: !!container.querySelector('[data-slot="customer-groups.coverage"]'), basis: screen.getByText('매장 결제 기준이에요').textContent, panels: screen.getAllByRole('tabpanel').length };
+    });
+    cleanup();
+    return { panelActions, views };
+  }
+  const real = await structure(groupsSession(groupsService(seed)).store);
+  expect(real.views).toHaveLength(3);
+  expect(real.views[0]).toMatchObject({ link: NAVER_BENEFIT_ADMIN_URL, coverage: true });
+  expect(await structure(createWidgetDataStore())).toEqual(real);
+});
 
 /** A stand-in for B14's issuance binding: the same command name and arguments, an authoritative receipt. */
 function reachOutBinding(): DomainAdapter {
@@ -60,10 +88,10 @@ it('shows the service groups with counts, masked names, consent and a manage-in-
   const link = screen.getByRole('link', { name: '네이버에서 관리하기' });
   expect(link).toHaveAttribute('href', NAVER_BENEFIT_ADMIN_URL);
   expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
-  expect(screen.getByText(/혜택 알림받기 대상은 네이버에서 관리해요/u)).toBeInTheDocument();
-  expect(screen.getByText(/회원 4명 · 방문 기록이 있는 손님 4명/u)).toBeInTheDocument();
+  expect(screen.getByText('네이버 혜택 알림받기 손님은 네이버에서 관리해요')).toBeInTheDocument();
+  expect(screen.getByText('회원 4명 · 그룹 밖 0명')).toBeInTheDocument();
   const list = document.querySelector('.ui-recipient-list') as HTMLElement;
-  expect(within(list).getByText('김○○')).toBeInTheDocument();
+  expect(within(list).getByText('김○○ · M-0008')).toBeInTheDocument();
   expect(within(list).getByText('박○○')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('tab', { name: '단골 1' }));
   expect(await screen.findByText('최○○')).toBeInTheDocument();
@@ -81,7 +109,7 @@ it('preselects only consenting customers, disables the others with the reason an
   const boxes = screen.getAllByRole('checkbox');
   expect(boxes.filter(box => (box as HTMLInputElement).getAttribute('aria-checked') === 'true')).toHaveLength(1);
   expect(boxes.filter(box => box.hasAttribute('disabled') || box.getAttribute('aria-disabled') === 'true')).toHaveLength(1);
-  expect(screen.getByText(/광고 문자 동의가 없어서 보낼 수 없어요|문자를 보낼 수 없어요/u)).toBeInTheDocument();
+  expect(screen.getByText('동의 안 함')).toBeInTheDocument();
   expect(posts(session, /reach-out-check/u)).toHaveLength(0);
   fireEvent.click(send);
   await waitFor(() => expect(posts(session, /reach-out-check/u)).toHaveLength(1));

@@ -10,7 +10,7 @@ import { LedgerDetail } from './ledger';
 import { MarginDetail } from './margin';
 import { TaxDetail } from './tax';
 import { GrantsDetail } from './grants';
-import { ledgerOf, man, paymentsOf } from './test-values';
+import { ledgerOf, paymentsOf } from './test-values';
 
 let style: HTMLStyleElement;
 beforeEach(() => {
@@ -105,11 +105,10 @@ it.each([{ textScale: 100 }, { textScale: 125 }] as const)('keeps the four ledge
   expect(grid.alignItems).toBe('stretch');
 
   const sales = cards[0]!;
-  const closing = screen.getByRole('button', { name: '마감 정산 열기' });
+  const closing = screen.getByRole('button', { name: /마감 정산 열기/ });
   const model = ledgerOf();
   const comparison = screen.getByText(new RegExp(`지난주 같은 요일 대비.*${Math.abs(model.comparison!.delta.value)}%`));
-  expect(sales.children[0]).toHaveTextContent(new RegExp(`${man(model.sales.net).replace('.', '\\.')}\\s*만 원`));
-  expect(sales.children[1]).toHaveTextContent('오늘 매출');
+  expect(sales.children[0]).toHaveTextContent(`${model.sales.net.toLocaleString('ko-KR')}원`);
   expect(sales.children[2]).toBe(closing);
   expect(sales.children[3]).toBe(comparison);
   expect(closing).toHaveTextContent('아직 마감 정산 전이에요');

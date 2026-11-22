@@ -82,7 +82,7 @@ async function fill(photos = 5, length: 10 | 15 | 30 | null = 15) {
   press(win().getByRole('checkbox', { name: '매장 소개' }));
   tab(2);
   await flush();
-  press(win().getByRole('radio', { name: /단톡방 대화 \+ 남은 수량 카운트다운/ }));
+  press(win().getByRole('radio', { name: /단톡방 대화/ }));
   tab(3);
   if (length) press(win().getByRole('radio', { name: `${length}초` }));
 }
@@ -126,6 +126,12 @@ describe('widget states (SCR-50, AC-323·344)', () => {
 });
 
 describe('D-231 panel layouts', () => {
+  it.each([[1, 2], [1, 3], [1, 4], [2, 2], [4, 4]] as const)('shows menu photo previews in a %d×%d panel', (width, height) => {
+    panel(newStore(), width, height);
+    const preview = document.querySelector('[data-slot="promo-video.photo-preview"]');
+    expect(preview).toHaveTextContent(PM);
+    expect(document.querySelector('[data-slot="promo-video.ready"]')).toBeNull();
+  });
   it('shows the posted label at 1×1', () => {
     const store = newStore();
     dispatchOk(store, { type: 'video.markPosted', videoId: makeDone(store, 'mk', 5, { menuIds: [PHOTO_MENU] }), route: 'clip', idempotencyKey: 'posted-test' });
@@ -159,7 +165,7 @@ describe('one photo number (AC-324)', () => {
       expect(store.getSnapshot().tables.marketing.promoPhoto).toHaveLength(n);
       if (n >= 5) {
         expect(screen.getByText(`${PM} 준비됨`)).toBeInTheDocument();
-        expect(screen.getByText(`영상에 쓸 매장 사진 ${n}장이 있어요`, { exact: false })).toBeInTheDocument();
+        expect(screen.getByText(new RegExp(`영상에 쓸 (?:매장 )?사진 ${n}장이 있어요`))).toBeInTheDocument();
       } else {
         // DATA-FIX item 12 (877f99a): the state follows the photos available (saved drafts no longer bypass the 5-photo threshold),
         // so a synced 4-photo catalog shows the few-photos state with a disabled [영상 만들기]; 오늘 할 홍보 omits its video cell.
@@ -167,7 +173,7 @@ describe('one photo number (AC-324)', () => {
         expect(document.querySelector('[data-widget="promo-video"]')).toHaveAttribute('data-promo-state', 'few-photos');
         expect(screen.getByText('사진이 5장 이상 모이면 영상을 만들 수 있어요', { selector: '.ui-panel-state__message' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '영상 만들기' })).toBeDisabled();
-        expect(document.body.textContent).not.toMatch(/영상에 쓸 매장 사진 \d+장/);
+        expect(document.body.textContent).not.toMatch(/영상에 쓸 (?:매장 )?사진 \d+장/);
       }
       cleanup();
     }
@@ -178,7 +184,7 @@ describe('one photo number (AC-324)', () => {
     expect(win().getByText(`사진 고르기 · ${PM} 7장`)).toBeInTheDocument();
     expect(win().getAllByRole('checkbox', { name: tilesOf(PM) })).toHaveLength(7);
     // T-52 (D-381/D-382, W26-F1): step ① says how many store photos the video can use, whatever menu is picked.
-    expect(win().getByText('영상에 쓸 매장 사진 7장')).toBeInTheDocument();
+    expect(win().getByText('영상에 쓸 사진 7장')).toBeInTheDocument();
   });
 });
 
@@ -283,32 +289,34 @@ describe('choices (AC-326~332)', () => {
     expect(win().getByText('100자까지 쓸 수 있어요')).toBeInTheDocument();
     expect(win().getByText('100/100')).toBeInTheDocument();
   });
-  it('the gallery: six cards in 4 staggered columns, all previews play at once, pressing a card chooses it (D-85)', async () => {
+  it('the gallery: eighteen cards in 4 staggered columns include the original demo and additional designs', async () => {
     both(newStore());
     tab(2);
     await flush();
     const radios = win().getAllByRole('radio');
-    expect(radios).toHaveLength(6);
+    expect(radios).toHaveLength(18);
+    expect(win().getByRole('radio', { name: '단톡방 대화 + 남은 수량 카운트다운' }).closest('[data-ref]')).toHaveAttribute('data-ref', 'ref-1');
+    expect(win().getByRole('radio', { name: '무디 나이트 / 소프트포커스' }).closest('[data-ref]')).toHaveAttribute('data-ref', 'ref-18');
     expect(document.querySelectorAll('.pv-gallery__col')).toHaveLength(4);
     // no separate [고르기] button
     expect(win().queryByText('고르기')).toBeNull();
     // every visible card plays silently on a loop, several at once
     const videos = [...document.querySelectorAll<HTMLVideoElement>('.pv-ref__video')];
-    expect(videos).toHaveLength(6);
+    expect(videos).toHaveLength(18);
     for (const video of videos) { expect(video.muted).toBe(true); expect(video.loop).toBe(true); expect(video.autoplay).toBe(true); expect(video.playsInline).toBe(true); }
     expect(win().queryAllByRole('radio', { checked: true })).toHaveLength(0);
-    press(win().getByRole('radio', { name: '디자인 2번' }));
-    expect(win().getByRole('radio', { name: '디자인 2번, 골랐어요', checked: true }).closest('[data-ref]')).toHaveAttribute('data-ref', 'ref-2');
+    press(win().getByRole('radio', { name: '줌 렌즈 투어' }));
+    expect(win().getByRole('radio', { name: '줌 렌즈 투어, 골랐어요', checked: true }).closest('[data-ref]')).toHaveAttribute('data-ref', 'ref-8');
     // pressing another card moves the choice (one at a time); previews keep playing
-    press(win().getByRole('radio', { name: '진열대 천천히 훑기' }));
-    expect(win().getAllByRole('radio', { checked: true }).map((r) => r.getAttribute('aria-label'))).toEqual(['진열대 천천히 훑기, 골랐어요']);
-    expect(document.querySelectorAll('.pv-ref__video')).toHaveLength(6);
+    press(win().getByRole('radio', { name: '스티커 팝' }));
+    expect(win().getAllByRole('radio', { checked: true }).map((r) => r.getAttribute('aria-label'))).toEqual(['스티커 팝, 골랐어요']);
+    expect(document.querySelectorAll('.pv-ref__video')).toHaveLength(18);
     // a video that fails keeps the poster and the card still chooses
-    act(() => { fireEvent.error(document.querySelector('[data-ref="ref-2"] .pv-ref__video') as HTMLVideoElement); });
-    expect(document.querySelector('[data-ref="ref-2"] .pv-ref__video')).toBeNull();
-    expect(document.querySelector('[data-ref="ref-2"] .pv-ref__img')).not.toBeNull();
-    press(win().getByRole('radio', { name: '디자인 2번' }));
-    expect(win().getAllByRole('radio', { checked: true }).map((r) => r.getAttribute('aria-label'))).toEqual(['디자인 2번, 골랐어요']);
+    act(() => { fireEvent.error(document.querySelector('[data-ref="ref-8"] .pv-ref__video') as HTMLVideoElement); });
+    expect(document.querySelector('[data-ref="ref-8"] .pv-ref__video')).toBeNull();
+    expect(document.querySelector('[data-ref="ref-8"] .pv-ref__img')).not.toBeNull();
+    press(win().getByRole('radio', { name: '줌 렌즈 투어' }));
+    expect(win().getAllByRole('radio', { checked: true }).map((r) => r.getAttribute('aria-label'))).toEqual(['줌 렌즈 투어, 골랐어요']);
     // the masonry rule: next card into the lowest column
     expect(masonryColumns([520, 312, 390, 520, 390, 312], (h) => h).map((c) => c.length)).toEqual([1, 2, 2, 1]);
   });
@@ -316,20 +324,22 @@ describe('choices (AC-326~332)', () => {
     both(newStore());
     tab(2);
     await flush();
-    for (const tag of ['img', 'video']) {
-      const urls = [...document.querySelectorAll(`.pv-ref__media ${tag}`)].map((media) => media.getAttribute('src'));
-      expect(new Set(urls).size).toBe(6);
-      for (const url of urls) {
-        expect(url).toBeTruthy();
-        expect(url).not.toContain('/api/promo/references/');
-      }
+    const allUrls = (tag: string) => [...document.querySelectorAll(`.pv-ref__media ${tag}`)].map(item => item.getAttribute('src'));
+    const posters = allUrls('img');
+    const playing = allUrls('video').filter(Boolean);
+    expect(new Set(posters).size).toBe(18);
+    expect(playing.length).toBeGreaterThan(0);
+    expect(new Set(playing).size).toBe(playing.length);
+    for (const url of [...posters, ...playing]) {
+      expect(url).toBeTruthy();
+      expect(url).not.toContain('/api/promo/references/');
     }
   });
   it.each([
-    ['ko', '디자인', '디자인 2번'],
-    ['en', 'Design', 'Design 2'],
-    ['zh-Hans', '设计', '设计 2'],
-    ['zh-Hant', '設計', '設計 2'],
+    ['ko', '디자인', '줌 렌즈 투어'],
+    ['en', 'Design', 'Zoom lens tour'],
+    ['zh-Hans', '设计', '变焦镜头漫游'],
+    ['zh-Hant', '設計', '變焦鏡頭漫遊'],
   ] as const)('uses approved gallery wording in %s', async (locale, label, secondDesign) => {
     both(newStore(), { locale });
     tab(2);
@@ -374,6 +384,28 @@ describe('window matches SCREENS SCR-51~55 (PROMO-UI, D-326 Q12)', () => {
     style.textContent = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'promo.css'), 'utf8');
     document.body.prepend(style);
   };
+  it('places a collapsed upload button on the photo grid toolbar', async () => {
+    both(newStore());
+    await flush();
+    const toolbar = document.querySelector<HTMLElement>('.pv-photos-head')!;
+    const button = within(toolbar).getByRole('button', { name: '사진 올리기' });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(document.querySelector('input[type="file"]')).toBeNull();
+    press(button);
+    expect(win().getByRole('button', { name: '사진 고르기' })).toBeVisible();
+    fireEvent.keyDown(win().getByRole('button', { name: '사진 고르기' }), { key: 'Escape' });
+    expect(button).toHaveFocus();
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+  it('right-aligns the step actions and makes the previous action quiet', async () => {
+    both(newStore());
+    css();
+    await flush();
+    tab(1);
+    const buttons = document.querySelector<HTMLElement>('.pv-footer__buttons')!;
+    expect(getComputedStyle(buttons).justifyContent).toBe('flex-end');
+    expect(win().getByRole('button', { name: '이전' })).toHaveClass('ui-button--ghost');
+  });
   it('the menu chip reads "{menu} · 사진 {n}장" in one text flow (no flex gap before the dot: one space, not two)', async () => {
     both(newStore());
     await flush();
@@ -412,7 +444,7 @@ describe('window matches SCREENS SCR-51~55 (PROMO-UI, D-326 Q12)', () => {
     expect(place.bottom).toBe('var(--space-2)');
     expect(place.left).toBe('var(--space-2)');
     expect(place.top).toBe('');
-    expect(win().getByRole('radio', { name: /단톡방 대화 \+ 남은 수량 카운트다운, 어울려요$/ })).toBeInTheDocument();
+    expect(win().getByRole('radio', { name: /남은 수량 카운트다운, 어울려요$/ })).toBeInTheDocument();
   });
 });
 
@@ -439,7 +471,9 @@ describe('easy pressing (D-87)', () => {
     if (win().queryAllByRole('checkbox', { name: tilesOf(PM) }).length === 0) press(win().getByRole('checkbox', { name: chip(PM) }));
     for (const c of win().queryAllByRole('checkbox', { name: new RegExp(`${PM} 사진.*, 선택됨`) })) press(c);
     down(tileEl(1)); over(tileEl(2)); over(tileEl(3)); up(tileEl(3));
-    expect(document.querySelector('[data-slot="promo-video.photo-count"]')).toHaveTextContent('3장 골랐어요');
+    const counter = document.querySelector('[data-slot="promo-video.photo-count"]');
+    expect(counter).toHaveTextContent('3장 골랐어요');
+    expect(counter?.querySelector('.pv-count__value')).toHaveTextContent('3');
     expect(tileEl(2)).toBeChecked();
     // sweep starting on a chosen tile (2) clears 2 and 3, and leaves 1 as is
     down(tileEl(2)); over(tileEl(3)); up(tileEl(3));
@@ -573,7 +607,10 @@ describe('making, finishing, saving and posting (AC-335·336·337·345~347)', ()
     expect(win().getByRole('heading', { name: '영상을 만들고 있어요' })).toBeInTheDocument();
     const current = () => document.querySelector('.pv-stage[data-state="current"]')?.getAttribute('data-stage');
     expect(current()).toBe('look');
-    expect(win().getByText('5장 살펴보는 중')).toBeInTheDocument();
+    expect(win().getByText('미리 분석한 사진 정보')).toBeInTheDocument();
+    expect(win().getByText('사진 5장')).toBeInTheDocument();
+    expect(win().getByText('Claude 영상 제작')).toBeInTheDocument();
+    expect(win().getByText('완성')).toBeInTheDocument();
     expect(within(widget()).getByText('15초 · 사진 5장')).toBeInTheDocument();
     // no timetable: time alone never moves the step
     await flush(5000);
@@ -582,7 +619,7 @@ describe('making, finishing, saving and posting (AC-335·336·337·345~347)', ()
     server.advance();
     await flush(1000);
     expect(current()).toBe('story');
-    expect(within(widget()).getByText('이야기 짜기')).toBeInTheDocument();
+    expect(within(widget()).getByText('HyperCLOVA X 기획')).toBeInTheDocument();
     // close the window: the watcher keeps going without it
     view.unmount();
     server.advance();
@@ -830,7 +867,7 @@ describe('step moves [이전]·[다음] (D-84)', () => {
     expect((document.querySelector('.pv-body') as HTMLElement).scrollTop).toBe(0);
     expect(next()).toBeDisabled();
     expect(win().getByText('디자인을 하나 골라 주세요')).toBeInTheDocument();
-    press(win().getByRole('radio', { name: /단톡방 대화 \+ 남은 수량 카운트다운/ }));
+    press(win().getByRole('radio', { name: /단톡방 대화/ }));
     press(next());
     expect(win().queryByRole('button', { name: '다음' })).toBeNull();
     expect(makeButton()).toBeDisabled();
@@ -864,8 +901,8 @@ describe('choices survive closing; reduced motion; keys (AC-343·348·349)', () 
     tab(2);
     await flush();
     expect(document.querySelectorAll('.pv-ref__video')).toHaveLength(0);
-    expect(document.querySelectorAll('.pv-ref__img')).toHaveLength(6);
-    press(win().getByRole('radio', { name: '디자인 2번' }));
+    expect(document.querySelectorAll('.pv-ref__img')).toHaveLength(18);
+    press(win().getByRole('radio', { name: '줌 렌즈 투어' }));
     expect(win().getAllByRole('radio', { checked: true })).toHaveLength(1);
   });
   it('every promo.* and widget.promo-video.* key used in this folder has a Korean value', () => {

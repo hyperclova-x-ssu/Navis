@@ -12,6 +12,15 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 /** The first seed manual of a category (the cafe seed has one opening, one closing, three new-staff manuals). */
 const firstOf = (store: ReturnType<typeof createWidgetDataStore>, category: string) => model(store).manuals.find((m) => m.category === category)!;
 
+it('shows the legacy store information step when its body is empty', async () => {
+  const { collections, newStore } = insightSession();
+  collections.set('manuals', [{ ...manual, section: 'store-info', category: 'store-info', checklist: false, body: '', steps: [{ body: '영업시간 08:00~20:00 (가상 주소)' }] }]);
+  renderDetail('manuals', makeHost().host, { store: newStore() });
+  await userEvent.click(await screen.findByRole('tab', { name: '매장 정보 1개' }));
+  expect(await screen.findByText('영업시간 08:00~20:00')).toBeVisible();
+  expect(screen.queryByRole('list', { name: '오늘 체크리스트' })).toBeNull();
+});
+
 it('publishes an Insight draft only after confirmation and re-reads a checked step in a fresh session', async () => {
   const { backend, collections, newStore, setBusinessDay } = insightSession();
   backend.on('POST', `${insight}/manual-drafts`, () => {
@@ -29,7 +38,7 @@ it('publishes an Insight draft only after confirmation and re-reads a checked st
   });
   const user = userEvent.setup();
   const view = renderDetail('manuals', makeHost().host, { store: newStore() });
-  await user.click(await screen.findByRole('button', { name: '메모로 만들기' }));
+  await user.click(await screen.findByRole('button', { name: '메모로 매뉴얼 만들기' }));
   await user.type(screen.getByRole('textbox', { name: '메모' }), '마감 점검');
   await user.click(screen.getByRole('button', { name: '초안 만들기' }));
   expect(backend.callsTo('POST', `${insight}/manual-drafts`)[0]?.body).toEqual({ memo: '마감 점검' });
@@ -56,7 +65,7 @@ describe('manuals panel (AC-262)', () => {
   it('1×1 shows the manual count', () => {
     const store = createWidgetDataStore();
     renderPanel('manuals', 1, 1, makeHost().host, { store });
-    expect(screen.getByText('인수인계')).toBeInTheDocument();
+    expect(screen.getByText('인수인계 문서')).toBeInTheDocument();
     expect(screen.getByText(String(model(store).publishedCount))).toBeInTheDocument();
   });
   it('1×2 lists opening, closing and new staff first', () => {
@@ -106,7 +115,7 @@ describe('manuals detail', () => {
     const store = createWidgetDataStore();
     renderDetail('manuals', makeHost().host, { store });
     const group = model(store).byCategory.find((c) => c.category === 'new-staff')!;
-    await userEvent.click(screen.getByRole('tab', { name: `${koKey(group.categoryKey)} ${group.count}` }));
+    await userEvent.click(screen.getByRole('tab', { name: `${koKey(group.categoryKey)} ${group.count}개` }));
     const list = screen.getByRole('list', { name: '매뉴얼 목록' });
     expect(within(list).getAllByRole('listitem')).toHaveLength(group.count);
   });
@@ -116,7 +125,7 @@ describe('manuals detail', () => {
     renderDetail('manuals', makeHost().host, { store });
     const before = model(store).publishedCount;
     expect(before).toBeGreaterThan(0);
-    await userEvent.click(screen.getByRole('button', { name: '메모로 만들기' }));
+    await userEvent.click(screen.getByRole('button', { name: '메모로 매뉴얼 만들기' }));
     await userEvent.type(screen.getByRole('textbox', { name: '메모' }), '우유는 먼저 받은 것부터 써요');
     await userEvent.click(screen.getByRole('button', { name: '초안 만들기' }));
     expect(screen.getByText('저장하기 전에는 매뉴얼 수에 들어가지 않아요')).toBeInTheDocument();
@@ -129,7 +138,7 @@ describe('manuals detail', () => {
 
   it('asks for a memo before making a draft', async () => {
     renderDetail('manuals', makeHost().host);
-    await userEvent.click(screen.getByRole('button', { name: '메모로 만들기' }));
+    await userEvent.click(screen.getByRole('button', { name: '메모로 매뉴얼 만들기' }));
     await userEvent.click(screen.getByRole('button', { name: '초안 만들기' }));
     expect(screen.getByRole('alert')).toHaveTextContent('메모를 적어 주세요');
   });
@@ -149,8 +158,8 @@ describe('manual document layout', () => {
   it('keeps edit and destructive delete together in a row of 48 px controls (the kit sets the height; the widget adds no override)', async () => {
     renderDetail('manuals', makeHost().host, { textScale: 125 });
     await userEvent.click(screen.getByRole('tab', { name: /매장 정보/ }));
-    const edit = screen.getByRole('button', { name: '문서 고치기' });
-    const remove = screen.getByRole('button', { name: '문서 지우기' });
+    const edit = screen.getByRole('button', { name: '매뉴얼 고치기' });
+    const remove = screen.getByRole('button', { name: '매뉴얼 지우기' });
     expect(remove).toHaveClass('ui-button--destructive');
     expect(remove.parentElement).toBe(edit.parentElement);
     const row = getComputedStyle(edit.parentElement!);
@@ -164,19 +173,12 @@ describe('manual document layout', () => {
   });
 
   it.each([{ textScale: 100, rowHeight: '56px' }, { textScale: 125, rowHeight: '64px' }] as const)(
-    'gives checklist progress rows a $rowHeight minimum at $textScale% text size', async ({ textScale, rowHeight }) => {
+    'shows checklist progress once at $textScale% text size', async ({ textScale, rowHeight }) => {
       renderDetail('manuals', makeHost().host, { textScale });
-      await userEvent.click(screen.getByRole('tab', { name: /매장 정보/ }));
-      const list = screen.getByRole('list', { name: '오늘 체크리스트' });
+      const progress = document.querySelector('.mgmt-manual__head .mgmt-checklist-progress');
+      expect(progress).toBeInTheDocument();
       expect(getComputedStyle(document.documentElement).getPropertyValue('--table-row-min')).toBe(rowHeight);
-      const rows = within(list).getAllByRole('listitem');
-      expect(rows).toHaveLength(2);
-      for (const row of rows) {
-        const style = getComputedStyle(row);
-        expect(style.minHeight).toBe('var(--table-row-min)');
-        expect(style.alignItems).toBe('center');
-        expect(style.paddingBlock).toBe('var(--space-2)');
-      }
+      expect(screen.queryByRole('list', { name: '오늘 체크리스트' })).toBeNull();
     },
   );
 
@@ -221,8 +223,8 @@ const generated = () => Response.json({
 function openNaverManual() {
   const store = createWidgetDataStore();
   renderDetail('manuals', makeHost().host, { store, textScale: 125 });
-  fireEvent.click(screen.getByRole('button', { name: '문서 만들기' }));
-  const form = screen.getByRole('form', { name: '문서 만들기' });
+  fireEvent.click(screen.getByRole('button', { name: '매뉴얼 만들기' }));
+  const form = screen.getByRole('form', { name: '매뉴얼 만들기' });
   fireEvent.click(within(form).getByRole('radio', { name: '인수인계' }));
   fireEvent.click(within(form).getByRole('radio', { name: '오픈 전 조명·장비·재고 점검' }));
   return { store, form };
@@ -233,7 +235,7 @@ it('edits a generated title, ordered steps and cautions, then publishes using th
   const transport = vi.fn(() => new Promise<Response>(resolve => { respond = resolve; }));
   vi.spyOn(globalThis, 'fetch').mockImplementation(transport);
   const { store, form } = openNaverManual();
-  const generate = within(form).getByRole('button', { name: '문서 초안 만들기' });
+  const generate = within(form).getByRole('button', { name: '매뉴얼 초안 만들기' });
   const save = within(form).getByRole('button', { name: '저장하기' });
   fireEvent.click(generate);
   fireEvent.click(generate);
@@ -267,7 +269,7 @@ it('keeps edits on failure and leaves the published count alone when abandoned',
   vi.spyOn(globalThis, 'fetch').mockImplementation(transport);
   const { store, form } = openNaverManual();
   const before = model(store).publishedCount;
-  const generate = within(form).getByRole('button', { name: '문서 초안 만들기' });
+  const generate = within(form).getByRole('button', { name: '매뉴얼 초안 만들기' });
   fireEvent.click(generate);
   const title = within(form).getByRole('textbox', { name: '제목' });
   await waitFor(() => expect(title).toHaveValue('오픈 준비'));
@@ -277,9 +279,9 @@ it('keeps edits on failure and leaves the published count alone when abandoned',
   expect(title).toHaveValue('고친 제목');
   fireEvent.click(within(alert).getByRole('button', { name: '다시 시도하기' }));
   await waitFor(() => expect(title).toHaveValue('오픈 준비'));
-  fireEvent.click(within(form).getByRole('radio', { name: '자료가 없는 예시' }));
-  fireEvent.click(within(form).getByRole('button', { name: '문서 초안 만들기' }));
-  expect(within(form).getByText('초안을 만들 예시 자료가 없어요')).toBeVisible();
+  fireEvent.click(within(form).getByRole('radio', { name: '자료 없음' }));
+  fireEvent.click(within(form).getByRole('button', { name: '매뉴얼 초안 만들기' }));
+  expect(within(form).getByText('초안을 만들 자료가 없어요')).toBeVisible();
   expect(title).toHaveValue('');
   fireEvent.click(within(form).getByRole('button', { name: '닫기' }));
   expect(model(store).publishedCount).toBe(before);
@@ -310,8 +312,8 @@ describe('recheck 12: labels, chip and guards', () => {
 
   const openForm = async (store: ReturnType<typeof createWidgetDataStore>) => {
     renderDetail('manuals', makeHost().host, { store });
-    await userEvent.click(screen.getByRole('button', { name: '문서 만들기' }));
-    return screen.getByRole('form', { name: '문서 만들기' });
+    await userEvent.click(screen.getByRole('button', { name: '매뉴얼 만들기' }));
+    return screen.getByRole('form', { name: '매뉴얼 만들기' });
   };
 
   it('the create form needs only a title: no step is sent when none is written (SCR-222: 제목·분류 필수)', async () => {
@@ -336,7 +338,7 @@ describe('recheck 12: labels, chip and guards', () => {
     expect(within(form).getByText('같은 제목의 매뉴얼이 있어요. 그래도 새로 만들까요?')).toBeVisible();
     expect(model(store).publishedCount).toBe(before);
     await userEvent.click(within(form).getByRole('button', { name: '그대로 두기' }));
-    expect(screen.queryByRole('form', { name: '문서 만들기' })).toBeNull();
+    expect(screen.queryByRole('form', { name: '매뉴얼 만들기' })).toBeNull();
     expect(model(store).publishedCount).toBe(before);
   });
 
@@ -357,7 +359,7 @@ describe('recheck 12: labels, chip and guards', () => {
     await userEvent.click(within(form).getByRole('button', { name: '그래도 저장하기' }));
     expect(model(store).publishedCount).toBe(before + 1);
     expect(model(store).manuals.filter((m) => koText(m.title) === existing)).toHaveLength(2);
-    expect(screen.queryByRole('form', { name: '문서 만들기' })).toBeNull();
+    expect(screen.queryByRole('form', { name: '매뉴얼 만들기' })).toBeNull();
   });
 
   it('NOT_CHECKLIST: a refused check says so under that step and does not look saved', async () => {

@@ -1,6 +1,6 @@
 /**
  * LARGE-CARDS-2 (D-333): the 4x4 동네 변화 알림, 상권분석 and 로컬 트렌드 cards show more of the real data they hold
- * (distance, source and update time, every hour, every keyword with its mentions) and never write a line the data does not have.
+ * (distance, source and update time, every hour, and ranked search terms).
  */
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
@@ -12,6 +12,7 @@ import { createWidgetDataStore } from '../../../data/db/store';
 import { readModel } from '../../../data/widget-data';
 import { renderWithKit, type KitRenderOptions } from '../../../ui/test-utils';
 import { widgets } from './index';
+import { testTrendRows, trendTestStore } from './local-trends.testing';
 
 afterEach(cleanup);
 
@@ -28,16 +29,16 @@ const model = <T extends FeatureId>(id: T) => readModel(createWidgetDataStore().
 
 describe('동네 변화 알림 (19) on large cards', () => {
   const m = model('local-changes');
-  it('adds the distance and update time under each change, and the same-category badge, at 4x4', () => {
+  it('adds the source and update time under each change, and the same-category badge, at 4x4', () => {
     expect(m.openChanges.length).toBeGreaterThan(0);
     panel('local-changes', 4, 4);
     expect(rows()).toHaveLength(m.openChanges.length);
     rows().forEach((li, i) => {
       const change = m.openChanges[i]!;
       const [when, extra] = subs(li);
-      expect(when).not.toMatch(/매장에서/);
-      expect(extra).toContain(`매장에서 ${change.distanceM}m`);
-      expect(extra).toMatch(/ · .+ 갱신$/);
+      expect(when).not.toMatch(/출처/);
+      expect(extra).not.toMatch(/매장에서/);
+      expect(extra).toMatch(/^출처: .+ · .+ 갱신$/);
       expect(text(li).includes('같은 업종')).toBe(change.sameCategory);
     });
   });
@@ -48,7 +49,7 @@ describe('동네 변화 알림 (19) on large cards', () => {
     for (const [w, h] of [[4, 2], [2, 2], [4, 3]] as const) {
       panel('local-changes', w, h);
       for (const li of rows()) expect(subs(li)).toHaveLength(1);
-      expect(rows().map(text).join('|')).not.toMatch(/매장에서|같은 업종/);
+      expect(rows().map(text).join('|')).not.toMatch(/출처|같은 업종/);
       cleanup();
     }
   });
@@ -62,22 +63,23 @@ describe('동네 변화 알림 (19) on large cards', () => {
 
 describe('상권분석 (20) on large cards', () => {
   const m = model('trade-area');
-  it('lists every hour of the data in clock order at 4x4, the area and period beside the average line', () => {
+  it('lists the other measured hours in clock order alongside the 4x4 peak metric', () => {
     expect(m.hours.length).toBeGreaterThan(5);
     panel('trade-area', 4, 4);
-    expect(rows()).toHaveLength(m.hours.length);
+    const remaining = m.hours.filter(h => h.hour !== m.peak?.hour);
+    expect(rows()).toHaveLength(remaining.length);
     const titles = rows().map((li) => li.querySelector('.mkt-row__title')!.textContent);
     expect(titles[0]).toMatch(/^\d+~\d+시$/);
-    expect(rows().map((li) => li.querySelector('.mkt-row__value')!.textContent)).toEqual([...m.hours].sort((a, b) => a.hour - b.hour).map((h) => `${h.people}명`));
-    const note = text(document.querySelector('.mkt-secondary')!);
-    expect(note).toMatch(/ · .+ · 시간대별 일평균$/);
+    expect(rows().map((li) => li.querySelector('.mkt-row__value')!.textContent)).toEqual(remaining.sort((a, b) => a.hour - b.hour).map((h) => `${h.people}명`));
+    // PAR-3: the same source line as the real screen
+    expect(text(document.querySelector('.mkt-secondary')!)).toMatch(/^서울 공개 자료 · /);
     // the busiest five stay the rows a tight card keeps; the rest are the extra rows that drop first
     expect(rows().filter((li) => li.hasAttribute('data-mkt-extra'))).toHaveLength(m.hours.length - 5);
   });
   it('keeps the 4x2 and 2x2 cards as before: the busiest hours only', () => {
     panel('trade-area', 4, 2);
     expect(rows()).toHaveLength(5);
-    expect(text(document.querySelector('.mkt-secondary')!)).toBe('시간대별 일평균');
+    expect(text(document.querySelector('.mkt-secondary')!)).toMatch(/^서울 공개 자료 · /);
     cleanup();
     panel('trade-area', 2, 2);
     expect(rows()).toHaveLength(3);
@@ -92,54 +94,22 @@ describe('상권분석 (20) on large cards', () => {
   });
 });
 
-describe('로컬 트렌드 (18) on large cards', () => {
-  const m = model('local-trends');
-  it('4x4 gives each keyword its mentions and the count before, and the area and period beside the key number', () => {
-    panel('local-trends', 4, 4);
-    expect(rows()).toHaveLength(m.keywords.length);
-    rows().forEach((li, i) => {
-      const keyword = m.notable[i]!;
-      const [category, mentions] = subs(li);
-      expect(category).toMatch(/^연관 카테고리: /);
-      expect(mentions).toContain(`언급 ${keyword.mentions}회`);
-      expect(mentions.includes('이전')).toBe(keyword.previous !== null);
-    });
-    expect(text(document.querySelector('.mkt-secondary')!)).toMatch(/^지역: .+ · \d/);
+describe('search growth on large cards', () => {
+  it('fills the large panel with ranked terms and marks extra rows to drop first', () => {
+    panel('local-trends', 4, 4, { store: trendTestStore() });
+    const following = testTrendRows.slice(1);
+    expect(rows()).toHaveLength(following.length);
+    expect(rows().filter(li => li.hasAttribute('data-mkt-extra'))).toHaveLength(following.length - 5);
+    expect(rows().map(li => text(li.querySelector('.mkt-row__value')!))).toEqual(following.map(row => `+${row.changePercent.toFixed(1)}%`));
+    expect(subs(rows()[0])).toEqual(['우리 메뉴에 없음']);
   });
-  it('lists the keywords that are not notable after the notable ones, as the extra rows that drop first', () => {
-    const base = createSeedTables();
-    const first = base.trendKeyword[0]!;
-    const store = createWidgetDataStore({ trendKeyword: [...base.trendKeyword,
-      { ...first, keywordId: 'kw-large-flat', mentions: 40, prevMentions: 40 },
-      { ...first, keywordId: 'kw-large-new', mentions: 12, prevMentions: null }] });
-    const all = readModel(store.getSnapshot(), 'local-trends');
-    expect(all.keywords.length).toBe(all.notable.length + 2);
-    panel('local-trends', 4, 4, { store });
-    expect(rows()).toHaveLength(all.keywords.length);
-    const extra = rows().slice(all.notable.length);
-    expect(extra.every((li) => li.hasAttribute('data-mkt-extra'))).toBe(true);
-    expect(rows().slice(0, all.notable.length).some((li) => li.hasAttribute('data-mkt-extra'))).toBe(false);
-    expect(text(extra[0]!)).toContain('언급 40회');
-    expect(text(extra[0]!)).toContain('이전 40회');
-    expect(text(extra[1]!)).toContain('언급 12회');
-    expect(text(extra[1]!)).not.toContain('이전');
-    cleanup();
-    panel('local-trends', 4, 2, { store });
-    expect(rows()).toHaveLength(all.notable.length);
-  });
-  it('keeps the 4x2 and 2x2 cards as before: the notable keywords, one caption line, no area line', () => {
-    for (const [w, h] of [[4, 2], [2, 2]] as const) {
-      panel('local-trends', w, h);
-      expect(rows()).toHaveLength(m.notable.length);
-      for (const li of rows()) expect(subs(li)).toHaveLength(1);
-      expect(document.querySelector('.mkt-secondary')).toBeNull();
+
+  it('shows only the ranked rows that fit the shorter card', () => {
+    for (const [w, h, count] of [[4, 2, 5], [2, 2, 3]] as const) {
+      panel('local-trends', w, h, { store: trendTestStore() });
+      expect(rows()).toHaveLength(count);
+      expect(text(rows()[0])).toContain('2. 소금빵');
       cleanup();
     }
-  });
-  it('lists only the keywords the data has', () => {
-    const base = createSeedTables();
-    const store = createWidgetDataStore({ trendKeyword: base.trendKeyword.slice(0, 2) });
-    panel('local-trends', 4, 4, { store });
-    expect(rows().length).toBeLessThanOrEqual(2);
   });
 });

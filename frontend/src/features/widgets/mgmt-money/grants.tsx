@@ -2,11 +2,12 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { QueryCondition, WidgetDetailProps, WidgetHost, WidgetModule, WidgetPanelProps } from '../../../contracts';
 import { useRealRetry, useWidgetDataStore, useWidgetView } from '../../../data/react';
-import { resolveDataText, type DataCommand, type GrantRow, type GrantsModel } from '../../../data/widget-data';
+import { resolveDataText, type DataCommand, type GrantsModel } from '../../../data/widget-data';
 import type { GrantNoticeDto } from '../../../data/reality/11/dto';
 import { projectOfficialGrants, type GrantsViewModel, type NoticeRow } from '../../../data/reality/11/grants';
 import { useInsightCommand } from '../../../data/reality/11/use-insight-command';
-import { ActionButton, copyText, DataGrid, DetailDialog, DetailTabs, Icon, InlineEmpty, InlineError, InlineForm, MasterDetail, PinnedColumn, StatusBadge, StatusChip, Textarea, TextField, type DataGridHandle, type GridColumn, type GridFocus, type GridSort } from '../../../ui';
+import { ActionButton, copyText, DataGrid, DetailDialog, DetailTabs, Icon, InlineEmpty, InlineError, InlineForm, MasterDetail, PanelState, PinnedColumn, StatusBadge, StatusChip, Textarea, TextField, type DataGridHandle, type GridColumn, type GridFocus, type GridSort } from '../../../ui';
+import { uiBundle } from '../../../ui/messages';
 import { DetailViewState, MoneyPanel, NoteLine, ViewState, useMoneyT, useRunCommand, useSizeCtx, type PanelSpec, type RowData, type T } from './shared';
 
 import { manualsGrantsDetailPrefill } from '../../assistant/domains/manuals-grants';
@@ -45,11 +46,10 @@ const grantRow = (t: T, n: NoticeRow, shape: string, large: boolean, application
 
 function buildSpec(t: T, model: GrantsViewModel, notes: ReactNode, shape: string, large: boolean): PanelSpec {
   const candidates = model.notices.filter((n) => n.isCandidate);
-  const none = model.candidateCount === 0;
   const listed = large ? model.notices : candidates;
   return {
-    slot: ID, label: t('widget.grants.reviewCandidates'), value: none ? t('data.state.grants.none') : String(model.candidateCount), semanticValue: model.candidateCount,
-    unit: none ? undefined : t('widget.grants.unit', { n: model.candidateCount }), textValue: none, inlineUnit: true, tightT: 1,
+    slot: ID, label: t('widget.grants.reviewCandidates'), value: String(model.candidateCount), semanticValue: model.candidateCount,
+    unit: t('widget.grants.unit', { n: model.candidateCount }), inlineUnit: true, tightT: 1,
     sub: t('widget.grants.inProgress', { n: model.inProgressCount }), subSemanticValue: model.inProgressCount, subEssential: true,
     rows: listed.map((n) => grantRow(t, n, shape, large, model.applications.find((a) => a.noticeId === n.noticeId))), rowsTitle: shape === 'T' || shape === 'L' ? t('widget.grants.listTitle') : undefined, status: notes,
   };
@@ -60,8 +60,13 @@ export function GrantsPanel(props: WidgetPanelProps) {
   const ctx = useSizeCtx(props);
   const view = useGrantsView(props.condition);
   const retry = useRealRetry('manuals');
+  const copy = useGrantsCopy();
+  const noNotices = view.status === 'ready' && view.model.notices.length === 0 ||
+    view.status === 'empty' && view.messageKey === 'data.state.grants.none';
+  if (noNotices) return <PanelState shape={ctx.shape} message={t('data.state.grants.none')}
+    action={{ label: copy.t('grants.sync'), widgetName: t('widget.grants.title'), onPress: () => props.host.openDetail({ featureId: ID, view: 'notices', focus: 'action' }) }} />;
   if (view.status !== 'ready') return <ViewState view={view} ctx={ctx} host={view.messageKey === 'data.real.error' ? { ...props.host, resetPreview: retry } : props.host} featureId={ID} t={t} />;
-  return <MoneyPanel spec={buildSpec(t, view.model, <NoteLine notes={view.notes} t={t} />, ctx.shape, ctx.shape === 'L' && ctx.width >= 3 && ctx.height >= 3)} ctx={ctx} />;
+  return <MoneyPanel spec={buildSpec(t, view.model, <NoteLine notes={view.notes} t={t} />, ctx.shape, ctx.shape === 'L' && ctx.width >= 3 && ctx.height >= 3 || ctx.width === 1 && ctx.height === 4)} ctx={ctx} />;
 }
 
 export function useGrantsSummary({ condition }: { featureId: unknown; condition: QueryCondition }): string {
@@ -79,14 +84,16 @@ export function GrantsDetail({ condition, host, detailRef }: WidgetDetailProps) 
   const retry = useRealRetry('manuals');
   const fixtureRun = useRunCommand(host);
   const { http, pending, run } = useInsightCommand(host);
-  // HTTP: the Financial Center recommendations are rows of the same list as the official notices (source named on each row), not a filter or a second block.
+  // Financial Center recommendations sit in the original list column and identify their source on each row.
   const [fundingRef, setFundingRef] = useState<string>();
   const fundingActive = !!fundingRef;
-  const fundingList = http ? <FinancialCenterRecommendations selected={fundingRef} onSelect={setFundingRef} /> : null;
+  const fundingList = <FinancialCenterRecommendations selected={fundingRef} onSelect={setFundingRef} />;
   const fundingDetail = fundingActive ? <FundingNotice key={fundingRef} refId={fundingRef} /> : null;
+  const [fixtureScope, setFixtureScope] = useState<{ region: string; industry: string }>();
   const [actionError, setActionError] = useState<string>();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const attempt = useRef<{ noticeId: string; key: string } | undefined>(undefined);
+  const openSync = detailRef.view === 'notices' && detailRef.focus === 'action';
   const initialTab = detailRef.view === 'applications' ? 'applications'
     : detailRef.view === 'template' || detailRef.view === 'templates' ? 'template' : 'notices';
   const [selectedId, setSelectedId] = useState<string | null>(initialTab === 'applications' ? null : detailRef.itemId ?? null);
@@ -111,11 +118,18 @@ export function GrantsDetail({ condition, host, detailRef }: WidgetDetailProps) 
     const toNotices = <ActionButton variant="secondary" onClick={() => setTab('notices')}>{t('widget.grants.openNotices')}</ActionButton>;
     return <div className="mm-detail" data-widget={ID}><DetailTabs value={tab} onValueChange={setTab} label={t('widget.grants.tabs')} tabs={[{ value: 'notices', label: t('widget.grants.notices') }, { value: 'template', label: t('widget.grants.template') }, { value: 'applications', label: t('widget.grants.applications') }]} />{tab === 'template' ? <EmptyGrantDraft action={toNotices} /> : tab === 'applications'
       ? <InlineEmpty title={t('widget.grants.noApplications')} description={t('widget.grants.noApplicationsHint')} action={toNotices} />
-      : http ? <MasterDetail list={<><h3 className="mm-card__title">{t('widget.grants.listTitle')}</h3><p>{t(view.messageKey)}</p>{fundingList}<GrantSync host={host} /></>} detail={fundingDetail} listLabel={t('widget.grants.listTitle')} detailLabel={t('widget.grants.conditions')} />
-      : <InlineEmpty title={t(view.messageKey)} description={t('widget.grants.noNoticesHint')} action={<ActionButton variant="secondary" onClick={() => setTab('applications')}>{t('widget.grants.openApplications')}</ActionButton>} />}</div>;
+      : <MasterDetail list={<><h3 className="mm-card__title">{t('widget.grants.listTitle')}</h3>
+          <InlineEmpty title={copy.t('grants.noBizinfo')} description={t('widget.grants.noNoticesHint')} action={<ActionButton variant="secondary" onClick={() => setTab('applications')}>{t('widget.grants.openApplications')}</ActionButton>} />
+          {fundingList}<GrantSync host={host} initiallyOpen={openSync} onFixtureSync={setFixtureScope} />
+        </>} detail={fundingDetail} listLabel={t('widget.grants.listTitle')} detailLabel={t('widget.grants.conditions')} />}</div>;
   }
   const m: GrantsViewModel = view.model;
-  const selected = selectedId ? m.notices.find((n) => n.noticeId === selectedId) ?? null : m.notices[0] ?? null;
+  const notices = !http && fixtureScope ? m.notices.filter(notice => {
+    const matchingIndustry = /카페|음식|외식|cafe|café|coffee|food|咖啡|餐饮|餐飲/iu.test(fixtureScope.industry);
+    const region = t(notice.regionKey).toLowerCase();
+    return matchingIndustry && (region.includes(fixtureScope.region.toLowerCase()) || /전국|nationwide|全国|全國/iu.test(region));
+  }) : m.notices;
+  const selected = selectedId ? notices.find((n) => n.noticeId === selectedId) ?? null : notices[0] ?? null;
   const selectedOfficial = selected?.official;
   const deletion = m.applications.find(row => row.applicationId === deleteId);
   const applicationOpen = selected && (selectedOfficial ? !selectedOfficial.startsOn || selectedOfficial.startsOn <= (selected.businessDay ?? '') : selected.isCandidate || selected.reviewStatus === 'reviewed');
@@ -135,12 +149,16 @@ export function GrantsDetail({ condition, host, detailRef }: WidgetDetailProps) 
     <>
       <>
         <h3 className="mm-card__title">{t('widget.grants.listTitle')}</h3>
-        {m.notices.length === 0 ? <p className="mm-muted">{t('data.state.grants.none')}</p> : (
+        {notices.length === 0 ? <p className="mm-muted">{copy.t('grants.noBizinfo')}</p> : (
           <ul className="mm-select-list" data-slot="grants.list">
-            {m.notices.map((n) => (
+            {notices.map((n) => (
               <li key={n.noticeId} data-row-id={n.noticeId}>
                 <button type="button" className="mm-select-row" ref={n.noticeId === detailRef.itemId ? selectedButton : undefined} aria-pressed={!fundingActive && n.noticeId === selected?.noticeId} onClick={() => { setFundingRef(undefined); setSelectedId(n.noticeId); }}>
-                  <span className="mm-select-row__text"><strong>{t(n.titleKey)}</strong><span>{[t(n.agencyKey), deadlineText(t, n)].filter(Boolean).join('\u00A0· ')}</span></span>
+                  <span className="mm-select-row__text">
+                    <strong>{t(n.titleKey)}</strong>
+                    <span>{[t(n.agencyKey), deadlineText(t, n)].filter(Boolean).join('\u00A0· ')}</span>
+                    {n.official?.matchReason && <StatusChip semantic="none" compact>{n.official.matchReason}</StatusChip>}
+                  </span>
                   {statusBadge(t, n)}
                 </button>
               </li>
@@ -149,7 +167,7 @@ export function GrantsDetail({ condition, host, detailRef }: WidgetDetailProps) 
         )}
       </>
       {fundingList}
-      {http && <GrantSync host={host} scope={m.notices[0]?.official} />}
+      <GrantSync host={host} initiallyOpen={openSync} scope={m.notices[0]?.official} onFixtureSync={scope => { setSelectedId(null); setFundingRef(undefined); setFixtureScope(scope); }} />
     </>
   );
   const detail = selected ? (
@@ -170,8 +188,9 @@ export function GrantsDetail({ condition, host, detailRef }: WidgetDetailProps) 
           <div><dt>{copy.t('grants.updated')}</dt><dd><time dateTime={selectedOfficial.sourceUpdatedAt}>{noticeStamp(t.format, selectedOfficial.sourceUpdatedAt)}</time></dd></div>
         </>}
       </dl>
-      {!selectedOfficial && <><h4 className="mm-card__subtitle">{t('widget.grants.conditions')}</h4>
-      <ul className="mm-bullets">{selected.conditionKeys.map((key) => <li key={key}>{t(key)}</li>)}</ul></>}
+      <h4 className="mm-card__subtitle">{t('widget.grants.conditions')}</h4>
+      {selected.conditionKeys.length ? <ul className="mm-bullets">{selected.conditionKeys.map((key) => <li key={key}>{t(key)}</li>)}</ul>
+        : <p className="mm-muted">{t('widget.grants.draftCheck')}</p>}
       <p>{t(selected.summaryKey)}</p>
       <p className="mm-muted">{selectedOfficial ? copy.t('grants.source') : t('widget.grants.source', { source: t(m.sourceKey) })}</p>
       <div className="mm-actions">
@@ -197,16 +216,17 @@ export function GrantsDetail({ condition, host, detailRef }: WidgetDetailProps) 
   ) : <p className="mm-muted">{t('widget.grants.selectItem')}</p>;
   return (
     <div className={`mm-detail${tab === 'applications' ? ' mm-detail--grid' : tab === 'template' ? ' mm-detail--grant-draft' : ''}`} data-widget={ID}>
-      <p className="mm-detail__note" lang="ko">{t('widget.grants.reviewCandidates')} {t.format.count(m.candidateCount, 'count')}{'\u00A0'}· {t('widget.grants.reviewedNote')}</p>
+
       <NoteLine notes={view.notes} t={t} />
       {http && view.notes?.length ? <ActionButton variant="secondary" onClick={retry}>{t('common.retry')}</ActionButton> : null}
       {pending && <p role="status" className="mm-muted">{t('data.real.loading')}</p>}
       {actionError && !deletion && <p role="alert" className="ui-field__error">{actionError}</p>}
       <DetailTabs value={tab} onValueChange={setTab} label={t('widget.grants.tabs')} tabs={[{ value: 'notices', label: t('widget.grants.notices') }, { value: 'template', label: t('widget.grants.template') }, { value: 'applications', label: t('widget.grants.applications') }]} />
+      <p className="mm-detail__note">{t('widget.grants.reviewCandidates')} {t.format.count(m.candidateCount, 'count')}</p>
       {tab === 'notices' ? <MasterDetail list={list} detail={fundingDetail ?? detail} listLabel={t('widget.grants.listTitle')} detailLabel={t('widget.grants.conditions')} /> : tab === 'template' ? (
-        <GrantDraftView notices={m.notices} http={http} initialId={selected?.noticeId ?? (selectedId ? EMPTY_SAMPLE : undefined)}
+        <GrantDraftView notices={m.notices} initialId={selected?.noticeId ?? (selectedId ? EMPTY_SAMPLE : undefined)}
           prefill={typeof prefill?.body === 'string' ? prefill.body : undefined} focusAction={detailRef.focus === 'action'} />
-      ) : <section className="mm-card mm-detail__grid">{http && <p className="mm-muted">{t('common.linked.grants.appliedNote')}</p>}<DataGrid ref={grid} id="grant-applications" label={t('widget.grants.applications')} rowActionsLabel={t('widget.grants.deleteColumn')} rows={m.applications} getRowId={a => a.applicationId} getRowLabel={a => resolveDataText(t, a.title)} columns={[
+      ) : <section className="mm-card mm-detail__grid"><p className="mm-muted">{t('common.linked.grants.appliedNote')}</p><DataGrid ref={grid} id="grant-applications" label={t('widget.grants.applications')} rowActionsLabel={t('widget.grants.deleteColumn')} rows={m.applications} getRowId={a => a.applicationId} getRowLabel={a => resolveDataText(t, a.title)} columns={[
         { id: 'name', header: t('widget.grants.applicationName'), kind: 'text', minWidth: 200, value: a => resolveDataText(t, a.title) },
         { id: 'date', header: t('widget.grants.appliedOn'), kind: 'text', minWidth: 140, value: a => a.appliedOn, render: a => t.format.date(a.appliedOn, 'short'), accessibleValue: a => t.format.date(a.appliedOn, 'short') },
         { id: 'status', header: t('widget.grants.applicationStatus'), kind: 'status', minWidth: 140, value: a => a.status, accessibleValue: a => t(`widget.grants.${a.status}`), render: a => <StatusChip semantic={applicationSemantic[a.status]}>{t(`widget.grants.${a.status}`)}</StatusChip>, editable: () => !pending, editor: 'select', options: ['applied', 'reviewing', 'selected', 'rejected', 'completed'].map(value => ({ value, label: t(`widget.grants.${value}`) })) },
@@ -227,24 +247,30 @@ export function GrantsDetail({ condition, host, detailRef }: WidgetDetailProps) 
   );
 }
 
-function GrantSync({ host, scope }: { readonly host: WidgetHost; readonly scope?: GrantNoticeDto }) {
+function GrantSync({ host, scope, initiallyOpen, onFixtureSync }: { readonly host: WidgetHost; readonly scope?: GrantNoticeDto; readonly initiallyOpen: boolean; readonly onFixtureSync: (value: { region: string; industry: string }) => void }) {
+  const store = useWidgetDataStore();
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const { businessType } = snapshot.tables.shopSettings;
+  const defaultIndustry = businessType && businessType !== 'other' ? uiBundle.ko[`ui.business.${businessType}`] ?? '' : scope?.industry ?? '';
   const t = useMoneyT();
   const copy = useGrantsCopy();
-  const { run, pending } = useInsightCommand(host);
-  const [open, setOpen] = useState(false);
-  const [region, setRegion] = useState('');
-  const [industry, setIndustry] = useState('');
+  const { http, run, pending } = useInsightCommand(host);
+  const [open, setOpen] = useState(initiallyOpen);
+  const [region, setRegion] = useState(scope?.region ?? '');
+  const [industry, setIndustry] = useState(defaultIndustry);
   const [error, setError] = useState<string>();
-  const show = () => { setRegion(scope?.region ?? ''); setIndustry(scope?.industry ?? ''); setError(undefined); setOpen(true); };
+  const show = () => { setRegion(scope?.region ?? ''); setIndustry(defaultIndustry); setError(undefined); setOpen(true); };
   if (!open) return <ActionButton variant="secondary" onClick={show}>{copy.t('grants.sync')}</ActionButton>;
-  return <InlineForm title={copy.t('grants.sync')} saveLabel={copy.t('grants.sync')} saving={pending} saveDisabled={!region.trim() || !industry.trim() || region.trim().length > 40 || industry.trim().length > 80}
+  return <InlineForm footerActions title={copy.t('grants.sync')} saveLabel={copy.t('grants.sync')} saving={pending} saveDisabled={!region.trim() || !industry.trim() || region.trim().length > 40 || industry.trim().length > 80}
     onClose={() => setOpen(false)} onSave={async () => {
-      const result = await run({ type: 'grants.syncNotices', region: region.trim(), industry: industry.trim() });
+      const query = { region: region.trim(), industry: industry.trim() };
+      if (!http) { onFixtureSync(query); setOpen(false); return; }
+      const result = await run({ type: 'grants.syncNotices', ...query });
       if (result?.ok) setOpen(false);
       else if (result) setError(t(result.messageKey));
     }}>
-    <TextField label={copy.t('grants.region')} value={region} disabled={pending} onValueChange={setRegion} />
-    <TextField label={copy.t('grants.industry')} value={industry} disabled={pending} onValueChange={setIndustry} />
+    <TextField label={copy.t('grants.region')} hint={copy.t('grants.regionHint')} value={region} disabled={pending} onValueChange={setRegion} />
+    <TextField label={copy.t('grants.industry')} hint={copy.t('grants.industryHint')} value={industry} disabled={pending} onValueChange={setIndustry} />
     {error && <p role="alert" className="ui-field__error">{error}</p>}
   </InlineForm>;
 }
@@ -257,8 +283,8 @@ function EmptyGrantDraft({ action }: { readonly action?: ReactNode }) {
   return <InlineEmpty title={t('widget.grants.draft.empty')} action={action} />;
 }
 
-function GrantDraftView({ notices, initialId, prefill, focusAction, http }: {
-  readonly notices: readonly NoticeRow[]; readonly initialId?: string; readonly prefill?: string; readonly focusAction?: boolean; readonly http: boolean;
+function GrantDraftView({ notices, initialId, prefill, focusAction }: {
+  readonly notices: readonly NoticeRow[]; readonly initialId?: string; readonly prefill?: string; readonly focusAction?: boolean;
 }) {
   const t = useMoneyT();
   const draftCopy = useNaverDraftCopy();
@@ -278,62 +304,25 @@ function GrantDraftView({ notices, initialId, prefill, focusAction, http }: {
           </button>
         </li>
       ))}
-      <li><button type="button" className="mm-select-row" aria-pressed={!notice} onClick={() => setSample(EMPTY_SAMPLE)}>{draftCopy.t(http ? 'widget.grants.draft.noNotice' : 'widget.grants.draft.emptySample')}</button></li>
+      <li><button type="button" className="mm-select-row" aria-pressed={!notice} onClick={() => setSample(EMPTY_SAMPLE)}>{draftCopy.t('widget.grants.draft.noNotice')}</button></li>
     </ul>
   );
   return (
-    <MasterDetail list={list} detail={http ? <OfficialGrantDraft key={sample} row={notice} prefill={sample === initialId ? prefill : undefined} focusAction={sample === initialId && focusAction} /> : <GrantDraftEditor key={sample} notice={notice}
-      prefill={sample === initialId && notice ? prefill : undefined} focusAction={sample === initialId && focusAction} />} listLabel={t('widget.grants.listTitle')} detailLabel={t('widget.grants.template')} />
+    <MasterDetail list={list} detail={<GrantDraftEditor key={sample} notice={notice}
+      prefill={sample === initialId ? prefill : undefined} focusAction={sample === initialId && focusAction} />} listLabel={t('widget.grants.listTitle')} detailLabel={t('widget.grants.template')} />
   );
 }
 
-/**
- * The service has no sample draft to generate from (the original editor's 초안 만들기 reads sample notices), so this is the same editor shell
- * (title and summary head, copy footer, the counted text field) with the official notice's own facts as the starting text.
- */
-function OfficialGrantDraft({ row, prefill, focusAction }: { readonly row?: NoticeRow; readonly prefill?: string; readonly focusAction?: boolean }) {
-  const t = useMoneyT();
-  const draftCopy = useNaverDraftCopy();
-  const copy = useGrantsCopy();
-  const notice = row?.official;
-  const [body, setBody] = useState(prefill ?? (notice ? [notice.title, notice.agency, notice.officialUrl].join('\n') + '\n\n' : ''));
-  const [result, setResult] = useState<'idle' | 'success' | 'error'>('idle');
-  const editor = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { if (focusAction) editor.current?.focus(); }, [focusAction]);
-  const tooLong = body.length > GRANT_MAX_LENGTH;
-  return <PinnedColumn footer={<div className="mm-grant-draft__actions">
-    <ActionButton size="primary" disabled={tooLong || !body.trim()} onClick={async () => {
-      const copied = await copyText(body);
-      if (editor.current?.value !== body) return;
-      setResult(copied ? 'success' : 'error');
-      if (!copied) { editor.current?.focus(); editor.current?.select(); }
-    }}>{t('widget.grants.copy')}</ActionButton>
-    {result === 'success' && <p role="status"><Icon name="check" />{t('widget.grants.copied')}</p>}
-    {result === 'error' && <p className="ui-draft-card__error" role="alert"><Icon name="error" />{t('widget.grants.copyFailed')}</p>}
-  </div>}><section className="mm-card mm-grant-draft">
-    {row && <>
-      <h3 className="mm-card__title">{t(row.titleKey)}</h3>
-      <div className="mm-grant-draft__summary">
-        <p>{t(row.summaryKey)}</p>
-        <p className="mm-muted">{copy.t('grants.source')}</p>
-      </div>
-    </>}
-    <div>
-      <Textarea className="mm-grant-draft__editor" label={t('widget.grants.template')} value={body} inputRef={field => { editor.current = field; setDraftInputLanguage(field); }}
-        onValueChange={value => { setBody(value); setResult('idle'); }}
-        hint={draftCopy.t('widget.grants.draft.count', { n: body.length, max: GRANT_MAX_LENGTH })}
-        error={tooLong ? draftCopy.t('widget.grants.draft.tooLong', { max: GRANT_MAX_LENGTH }) : undefined} />
-    </div>
-  </section></PinnedColumn>;
-}
-
 function GrantDraftEditor({ notice, prefill, focusAction }: {
-  readonly notice?: GrantRow; readonly prefill?: string; readonly focusAction?: boolean;
+  readonly notice?: NoticeRow; readonly prefill?: string; readonly focusAction?: boolean;
 }) {
   const t = useMoneyT();
+  const copy = useGrantsCopy();
   const draftCopy = useNaverDraftCopy();
   const { generation, generate } = useNaverDraft('grants');
-  const [body, setBody] = useState(prefill ?? '');
+  const official = notice?.official;
+  const officialDraft = official ? `${official.title}\n${official.agency}\n${official.officialUrl}\n\n` : '';
+  const [body, setBody] = useState(prefill ?? officialDraft);
   const [sources, setSources] = useState<readonly string[] | null>(prefill ? [] : null);
   const [copied, setCopied] = useState<'idle' | 'success' | 'error'>('idle');
   const editor = useRef<HTMLTextAreaElement>(null);
@@ -346,12 +335,13 @@ function GrantDraftEditor({ notice, prefill, focusAction }: {
   const tooLong = body.length > GRANT_MAX_LENGTH;
   const start = () => {
     setCopied('idle');
+    if (official) { setBody(officialDraft); return; }
     void generate(notice?.noticeId ?? null, draft => {
       setBody(draft?.content.body ?? '');
       setSources(draft?.sourceLabels ?? null);
     });
   };
-  const copy = async () => {
+  const copyDraft = async () => {
     const ok = await copyText(body);
     if (editor.current?.value !== body) return;
     setCopied(ok ? 'success' : 'error');
@@ -364,7 +354,8 @@ function GrantDraftEditor({ notice, prefill, focusAction }: {
   return (
     <PinnedColumn footer={
       <div className="mm-grant-draft__actions">
-        <ActionButton size="primary" onClick={copy} disabled={loading || !body.trim() || tooLong}>{t('widget.grants.copy')}</ActionButton>
+        <ActionButton size="primary" onClick={copyDraft} disabled={loading || !body.trim() || tooLong}>{t('widget.grants.copy')}</ActionButton>
+        {!loading && !body.trim() && <p className="mm-muted">{copy.t('grants.copyHint')}</p>}
         {copied === 'success' && <p role="status"><Icon name="check" />{t('widget.grants.copied')}</p>}
         {copied === 'error' && <p className="ui-draft-card__error" role="alert"><Icon name="error" />{t('widget.grants.copyFailed')}</p>}
       </div>
@@ -373,15 +364,16 @@ function GrantDraftEditor({ notice, prefill, focusAction }: {
         {notice && <>
           <h3 className="mm-card__title">{t(notice.titleKey)}</h3>
           <div className="mm-grant-draft__summary">
-            <p>{t('widget.grants.draftProfile')}</p>
+            <p>{official?.agency ?? t('widget.grants.draftProfile')}</p>
             <p>{t(notice.summaryKey)}</p>
-            <p className="mm-muted">{t('data.management.grantGuide')}</p>
+            <p className="mm-muted">{official ? copy.t('grants.source') : t('data.management.grantGuide')}</p>
           </div>
         </>}
         <div className="mm-actions">
           {generation.status === 'error'
             ? <InlineError message={naverDraftErrorText(generation, draftCopy.t)} onRetry={start} />
-            : <ActionButton ref={generateButton} variant="secondary" disabled={loading} aria-busy={loading || undefined} onClick={start}>{t('widget.grants.generate')}</ActionButton>}
+            : <ActionButton ref={generateButton} variant="secondary" disabled={loading || !notice} aria-busy={loading || undefined} onClick={start}>{t('widget.grants.generate')}</ActionButton>}
+          {!notice && <p className="mm-muted">{copy.t('grants.chooseNotice')}</p>}
           {loading && <p role="status">{draftCopy.t('widget.grants.draft.loading')}</p>}
         </div>
         {generation.status === 'empty' && <EmptyGrantDraft />}
@@ -391,7 +383,7 @@ function GrantDraftEditor({ notice, prefill, focusAction }: {
             {body.includes('확인 필요') && <li><StatusBadge kind="needsReview" label={t('widget.grants.draftCheck')} /></li>}
           </ul>
         )}
-        {(sources !== null || generation.status === 'empty') && (
+        {(
           <div>
             <Textarea className="mm-grant-draft__editor" label={t('widget.grants.template')} value={body} inputRef={field => { editor.current = field; setDraftInputLanguage(field); }}
               disabled={loading || generation.status === 'empty'}

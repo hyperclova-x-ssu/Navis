@@ -19,6 +19,7 @@ describe('custom UI consumes the real M2 planners', () => {
     renderWithKit(<CustomOrderProvider port={port}><CustomOrderDetail {...props} /></CustomOrderProvider>);
     fireEvent.click(screen.getByRole('button', { name: /CO-002/ }));
     fireEvent.click(screen.getByRole('button', { name: '수정 요청으로 바꾸기' }));
+    fireEvent.click(screen.getByRole('button', { name: '견적 고치기' }));
     fireEvent.change(screen.getByLabelText('견적 금액'), { target: { value: '65000' } });
     fireEvent.click(screen.getByRole('button', { name: '견적 저장하기' }));
     fireEvent.click(screen.getByRole('button', { name: '승인으로 바꾸기' }));
@@ -40,8 +41,8 @@ describe('custom UI consumes the real M2 planners', () => {
     renderWithKit(<CustomOrderProvider port={port}><CustomOrderDetail {...props} /></CustomOrderProvider>);
     fireEvent.click(screen.getByRole('tab', { name: '템플릿 관리' }));
     fireEvent.change(screen.getByLabelText('상품 종류'), { target: { value: '꽃 케이크' } });
-    fireEvent.click(screen.getByRole('button', { name: '양식 견본 만들기' }));
-    expect(screen.getByRole('button', { name: '양식 견본을 만들고 있어요' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '템플릿 견본 만들기' }));
+    expect(screen.getByRole('button', { name: '템플릿 견본을 만들고 있어요' })).toBeDisabled();
     act(() => vi.advanceTimersByTime(1000));
     const editor = screen.getByRole('form', { name: '템플릿 고치기' });
     fireEvent.change(within(editor).getByLabelText('템플릿 이름'), { target: { value: '꽃 주문서' } });
@@ -63,7 +64,7 @@ describe('custom UI consumes the real M2 planners', () => {
     const refs = within(form).getByRole('group', { name: '참고 사진' });
     expect(within(refs).getByRole('checkbox', { name: '레터링 생크림 케이크 1호' })).toBeInTheDocument();
     fireEvent.click(within(refs).getByRole('checkbox', { name: '답례 쿠키 세트 20박스' }));
-    fireEvent.click(within(form).getByRole('button', { name: '주문 접수하기' }));
+    fireEvent.click(within(form).getByRole('button', { name: '접수하기' }));
     expect(selectCustomOrders(port.read()).orders.find(row => row.productLabel === '꽃 케이크')).toMatchObject({
       channel: 'visit', stage: 'received', guest: { name: '박하늘' }, referencePhotoKeys: ['gift-reference'],
     });

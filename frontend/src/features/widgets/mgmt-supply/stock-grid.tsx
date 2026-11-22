@@ -12,7 +12,7 @@ import { inventoryCopy, type InventoryItemPrefill } from '../../assistant/domain
 import { useBundle } from '../../../i18n';
 import { ActionButton, ChannelTransfer, ChipChoice, DataGrid, DateField, FieldFrame, Icon, InlineForm, Spinner, StatusChip, TextField, type GridColumn, type GridFocus, type GridSort, SplitBar } from '../../../ui';
 import { createCommandAttemptKeys } from '../../../data/commands/attempt-keys';
-import { unitLabel, useSupplyText, useTextScale, useViewMemory, sortGridRows, Flash, GridValueSlot } from './shared';
+import { unitLabel, useSupplyText, useTextScale, useViewMemory, sortGridRows, Flash, GridValueSlot , supplyQuantity } from './shared';
 import './stock-grid.css';
 
 const ko = {
@@ -101,8 +101,8 @@ function History({ row, host }: {row: IngredientRow; host:WidgetDetailProps['hos
   const nextOrder = next ? deriveOpenOrders(snapshot, { date: stockDate(snapshot) }).orders.find(order => order.poId === next.poId) : undefined;
   const nextSupplier = next ? x.text(nextOrder?.supplierName ?? {key:next.supplierNameKey}) : '';
   return <div className="ms-stock-expanded">
-    <section><h4>{t('supply.stock.menus')}</h4>{row.usingMenus.map(menu=><p key={menu.menuId}><ActionButton variant="link" onClick={()=>host.openLinked({featureId:'menu',itemId:menu.menuId})}>{x.text(menu.name)} · {x.format.quantity(menu.quantity,menu.unit)}</ActionButton></p>)}</section>
-    <section><h4>{t('supply.stock.nearest')}</h4>{row.nextDelivery?<ActionButton variant="link" onClick={()=>host.openLinked({featureId:'suppliers',view:'order',itemId:row.nextDelivery!.poId})}>{x.format.quantity(row.nextDelivery.remaining.value,row.nextDelivery.remaining.unit)} · {nextSupplier}</ActionButton>:<p>{t('supply.stock.noDelivery')}</p>}
+    <section><h4>{t('supply.stock.menus')}</h4>{row.usingMenus.map(menu=><p key={menu.menuId}><ActionButton variant="link" onClick={()=>host.openLinked({featureId:'menu',itemId:menu.menuId})}>{x.text(menu.name)} · {supplyQuantity(x, menu.quantity,menu.unit)}</ActionButton></p>)}</section>
+    <section><h4>{t('supply.stock.nearest')}</h4>{row.nextDelivery?<ActionButton variant="link" onClick={()=>host.openLinked({featureId:'suppliers',view:'order',itemId:row.nextDelivery!.poId})}>{supplyQuantity(x, row.nextDelivery.remaining.value,row.nextDelivery.remaining.unit)} · {nextSupplier}</ActionButton>:<p>{t('supply.stock.noDelivery')}</p>}
       {source && item?.unit && <StockLots item={item} source={source} row={row} host={host}/>}
     </section>
     <section className="ms-stock-history"><h4>{t('supply.stock.history')}</h4><ChipChoice label={t('supply.stock.history')} value={period} onChange={setPeriod} options={[{value:'today',label:t('supply.stock.today')},{value:'last7days',label:t('supply.stock.week')}]}/>{history.dayGroups.map(group=><HistoryDay key={group.date} itemId={row.itemId} name={name} unit={row.unit} group={group} usingMenus={row.usingMenus} menus={menus} today={stockDate(snapshot)} http={!!source}/>)}{!history.dayGroups.length && <p>{t('supply.stock.historyEmpty')}</p>}</section>
@@ -114,7 +114,7 @@ const storeTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Seoul', hou
 function HistoryDay({itemId,name,unit,group,usingMenus,menus,today,http}:{itemId:string;name:string;unit:IngredientRow['unit'];group:HistoryGroup;usingMenus:IngredientRow['usingMenus'];menus:MenuRecords;today:string;http:boolean}) {
   const x=useSupplyText(),{t}=useStockText(),[focus,setFocus]=useState<GridFocus>(null);
   type Line = {rowId:string;at:string;kind:string;quantity:string;description:string;balance:number};
-  const quantity=(n:number)=>x.format.quantity(Math.abs(n),unit);
+  const quantity=(n:number)=>supplyQuantity(x, Math.abs(n),unit);
   const lines:Line[] = group.rows.filter(line=>group.date===today||line.kind!=='opening').map(line=>{
     const initial=line.description && 'key' in line.description && line.description.key==='data.management.history.initial';
     const kind=initial||line.kind==='opening'?'':line.kind;
@@ -143,7 +143,7 @@ function HistoryDay({itemId,name,unit,group,usingMenus,menus,today,http}:{itemId
     {id:'kind',header:t('supply.stock.kind'),kind:'computed',minWidth:176,value:r=>r.kind==='usage'?t('supply.stock.usage'):r.kind==='receive'?t('supply.stock.receive'):r.kind==='adjust'?t('supply.stock.adjust'):'',readOnlyReason:reason,render:r=>r.kind?<StatusChip semantic={r.kind==='usage'?'none':undefined} tone={r.kind==='receive'?'success':r.kind==='adjust'?'warning':'neutral'}>{r.kind==='receive'?'+ ':r.kind==='usage'?'− ':'± '}{t(r.kind==='receive'?'supply.stock.receive':r.kind==='usage'?'supply.stock.usage':'supply.stock.adjust')}</StatusChip>:null},
     {id:'quantity',header:t('supply.stock.qty'),kind:'computed',minWidth:120,value:r=>r.quantity,readOnlyReason:reason},
     {id:'description',header:t('supply.stock.description'),kind:'computed',minWidth:200,value:r=>r.description,readOnlyReason:reason},
-    {id:'balance',header:t('supply.stock.balance'),kind:'computed',minWidth:130,value:r=>x.format.quantity(r.balance,unit),readOnlyReason:reason},
+    {id:'balance',header:t('supply.stock.balance'),kind:'computed',minWidth:130,value:r=>supplyQuantity(x, r.balance,unit),readOnlyReason:reason},
   ];
   return <div className="ms-history-day" data-stock-source={http ? 'http' : undefined}><h5>{x.locale==='ko'?x.format.date(group.date,'short'):group.date}</h5><DataGrid id={`history-${itemId}-${group.date}`} label={`${name} ${t('supply.stock.history')} ${x.locale==='ko'?x.format.date(group.date,'short'):group.date}`} rows={lines} columns={columns} getRowId={r=>r.rowId} getRowLabel={r=>r.description} sort={null} onSortChange={()=>{}} focus={focus} onFocusChange={setFocus} selectedRowId={null} expandedRowIds={new Set()} emptyContent=""/></div>;
 }
@@ -185,9 +185,9 @@ function StockLots({ item, source, row, host }: { item: StockItemDto; source: Re
   const forecast = readStockForecast(source, item);
   const factor = unitFactor(row.unit);
   const forecastQuantity = (value: number) => value > 0 && value * factor < 1
-    ? `< ${x.format.quantity(1 / factor, row.unit)}`
-    : x.format.quantity(Math.round(value * factor) / factor, row.unit);
-  const amount = (quantity: number | null) => quantity === null ? '—' : x.format.quantity(quantity, row.unit);
+    ? `< ${supplyQuantity(x, 1 / factor, row.unit)}`
+    : supplyQuantity(x, Math.round(value * factor) / factor, row.unit);
+  const amount = (quantity: number | null) => quantity === null ? '—' : supplyQuantity(x, quantity, row.unit);
   function confirmDiscard() {
     if (!discard) return;
     const current = lots.find(batch => batch.batchId === discard.batchId);
@@ -262,15 +262,15 @@ export function NewItem({onClose,host,t,prefill}:{onClose:()=>void;host:WidgetDe
       if (!closed.current) close();
     });
   };
-  return <InlineForm title={t('supply.stock.add')} onClose={close} saveLabel={x.t('common.saveAction')} closeLabel={x.t('common.close')} onSave={save} saving={pending}>
+  return <InlineForm title={t('supply.stock.add')} onClose={close} saveLabel={x.locale === 'ko' ? '품목 저장하기' : x.t('common.saveAction')} closeLabel={x.locale === 'ko' ? '품목 추가 닫기' : x.t('common.close')} onSave={save} saving={pending}>
     <div className="ms-form-grid">
       <TextField label={labels.sku} value={sku} onValueChange={v=>{setSku(v);clear('sku');}} error={errors.sku} name="sku" disabled={pending}/>
       <TextField label={labels.name} value={name} onValueChange={v=>{setName(v);clear('name');}} error={errors.name} name="name" disabled={pending}/>
       <FieldFrame label={labels.unit} fieldId={unitId}><select id={unitId} className="ui-text-input" value={unit} disabled={pending} onChange={event=>setUnit(event.target.value as UnitCode)}>
         {(['pcs', 'kg', 'g', 'L', 'mL'] as const).map(option=><option key={option} value={option}>{unitLabel(x,option)}</option>)}
       </select></FieldFrame>
-      <TextField label={t('supply.stock.initial')} value={stock} onValueChange={v=>{setStock(v);clear('stock');}} error={errors.stock} inputMode="decimal" name="stock" disabled={pending}/>
-      <TextField label={t('supply.stock.safe')} value={threshold} onValueChange={v=>{setThreshold(v);clear('threshold');}} error={errors.threshold} inputMode="decimal" name="threshold" disabled={pending}/>
+      <TextField label={t('supply.stock.initial')} value={stock} onValueChange={v=>{setStock(v);clear('stock');}} error={errors.stock} inputMode="decimal" name="stock" disabled={pending} groupThousands/>
+      <TextField label={t('supply.stock.safe')} value={threshold} onValueChange={v=>{setThreshold(v);clear('threshold');}} error={errors.threshold} inputMode="decimal" name="threshold" disabled={pending} groupThousands/>
     </div>
     {errors.form?<p className="ms-error" role="alert"><Icon name="error"/>{errors.form}</p>:null}
   </InlineForm>;
@@ -284,16 +284,16 @@ export function StockGrid({model,host,initialAdd=false,initialItemId,prefill}:{m
   const editStart = useRef<{ rowId: string; columnId: string; value: unknown } | undefined>(undefined);
   const [expanded,setExpanded]=useViewMemory<ReadonlySet<string>>('stock.expanded',()=>new Set(initialItemId ? [initialItemId] : []));
   const [add,setAdd]=useState(initialAdd);
-  const [deletion, setDeletion] = useState<StockItemDto>();
+  const [deletion, setDeletion] = useState<{ itemId: string; name: string; revision?: number }>();
   const [error, setError] = useState<string>();
   const name=(r:IngredientRow)=>x.text(r.name??{key:r.nameKey});
   const viewOrder = t('supply.stock.delivery');
-  const warningFor=(r:IngredientRow)=>r.deficit>0?t('supply.stock.excess',{qty:x.format.quantity(r.deficit,r.unit)}):r.needsReview||r.stock===null||!Number.isFinite(r.stock)||r.stock<0||r.threshold!==null&&(!Number.isFinite(r.threshold)||r.threshold<0)?x.t('widget.inventory-booking.needsReview'):null;
-  const amount=(field:'stock'|'threshold')=>(r:IngredientRow)=>r[field]===null?'—':x.format.quantity(r[field],r.unit);
+  const warningFor=(r:IngredientRow)=>r.deficit>0?t('supply.stock.excess',{qty:supplyQuantity(x, r.deficit,r.unit)}):r.needsReview||r.stock===null||!Number.isFinite(r.stock)||r.stock<0||r.threshold!==null&&(!Number.isFinite(r.threshold)||r.threshold<0)?x.t('widget.inventory-booking.needsReview'):null;
+  const amount=(field:'stock'|'threshold')=>(r:IngredientRow)=>r[field]===null?'—':supplyQuantity(x, r[field],r.unit);
   const editable = (r: IngredientRow) => !pending && (!source || !!source.items.find(record => record.itemId === r.itemId)?.unit);
   const status = (r: IngredientRow) => r.trackExpiry ? x.t('widget.inventory-booking.expiry.badge') : r.outOfStock ? x.t('widget.inventory-booking.outBadge') : r.needsRestock ? x.t('widget.inventory-booking.restockNeeded') : http && r.needsReview ? x.t('widget.inventory-booking.itemNeedsReview') : t('supply.stock.sufficient');
   const expiryLabel = (r: IngredientRow) => r.expiresOn === model.asOf ? t('supply.stock.todayUntil') : r.expiresOn ? t('supply.stock.lotExpires', {date:x.format.date(r.expiresOn,'short')}) : null;
-  const used = (r: IngredientRow) => http && r.stock === null ? '—' : x.format.quantity(r.usedToday, r.unit);
+  const used = (r: IngredientRow) => http && r.stock === null ? '—' : supplyQuantity(x, r.usedToday, r.unit);
   const columns:GridColumn<IngredientRow>[]=[
     {id:'sku',header:t('supply.stock.sku'),kind:'text',minWidth:136,fixedWidth:true,value:r=>r.sku??''},
     {id:'name',header:t('supply.stock.name'),kind:'text',minWidth:180,value:name,editable,sortable:true},
@@ -338,14 +338,15 @@ export function StockGrid({model,host,initialAdd=false,initialItemId,prefill}:{m
       setError(x.tk('data.real.error.STALE_REVISION'));
       return;
     }
-    send({ type: 'inventory.deleteItem', itemId: deletion.itemId }, result => { setDeletion(undefined); saveResult(result); });
+    const command = { type: 'inventory.deleteItem', itemId: deletion.itemId } as const;
+    if (!http) { setDeletion(undefined); saveResult(dispatch(command)); return; }
+    send(command, result => { setDeletion(undefined); saveResult(result); });
   }
   return <>
-    <p>{t('supply.stock.caption')}</p>
     {pending ? <p role="status"><Spinner /> {t('supply.stock.saving')}</p> : null}
     {error ? <p className="ms-error" role="alert"><Icon name="error"/>{error}</p> : null}
     {deletion ? <div role="group" aria-label={t('supply.stock.deleteAction')}>
-      <p>{t('supply.stock.deleteConfirm', {name:deletion.name ?? deletion.sku ?? '—'})}</p>
+      <p>{t('supply.stock.deleteConfirm', {name:deletion.name})}</p>
       <ActionButton variant="destructive" loading={pending} onClick={confirmDeletion}>{t('supply.stock.deleteAction')}</ActionButton>
       <ActionButton ref={focusCancel} variant="secondary" disabled={pending} onClick={()=>setDeletion(undefined)}>{x.t('common.close')}</ActionButton>
     </div> : null}
@@ -356,10 +357,10 @@ export function StockGrid({model,host,initialAdd=false,initialItemId,prefill}:{m
       getRowActions={r=>{
         const record = source?.items.find(item => item.itemId === r.itemId);
         const blocked = record ? record.referenced : snapshot.tables.recipeLine.some(line=>line.itemId===r.itemId) || snapshot.tables.purchaseOrderLine.some(line=>line.itemId===r.itemId&&snapshot.tables.purchaseOrder.some(o=>o.poId===line.poId&&['scheduled','partial'].includes(o.status)));
-        return [{id:'delete',label:t('supply.stock.delete',{name:name(r)}),disabled:blocked||pending,disabledReason:blocked?t('supply.stock.block'):undefined,onPress:()=>{
+        return [{id:'delete',label:t('supply.stock.delete',{name:name(r)}),disabled:pending,disabledReason:blocked?t('supply.stock.block'):undefined,onPress:()=>{
           setError(undefined);
-          if (record) setDeletion(record);
-          else if (!http) saveResult(dispatch({type:'inventory.deleteItem',itemId:r.itemId}));
+          if (blocked) { setError(t('supply.stock.block')); return; }
+          setDeletion({ itemId: r.itemId, name: name(r), revision: record?.revision });
         }}];
       }}
       addAction={{id:'add',label:t('supply.stock.add'),onPress:()=>setAdd(true)}}
@@ -430,7 +431,11 @@ export function ProductGrid({ model, host }: { model: InventoryModel; host: Widg
   const transfer = (row: Product) => quantity(row, 'total') === null ? <p>{x.tk('data.real.partial')}</p> : <ProductTransfer key={row.itemId} row={row} host={host}/>;
   const known = products.items.every(row => quantity(row, 'total') !== null);
   const combined = (field: 'total' | 'store' | 'online') => products.items.reduce((sum, row) => sum + (quantity(row, field) ?? 0), 0);
-  if (!products.items.length) return <p>{x.t('data.state.inventory-booking.no-products')}</p>;
+  if (!products.items.length) return <div className="ms-product-empty">
+    <p>{x.t('data.state.inventory-booking.no-products')}</p>
+    <p>판매 상품은 메뉴에서 등록해요</p>
+    <ActionButton variant="secondary" onClick={() => host.openLinked({ featureId: 'menu' })}>판매 상품 등록하기</ActionButton>
+  </div>;
   return <>
     <div className="ms-products__summary">
       {known ? <><p>{x.t('widget.inventory-booking.productsTotal')} <strong>{x.format.count(combined('total'),'pcs')}</strong></p>

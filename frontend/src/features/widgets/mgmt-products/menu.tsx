@@ -1,4 +1,5 @@
 import { MenuPlace, VenuePlace } from './menu-publication';
+import { useMenuPlace, type MenuPlacePorts } from './example-place';
 import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { MENU_CATEGORIES, normalizeMenuCategory, type MenuCategory, type WidgetDetailProps, type WidgetPanelProps } from '../../../contracts';
 import { useBundle } from '../../../i18n';
@@ -7,7 +8,8 @@ import { useKitT } from '../../../ui/kit-i18n';
 import { dataBundles, resolveDataText } from '../../../data/widget-data';
 import { useDomainState, useRealPort, useRealRetry, useWidgetView } from '../../../data/react';
 import { menuLineCost, menuPhotoFileId, type MenuCommand } from '../../../data/reality/01/menu-dto';
-import { ActionButton, ChipChoice, DataGrid, DetailSidePanel, DetailTabs, IconButton, InlineForm, TextField, NumberField, Textarea, StatusChip, SegmentedControl, Loading, Spinner, menuPhotos, type GridColumn, type GridFocus, type GridSort, type DataGridHandle } from '../../../ui';
+import { fromBase, toBase } from '../../../data/derive/common';
+import { ActionButton, ChipChoice, DataGrid, DetailDialog, DetailSidePanel, DetailTabs, IconButton, InlineForm, TextField, NumberField, Textarea, StatusChip, SegmentedControl, Spinner, menuPhotos, type GridColumn, type GridFocus, type GridSort, type DataGridHandle } from '../../../ui';
 import { Body, DetailState, Kpi, ListBlock, Notes, PanelFrame, Row, StatePanel, reportResult, useT } from '../mgmt-customers/shared';
 
 import { FitMiniTable, ValueSlot, restoreGrid } from '../mgmt-customers/workspace';
@@ -30,7 +32,7 @@ type MenuFilter = typeof categoryTabs[number];
 const menuNameWidth = 264;
 const bundle: MessageBundle<string> = { id: 'widget.menu.screen', en: { 'widget.menu.actions': 'Actions' }, 'zh-Hans': { 'widget.menu.actions': '操作' }, 'zh-Hant': { 'widget.menu.actions': '操作' }, ko: {
   'widget.menu.actions': '조작',
-  'widget.menu.addIngredient':'재료 추가하기', 'widget.menu.chooseIngredient':'재료 선택', 'widget.menu.insertIngredient':'재료 넣기', 'widget.menu.remove':'{name} 지우기', 'widget.menu.margin':'마진율', 'widget.menu.sold':'오늘 판매량', 'widget.menu.top':'오늘 가장 많이 팔린 메뉴 {name}', 'widget.menu.unitCost':'재료 원가', 'widget.menu.recipeUnit':'단위', 'widget.menu.historical':'오늘 판매분은 판매할 때의 원가로 계산해요', 'widget.menu.addMemo':'메모 추가하기', 'widget.menu.editMemo':'{name} 고치기', 'widget.menu.memoSave':'메모 저장하기', 'widget.menu.count': '등록한 메뉴', 'widget.menu.list': '메뉴 목록', 'widget.menu.name': '메뉴 이름', 'widget.menu.price': '판매가', 'widget.menu.cost': '원가', 'widget.menu.missingCost': '원가 미등록', 'widget.menu.recipe': '레시피', 'widget.menu.ingredient': '재료', 'widget.menu.quantity': '수량', 'widget.menu.usage': '오늘 사용량', 'widget.menu.memo': '메모', 'widget.menu.add': '메뉴 추가하기', 'widget.menu.save': '저장하기', 'widget.menu.delete': '메뉴 지우기', 'widget.menu.close': '닫기', 'widget.menu.new': '새 메뉴', 'widget.menu.search': '메뉴 이름으로 찾아보세요', 'widget.menu.emptyRecipe': '등록한 레시피가 없어요', 'widget.menu.none': '검색 결과가 없어요', 'widget.menu.unit': '개', 'widget.menu.won': '원', 'widget.menu.recipeSave': '레시피 저장하기',
+  'widget.menu.addIngredient':'재료 추가하기', 'widget.menu.chooseIngredient':'재료 선택', 'widget.menu.insertIngredient':'재료 넣기', 'widget.menu.remove':'{name} 지우기', 'widget.menu.margin':'마진율', 'widget.menu.sold':'오늘 판매량', 'widget.menu.top':'오늘 가장 많이 팔린 메뉴 {name}', 'widget.menu.unitCost':'재료 원가', 'widget.menu.recipeUnit':'단위', 'widget.menu.historical':'오늘 판매분은 판매할 때의 원가로 계산해요', 'widget.menu.addMemo':'메모 추가하기', 'widget.menu.editMemo':'{name} 고치기', 'widget.menu.memoSave':'메모 저장하기', 'widget.menu.count': '등록한 메뉴', 'widget.menu.list': '메뉴 목록', 'widget.menu.name': '메뉴 이름', 'widget.menu.price': '판매가', 'widget.menu.cost': '원가', 'widget.menu.missingCost': '원가 미등록', 'widget.menu.recipe': '레시피', 'widget.menu.ingredient': '재료', 'widget.menu.quantity': '수량', 'widget.menu.usage': '오늘 사용량', 'widget.menu.memo': '메모', 'widget.menu.add': '메뉴 추가하기', 'widget.menu.save': '저장하기', 'widget.menu.delete': '메뉴 지우기', 'widget.menu.close': '닫기', 'widget.menu.new': '새 메뉴', 'widget.menu.search': '메뉴 이름으로 찾아보세요', 'widget.menu.emptyRecipe': '등록한 레시피가 없어요', 'widget.menu.none': '찾는 항목이 없어요', 'widget.menu.loading': '메뉴를 불러오는 중이에요', 'widget.menu.saveNew': '메뉴 저장하기', 'widget.menu.unit': '개', 'widget.menu.won': '원', 'widget.menu.recipeSave': '레시피 저장하기',
   'widget.menu.editShort': '고치기', 'widget.menu.removeShort': '지우기', 'widget.menu.marginSummary': '원가 {cost} · 마진 {margin}({rate})', 'widget.menu.subtitle': '{category} · {price}', 'widget.menu.salesUnavailable': '판매량을 불러올 수 없어요', 'widget.menu.saving': '저장하고 있어요',
 } };
 function useText() { return useBundle(bundle, categoryBundle, menuPhotoBundle, ...dataBundles); }
@@ -48,6 +50,11 @@ function soldText(t: ReturnType<typeof useText>, row: Menu) {
   if (quantity === null) return '—';
   return row.category === 'dessert' ? t.format.count(quantity, 'pcs')
     : `${t.format.number(quantity)}${t.locale === 'en' ? ' ' : ''}${t.t('common.navis.agent.menuCups')}`;
+}
+/** What a recipe line used today: the example day's own figure, or over HTTP the number sold today times the line's quantity (the services send sales, not usage per menu). */
+function usedToday(row: Menu, line: Menu['recipeLines'][number], http: boolean): number {
+  if (!http) return line.usedToday;
+  return fromBase(toBase(line.quantity * (soldQuantity(row) ?? 0), line.unit) ?? 0, line.inventoryUnit);
 }
 /** A. Margin rate always shows one decimal (65.0%, 84.4%), so a column never mixes digit counts. */
 const rateText = (rate: number | null) => rate === null ? '—' : `${rate.toFixed(1)}%`;
@@ -76,7 +83,7 @@ export function useMenuSummary({ condition }: { condition: WidgetPanelProps['con
 export function MenuPanel(props: WidgetPanelProps) {
  const t=useText(),base=useT(),{ view, retry, loading, http, domain }=useMenuView(props.condition);
  const stateProps=http?{...props,host:{...props.host,resetPreview:retry}}:props;
- if(loading)return <PanelFrame id={id}><Loading /></PanelFrame>;
+ if(loading)return <PanelFrame id={id}><p className="menu-loading" role="status"><Spinner /> {t.t('widget.menu.loading')}</p></PanelFrame>;
  if(view.status!=='ready')return <StatePanel id={id} view={view.status==='error'&&http?{...view,messageKey:'data.state.menu.error'}:view} t={base} props={stateProps}/>;
  const rows=[...view.model.rows].sort((a,b)=>(soldQuantity(b)??-1)-(soldQuantity(a)??-1)||a.menuId.localeCompare(b.menuId));
  const money=(n:number)=>`${t.format.number(n)}${t.t('widget.menu.won')}`;
@@ -86,15 +93,14 @@ export function MenuPanel(props: WidgetPanelProps) {
  const short = props.height === 1;
  const list = props.width > 1 && !short
    ? <FitMiniTable rows={rows} columns={cols} getRowId={r=>r.menuId} label={t.t('widget.menu.list')} dropColumns={['rate','sold','cost']}/>
-   : rows.length > 0 && <ListBlock id={id} title={short ? undefined : t.t('widget.menu.list')}>
-       {(short ? rows.slice(0, 2) : rows).map(row => <Row key={row.menuId} id={id} rowId={row.menuId} name={name(t,row)} value={short?soldText(t,row):money(row.price)} />)}
+   : rows.length > 0 && <ListBlock id={id} title={short ? t.t('widget.menu.sold') : t.t('widget.menu.list')}>
+       {(short ? rows.slice(0, props.width >= 3 ? 4 : 2) : rows).map(row => <Row key={row.menuId} id={id} rowId={row.menuId} name={name(t,row)} value={short?soldText(t,row):money(row.price)} />)}
      </ListBlock>;
  return <PanelFrame id={id}><Body props={props} primary={<Kpi id={id} label={t.t('widget.menu.count')} value={String(view.model.total)} unit={t.t('widget.menu.unit')} sub={hint}/>} list={list}/></PanelFrame>;
 }
-function MenuEditor({ row, host, close, entryView, entryFocus }: {
-  row: Menu; host: WidgetDetailProps['host']; close: () => void; entryView?: string; entryFocus: (node: HTMLElement | null) => void;
+function MenuEditor({ row, host, requestDelete, entryView, entryFocus, place }: {
+  row: Menu; host: WidgetDetailProps['host']; requestDelete: () => void; entryView?: string; entryFocus: (node: HTMLElement | null) => void; place: MenuPlacePorts;
 }) {
-  const transport = useRealPort()?.transport;
   const t = useText(), { send, pending, http } = useMenuCommand(), ingredients = useMenuIngredients();
   const [nameDraft, setNameDraft] = useState<string>();
   const [priceDraft, setPriceDraft] = useState<number | null>();
@@ -113,9 +119,7 @@ function MenuEditor({ row, host, close, entryView, entryFocus }: {
     onMenuResult(result, response => {
       setError(response.ok ? null : { field, message: menuError(response, t.t) });
       if (command.type === 'menu.setSaleStatus') reportMenuResult(host, response, command, menuName, t.t);
-      else if (response.ok && command.type === 'menu.delete' && t.locale === 'ko') {
-        host.notify({ kind: 'success', messageKey: 'data.management.notice.menuDeleted', params: { name: menuName }, undoToken: response.undoToken });
-      } else reportResult(host, response);
+      else reportResult(host, response);
       if (response.ok) onSaved?.();
     });
     return result;
@@ -137,7 +141,6 @@ function MenuEditor({ row, host, close, entryView, entryFocus }: {
   ], [t]);
 
   return <div className="menu-editor" lang="ko" aria-busy={pending || undefined}>
-    {http && transport && <MenuPlace transport={transport} menuId={row.menuId} />}
     <section className="menu-editor-section">
       <p className="mc-caption menu-editor-subtitle" data-slot="menu.panel.subtitle">{t.t('widget.menu.subtitle', { category: t.t(`widget.menu.${category}`), price: `${t.format.number(row.price)}${t.t('widget.menu.won')}` })}</p>
       <form className="menu-editor-field-form" aria-label={t.t('widget.menu.name')} onSubmit={event => {
@@ -177,8 +180,8 @@ function MenuEditor({ row, host, close, entryView, entryFocus }: {
             getRowActions={line => [{ id: 'delete', label: t.t('widget.menu.remove', { name: resolveDataText(t.t, line.name) }), onPress: () => recipe(lines.filter(other => other.recipeLineId !== line.recipeLineId)) }]}
             emptyContent={t.t('widget.menu.missingCost')} />
         </div>
-        {!http && <ul className="mc-recipe-usage mc-caption">{lines.map(line => <li key={line.recipeLineId}>
-          {resolveDataText(t.t, line.name)} · {t.t('widget.menu.usage')} {t.format.number(line.usedToday, { maximumFractionDigits: 3 })}{unitLabel(t, line.inventoryUnit)} ({soldText(t, row)})
+        {(!http || soldQuantity(row) !== null) && <ul className="mc-recipe-usage mc-caption">{lines.map(line => <li key={line.recipeLineId}>
+          {resolveDataText(t.t, line.name)} · {t.t('widget.menu.usage')} {t.format.number(usedToday(row, line, http), { maximumFractionDigits: 3 })}{unitLabel(t, line.inventoryUnit)} ({soldText(t, row)})
         </li>)}</ul>}
       </>}
       {row.cost === null ? <StatusChip tone="warning">{t.t('widget.menu.missingCost')}</StatusChip>
@@ -213,7 +216,7 @@ function MenuEditor({ row, host, close, entryView, entryFocus }: {
         run({ type: 'menu.update', menuId: row.menuId, patch: { price } }, 'price',
           () => setPriceDraft(current => current === priceDraft ? undefined : current));
       }}>
-        <NumberField label={t.t('widget.menu.price')} value={priceDraft === undefined ? row.price : priceDraft} onValueChange={setPriceDraft}
+        <NumberField label={t.t('widget.menu.price')} value={priceDraft === undefined ? row.price : priceDraft} onValueChange={setPriceDraft} groupThousands
           unit={t.t('widget.menu.won')} error={error?.field === 'price' ? error.message : undefined} />
         <ActionButton type="submit" variant="secondary" disabled={pending}>{t.t('widget.menu.price')} {t.t('widget.menu.save')}</ActionButton>
       </form>
@@ -241,18 +244,22 @@ function MenuEditor({ row, host, close, entryView, entryFocus }: {
         run({ type: 'menu.update', menuId: row.menuId, patch: { memo } }, undefined, () => setMemoOpen(false));
       }}><Textarea label={t.t('widget.menu.memo')} value={memo} onValueChange={setMemo} /></InlineForm>}
     </section>
+    <MenuPlace transport={place.transport} menuId={row.menuId} />
     {error && !error.field && <p role="alert">{error.message}</p>}
-    <ActionButton variant="ghost" className="menu-editor-delete" disabled={pending} onClick={() => {
-      run({ type: 'menu.delete', menuId: row.menuId }, undefined, close);
-    }}>{t.t('widget.menu.delete')}</ActionButton>
+    <ActionButton variant="ghost" className="menu-editor-delete" disabled={pending} onClick={requestDelete}>{t.t('widget.menu.delete')}</ActionButton>
   </div>;
 }
 export function MenuDetail({condition,host,detailRef}:WidgetDetailProps) {
  const port = useRealPort();
- const transport = port?.transport;
  const t=useText(),base=useT(),{view,domain,retry,http,loading}=useMenuView(condition),{send,pending}=useMenuCommand();
+ // PAR-1: the 플레이스 pages (업체 정보, 플레이스에 올리기) are in both modes: the gateway over HTTP, an in-memory listing with the example data.
+ const placeMenus=useMemo(()=>view.status==='ready'?view.model.rows.map(row=>({menuId:row.menuId,name:name(t,row),price:row.price})):[],[view,t]);
+ const place=useMenuPlace(http?port:undefined,placeMenus);
  const prefill=detailRef.prefill?.kind==='menu.create'?detailRef.prefill:undefined;
  const [selected,setSelected]=useState<string|null>(detailRef.itemId??null),[focus,setFocus]=useState<GridFocus>(null),[sort,setSort]=useState<GridSort>({columnId:'sold',direction:'desc'}),[query,setQuery]=useState(''),[adding,setAdding]=useState(detailRef.view==='register'),[newName,setNewName]=useState(prefill?.name??''),[newPrice,setNewPrice]=useState<number|null>(prefill?.price??null),[category,setCategory]=useState<MenuCategory>(normalizeMenuCategory(prefill?.category)??'beverage'),[error,setError]=useState('');
+ const [venueOpen, setVenueOpen] = useState(false);
+ const [deletion, setDeletion] = useState<Menu | null>(null);
+ const [deleteError, setDeleteError] = useState('');
  const [filter, setFilter] = useState<MenuFilter>('all');
  const categoryFieldId = useId();
  const attempt=useRef<{name:string;price:number;category:MenuCategory;key:string}|null>(null);
@@ -277,7 +284,7 @@ export function MenuDetail({condition,host,detailRef}:WidgetDetailProps) {
  const setEditorEntryFocus = useCallback((node: HTMLElement | null) => { editorEntryFocus.current = node; }, []);
  const editorEntryView = current && detailRef.itemId === current.menuId ? detailRef.view : undefined;
  const workspace = useRef<HTMLDivElement>(null);
- const panelOpen = !!current;
+ const panelOpen = !!current || venueOpen;
  useLayoutEffect(() => {
   const root = workspace.current;
   if (!panelOpen || !root) return;
@@ -319,12 +326,23 @@ export function MenuDetail({condition,host,detailRef}:WidgetDetailProps) {
   {id:'sold',header:t.t('widget.menu.sold'),kind:'computed',value:r=>soldQuantity(r)??'—',render:r=>soldText(t,r),
     accessibleValue:r=>soldQuantity(r)===null?t.t('widget.menu.salesUnavailable'):soldText(t,r),minWidth:168,fixedWidth:true,dropOrder:5,sortable:true},
  ],[t]);
- if(loading)return <Loading/>;
+ if(loading)return <p className="menu-loading" role="status"><Spinner /> {t.t('widget.menu.loading')}</p>;
  if(view.status==='error'||(!http&&view.status!=='ready'))return <DetailState id={id}
   view={view.status==='error'&&http?{...view,messageKey:'data.state.menu.error'}:view} t={base} host={http?{...host,resetPreview:retry}:host}/>;
 
  const close=()=>setSelected(null);
- const closeCurrent=()=>setSelected(previous=>previous===current?.menuId?null:previous);
+ const requestDelete=(row:Menu)=>{setDeleteError('');setDeletion(row);};
+ const confirmDelete=()=>{
+  if(!deletion||pending)return;
+  setDeleteError('');
+  onMenuResult(send({type:'menu.delete',menuId:deletion.menuId}),result=>{
+   if(!result.ok){setDeleteError(t.locale==='ko'?'메뉴를 지우지 못했어요. 목록을 확인한 뒤 다시 눌러 주세요':menuError(result,t.t));return;}
+   setDeletion(null);
+   setSelected(previous=>previous===deletion.menuId?null:previous);
+   if(t.locale==='ko')host.notify({kind:'success',messageKey:'data.management.notice.menuDeleted',params:{name:name(t,deletion)},undoToken:result.undoToken});
+   else reportResult(host,result);
+  });
+ };
  const closeAdd=()=>{addForm.current+=1;setAdding(false);};
  const create=()=>{
   if(pending)return;
@@ -358,6 +376,7 @@ export function MenuDetail({condition,host,detailRef}:WidgetDetailProps) {
   event.stopPropagation();
   target.closest<HTMLElement>('.ui-data-grid__cell')?.focus({preventScroll:true});
   const rowId=row.dataset.gridRow;
+  setVenueOpen(false);
   setSelected(previous=>previous===rowId?null:rowId);
  };
 
@@ -366,12 +385,7 @@ export function MenuDetail({condition,host,detailRef}:WidgetDetailProps) {
   selectedRowId={selected} expandedRowIds={new Set()} focus={focus} onFocusChange={setFocus} ref={grid}
   rowActionsLabel={t.t('widget.menu.actions')} rowActionsDropOrder={2}
   getRowActions={row=>[
-    {id:'delete',label:t.t('widget.menu.remove',{name:name(t,row)}),onPress:()=>{
-      onMenuResult(send({type:'menu.delete',menuId:row.menuId}),result=>{
-        if(result.ok&&t.locale==='ko')host.notify({kind:'success',messageKey:'data.management.notice.menuDeleted',params:{name:name(t,row)},undoToken:result.undoToken});
-        else reportResult(host,result);
-      });
-    }},
+    {id:'delete',label:t.t('widget.menu.remove',{name:name(t,row)}),onPress:()=>requestDelete(row)},
   ]}
   renderRowActions={(_row,actions)=>actions.map(action=><IconButton
     key={action.id}
@@ -384,11 +398,11 @@ export function MenuDetail({condition,host,detailRef}:WidgetDetailProps) {
     onClick={action.onPress}
   />)}
   addAction={{ id: 'add', label: t.t('widget.menu.add'), disabled: pending, onPress: () => { setSelected(null); setAdding(true); } }}
-  renderAddRow={() => adding ? <InlineForm title={t.t('widget.menu.new')} onClose={closeAdd}
-    saveLabel={t.t('widget.menu.save')} onSave={create} saving={pending}>
+  renderAddRow={() => adding ? <InlineForm title={t.t('widget.menu.new')} onClose={closeAdd} closeLabel={t.locale === 'ko' ? '메뉴 추가 닫기' : undefined}
+    saveLabel={t.locale === 'ko' ? t.t('widget.menu.saveNew') : t.t('widget.menu.save')} onSave={create} saving={pending}>
     <div className="menu-add-fields">
       <TextField label={t.t('widget.menu.name')} value={newName} onValueChange={setNewName} />
-      <NumberField label={t.t('widget.menu.price')} value={newPrice} onValueChange={setNewPrice} unit={t.t('widget.menu.won')} />
+      <NumberField label={t.t('widget.menu.price')} value={newPrice} onValueChange={setNewPrice} unit={t.t('widget.menu.won')} groupThousands />
       <div className="ui-field">
         <label htmlFor={categoryFieldId} className="ui-field__label">{t.t('widget.menu.category')}</label>
         <select id={categoryFieldId} className="ui-text-input" value={category} onChange={event => setCategory(event.target.value as MenuCategory)}>
@@ -399,7 +413,7 @@ export function MenuDetail({condition,host,detailRef}:WidgetDetailProps) {
     {error && <p role="alert">{error}</p>}
   </InlineForm> : null}
   emptyContent={t.t(view.status === 'empty' && !query ? 'data.state.menu.no-menus' : 'widget.menu.none')} />;
- const editor=<DetailSidePanel open={!!current} selectedRowId={selected} title={current?name(t,current):t.t('widget.menu.list')} onClose={close} returnFocusKey={selected??''} onRestoreFocus={restoreFocus} initialFocusRef={editorEntryFocus}>{current?<MenuEditor key={current.menuId} row={current} host={host} close={closeCurrent} entryView={editorEntryView} entryFocus={setEditorEntryFocus}/>:null}</DetailSidePanel>;
+ const editor=<DetailSidePanel open={!!current} selectedRowId={selected} title={current?name(t,current):t.t('widget.menu.list')} onClose={close} returnFocusKey={selected??''} onRestoreFocus={restoreFocus} initialFocusRef={editorEntryFocus}>{current?<MenuEditor key={current.menuId} row={current} host={host} requestDelete={()=>requestDelete(current)} entryView={editorEntryView} entryFocus={setEditorEntryFocus} place={place}/>:null}</DetailSidePanel>;
 
  return <div ref={workspace} className="mc-detail mc-workspace menu-management" data-panel-open={panelOpen||undefined} lang="ko"
   onClickCapture={activateRow} onKeyDownCapture={event=>{if(event.key==='Enter'||event.key===' ')activateRow(event);}}>
@@ -407,10 +421,17 @@ export function MenuDetail({condition,host,detailRef}:WidgetDetailProps) {
  {domain.pending>0&&!domain.refreshing&&<span role="status"><Spinner/> {t.t('widget.menu.saving')}</span>}
  {view.status==='ready'&&<Notes notes={view.notes} t={base}/>}
  {domain.status==='stale'&&<ActionButton variant="secondary" onClick={retry}>{t.t('data.action.retry')}</ActionButton>}
- {http && transport && <VenuePlace transport={transport} files={port?.files} />}
+ <VenuePlace transport={place.transport} files={place.files} open={venueOpen} onOpenChange={open => {
+   setVenueOpen(open);
+   if (open) { setSelected(null); setAdding(false); }
+ }} />
  <div className="menu-category-tabs" lang={t.locale}>
   <DetailTabs value={filter} onValueChange={value=>{setFilter(value);setSelected(null);}} label={t.t('widget.menu.categoryFilter')}
     tabs={categoryTabs.map(value=>({value,label:t.t(`widget.menu.${value}`)}))} panels={{[filter]:<>{menuGrid}{editor}</>}} />
  </div>
+ {deletion&&<DetailDialog open dialogRole="alertdialog" title={t.t('widget.menu.delete')} description={name(t,deletion)} onClose={()=>{if(!pending)setDeletion(null);}}
+   footer={<ActionButton variant="destructive" loading={pending} onClick={confirmDelete}>{t.t('widget.menu.removeShort')}</ActionButton>}>
+  {deleteError&&<p role="alert">{deleteError}</p>}
+ </DetailDialog>}
  </div>;
 }

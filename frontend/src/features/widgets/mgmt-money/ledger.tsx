@@ -3,12 +3,12 @@ import { posBundle } from '../../../i18n/messages/pos';
 /** 가계부 (F-27, SCR-30/31): panel for the 16 sizes, detail with period/tabs/expense form, and the key sentence. */
 import { createContext, useContext, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import type { QueryCondition, WidgetDetailProps, WidgetHost, WidgetModule, WidgetPanelProps } from '../../../contracts';
-import { useDataExecute, useRealPort, useWidgetDataStore, useWidgetView } from '../../../data/react';
+import { useDataExecute, useRealPort, useRealRetry, useWidgetDataStore, useWidgetView } from '../../../data/react';
 import { TODAY, selectPayments, selectClosing, resolveDataText, supportedConditions, type DataCommand, type DataCommandResult, type ExpenseCategory, type Evidence, type LedgerExpenseRow, type LedgerModel } from '../../../data/widget-data';
 import { selectHourlySales } from '../../../data/derive/payments';
-import { ActionButton, ChipChoice, PosMoney, DataGrid, DateField, DateStepper, DetailTabs, Icon, InlineEmpty, InlineForm, NumberField, StatusBadge, Table, TextField, type GridColumn, type GridFocus, type GridSort, layoutTokens, formatPosMoney } from '../../../ui';
+import { ActionButton, ChipChoice, PosMoney, Spinner, DataGrid, DateField, DateStepper, DetailTabs, Icon, InlineEmpty, InlineForm, NumberField, StatusBadge, Table, TextField, type GridColumn, type GridFocus, type GridSort, layoutTokens, formatPosMoney } from '../../../ui';
 import {
-  DetailViewState, Kpi, MiniSeries, MoneyPanel, MONEY_FIT, NoteLine, PERIOD_KEYS, ViewState, addIsoDays, copyLang, splitMoney, useMoneyT, useRunCommand, useSizeCtx,
+  DetailViewState, Kpi, MiniSeries, MoneyPanel, MONEY_FIT, NoteLine, PERIOD_KEYS, ViewState, addIsoDays, copyLang, splitFormatted, splitMoney, useMoneyT, useRunCommand, useSizeCtx,
   type ChartData, type PanelSpec, type RowData, type T,
 } from './shared';
 import { ValueSlot } from './value-slot';
@@ -72,65 +72,80 @@ export function accountingForPeriod(presentation: AccountingPresentation | null,
 export type AccountingDetailProps = WidgetDetailProps & { readonly accounting?: AccountingView; readonly onOpenAccountingReceipt?: OpenAccountingReceipt };
 const realMethods = ['card', 'easy_pay', 'cash'] as const;
 const recognitionFields = ['chargeUsed', 'receivableCreated', 'membershipCount', 'subscriptionDaily', 'membershipExpiry', 'customPickup'] as const;
-const httpRecognitionFields = ['chargeUsed', 'receivableCreated', 'customPickup'] as const;
+const closingMembershipLabels = { membershipCount: '횟수형 회원권 이용분', subscriptionDaily: '기간형 회원권 이용분' } as const;
 const depositPurposes = ['sale', 'charge_topup', 'receivable_collection', 'membership_sale', 'custom_order'] as const;
 const won = (amount: number) => formatPosMoney(amount);
-function AmountTable({ title, rows }: { readonly title: string; readonly rows: readonly { readonly id: string; readonly label: string; readonly amount: number }[] }) {
-  return <Table className="mm-table"><caption className="mm-table__caption">{title}</caption><tbody>{rows.map(row => <tr key={row.id}><th scope="row">{row.label}</th><td>{won(row.amount)}</td></tr>)}</tbody></Table>;
+type AmountRow = { readonly id: string; readonly label: string; readonly amount: number | string };
+function AmountTable({ title, rows }: { readonly title: string; readonly rows: readonly AmountRow[] }) {
+  return <Table className="mm-table"><caption className="mm-table__caption">{title}</caption><tbody>{rows.map(row => <tr key={row.id}><th scope="row">{row.label}</th><td>{typeof row.amount === 'number' ? won(row.amount) : row.amount}</td></tr>)}</tbody></Table>;
 }
 /** REAL-PLAN F09-2 copy (Korean-only like this card; for R2/R4 review). */
 const methodCopy = {
   /** The one row a snapshot without `sales.byMethod` shows in place of the tender rows. */
-  unavailableLabel: '카드 · 간편결제 · 현금 판매분', unavailable: '집계 없음',
-  /** The subtotals that are already inside the amounts above: never added to them or to the day's sales. */
-  overlapTitle: '겹치는 소계(합계에 더하지 않아요)', mixed: '섞어 낸 결제', marginTitle: '매출을 받은 수단',
+  unavailableLabel: '카드 · 간편결제 · 현금 판매분', unavailable: '아직 기록 없음',
+  /** The subtotal that is already inside the amounts above: never added to them or to the day's sales. */
+  overlapTitle: '다른 항목과 겹치는 금액(합계에 넣지 않아요)', mixed: '복합 결제', marginTitle: '매출을 받은 수단',
 } as const;
+type ReadyAccountingView = Extract<AccountingView, { readonly status: 'ready' }>;
+/** The sales of receipts paid with more than one tender, from the example transactions (over HTTP the finance service sends it as `sales.byMethod.mixed`). */
+const exampleMixedSales = (view: ReadyAccountingView) => view.transactions.filter(row => row.methods.length > 1).reduce((total, row) => total + (row.salesAmount ?? 0), 0);
 /**
- * HTTP only (B09-2 `sales.byMethod`). Three separate tables, as PRD F-287 keeps tender and settlement type apart: the real tender of the sales (card, easy
- * pay, cash), the sales settled by member charge or on receivable, and the overlapping subtotals (mixed tenders, pickups), which the owner must not add up.
- * A summary without the split (an archived closing) shows one "not available" row and the earlier activity-based settlement rows, never zeros.
+ * The same tables over HTTP (B09-2 `sales.byMethod`) and with the example data (PAR-1, D-355): the sales by real tender (card, easy pay, cash), the
+ * sales by settlement type, and the subtotal of mixed tenders, which overlaps the tender rows and which the owner must not add up (PRD F-287 keeps
+ * tender and settlement type apart). The finance service does not split recognized sales by membership source, so those three rows say "집계 없음"
+ * over HTTP instead of showing a zero; a summary without the tender split (an archived closing) shows one "not available" row and no subtotal.
  */
-export function SalesMethodTables({ sales }: { readonly sales: AccountingSummary['sales'] }) {
-  const split = sales.byMethod;
-  if (!split) return <>
-    <Table className="mm-table"><caption className="mm-table__caption">{ac.salesMethods}</caption><tbody><tr><th scope="row">{methodCopy.unavailableLabel}</th><td>{methodCopy.unavailable}</td></tr></tbody></Table>
-    <AmountTable title={ac.settlementSales} rows={httpRecognitionFields.map(field => ({ id: field, label: ac[field], amount: sales[field] }))} />
-  </>;
+export function SalesMethodTables({ view, zerosBelow = false }: { readonly view: ReadyAccountingView; readonly zerosBelow?: boolean }) {
+  const { sales } = view.summary;
+  const http = view.source === 'http';
+  const split = http ? sales.byMethod : sales.byRealMethodSale;
+  const methods: readonly AmountRow[] = split ? realMethods.map((method, index) => ({ id: method, label: [ac.cardSale, ac.easyPaySale, ac.cashSale][index]!, amount: split[method] }))
+    : [{ id: 'unavailable', label: methodCopy.unavailableLabel, amount: methodCopy.unavailable }];
+  const settlement: readonly AmountRow[] = recognitionFields.map(field => ({
+    id: field, label: zerosBelow && (field === 'membershipCount' || field === 'subscriptionDaily') ? closingMembershipLabels[field] : ac[field],
+    amount: http && (field === 'membershipCount' || field === 'subscriptionDaily' || field === 'membershipExpiry') ? methodCopy.unavailable : sales[field],
+  }));
+  const mixed = http ? sales.byMethod?.mixed : exampleMixedSales(view);
+  const groups = [
+    { title: ac.salesMethods, rows: methods },
+    { title: ac.settlementSales, rows: settlement },
+    { title: methodCopy.overlapTitle, rows: mixed === undefined ? [] : [{ id: 'mixed', label: zerosBelow ? ac.mixed : methodCopy.mixed, amount: mixed }] },
+  ];
+  const zeros = zerosBelow ? groups.flatMap(group => group.rows.filter(row => row.amount === 0)) : [];
   return <>
-    <AmountTable title={ac.salesMethods} rows={realMethods.map((method, index) => ({ id: method, label: [ac.cardSale, ac.easyPaySale, ac.cashSale][index]!, amount: split[method] }))} />
-    <AmountTable title={ac.settlementSales} rows={[{ id: 'chargeUsed', label: ac.chargeUsed, amount: split.charge }, { id: 'receivableCreated', label: ac.receivableCreated, amount: split.receivable }]} />
-    <AmountTable title={methodCopy.overlapTitle} rows={[{ id: 'mixed', label: methodCopy.mixed, amount: split.mixed }, { id: 'customPickup', label: ac.customPickup, amount: sales.customPickup }]} />
+    {groups.map(({ title, rows }) => {
+      const visible = zerosBelow ? rows.filter(row => row.amount !== 0) : rows;
+      return visible.length ? <AmountTable key={title} title={title} rows={visible} /> : null;
+    })}
+    {zeros.length > 0 ? <dl className="app-closing-sales-notes">{zeros.map(row => <div key={row.id}><dt>{row.label}</dt><dd>{won(0)}</dd></div>)}</dl> : null}
   </>;
 }
-/** The margin widget's card: the same tender split for the margin period (finance service rows only; nothing in fixture mode). */
+/** The margin widget's card: the same tender split for the margin period. */
 export function SalesMethodCard({ view }: { readonly view: AccountingView | undefined }) {
-  if (view?.status !== 'ready' || view.source !== 'http') return null;
-  return <section className="mm-card" lang="ko" aria-label={methodCopy.marginTitle}><h3 className="mm-card__title">{methodCopy.marginTitle}</h3><SalesMethodTables sales={view.summary.sales} /></section>;
+  if (view?.status !== 'ready') return null;
+  return <section className="mm-card" lang="ko" aria-label={methodCopy.marginTitle}><h3 className="mm-card__title">{methodCopy.marginTitle}</h3><SalesMethodTables view={view} /></section>;
 }
 /** A controlled projection: rendering never creates recognition or calculates financial totals. */
-export function SalesDepositSplitCard({ view, onRetry, featureId = 'ledger', stacked = false }: { readonly view: AccountingView; readonly onRetry?: () => void; readonly featureId?: 'ledger' | 'tax'; readonly stacked?: boolean }) {
+export function SalesDepositSplitCard({ view, onRetry, featureId = 'ledger', stacked = false, showSalesTotal = true, closing = false }: { readonly view: AccountingView; readonly onRetry?: () => void; readonly featureId?: 'ledger' | 'tax'; readonly stacked?: boolean; readonly showSalesTotal?: boolean; readonly closing?: boolean }) {
   const instanceId = useId();
   if (view.status !== 'ready') return <section className="mm-card" lang="ko" aria-label={ac.title}>
     {view.status === 'loading' ? <p role="status" aria-live="polite">{ac.loading}</p> : view.status === 'error' ? <div role="alert"><p>{ac.error}</p>{onRetry ? <ActionButton variant="outline" onClick={onRetry}>{ac.retry}</ActionButton> : null}</div> : <InlineEmpty title={ac[view.status]} />}
   </section>;
   const { sales, deposits } = view.summary;
   const http = view.source === 'http';
-  const salesLabel = view.period.start === TODAY && view.period.end === TODAY ? ac.sales : ac.recognized;
+  const salesLabel = showSalesTotal ? view.period.start === TODAY && view.period.end === TODAY ? ac.sales : ac.recognized : '매출 계산';
   return <section className={stacked ? "mm-detail" : undefined} tabIndex={stacked ? 0 : undefined} lang="ko" aria-label={ac.title}>
     <div className={stacked ? "mm-detail__overview" : "mm-detail__split"}>
       <section className="mm-card" aria-label={salesLabel}>
         <header className="mm-card__header"><h3 className="mm-card__title">{salesLabel}</h3></header>
-        <p className="mm-kpi__value"><ValueSlot slotId={`${featureId}.accounting.${instanceId}.sales`} featureId={featureId} scope="detail" semanticValue={sales.total}><PosMoney amount={sales.total} size="display"/></ValueSlot></p>
-        {http ? <SalesMethodTables sales={sales} /> : <>
-          <AmountTable title={ac.salesMethods} rows={realMethods.map((method, index) => ({ id: method, label: [ac.cardSale, ac.easyPaySale, ac.cashSale][index]!, amount: sales.byRealMethodSale[method] }))} />
-          <AmountTable title={ac.settlementSales} rows={recognitionFields.map(field => ({ id: field, label: ac[field], amount: sales[field] }))} />
-        </>}
-        <p className="mm-muted">{http ? <>{ac.gross} {won(sales.gross)} − {ac.discount} {won(sales.discount)} − {ac.refund} {won(sales.refund)}</> : <>{ac.gross} {won(sales.gross)} − {ac.discount} {won(sales.discount)} − {ac.refund} {won(sales.refund)} + {ac.subscriptionDaily} {won(sales.subscriptionDaily)} + {ac.membershipExpiry} {won(sales.membershipExpiry)} + {ac.customPickup} {won(sales.customPickup)}{view.legacySales !== undefined ? <> + {ac.legacySales} {won(view.legacySales)}</> : null}</>}</p>
+        {showSalesTotal && <p className="mm-kpi__value"><ValueSlot slotId={`${featureId}.accounting.${instanceId}.sales`} featureId={featureId} scope="detail" semanticValue={sales.total}><PosMoney amount={sales.total} size="display"/></ValueSlot></p>}
+        <SalesMethodTables view={view} zerosBelow={closing} />
+        <p className={closing ? 'app-closing-sales-notes' : 'mm-muted'}>{http ? <>{ac.gross} {won(sales.gross)} − {ac.discount} {won(sales.discount)} − {ac.refund} {won(sales.refund)}</> : <>{ac.gross} {won(sales.gross)} − {ac.discount} {won(sales.discount)} − {ac.refund} {won(sales.refund)} + {ac.subscriptionDaily} {won(sales.subscriptionDaily)} + {ac.membershipExpiry} {won(sales.membershipExpiry)} + {ac.customPickup} {won(sales.customPickup)}{view.legacySales !== undefined ? <> + {ac.legacySales} {won(view.legacySales)}</> : null}</>}</p>
       </section>
       <section className="mm-card" aria-label={ac.deposits}>
         <header className="mm-card__header"><h3 className="mm-card__title">{ac.deposits}</h3></header>
         <p className="mm-kpi__value"><ValueSlot slotId={`${featureId}.accounting.${instanceId}.deposits`} featureId={featureId} scope="detail" semanticValue={deposits.total}><PosMoney amount={deposits.total} size="display"/></ValueSlot></p>
-        {view.depositCoverage?.complete === false ? <p className="mm-muted">{depositCoverageNote(view.depositCoverage.start, view.depositCoverage.end)}</p> : null}
+        {featureId === 'ledger' && view.depositCoverage?.complete === false && view.depositCoverage.start >= view.period.start && view.depositCoverage.end <= view.period.end ? <p className="mm-muted">{depositCoverageNote(view.depositCoverage.start, view.depositCoverage.end)}</p> : null}
         <AmountTable title={ac.depositMethods} rows={realMethods.map(method => ({ id: method, label: ac[method], amount: deposits.byMethod[method] }))} />
         <AmountTable title={ac.depositPurposes} rows={depositPurposes.map(purpose => ({ id: purpose, label: ac[purpose], amount: deposits.byPurpose[purpose] }))} />
         <dl className="mm-dl"><div><dt>{ac.grossReceived}</dt><dd>{won(deposits.grossReceived)}</dd></div><div><dt>{ac.returned}</dt><dd>{won(deposits.returned)}</dd></div>{deposits.pendingReceived > 0 ? <div><dt>{ac.pendingReceived}</dt><dd>{won(deposits.pendingReceived)}</dd></div> : null}</dl>
@@ -151,7 +166,9 @@ const referenceText = (value: string | undefined): string => {
   const text = value?.trim();
   return text && !INTERNAL_REFERENCE.test(text) ? text : '—';
 };
-export function AccountingTransactions({ rows, onOpenReceipt }: { readonly rows: readonly AccountingTransaction[]; readonly onOpenReceipt?: OpenAccountingReceipt }) {
+export function AccountingTransactions({ rows, onOpenReceipt, showDate = false }: { readonly rows: readonly AccountingTransaction[]; readonly onOpenReceipt?: OpenAccountingReceipt; readonly showDate?: boolean }) {
+  const t = useMoneyT();
+  const time = (row: AccountingTransaction) => showDate ? t.format.dateTime(row.at) : row.at.slice(11, 16);
   const gridId = useId();
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState<GridSort>({ columnId: 'time', direction: 'desc' });
@@ -165,8 +182,8 @@ export function AccountingTransactions({ rows, onOpenReceipt }: { readonly rows:
   });
   const open = (row: AccountingTransaction) => { setSelectedId(row.id); onOpenReceipt?.(row); };
   const columns: readonly GridColumn<AccountingTransaction>[] = [
-    { id: 'time', header: ac.time, kind: 'text', sortable: true, minWidth: layoutTokens.targetDefault * 2, value: row => row.at.slice(11, 16) },
-    { id: 'transaction', header: ac.transaction, kind: 'text', minWidth: layoutTokens.targetDefault * 4, value: row => referenceText(row.transactionNo) },
+    { id: 'time', header: showDate ? '날짜·시각' : ac.time, kind: 'text', sortable: true, minWidth: layoutTokens.targetDefault * (showDate ? 4 : 2), value: time },
+    { id: 'transaction', header: ac.transaction, kind: 'text', minWidth: layoutTokens.targetDefault * 5, value: row => referenceText(row.transactionNo) },
     { id: 'purpose', header: ac.purpose, kind: 'text', minWidth: layoutTokens.targetDefault * 3, value: row => ac[row.purpose] },
     { id: 'amount', header: ac.amount, kind: 'number', sortable: true, minWidth: layoutTokens.targetDefault * 3, value: row => won(visibleAmount(row)) },
     { id: 'recognized', header: ac.recognized, kind: 'number', minWidth: layoutTokens.targetDefault * 3, value: row => row.salesAmount === null ? '—' : won(row.salesAmount) },
@@ -175,7 +192,9 @@ export function AccountingTransactions({ rows, onOpenReceipt }: { readonly rows:
     { id: 'status', header: ac.status, kind: 'status', minWidth: layoutTokens.targetDefault * 2, value: row => ac[row.kind] },
     { id: 'original', header: ac.original, kind: 'text', minWidth: layoutTokens.targetDefault * 3, value: row => referenceText(row.originalId) },
   ];
-  return <DataGrid renderFilters={() => <ChipChoice label={ac.transactions} value={filter} onChange={setFilter} options={['all', ...realMethods, 'accounts', 'mixed'].map(key => ({ value: key, label: ac[key as 'all' | RealMethod | 'accounts' | 'mixed'] }))} />} id={`accounting-transactions-${gridId}`} label={ac.transactions} rows={ordered} getRowId={row => row.id} getRowLabel={row => `${row.at.slice(11, 16)} ${ac[row.purpose]}`} columns={columns} sort={sort} onSortChange={setSort} selectedRowId={selectedId} onSelectionChange={onOpenReceipt ? id => { const row = ordered.find(candidate => candidate.id === id); if (row) open(row); } : undefined} expandedRowIds={new Set()} focus={focus} onFocusChange={setFocus} getRowActions={onOpenReceipt ? row => [{ id: 'receipt', label: ac.openReceipt, onPress: () => open(row) }] : undefined} emptyContent={<InlineEmpty title={ac.emptyTransactions} />} />;
+  const visibleColumns = columns.filter(column => ['time', 'purpose', 'amount', 'status'].includes(column.id)
+    || filtered.some(row => { const value = column.value(row); return value != null && value !== '' && value !== '—'; }));
+  return <DataGrid renderFilters={() => <ChipChoice label={ac.transactions} value={filter} onChange={setFilter} options={['all', ...realMethods, 'accounts', 'mixed'].map(key => ({ value: key, label: ac[key as 'all' | RealMethod | 'accounts' | 'mixed'] }))} />} id={`accounting-transactions-${gridId}`} label={ac.transactions} rows={ordered} getRowId={row => row.id} getRowLabel={row => `${time(row)} ${ac[row.purpose]}`} columns={visibleColumns} sort={sort} onSortChange={setSort} selectedRowId={selectedId} onSelectionChange={onOpenReceipt ? id => { const row = ordered.find(candidate => candidate.id === id); if (row) open(row); } : undefined} expandedRowIds={new Set()} focus={focus} onFocusChange={setFocus} getRowActions={onOpenReceipt ? row => [{ id: 'receipt', label: ac.openReceipt, onPress: () => open(row) }] : undefined} emptyContent={<InlineEmpty title={ac.emptyTransactions} />} />;
 }
 
 
@@ -207,7 +226,7 @@ export const LEDGER_FIT = [{ selector: '.mm-chart' }, ...MONEY_FIT, { selector: 
 
 function compareText(t: T, model: LedgerModel): string | undefined {
   const c = model.comparison;
-  if (!c) return undefined;
+  if (!c || (model.period.start === model.period.end && model.sales.net === 0)) return undefined;
   const delta = t.format.delta(c.delta.value, 'percent');
   return t(model.period.start === model.period.end ? 'widget.ledger.vsWeek' : 'widget.ledger.vsPrev', { delta });
 }
@@ -285,7 +304,10 @@ export function LedgerPanel(props: WidgetPanelProps) {
   const ctx = useSizeCtx(props);
   const store = useWidgetDataStore();
   const view = useWidgetView(ID, props.condition);
-  if (view.status !== 'ready') return <ViewState view={view} ctx={ctx} host={props.host} featureId={ID} t={t} />;
+  const retry = useRealRetry('money');
+  const http = useRealPort()?.mode('money') === 'http';
+  if (view.status !== 'ready' && view.messageKey === 'data.real.loading') return <p className="mm-ledger-loading" role="status"><Spinner /> {t('widget.ledger.loading')}</p>;
+  if (view.status !== 'ready') return <ViewState view={view} ctx={ctx} host={props.host} featureId={ID} t={t} onRetry={http ? retry : undefined} message={view.status === 'error' ? t('widget.ledger.loadError') : undefined} />;
   return <MoneyPanel spec={buildSpec(t, view.model, <NoteLine notes={view.notes} t={t} />, ctx.shape, selectClosing(store.getSnapshot(), { date: TODAY, scenario: 'normal' }).status === 'closed', ctx.height)} ctx={ctx} />;
 }
 
@@ -314,6 +336,9 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
   const [tab, setTab] = useState<LedgerTab>(() => expenseView ? 'expenses' : detailRef.view === 'profit' ? 'profit' : 'sales');
   const store = useWidgetDataStore();
   const view = useWidgetView(ID, conditionFor(period));
+  const retry = useRealRetry('money');
+  const http = useRealPort()?.mode('money') === 'http';
+  const onRetry = http ? retry : host.resetPreview;
   const presentation = useAccountingPresentation();
   const run = useMoneyRun(host);
   const [confirming, setConfirming] = useState<ReadonlySet<string>>(new Set());
@@ -325,13 +350,15 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
     <ChipChoice label={t('widget.ledger.periodLabel')} value={period} onChange={setPeriod} options={PERIODS.map((p) => ({ value: p, label: t(PERIOD_KEYS[p]) }))} />
   );
   const widerPeriod = PERIODS[PERIODS.indexOf(period) + 1];
-  if (view.status !== 'ready') return <div className="mm-detail" data-widget={ID}>{periodChips}<DetailViewState view={view} host={host} t={t} nextAction={widerPeriod && period !== 'last30' ? { label: t('widget.ledger.seePeriod', { period: t(PERIOD_KEYS[widerPeriod]) }), onPress: () => setPeriod(widerPeriod) } : undefined} /></div>;
+  if (view.status !== 'ready') return <div className="mm-detail" data-widget={ID}>{periodChips}<DetailViewState view={view} host={host} t={t} onRetry={onRetry}
+    message={view.status === 'error' ? t('widget.ledger.loadError') : view.messageKey === 'data.real.loading' ? t('widget.ledger.loading') : undefined}
+    nextAction={widerPeriod && period === 'today' && view.messageKey !== 'data.real.loading' ? { label: t('widget.ledger.seePeriod', { period: t(PERIOD_KEYS[widerPeriod]) }), onPress: () => setPeriod(widerPeriod) } : undefined} /></div>;
   const m = view.model;
   const accounting = accountingForPeriod(presentation, m.period, explicitAccounting);
   const money = (n: number) => t.format.money(n, 'compact');
   const full = (n: number) => t.format.money(n, 'full');
   const recognizedSales = accounting ? accounting.status === 'ready' ? accounting.summary.sales.total : null : m.sales.net;
-  const sales = recognizedSales === null ? { value: '—', unit: '' } : splitMoney(t, recognizedSales), expenses = splitMoney(t, m.expenses.total);
+  const sales = recognizedSales === null ? { value: '—', unit: '' } : splitFormatted(full(recognizedSales)), expenses = splitMoney(t, m.expenses.total);
   const remaining = m.remaining === null ? null : splitMoney(t, m.remaining);
   const compare = compareText(t, m);
   const snapshot = store.getSnapshot();
@@ -344,7 +371,7 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
   const showCategories = tab === 'expenses' && !singleDay;
   const chart = singleDay ? singleDayChart(t, m, tab, chartTitle, snapshot) : {
     ...trendChart(t, m.periodTrend, chartTitle, [tab === 'sales' ? 'net' : tab === 'expenses' ? 'expenses' : 'netProfit']),
-    allLabels: m.periodTrend.length <= 7,
+    allLabels: tab === 'sales' || m.periodTrend.length <= 7, valueLabels: tab === 'sales',
   };
   const comparisonTitle = t('widget.ledger.comparisonChart');
   const confirmCandidate = (expenseId: string) => {
@@ -368,7 +395,7 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
             unit={sales.unit}
             semanticValue={recognizedSales}
             details={<>
-              <ActionButton id="ledger.closing.status" data-focus-key="ledger.closing.status" variant="outline" aria-label={t('widget.ledger.openClosing')} onClick={() => host.openClosing('ledger.closing.status')}>
+              <ActionButton id="ledger.closing.status" data-focus-key="ledger.closing.status" variant="outline" aria-label={`${t(closed ? 'widget.ledger.closed' : 'widget.ledger.beforeClosing')}, ${t('widget.ledger.openClosing')}`} onClick={() => host.openClosing('ledger.closing.status')}>
                 <Icon name={closed ? 'check' : 'clock'} aria-hidden />
                 <ValueSlot slotId="ledger.detail.closing" featureId={ID} scope="detail" semanticValue={closed}>{t(closed ? 'widget.ledger.closed' : 'widget.ledger.beforeClosing')}</ValueSlot>
               </ActionButton>
@@ -377,7 +404,7 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
           />
           <Kpi slot="ledger.kpi.expenses" label={t('widget.ledger.totalExpenses')} value={expenses.value} unit={expenses.unit} semanticValue={m.expenses.total} />
           <Kpi slot="ledger.kpi.remaining" label={t('widget.ledger.remaining')} value={remaining ? remaining.value : t('data.state.ledger.no-expenses')} unit={remaining?.unit} semanticValue={m.remaining} />
-          <Kpi slot="ledger.kpi.missing" label={t('widget.ledger.missingEvidenceLabel')} value={String(m.missingEvidenceCount)} unit={t.locale === 'ko' ? '개' : undefined} semanticValue={m.missingEvidenceCount} tone={m.missingEvidenceCount > 0 ? 'warning' : undefined} />
+          <Kpi slot="ledger.kpi.missing" label={t('widget.ledger.missingEvidenceLabel')} value={String(m.missingEvidenceCount)} unit={t.locale === 'ko' ? '건' : undefined} semanticValue={m.missingEvidenceCount} tone={m.missingEvidenceCount > 0 ? 'warning' : undefined} />
         </div>
         <div className={`mm-detail__split${singleDay && tab === 'sales' ? ' mm-ledger-today-sales' : ''}${showCategories ? '' : ' mm-detail__split--single'}`}>
           <section className="mm-card" aria-label={chartTitle}>
@@ -386,13 +413,13 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
           </section>
           {showCategories ? <section className="mm-card" aria-label={t('widget.ledger.detailCategories')}>
             <h3 className="mm-card__title" lang="ko">{t('widget.ledger.detailCategories')}</h3>
-            {m.expenses.byCategory.length === 0 ? <p className="mm-muted">{t('widget.ledger.noExpenseRows')}</p> : (
+            {m.expenses.byCategory.length === 0 ? null : (
               <ul className="mm-plain-list">{m.expenses.byCategory.map((c) => <li key={c.category} data-row-id={c.category}><span>{t(c.categoryKey)}</span><strong><ValueSlot slotId={`ledger.detail.category.${c.category}`} featureId={ID} scope="detail" semanticValue={c.amount}>{money(c.amount)}</ValueSlot></strong></li>)}</ul>
             )}
           </section> : null}
         </div>
         {tab === 'sales' ? (
-          <>{accounting ? <SalesDepositSplitCard view={accounting} onRetry={presentation?.onRetry ?? host.resetPreview} /> : <><p lang="ko">{posT('pos.salesCalculation', { gross: money(m.sales.gross), discount: money(m.sales.discount), refund: money(m.sales.refund) })}</p> <ActionButton id="ledger.closing" data-focus-key="ledger.closing" variant="outline" onClick={() => host.openClosing('ledger.closing')}>{t('widget.briefing.closingAction')}</ActionButton><Table className="mm-table" data-slot="ledger.sales-summary">
+          <>{accounting ? <SalesDepositSplitCard view={accounting} showSalesTotal={false} onRetry={presentation?.onRetry ?? onRetry} /> : <><p lang="ko">{posT('pos.salesCalculation', { gross: money(m.sales.gross), discount: money(m.sales.discount), refund: money(m.sales.refund) })}</p> <ActionButton id="ledger.closing" data-focus-key="ledger.closing" variant="outline" onClick={() => host.openClosing('ledger.closing')}>{t('widget.briefing.closingAction')}</ActionButton><Table className="mm-table" data-slot="ledger.sales-summary">
             <tbody>
               <tr><th scope="row">{t('widget.ledger.gross')}</th><td>{full(m.sales.gross)}</td></tr>
               <tr><th scope="row">{t('widget.ledger.discount')}</th><td>{full(-m.sales.discount)}</td></tr>
@@ -439,7 +466,7 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
           </div>
         )}
       </section>
-      {tab === 'sales' ? <div className="mm-detail__grid">{accounting ? accounting.status === 'ready' ? <AccountingTransactions rows={accounting.transactions} onOpenReceipt={onOpenAccountingReceipt ?? presentation?.onOpenReceipt} /> : null : <PaymentGrid t={t} snapshot={store.getSnapshot()} />}</div> : tab === 'expenses' && m.expenses.items.length > 0 ? <div className="mm-detail__grid"><ExpenseGrid t={t} rows={m.expenses.items} itemId={detailRef.itemId} /></div> : null}
+      {tab === 'sales' ? <div className="mm-detail__grid">{accounting ? accounting.status === 'ready' ? <AccountingTransactions rows={accounting.transactions} showDate={!singleDay} onOpenReceipt={onOpenAccountingReceipt ?? presentation?.onOpenReceipt} /> : null : <PaymentGrid t={t} snapshot={store.getSnapshot()} />}</div> : tab === 'expenses' && m.expenses.items.length > 0 ? <div className="mm-detail__grid"><ExpenseGrid t={t} rows={m.expenses.items} itemId={detailRef.itemId} /></div> : null}
     </div>
   );
 }

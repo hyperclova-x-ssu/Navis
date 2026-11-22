@@ -95,7 +95,7 @@ describe('staff detail', () => {
     expect(screen.queryByText('17:30 교대')).toBeNull();
     expect(container.querySelector('[data-slot="staff-schedule.metric.value"]')).toBeTruthy();
     rerender(<StaffPanel {...panel} width={2} shape="W" />);
-    const row = screen.getByText('오전·낮').closest('.staff-value-row');
+    const row = screen.getByText('오전').closest('.staff-value-row');
     expect(row?.querySelector('strong')?.textContent).toBe('0명');
     rerender(<StaffPanel {...panel} width={2} height={2} shape="S" />);
     expect(screen.getByText('교대')).toBeTruthy();

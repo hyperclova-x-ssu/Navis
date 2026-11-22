@@ -75,7 +75,7 @@ it('confirms store closure deletion, warns about its linked notice draft, and su
   fireEvent.click(remove);
   expect(store.getSnapshot()).toBe(before);
   expect(item.getByText('연결된 공지 초안에서 휴무 연결이 끊겨요')).toBeInTheDocument();
-  const cancel = item.getByRole('button', { name: '그대로 두기' });
+  const cancel = item.getByRole('button', { name: '일정 유지하기' });
   expect(cancel).toHaveFocus();
   fireEvent.click(cancel);
   expect(remove).toHaveFocus();
@@ -120,7 +120,7 @@ describe('GD-2 calendar form answers', () => {
   it('past date: message under the date field, nothing saved, then 지난 기록으로 남기기 saves it', async () => {
     const store = open(), start = events(store).length;
     await fill('거래처 미팅', PAST_DAY);
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     expect(form().getByRole('alert')).toHaveTextContent(PAST);
     expect(form().getByLabelText('날짜')).toHaveAttribute('aria-invalid', 'true');
     expect(events(store)).toHaveLength(start);
@@ -131,19 +131,19 @@ describe('GD-2 calendar form answers', () => {
   it('changing the date clears the question; a date from today on saves without asking', async () => {
     const store = open(), start = events(store).length;
     await fill('거래처 미팅', PAST_DAY);
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     expect(form().getByRole('alert')).toHaveTextContent(PAST);
     await pickDate(form(), '날짜', LATER_DAY);
     expect(screen.queryByRole('form') && form().queryByRole('alert')).toBeFalsy();
     expect(screen.queryByRole('button', { name: '지난 기록으로 남기기' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     expect(events(store)).toHaveLength(start + 1);
     expect(events(store).at(-1)).toMatchObject({ date: LATER_DAY });
   });
   it('duplicate: asks at the title field with 그래도 저장하기 / 그대로 두기; leaving it keeps one event', async () => {
     const store = open(), start = events(store).length;
     await fill(SAMPLE_EVENT.title, TODAY);
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     expect(form().getByRole('alert')).toHaveTextContent(TWIN);
     expect(form().getByLabelText('일정 제목')).toHaveAttribute('aria-invalid', 'true');
     expect(events(store)).toHaveLength(start);
@@ -154,7 +154,7 @@ describe('GD-2 calendar form answers', () => {
   it('duplicate: 그래도 저장하기 adds the second one on purpose', async () => {
     const store = open(), start = events(store).length;
     await fill(SAMPLE_EVENT.title, TODAY);
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     fireEvent.click(screen.getByRole('button', { name: '그래도 저장하기' }));
     expect(events(store)).toHaveLength(start + 1);
     expect(events(store).filter(e => 'raw' in e.title && e.title.raw === SAMPLE_EVENT.title)).toHaveLength(2);

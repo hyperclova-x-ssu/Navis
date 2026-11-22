@@ -28,7 +28,7 @@ export function useLocalCommand(host: WidgetHost) {
   const active = useRef(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
-  async function send(command: DataCommand): Promise<boolean> {
+  async function send(command: DataCommand, { notifySuccess = true, success }: { notifySuccess?: boolean; success?: Pick<Parameters<WidgetHost['notify']>[0], 'messageKey' | 'params'> } = {}): Promise<boolean> {
     if (active.current) return false;
     active.current = true;
     setPending(true);
@@ -40,12 +40,15 @@ export function useLocalCommand(host: WidgetHost) {
         if (result.reason === 'OFFER_CLOSED' || result.reason === 'OFFER_EXPIRED') retry();
         return false;
       }
-      if (result.noticeKey) {
+      if (notifySuccess && result.noticeKey) {
         const expiry = (result.value as CommandReceipt | undefined)?.undoUntil;
-        host.notify({ kind: 'success', messageKey: result.noticeKey,
+        host.notify({ kind: 'success', messageKey: result.noticeKey, ...success,
           ...(result.undoToken ? { undoToken: result.undoToken } : {}), ...(expiry ? { undoUntil: expiry } : {}) });
       }
       return true;
+    } catch {
+      setError('data.real.error.SERVICE_UNAVAILABLE');
+      return false;
     } finally {
       active.current = false;
       setPending(false);
@@ -54,7 +57,7 @@ export function useLocalCommand(host: WidgetHost) {
   return { pending, error, send };
 }
 
-export function allowedSource(value: string | null): string | undefined {
+export function allowedSource(value: string | null | undefined): string | undefined {
   if (!value) return;
   try {
     const url = new URL(value);
@@ -63,6 +66,8 @@ export function allowedSource(value: string | null): string | undefined {
 }
 
 export function seoulStamp(stamp: string): string {
+  // An example (fixture) stamp is already the store's wall time; only a timezone-qualified service stamp is moved to Seoul time.
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/u.test(stamp)) return stamp.slice(0, 16);
   const time = Date.parse(stamp);
   return Number.isFinite(time) ? new Date(time + 9 * 3_600_000).toISOString().slice(0, 16) : stamp;
 }

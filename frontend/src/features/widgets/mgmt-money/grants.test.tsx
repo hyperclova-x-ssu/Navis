@@ -6,14 +6,59 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithKit } from '../../../ui/test-utils';
 import { createWidgetDataStore, selectWidget, TODAY } from '../../../data/widget-data';
+import { addDays } from '../../../data/db/time';
 import type { WidgetHost } from '../../../contracts';
-import { GrantsDetail } from './grants';
+import { GrantsDetail, GrantsPanel } from './grants';
 import { applicationId, grant, insight, insightSession, noticeId, updatedAt } from '../../../data/reality/11/testing';
 import { manualsGrantsDomain } from '../../assistant/domains/manuals-grants';
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const host: WidgetHost = { layer: 'management', resetPreview: vi.fn(), openClosing: vi.fn(() => true), openLinked: vi.fn(), openDetail: vi.fn(), notify: vi.fn(), acknowledgeBriefing: vi.fn() };
 const detail = <GrantsDetail featureId="grants" condition={{ kind: 'default' }} detailRef={{ featureId: 'grants' }} host={host} />;
 const widgetStyles = readFileSync('src/features/widgets/mgmt-money/widget.css', 'utf8');
+
+it('shows a reason chip and sorts open grants by match tier then deadline', async () => {
+ const { collections, newStore } = insightSession();
+ const row = (id: string, title: string, matchTier: 'exact' | 'related', deadline: string, startsOn = TODAY) =>
+  ({ ...grant, id, title, matchTier, startsOn, deadline, matchReason: matchTier === 'exact' ? '서울 · 카페' : '서울 · 소상공인' });
+ collections.set('grant-notices', [
+  row('late', '늦은 마감 사업', 'related', addDays(TODAY, 6)),
+  row('next', '접수 예정 사업', 'exact', addDays(TODAY, 3), addDays(TODAY, 1)),
+  row('soon', '빠른 마감 사업', 'related', addDays(TODAY, 2)),
+  row('exact', '프로필 일치 사업', 'exact', addDays(TODAY, 9)),
+ ]);
+ const { container } = renderWithKit(detail, { store: newStore() });
+ const exact = await screen.findByRole('button', { name: /프로필 일치 사업/ });
+ expect(within(exact).getByText('서울 · 카페').closest('.ui-status-chip')).toBeVisible();
+ const list = container.querySelector('[data-slot="grants.list"]')!;
+ expect(within(list as HTMLElement).getAllByRole('button').map(button => button.querySelector('strong')?.textContent))
+  .toEqual(['프로필 일치 사업', '빠른 마감 사업', '늦은 마감 사업', '접수 예정 사업']);
+});
+
+it('links the empty dashboard to the notice form without requesting a refresh', async () => {
+ const { backend, newStore } = insightSession();
+ const openDetail = vi.fn();
+ renderWithKit(<GrantsPanel featureId="grants" shape="Q" presetId="A" editing={false} width={1} height={1} condition={{ kind: 'default' }} host={{ ...host, openDetail }} />, { store: newStore() });
+ expect(await screen.findByText('확인할 지원사업이 없어요')).toBeVisible();
+ await userEvent.click(screen.getByRole('button', { name: /공고 불러오기/ }));
+ expect(openDetail).toHaveBeenCalledWith({ featureId: 'grants', view: 'notices', focus: 'action' });
+ expect(backend.callsTo('POST', `${insight}/grant-notices/sync`)).toHaveLength(0);
+});
+
+it('uses the saved business type and asks for a region before importing notices', async () => {
+ const { backend, newStore } = insightSession();
+ const store = newStore();
+ const transaction = { transactionId: 'grant-shop-type', runId: store.getSnapshot().runId!, expectedDataRevision: store.getSnapshot().revision, expectedRunRevision: 0, transitionToken: 'grant-shop-type' };
+ const prepared = store.session.prepare(transaction, { type: 'shop.updateSettings', businessType: 'restaurant', paymentStyle: 'prepaid', tableLayout: null });
+ if (!prepared.ok) throw new Error(prepared.reason);
+ store.session.publish(prepared.change);
+ store.session.flush(transaction.transactionId);
+ renderWithKit(detail, { store });
+ await userEvent.click(await screen.findByRole('button', { name: '공고 불러오기' }));
+ expect(screen.getByRole('textbox', { name: '업종' })).toHaveValue('음식점');
+ expect(screen.getByRole('textbox', { name: '지역' })).toHaveAccessibleDescription('매장이 있는 지역을 넣어 주세요');
+ expect(screen.getByRole('button', { name: '공고 불러오기' })).toBeDisabled();
+ expect(backend.callsTo('POST', `${insight}/grant-notices/sync`)).toHaveLength(0);
+});
 
 it('keeps the official notice period and records a historical application in Insight', async () => {
  const { backend, collections, newStore } = insightSession();
@@ -122,14 +167,14 @@ it('offers application status in a keyboard-navigable grid', async () => {
 });
 it('keeps all three tabs usable in the empty example, each with a sentence and its next action', async () => {
  renderWithKit(<GrantsDetail featureId="grants" condition={{ kind: 'default' }} detailRef={{ featureId: 'grants' }} host={host} />, { preview: { family: 'empty', overrides: {} } });
- expect(screen.getByText('확인할 지원사업이 없어요')).toBeInTheDocument();
+ expect(screen.getByText('기업마당 공고가 없어요')).toBeInTheDocument();
  expect(screen.getByText('새 공고가 올라오면 이 목록에 보여 드려요')).toBeInTheDocument();
  await userEvent.click(screen.getByRole('button', { name: '지원 현황 보기' }));
  expect(screen.getByRole('tab', { name: '지원 현황' })).toHaveAttribute('aria-selected', 'true');
  expect(screen.getByText('아직 신청한 사업이 없어요')).toBeInTheDocument();
  expect(screen.getByText('사업 목록에서 신청 완료로 표시하면 여기에 쌓여요')).toBeInTheDocument();
  await userEvent.click(screen.getByRole('tab', { name: '신청서 초안' }));
- expect(screen.getByText('초안을 만들 예시 자료가 없어요')).toBeInTheDocument();
+ expect(screen.getByText('초안을 만들 자료가 없어요')).toBeInTheDocument();
  await userEvent.click(screen.getByRole('button', { name: '사업 목록 보기' }));
  expect(screen.getByRole('tab', { name: '사업 목록' })).toHaveAttribute('aria-selected', 'true');
 });
@@ -179,7 +224,7 @@ it('loads once per action, shows sources and checks, and copies the exact edit',
  expect(transport).toHaveBeenCalledWith('/api/navis/widget-drafts', expect.objectContaining({ body: JSON.stringify({ widget: 'grants', sampleId: programs()[1]!.noticeId }) }));
  resolve(draftResponse());
  const editor = await screen.findByRole('textbox', { name: '신청서 초안' });
- expect(editor).toHaveValue(draftBody);
+ await waitFor(() => expect(editor).toHaveValue(draftBody));
  expect(screen.getByText('예시 지원 공고')).toBeVisible();
  expect(screen.getByText('확인 필요')).toBeVisible();
  fireEvent.change(editor, { target: { value: '고친 신청서\n지원 금액: 확인 필요' } });
@@ -188,7 +233,7 @@ it('loads once per action, shows sources and checks, and copies the exact edit',
  expect(screen.getByText('복사했어요')).toBeVisible();
 });
 
-it('keeps edits on failure, retries explicitly, and clears the editor for an empty example', async () => {
+it('keeps edits on failure, retries explicitly, and opens a blank editor without a notice', async () => {
  const transport = vi.fn().mockResolvedValueOnce(draftResponse())
   .mockResolvedValueOnce(Response.json({ code: 'RATE_LIMITED' }, { status: 429, headers: { 'Retry-After': '12' } }))
   .mockResolvedValueOnce(draftResponse());
@@ -204,11 +249,13 @@ it('keeps edits on failure, retries explicitly, and clears the editor for an emp
  expect(editor).toHaveValue('고친 글');
  fireEvent.click(within(alert).getByRole('button', { name: '다시 시도하기' }));
  await waitFor(() => expect(editor).toHaveValue(draftBody));
- fireEvent.click(screen.getByRole('button', { name: '자료가 없는 예시' }));
- fireEvent.click(screen.getByRole('button', { name: '신청서 초안 만들기' }));
- expect(screen.getByText('초안을 만들 예시 자료가 없어요')).toBeVisible();
- expect(screen.getByRole('textbox', { name: '신청서 초안' })).toHaveValue('');
+ fireEvent.click(screen.getByRole('button', { name: '공고 없이 직접 쓰기' }));
+ expect(screen.getByRole('button', { name: '신청서 초안 만들기' })).toBeDisabled();
+ const blank = screen.getByRole('textbox', { name: '신청서 초안' });
+ expect(blank).toHaveValue('');
  expect(screen.getByRole('button', { name: '초안 복사하기' })).toBeDisabled();
+ fireEvent.change(blank, { target: { value: '직접 쓴 초안' } });
+ expect(screen.getByRole('button', { name: '초안 복사하기' })).toBeEnabled();
 });
 
 it('focuses and selects the editable text if clipboard access fails', async () => {
@@ -256,7 +303,7 @@ it('reads a closed Financial Center recommendation alongside Bizinfo and re-read
   const section = document.querySelector<HTMLElement>('[data-slot="grants.financial-center.detail"]')!;
   expect(within(section).getByText('기관에서 신청')).toBeVisible();
   // T-27: the 기준일 is store day and clock, never the browser's date string.
-  expect(section.textContent).toMatch(/기준일\d{1,2}\/\d{1,2}\([월화수목금토일]\) 15:00/);
+  expect(section.textContent).not.toMatch(/기준일|15:00/);
   expect(section.textContent).not.toMatch(/GMT|오전|오후/);
   expect(within(section).getByRole('link', { name: '공식 안내 열기' })).toHaveAttribute('href', row.officialNoticeUrl);
   expect(within(section).queryByRole('button', { name: /신청 완료/u })).toBeNull();

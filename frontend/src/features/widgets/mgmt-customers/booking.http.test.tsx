@@ -68,6 +68,27 @@ const cell = (id: string, column: string) => document.querySelector(`[data-grid-
 const panelOf = async (title: RegExp | string) => within(await screen.findByRole('region', { name: title }));
 const transitions = (service: ReturnType<typeof bookingService>, id: string) => service.backend.callsTo('POST', `/reservations/${encodeURIComponent(id)}/transitions`);
 
+it('keeps a booking draft open and points to the list when a save cannot be confirmed', async () => {
+  const { service } = setup();
+  service.backend.on('POST', '/reservations', () => ({ status: 503, body: { code: 'SERVICE_UNAVAILABLE' } }));
+  await screen.findByRole('grid', { name: '예약 목록' }, { timeout: 8000 });
+  fireEvent.click(screen.getByRole('button', { name: '예약 추가하기' }));
+  fireEvent.change(screen.getByLabelText('예약자 이름'), { target: { value: '김하나' } });
+  fireEvent.change(screen.getByLabelText('예약 인원'), { target: { value: '2' } });
+  fireEvent.click(screen.getByRole('button', { name: '예약 저장하기' }));
+  const result = await screen.findByText(/잠시 뒤 목록에서 예약 상태를 확인해 주세요/u, {}, { timeout: 8000 });
+  expect(result).toHaveAttribute('role', 'alert');
+  expect(screen.getByLabelText('예약자 이름')).toHaveValue('김하나');
+});
+
+it('does not announce a zero party or a confirmation for a pending NAVER request', async () => {
+  setup();
+  await waitFor(() => expect(cell('naver-1001', 'party')).toHaveAccessibleName(/인원 정보 없음/));
+  fireEvent.click(cell('naver-1001', 'guest'));
+  const panel = await panelOf(/18:30/);
+  expect(panel.queryByText('직접 확정')).toBeNull();
+});
+
 it('finds the selected date and the displayed reservation status without writing', async () => {
   const { service } = setup();
   await waitFor(() => expect(row('naver-1004')).not.toBeNull());
@@ -85,25 +106,24 @@ it('shows NAVER bookings with their number, product and Npay lock, no party that
   const { service } = setup();
   const grid = await screen.findByRole('grid', { name: '예약 목록' });
   await waitFor(() => expect(row('naver-1001')).not.toBeNull());
-  expect(cell('naver-1001', 'number')).toHaveTextContent('1001');
-  expect(cell('naver-1001', 'product')).toHaveTextContent('저녁 코스');
-  expect(cell('naver-1001', 'party')).toHaveTextContent('—');
+  expect(within(grid).getAllByRole('columnheader').map(header => header.textContent)).toEqual([
+    '종류', '예약 시각', '예약자 정보', '예약 인원', '테이블', '요청사항', '경로', '상태',
+  ]);
+  expect(cell('naver-1001', 'party')).toHaveTextContent('인원 정보 없음');
   expect(cell('naver-1001', 'path')).toHaveTextContent('네이버 예약');
-  expect(cell('naver-1002', 'npay')).toHaveTextContent('Npay 결제');
-  expect(cell('naver-1001', 'npay')).not.toHaveTextContent('Npay');
   expect(cell('sg-1', 'path')).toHaveTextContent('전화 예약 요청');
-  expect(cell('rv-local', 'path')).toHaveTextContent('직접 추가함');
+  expect(cell('rv-local', 'path')).toHaveTextContent('직접 추가');
   // the POS table label is what the owner reads, never the service's table UUID
   expect(cell('rv-local', 'table')).toHaveTextContent('창가 1');
   expect(document.body.textContent).not.toContain(TABLE_UUID);
   // SmartCall is daily aggregates of the period only: totals, one row per day, and no call content of any kind
-  const calls = screen.getByRole('region', { name: '스마트콜 통화' });
+  const calls = screen.getByRole('region', { name: '스마트콜' });
   expect(calls).toHaveTextContent('통화 8건 · 부재중 2건');
   expect(calls).toHaveTextContent('네이버 검색');
   expect(within(calls).getAllByRole('row')).toHaveLength(1 + 2);
   expect(within(calls).getByRole('columnheader', { name: '10초 이상' })).toBeInTheDocument();
   expect(within(calls).getByText('80초')).toBeInTheDocument();
-  expect(calls).toHaveTextContent('통화 내용은 없어요');
+  expect(calls).toHaveTextContent('하루 단위로 통화 건수를 보여 드려요');
   expect(screen.queryByText(/통화 요약|전화 연결됨|녹음|원음/u)).toBeNull();
   // the booking products show their names and nothing else the provider does not give
   const products = screen.getByText(/^예약 상품/u).closest('details')!;
@@ -112,15 +132,25 @@ it('shows NAVER bookings with their number, product and Npay lock, no party that
   expect(screen.queryByText(/결제 요청|이용 후 결제/u)).toBeNull();
   // the Excel stays the owner's official export: a link with masking and the row limit, no import of any kind
   const link = screen.getByRole('link', { name: '네이버 예약 엑셀 내보내기' });
+  expect(link.nextElementSibling).toHaveTextContent('연락처는 가려지고 5,000행까지');
   expect(link).toHaveAttribute('href', NAVER_BOOKING_EXPORT_URL);
   expect(link).toHaveAttribute('rel', 'noopener noreferrer');
-  expect(screen.getByText(/연락처는 가려지고 최대 5,000행/u)).toBeInTheDocument();
+  expect(screen.getByText(/연락처는 가려지고 5,000행까지/u)).toBeInTheDocument();
   expect(document.querySelector('input[type="file"]')).toBeNull();
   expect(screen.queryByText(/가져오기|불러오기|업로드/u)).toBeNull();
   // none of the fixture phone-AI wording survives over HTTP
   expect(screen.queryByText('전화 연결됨(예시)')).toBeNull();
   expect(screen.queryByRole('region', { name: '통화 요약' })).toBeNull();
   expect(grid).toBeInTheDocument();
+  fireEvent.click(cell('naver-1001', 'guest'));
+  const first = await panelOf(/18:30.*박○○/u);
+  expect(first.getByText('1001')).toBeInTheDocument();
+  expect(first.getByText('저녁 코스')).toBeInTheDocument();
+  expect(first.queryByText('Npay 결제')).toBeNull();
+  fireEvent.click(cell('naver-1002', 'guest'));
+  const linked = await panelOf(/20:00.*이○○/u);
+  expect(linked.getByText('1002')).toBeInTheDocument();
+  expect(linked.getByText('Npay 결제')).toBeInTheDocument();
   expect(service.backend.callsTo('POST', /./u)).toHaveLength(0);
 });
 
@@ -168,7 +198,7 @@ it('locks an Npay-linked booking and never sends a change', async () => {
 });
 
 /** The cancel input step: the form the [예약 취소하기] button opens in the side panel (SCR-225 step 1). */
-const openCancel = async (panel: Awaited<ReturnType<typeof panelOf>>, name = '예약 취소하기') => {
+const openCancel = async (panel: Awaited<ReturnType<typeof panelOf>>, name = '네이버 예약 취소하기') => {
   fireEvent.click(panel.getByRole('button', { name }));
   return within(await panel.findByRole('form', { name: '예약 취소' }));
 };
@@ -208,7 +238,7 @@ it('cancels a NAVER booking that is not Npay-linked with the owner-entered reaso
   expect(back.getByLabelText('취소 사유')).toHaveValue('  휴무일이에요 ');
   expect(transitions(service, 'naver-1001')).toHaveLength(0);
   fireEvent.click(back.getByRole('button', { name: '취소 내용 확인하기' }));
-  const confirm = (await secondStep(panel)).getByRole('button', { name: '1001 예약 취소하기' });
+  const confirm = (await secondStep(panel)).getByRole('button', { name: '예약 취소하기' });
   fireEvent.click(confirm);
   fireEvent.click(confirm);
   await waitFor(() => expect(transitions(service, 'naver-1001')).toHaveLength(1));
@@ -230,7 +260,7 @@ it('never offers an undo after a NAVER cancel, even when a receipt carries an un
   const form = await openCancel(panel);
   fireEvent.change(form.getByLabelText('취소 사유'), { target: { value: '휴무일이에요' } });
   fireEvent.click(form.getByRole('button', { name: '취소 내용 확인하기' }));
-  fireEvent.click((await secondStep(panel)).getByRole('button', { name: '1001 예약 취소하기' }));
+  fireEvent.click((await secondStep(panel)).getByRole('button', { name: '예약 취소하기' }));
   await waitFor(() => expect(host.notify).toHaveBeenCalledWith({ kind: 'success', messageKey: 'data.real.booking.canceled' }));
   expect(host.notify).not.toHaveBeenCalledWith(expect.objectContaining({ undoToken: expect.anything() }));
   expect(host.notify).not.toHaveBeenCalledWith(expect.objectContaining({ undoUntil: expect.anything() }));
@@ -248,7 +278,7 @@ it('steps back with Esc inside the cancel (confirmation, then the form) and keep
   fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
   await waitFor(() => expect(panel.queryByRole('form', { name: '예약 취소' })).toBeNull());
   // the panel is still on this booking, which can be cancelled again, and nothing was sent
-  expect(panel.getByRole('button', { name: '예약 취소하기' })).toBeInTheDocument();
+  expect(panel.getByRole('button', { name: '네이버 예약 취소하기' })).toBeInTheDocument();
   expect(transitions(service, 'naver-1001')).toHaveLength(0);
 });
 
@@ -259,7 +289,7 @@ it('asks no refund terms for an Npay booking that is not confirmed yet', async (
   expect(form.queryByRole('radiogroup')).toBeNull();
   fireEvent.change(form.getByLabelText('취소 사유'), { target: { value: '사정이 생겼어요' } });
   fireEvent.click(form.getByRole('button', { name: '취소 내용 확인하기' }));
-  fireEvent.click((await secondStep(panel)).getByRole('button', { name: '1005 예약 취소하기' }));
+  fireEvent.click((await secondStep(panel)).getByRole('button', { name: '예약 취소하기' }));
   await waitFor(() => expect(transitions(service, 'naver-1005')).toHaveLength(1));
   expect(transitions(service, 'naver-1005')[0].body).toEqual({ type: 'booking.cancel', confirmed: true, cancelReason: '사정이 생겼어요', expectedRevision: 3 });
 });
@@ -294,7 +324,7 @@ it('asks for refund terms for a confirmed Npay booking, picks none for the owner
   expect(second.getByText('결제 금액의 50%')).toBeInTheDocument();
   expect(second.getByText('재료가 떨어졌어요')).toBeInTheDocument();
   expect(transitions(service, 'naver-1002')).toHaveLength(0);
-  const confirm = second.getByRole('button', { name: '1002 예약 취소하기' });
+  const confirm = second.getByRole('button', { name: '예약 취소하기' });
   fireEvent.click(confirm);
   fireEvent.click(confirm);
   await waitFor(() => expect(transitions(service, 'naver-1002')).toHaveLength(1));
@@ -329,7 +359,7 @@ it('bounds an amount refund by the payment amount the provider shows', async () 
   fireEvent.click(review);
   const second = await secondStep(panel);
   expect(second.getByText('12,000원')).toBeInTheDocument();
-  fireEvent.click(second.getByRole('button', { name: '1003 예약 취소하기' }));
+  fireEvent.click(second.getByRole('button', { name: '예약 취소하기' }));
   await waitFor(() => expect(transitions(service, 'naver-1003')).toHaveLength(1));
   expect(transitions(service, 'naver-1003')[0].body).toEqual({ type: 'booking.cancel', confirmed: true, cancelReason: '사정이 생겼어요', refund: { type: 'amount', value: 12000 }, expectedRevision: 6 });
 });
@@ -341,7 +371,7 @@ it('cancels a completed Npay booking with refund terms, says the used booking ca
   expect(panel.queryByRole('button', { name: '예약 저장하기' })).toBeNull();
   expect(panel.queryByText('Npay로 결제한 예약은 앱에서 바꿀 수 없어요')).toBeNull();
   expect(panel.getByText('이용이 끝난 예약도 취소할 수 있어요 · 실제 환불은 정산 상태에 따라 네이버에서 정해요')).toBeInTheDocument();
-  const form = await openCancel(panel, '네이버 예약 취소');
+  const form = await openCancel(panel, '네이버 예약 취소하기');
   expect(form.getByText('결제 금액 4,500원')).toBeInTheDocument();
   fireEvent.change(form.getByLabelText('취소 사유'), { target: { value: '정산 오류예요' } });
   fireEvent.click(form.getByRole('radio', { name: '전액' }));
@@ -350,14 +380,14 @@ it('cancels a completed Npay booking with refund terms, says the used booking ca
   expect(second.getByText('취소하면 되돌릴 수 없어요')).toBeInTheDocument();
   expect(within(second.getByText('환불 조건').closest('div')!).getByText('전액')).toBeInTheDocument();
   expect(transitions(service, 'naver-1006')).toHaveLength(0);
-  fireEvent.click(second.getByRole('button', { name: '1006 예약 취소하기' }));
+  fireEvent.click(second.getByRole('button', { name: '예약 취소하기' }));
   await waitFor(() => expect(transitions(service, 'naver-1006')).toHaveLength(1));
   expect(transitions(service, 'naver-1006')[0].body).toEqual({ type: 'booking.cancel', confirmed: true, cancelReason: '정산 오류예요', refund: { type: 'full' }, expectedRevision: 8 });
   await waitFor(() => expect(host.notify).toHaveBeenCalledWith({ kind: 'success', messageKey: 'data.real.booking.canceledRefund' }));
   expect(host.notify).not.toHaveBeenCalledWith(expect.objectContaining({ undoToken: expect.anything() }));
   await waitFor(() => expect(within(cell('naver-1006', 'status')).getByText('취소')).toBeInTheDocument());
   expect(panel.getByText('네이버 예약 취소는 되돌릴 수 없어요')).toBeInTheDocument();
-  expect(panel.queryByRole('button', { name: '네이버 예약 취소' })).toBeNull();
+  expect(panel.queryByRole('button', { name: '네이버 예약 취소하기' })).toBeNull();
   expect(service.reservations.get('naver-1006')).toMatchObject({ status: 'canceled' });
   // a new session reads the same cancelled booking
   expect(service.backend.callsTo('GET', '/reservations').length).toBeGreaterThan(1);
@@ -371,8 +401,8 @@ it('says what happened when the provider refuses the cancel, keeps what was type
   fireEvent.click(form.getByRole('button', { name: '취소 내용 확인하기' }));
   service.control.refuseCancel = true;
   const reads = service.backend.callsTo('GET', '/reservations').length;
-  fireEvent.click((await secondStep(panel)).getByRole('button', { name: '1001 예약 취소하기' }));
-  expect(await panel.findByText(/네이버가 이 취소를 받지 않았어요/u)).toBeInTheDocument();
+  fireEvent.click((await secondStep(panel)).getByRole('button', { name: '예약 취소하기' }));
+  expect(await panel.findByText(/네이버에서 취소를 받지 않았어요/u)).toBeInTheDocument();
   await waitFor(() => expect(service.backend.callsTo('GET', '/reservations').length).toBeGreaterThan(reads));
   expect(within(cell('naver-1001', 'status')).queryByText('취소')).toBeNull();
   // back on the input step with the reason still there
@@ -398,7 +428,7 @@ it('follows the service for what can be cancelled: a row the service marks cance
     actions: { change: false, confirm: false, cancel: true, cancelRequiresRefund: false, cancelUndoable: false } });
   setup({ ...data, reservations: [...data.reservations!, odd] }, 'naver-1010');
   const panel = await panelOf(/14:00/u);
-  expect(panel.getByRole('button', { name: '예약 취소하기' })).toBeInTheDocument();
+  expect(panel.getByRole('button', { name: '네이버 예약 취소하기' })).toBeInTheDocument();
 });
 
 it('cancels a local booking after the extra question and keeps the receipt deadline on the undo toast', async () => {
@@ -406,7 +436,7 @@ it('cancels a local booking after the extra question and keeps the receipt deadl
   const panel = await panelOf(/19:00 · 김하나/u);
   fireEvent.click(panel.getByRole('button', { name: '예약 취소하기' }));
   expect(service.backend.callsTo('POST', /transitions/u)).toHaveLength(0);
-  fireEvent.click(panel.getByRole('button', { name: '네, 취소할게요' }));
+  fireEvent.click(panel.getByRole('button', { name: '예약 취소 확정하기' }));
   await waitFor(() => expect(host.notify).toHaveBeenCalledWith(expect.objectContaining({ kind: 'success', messageKey: 'data.management.notice.bookingCanceled', undoUntil, undoToken: expect.stringContaining('real-undo:') })));
   await waitFor(() => expect(within(cell('rv-local', 'status')).getByText('취소')).toBeInTheDocument());
 });
@@ -467,7 +497,7 @@ it('declines a phone request only after the extra question', async () => {
   fireEvent.click(panel.getByRole('button', { name: '요청 거절하기' }));
   expect(transitions(service, 'sg-1')).toHaveLength(0);
   expect(panel.getByText('이 전화 예약 요청을 거절할까요?')).toBeInTheDocument();
-  fireEvent.click(panel.getByRole('button', { name: '네, 거절할게요' }));
+  fireEvent.click(panel.getByRole('button', { name: '요청 거절 확정하기' }));
   await waitFor(() => expect(transitions(service, 'sg-1')).toHaveLength(1));
   expect(transitions(service, 'sg-1')[0].body).toEqual({ type: 'booking.declineSuggestion', confirmed: true, expectedRevision: 5 });
   await waitFor(() => expect(row('sg-1')).toBeNull());
@@ -482,7 +512,7 @@ it('adds a booking, asks before a similar one, and a new session reads the same 
   fireEvent.change(screen.getByLabelText('예약 인원'), { target: { value: '3' } });
   fireEvent.click(screen.getByRole('button', { name: /^예약 시각 /u }));
   fireEvent.click(await screen.findByRole('option', { name: '19:00' }));
-  fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+  fireEvent.click(screen.getByRole('button', { name: '예약 저장하기' }));
   const alert = await screen.findByRole('button', { name: '그래도 예약하기' });
   expect(service.backend.callsTo('POST', '/reservations')[0].headers.get('idempotency-key')).toMatch(/^booking-create-/u);
   fireEvent.click(alert);

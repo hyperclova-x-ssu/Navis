@@ -36,7 +36,7 @@ describe('calendar panel (SCR-30 P5, AC-258)', () => {
     let body = panelBody(ko.container);
     expect(body).toHaveTextContent('오늘 일정');
     expect(body.querySelector('.ui-metric-fit__value')).toHaveTextContent(count);
-    expect(body.querySelector('.ui-metric-fit__unit')).toHaveTextContent('개');
+    expect(body.querySelector('.ui-metric-fit__unit')).toHaveTextContent('건');
     expect(body).toHaveTextContent(longDate(TODAY));
     cleanup();
     const en = panel(1, 1, { locale: 'en' });
@@ -73,24 +73,26 @@ describe('calendar panel (SCR-30 P5, AC-258)', () => {
     const week = panel(2, 2);
     const body = panelBody(week.container);
     expect(body).toHaveAttribute('data-view', 'week');
-    expect(body).toHaveTextContent('이번 주 일정');
-    expect(body.querySelector('.ui-metric-fit__value')).toHaveTextContent(String(model.weekCount));
+    expect(body.querySelector('[data-slot="calendar.metric.label"]')).toHaveTextContent('오늘 일정');
+    expect(body.querySelector('.ui-metric-fit__value')).toHaveTextContent(String(model.todayCount));
     expect(body.querySelectorAll('.ms-week__day')).toHaveLength(7);
-    expect(body.querySelector('[aria-current="date"]')).toHaveTextContent(`${longDate(TODAY)}, 일정 ${model.todayCount}개`);
+    expect(body.querySelector('[aria-current="date"]')).toHaveTextContent(`${longDate(TODAY)}, 일정 ${model.todayCount}건`);
     cleanup();
     const month = panel(3, 3);
     const table = screen.getByRole('table', { name: '2026년 11월 달력' });
     // the grid runs from the Monday before the 1st to the Sunday after the 30th: 6 weeks + the weekday header
     expect(within(table).getAllByRole('row')).toHaveLength(7);
-    expect(table.querySelector('[aria-current="date"]')).toHaveAttribute('aria-label', `${longDate(TODAY)}, 일정 ${model.todayCount}개`);
+    expect(table.querySelector('[aria-current="date"]')).toHaveAttribute('aria-label', `${longDate(TODAY)}, 일정 ${model.todayCount}건`);
     expect(panelBody(month.container)).toHaveAttribute('data-view', 'month');
+    expect(Array.from(panelBody(month.container).querySelectorAll('.ms-calendar-legend > span'), entry => entry.textContent))
+      .toEqual(['매장 운영', '발주·입고', '세금·행정', '예약 픽업']);
   });
 
   it('the key sentence is the 1×1 sentence (accessible name) and the S line drops before the label', () => {
     const wrapper = ({ children }: { children?: ReactNode }) => <KitProviders>{children}</KitProviders>;
     const count = day().todayCount;
     const { result } = renderHook(() => moduleOf('calendar').useSummary({ featureId: 'calendar', condition: { kind: 'default' } }), { wrapper });
-    expect(result.current).toBe(`오늘 일정 ${count}개, ${longDate(TODAY)}`);
+    expect(result.current).toBe(`오늘 일정 ${count}건, ${longDate(TODAY)}`);
     const en = renderHook(() => moduleOf('calendar').useSummary({ featureId: 'calendar', condition: { kind: 'default' } }), { wrapper: ({ children }) => <KitProviders locale="en">{children}</KitProviders> });
     expect(en.result.current).toBe(`${count} events today, Tuesday, Nov 17`);
     const { container } = panel(1, 1);
@@ -145,7 +147,7 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /일정 추가하기/ })[0]!);
     fireEvent.change(screen.getByLabelText('일정 제목'), { target: { value: '거래처 전화' } });
     fireEvent.change(screen.getByLabelText('시각'), { target: { value: '16:00' } });
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     expect(todayCount(store)).toBe(start + 1);
     const today = screen.getByRole('list', { name: '오늘 일정' });
     expect([...today.querySelectorAll('.ms-entry__time')].map((n) => n.textContent)).toEqual(['12:00', '16:00', '16:30', '17:00']);
@@ -156,7 +158,7 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /할 일 추가하기/ }));
     fireEvent.change(screen.getByLabelText('일정 제목'), { target: { value: '포스터 인쇄' } });
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '할 일 저장하기' }));
     expect(todayCount(store)).toBe(start + 2);
     expect(within(screen.getByRole('list', { name: '오늘 일정' })).getByText('포스터 인쇄')).toBeInTheDocument();
   });
@@ -168,7 +170,7 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /일정 추가하기/ })[0]!);
     fireEvent.change(screen.getByLabelText('일정 제목'), { target: { value: '거래처 미팅' } });
     fireEvent.change(screen.getByLabelText('시각'), { target: { value: '15:00' } });
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     expect(store.getSnapshot()).toBe(before);
 
     fireEvent.click(screen.getByRole('button', { name: '지난 기록으로 남기기' }));
@@ -181,11 +183,11 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
     const { store } = open();
     const start = todayCount(store);
     fireEvent.click(screen.getAllByRole('button', { name: /일정 추가하기/ })[0]!);
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     expect(screen.getByText('일정 제목을 넣어 주세요')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('일정 제목'), { target: { value: '점검' } });
     fireEvent.change(screen.getByLabelText('시각'), { target: { value: '25:99' } });
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     expect(screen.getByText('시각을 확인해 주세요')).toBeInTheDocument();
     expect(todayCount(store)).toBe(start);
   });
@@ -209,13 +211,14 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
     const { store } = open();
     const start = todayCount(store);
     fireEvent.click(screen.getByRole('button', { name: new RegExp(SAMPLE) }));
+    expect(screen.getByRole('button', { name: `${SAMPLE} 고치기` })).toHaveTextContent(`${SAMPLE} 고치기`);
     fireEvent.click(screen.getByRole('button', { name: `${SAMPLE} 고치기` }));
     fireEvent.change(screen.getByLabelText('일정 제목'), { target: { value: `${SAMPLE}(마감 전)` } });
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     expect(within(screen.getByRole('list', { name: '오늘 일정' })).getByText(`${SAMPLE}(마감 전)`)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: `${SAMPLE}(마감 전) 지우기` }));
     expect(todayCount(store)).toBe(start);
-    fireEvent.click(within(screen.getByRole('group', { name: '일정을 지울까요?' })).getByRole('button', { name: '지우기' }));
+    fireEvent.click(within(screen.getByRole('group', { name: '일정을 지울까요?' })).getByRole('button', { name: '일정 지우기' }));
     expect(todayCount(store)).toBe(start - 1);
   });
 
@@ -307,7 +310,7 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
     expect(container.querySelector('.ms-cal__agenda')).toBeNull();
     expect(screen.getAllByRole('form')).toHaveLength(1);
     expect(screen.getByLabelText('일정 제목')).toHaveValue('주간 점검');
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     expect(todayCount(store)).toBe(start + 1);
     expect(screen.getByRole('region', { name: '일' })).toHaveTextContent('주간 점검');
   });
@@ -316,7 +319,7 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
     const { container, store } = open({ store: withOpenCups() });
     renderWithKit(<style>{calendarCss}</style>);
     const agenda = container.querySelector<HTMLElement>('.ms-cal__agenda')!;
-    const count = within(agenda).getByText(`${todayCount(store)}개`);
+    const count = within(agenda).getByText(`${todayCount(store)}건`);
     expect(count.childNodes).toHaveLength(1);
     expect(count.firstChild?.nodeType).toBe(Node.TEXT_NODE);
     const delivery = within(agenda).getByRole('button', { name: /컵·뚜껑·슬리브 세트 입고/ });
@@ -360,7 +363,7 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
     const start = todayCount(store);
     fireEvent.click(within(screen.getByRole('region', { name: 'detail:calendar' })).getByRole('button', { name: '일정 추가하기' }));
     fireEvent.change(screen.getByLabelText('일정 제목'), { target: { value: '청소' } });
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '일정 저장하기' }));
     expect(todayCount(store)).toBe(start + 1);
     expect(onReset).toHaveBeenCalledWith('calendar');
   });

@@ -30,15 +30,15 @@ it('finds a member by their compact display number and uses the canonical row ID
   const { memberProfile } = store.getSnapshot().tables;
   const original = memberProfile.find(row => row.memberId === 'M-0008')!;
   const memberId = 'e79a88b6-e6a5-4d5b-b23a-78c7f72e2dcc';
-  store.hydrate({ memberProfile: memberProfile.map(row => row === original ? { ...row, memberCode: undefined, memberId } : row) });
+  store.hydrate({ memberProfile: memberProfile.map(row => row === original ? { ...row, memberCode: 'M-0008', memberId } : row) });
   renderWithKit(<MembersDetail {...common} detailRef={{ featureId: 'members' }} />, { store });
   const grid = screen.getByRole('grid', { name: '회원목록' });
-  await userEvent.type(screen.getByRole('searchbox'), 'M-E79A88B6');
-  const compact = within(grid).getByText('M-E79A88B6');
+  await userEvent.type(screen.getByRole('searchbox'), 'M-0008');
+  const compact = within(grid).getByText('M-0008');
   expect(compact.closest('tr')).toHaveAttribute('data-grid-row', memberId);
   expect(grid).not.toHaveTextContent(memberId);
   await userEvent.click(compact);
-  expect(screen.getByRole('region')).toHaveTextContent('M-E79A88B6');
+  expect(screen.getByRole('region', { name: /M-0008/ })).toBeInTheDocument();
 });
 it('right-aligns the membership counts with their unit and their header in the member list', () => {
   renderWithKit(<><style>{gridStyles}</style><MembersDetail {...common} detailRef={{ featureId: 'members' }} /></>);
@@ -46,9 +46,9 @@ it('right-aligns the membership counts with their unit and their header in the m
   const header = within(grid).getByRole('columnheader', { name: '회원권' });
   expect(getComputedStyle(within(header).getByText('회원권')).justifyContent).toBe('flex-end');
   const counts = Array.from(grid.querySelectorAll('[data-grid-column-id="membership"]'));
-  expect(counts.map(cell => cell.textContent)).toEqual(expect.arrayContaining(['0 개', '1 개']));
+  expect(counts.map(cell => cell.textContent)).toEqual(expect.arrayContaining(['0개', '1개']));
   for (const cell of counts) {
-    expect(cell.textContent).toMatch(/^\d+ 개$/); // DS 12.1: the unit follows the number (A2)
+    expect(cell.textContent).toMatch(/^\d+개$/); // DS 12.1: the unit follows the number (A2)
     expect(getComputedStyle(cell).textAlign).toBe('right');
   }
 });

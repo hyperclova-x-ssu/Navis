@@ -12,3 +12,13 @@
 .mc-workspace[data-widget="voice-booking"] .mc-booking-confirm__quote { white-space: pre-wrap; }
 /* What the cancel did, then that it cannot be undone: one live region, two lines. */
 .mc-workspace[data-widget="voice-booking"] .mc-done__note { display: block; color: var(--muted-foreground); font-weight: var(--weight-regular); }
+
+[data-widget='voice-booking'] .mc-booking-export { text-decoration: none; }
+[data-widget='voice-booking'] .mc-booking-summary__free { margin-inline-start: 0 !important; }
+[data-widget='voice-booking'] .mc-booking-add .ui-number-input { width: 100%; }
+[data-widget='voice-booking'] .mc-booking-add .ui-picker-field__button { min-height: var(--target-primary); }
+.ui-feature-panel[data-feature-id='voice-booking'][data-height='1'] .ui-panel-body .mc-primary { gap: 0; }
+.ui-feature-panel[data-feature-id='voice-booking'][data-height='1'] .mc-row { padding-block: 0; }
+
+[data-widget='voice-booking'] .mc-booking-export-block { display: grid; justify-items: start; gap: var(--space-1); }
+[data-widget='voice-booking'] .mc-booking-export-block p { margin: 0; }

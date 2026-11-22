@@ -75,7 +75,7 @@ function open(backend: ReturnType<typeof fakeBackend>) {
 it('posts text to the one writable board only after the card press and its confirmation, once, and links the article', async () => {
   const { backend, log } = setup();
   open(backend);
-  expect(await screen.findByText('글을 쓸 수 있는 게시판 1곳에 올려요')).toBeInTheDocument();
+  expect(await screen.findByText('사진·파일은 붙일 수 없어요')).toBeInTheDocument();
   expect(screen.getByText('아직 올린 글이 없어요')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '올릴 내용 확인하기' }));
   expect(await screen.findByText('제목을 넣어 주세요')).toBeInTheDocument();

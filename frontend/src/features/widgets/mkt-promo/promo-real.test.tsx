@@ -1,13 +1,15 @@
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, screen } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
 import { createWidgetDataStore } from '../../../data/db/store';
+import { catalogForSource } from '../../../data/marketing/promo';
 import { createRealPort } from '../../../data/reality/00';
 import { fakeBackend, reply } from '../../../data/reality/00/testing';
 import { promoAdapter } from '../../../data/reality/16/adapter';
 import { renderWithKit } from '../../../ui/test-utils';
-import { PromoVideoDetail } from './promo-video';
+import { PromoVideoDetail, PromoVideoPanel } from './promo-video';
+import { cafeCatalog, createFakeServer, syncedCafeStore } from './promo-test-server';
 import { makeHost } from './test-helpers';
 
 const promo = '/marketing/promo';
@@ -16,7 +18,7 @@ const page = <T,>(items: readonly T[]) => ({ items, asOf, sourceRevision: 1, nex
 const photoIds = ['photo-1', 'photo-2', 'photo-3', 'photo-4', 'photo-5'];
 const input = { menuIds: ['latte'], photoIds, moods: ['warm'], concepts: ['new-item'], memo: '점주가 남긴 메모', referenceId: 'ref-1', lengthSec: 15, locale: 'ko' };
 
-function open(finished: boolean, placeNews: () => unknown = () => reply(409, { code: 'CONFLICT', reason: 'MANUAL_UPLOAD_REQUIRED' }), photos = finished ? photoIds.length : 0) {
+function open(finished: boolean, placeNews: () => unknown = () => reply(409, { code: 'CONFLICT', reason: 'MANUAL_UPLOAD_REQUIRED' }), photos = finished ? photoIds.length : 0, fixture = false, panel = false) {
   const backend = fakeBackend();
   const owned = photoIds.slice(0, photos);
   backend.on('GET', `${promo}/assets`, () => ({ ...page(owned.map(photoId => ({ photoId, menuId: 'latte', url: `/owner/${photoId}.jpg`, fileId: null, width: 180, height: 300 }))),
@@ -28,17 +30,114 @@ function open(finished: boolean, placeNews: () => unknown = () => reply(409, { c
   backend.on('POST', `${promo}/jobs/job/attest`, () => ({ resourceId: 'post', revision: 1, receiptId: 'receipt', affectedSources: ['promo'] }));
   const store = createWidgetDataStore();
   const port = createRealPort({ store, fetch: backend.fetch, source: () => 'http', adapters: [promoAdapter], reconcileDelaysMs: [] });
-  store.bindReal(port);
-  renderWithKit(<PromoVideoDetail featureId="promo-video" condition={{ kind: 'default' }} detailRef={{ featureId: 'promo-video', view: 'create' }} host={makeHost()} />, { store });
+  if (fixture) syncedCafeStore(store); else store.bindReal(port);
+  const host = makeHost();
+  renderWithKit(<>
+    {panel && <PromoVideoPanel featureId="promo-video" condition={{ kind: 'default' }} width={3} height={3} shape="S" presetId="A" editing={false} host={host} />}
+    <PromoVideoDetail featureId="promo-video" condition={{ kind: 'default' }} detailRef={{ featureId: 'promo-video', view: 'create' }} host={host} />
+  </>, { store });
   return backend;
 }
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+it.each(['example', 'http'] as const)('offers the chestnut and D-409 menu photos in %s mode', async (mode) => {
+  const catalog = catalogForSource('cafe');
+  const server = createFakeServer();
+  server.catalog = catalog;
+  vi.spyOn(globalThis, 'fetch').mockImplementation(server.fetch);
+  const store = createWidgetDataStore();
+  if (mode === 'http') {
+    const backend = fakeBackend();
+    backend.on('GET', `${promo}/assets`, ({ query }) => {
+      const offset = Number(query.cursor ?? 0);
+      const limit = Number(query.limit);
+      return {
+        ...page(catalog.photos.slice(offset, offset + limit).map(photo => ({ ...photo, fileId: null }))),
+        nextCursor: offset + limit < catalog.photos.length ? String(offset + limit) : null,
+        store: catalog.store, menus: catalog.menus, eligiblePhotoCount: catalog.photos.length,
+      };
+    });
+    backend.on('GET', `${promo}/drafts`, () => page([]));
+    backend.on('GET', `${promo}/publications`, () => page([]));
+    store.bindReal(createRealPort({ store, fetch: backend.fetch, source: () => 'http', adapters: [promoAdapter] }));
+  }
+  renderWithKit(<PromoVideoDetail featureId="promo-video" condition={{ kind: 'default' }}
+    detailRef={{ featureId: 'promo-video', view: 'create' }} host={makeHost()} />, { store });
+  fireEvent.click(await screen.findByRole('checkbox', { name: /^공주 보늬밤 라떼\s·\s사진 6장$/ }));
+  const photos = screen.getAllByRole('checkbox', { name: /^공주 보늬밤 라떼 사진 \d/ });
+  expect(photos).toHaveLength(6);
+  photos.forEach(photo => fireEvent.click(photo));
+  expect(screen.getAllByRole('checkbox', { name: /^공주 보늬밤 라떼 사진 \d/, checked: true })).toHaveLength(6);
+  fireEvent.click(screen.getByRole('checkbox', { name: /^고흥 유자 캐모마일 티\s·\s사진 5장$/ }));
+  expect(screen.getAllByRole('checkbox', { name: /^고흥 유자 캐모마일 티 사진 \d/ })).toHaveLength(5);
+});
+
+it('keeps the video panel, upload controls and draft footer across all four steps in both modes', async () => {
+  const server = createFakeServer();
+  server.catalog = cafeCatalog(createWidgetDataStore());
+  vi.spyOn(globalThis, 'fetch').mockImplementation(server.fetch);
+  async function structure(fixture: boolean) {
+    open(false, undefined, photoIds.length, fixture, true);
+    const tabs = await screen.findAllByRole('tab');
+    fireEvent.click(screen.getByRole('button', { name: '사진 올리기' }));
+    const upload = screen.queryByRole('region', { name: '사진 올리기' });
+    const panel = document.querySelector('[data-widget="promo-video"].pv-panel');
+    const steps: { label: string | null; heading?: string | null; save: boolean; designs: number }[] = [];
+    const result = { panel: !!panel?.querySelector('.pv-panel__action button'), upload: upload && {
+      inputs: Array.from(upload.querySelectorAll('input,select'), el => el.getAttribute('type') ?? el.tagName),
+      button: upload.querySelector('button') !== null },
+    steps };
+    for (const [index, tab] of tabs.entries()) {
+      fireEvent.click(tab);
+      const step = document.querySelector<HTMLElement>('.pv-body')!;
+      if (index === 2) await waitFor(() => expect(within(step).getAllByRole('radio')).toHaveLength(18));
+      result.steps.push({ label: tab.textContent, heading: step.querySelector('h3')?.textContent,
+        save: !!screen.queryByRole('button', { name: '초안 저장하기' }),
+        designs: step.querySelectorAll('[data-ref]').length });
+    }
+    cleanup();
+    return result;
+  }
+  const real = await structure(false);
+  expect(real.steps).toHaveLength(4);
+  expect(await structure(true)).toEqual(real);
+});
+
+it('adds a rights-confirmed photo to the example run and stores the draft without a provider request', async () => {
+  const example = createFakeServer();
+  example.catalog = cafeCatalog(createWidgetDataStore());
+  vi.spyOn(globalThis, 'fetch').mockImplementation(example.fetch);
+  vi.stubGlobal('createImageBitmap', async () => ({ width: 100, height: 100, close() {} }));
+  try {
+    open(false, undefined, 0, true);
+    fireEvent.click(await screen.findByRole('button', { name: '사진 올리기' }));
+    const upload = await screen.findByRole('region', { name: '사진 올리기' });
+    const controls = within(upload);
+    fireEvent.change(controls.getByLabelText('사진 파일'), { target: { files: [new File(['sample'], 'sample.jpg', { type: 'image/jpeg' })] } });
+    fireEvent.change(controls.getByLabelText('사진에 나온 메뉴'), { target: { value: 'm-americano' } });
+    expect(controls.getByRole('button', { name: '사진 올리기' })).toBeDisabled();
+    fireEvent.click(controls.getByRole('checkbox', { name: '이 사진을 홍보에 쓸 권리가 있어요' }));
+    fireEvent.click(controls.getByRole('button', { name: '사진 올리기' }));
+    expect(await screen.findByText('영상에 쓸 사진 11장')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '초안 저장하기' }));
+    expect(await screen.findByText('초안을 저장했어요')).toBeInTheDocument();
+    expect(example.calls.every(call => call.method === 'GET')).toBe(true);
+  } finally {
+    Reflect.deleteProperty(globalThis, 'createImageBitmap');
+  }
+});
 
 it('lets a store with zero eligible photos enter the rights-confirmed upload flow', async () => {
   const backend = open(false);
+  const toggle = await screen.findByRole('button', { name: '사진 올리기' });
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(document.querySelector('input[type="file"]')).toBeNull();
+  fireEvent.click(toggle);
   const input = await screen.findByLabelText('사진 파일');
+  expect(input).toHaveAttribute('hidden');
   fireEvent.change(input, { target: { files: [new File(['image'], 'latte.jpg', { type: 'image/jpeg' })] } });
+  expect(screen.getByText('latte.jpg')).toBeVisible();
   fireEvent.change(screen.getByLabelText('사진에 나온 메뉴'), { target: { value: 'latte' } });
   expect(screen.getByRole('button', { name: '사진 올리기' })).toBeDisabled();
   fireEvent.click(screen.getByRole('checkbox', { name: '이 사진을 홍보에 쓸 권리가 있어요' }));
@@ -82,5 +181,5 @@ it('says what was refused and what to do when the publish request is refused', a
 // T-52 (W26-F1): step ① states how many store photos the video can use, before any menu is picked.
 it('states how many store photos the video can use before any menu is picked', async () => {
   open(false, undefined, photoIds.length);
-  expect(await screen.findByText('영상에 쓸 매장 사진 5장')).toBeInTheDocument();
+  expect(await screen.findByText('영상에 쓸 사진 5장')).toBeInTheDocument();
 });

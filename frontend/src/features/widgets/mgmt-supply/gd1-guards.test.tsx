@@ -24,7 +24,7 @@ it('a new ingredient with a name that already exists is refused with 이미 같�
   fireEvent.change(screen.getByLabelText('이름'), { target: { value: ` ${milkName.replace(/ /g, '  ')} ` } });
   fireEvent.change(screen.getByLabelText('처음 수량'), { target: { value: '3' } });
   fireEvent.change(screen.getByLabelText('안전 재고'), { target: { value: '1' } });
-  fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+  fireEvent.click(screen.getByRole('button', { name: '품목 저장하기' }));
   expect(store.getSnapshot().revision).toBe(0);
   expect(screen.getByRole('alert')).toHaveTextContent('이미 같은 이름이 있어요');
 });
@@ -40,7 +40,7 @@ it('a look-alike order asks first and is saved only after 그래도 발주하기
     const form = screen.getByRole('form', { name: '발주 추가하기' });
     fireEvent.change(within(form).getByLabelText('발주 품목'), { target: { value: beans.purchaseItemId } });
     fireEvent.change(within(form).getByRole('spinbutton', { name: '주문 수량' }), { target: { value: '3' } });
-    fireEvent.click(within(form).getByRole('button', { name: '저장하기' }));
+    fireEvent.click(within(form).getByRole('button', { name: '발주 기록하기' }));
     return form;
   };
   const before = orders();

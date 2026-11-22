@@ -23,15 +23,15 @@ it('shows the café playback and keeps the camera status and analysis in the exa
  for (const chip of within(grid).getAllByText('녹화 중').map(el => el.closest('.ui-status-chip'))) expect(chip).toHaveAttribute('data-semantic', 'done');
  expect(within(grid).queryByText('작동 중')).toBeNull();
 });
-it('reports the disconnected camera in the example',()=>{renderWithKit(<CustomerAnalysisPanel {...common} width={1} height={1} shape="Q" presetId="A" editing={false}/>,{preview:{family:'normal',overrides:{'customer-analysis':'camera-disconnected'}}});expect(screen.getByText('지금 숫자 · 1대 확인 필요')).toBeInTheDocument();}); // 1x1: the label is never dropped, so the warning rides on it (D-323: the label is the headcount's)
+it('reports the disconnected camera in the example',()=>{renderWithKit(<CustomerAnalysisPanel {...common} width={1} height={1} shape="Q" presetId="A" editing={false}/>,{preview:{family:'normal',overrides:{'customer-analysis':'camera-disconnected'}}});expect(screen.getByText('지금 손님 · 1대 확인 필요')).toBeInTheDocument();}); // 1x1: the label is never dropped, so the warning rides on it (D-323: the label is the headcount's)
 it('on a 2x2 panel the camera warning rides on the headcount label (never dropped before it), while the visits line is the first to go and the normal chip goes next (AC-1075, D-323)',()=>{
  const rank=(el:HTMLElement)=>Number(el.closest('[data-drop]')!.getAttribute('data-drop')); // the higher the rank, the earlier it is dropped
  const warn=renderWithKit(<CustomerAnalysisPanel {...common} width={2} height={2} shape="S" presetId="A" editing={false}/>,{preview:{family:'normal',overrides:{'customer-analysis':'camera-disconnected'}}});
- expect(rank(screen.getByText('지금 숫자 · 1대 확인 필요'))).toBeLessThan(rank(screen.getByText(/^방문 감지 \d+건$/)));
+ expect(rank(screen.getByText('지금 손님 · 1대 확인 필요'))).toBeLessThan(rank(screen.getByText(/^방문 감지 \d+건$/)));
  warn.unmount();
  renderWithKit(<CustomerAnalysisPanel {...common} width={2} height={2} shape="S" presetId="A" editing={false}/>);
  expect(rank(screen.getByText(/^방문 감지 \d+건$/))).toBeGreaterThan(rank(screen.getByText(/카메라 \d+대 정상/)));
- expect(rank(screen.getByText(/카메라 \d+대 정상/))).toBeGreaterThan(rank(screen.getByText('지금 숫자')));
+ expect(rank(screen.getByText(/카메라 \d+대 정상/))).toBeGreaterThan(rank(screen.getByText('지금 손님')));
 });
 it.each([
  ['ko', '카메라 1대 정상'],

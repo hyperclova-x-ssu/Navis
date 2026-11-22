@@ -190,14 +190,14 @@ export function useActionFocus(ref: RefObject<HTMLElement | null>, detailRef: De
   return wanted;
 }
 
-function CouponSmsFixedLine({ part, storeName, descriptionId }: { readonly part: 'ad' | 'optout'; readonly storeName?: string; readonly descriptionId?: string }) {
+function CouponSmsFixedLine({ part, storeName, customerOnly, descriptionId }: { readonly part: 'ad' | 'optout'; readonly storeName?: string; readonly customerOnly?: boolean; readonly descriptionId?: string }) {
   const { t } = useMkt();
   const ad = part === 'ad';
   return <p className={`ui-sms-preview__fixed ui-sms-preview__${part}`} data-fixed={part}>
     <span lang="ko"><strong>{ad ? '(광고)' : '무료수신거부'}</strong>{ad && storeName ? ` ${storeName}` : null}</span>
-    <span id={descriptionId} aria-hidden={descriptionId ? true : undefined} className="mkt-sms-help">
+    {!customerOnly && <span id={descriptionId} aria-hidden={descriptionId ? true : undefined} className="mkt-sms-help">
       {t(ad ? 'widget.slot-coupon.adHelp' : 'widget.slot-coupon.optOutHelp')}
-    </span>
+    </span>}
   </p>;
 }
 
@@ -212,40 +212,48 @@ function useCouponStoreName() {
 
 const noStoreSubscription = () => () => undefined;
 
-export function EditableSmsPreview({ body, onBodyChange, recipientCount }: { readonly body: string; readonly onBodyChange: (value: string) => void; readonly recipientCount: number }) {
+export function SmsSetupHelp({ openSettings, settingsPath }: { readonly openSettings?: WidgetHost['openSettings']; readonly settingsPath?: boolean }) {
+  const { t } = useMkt();
+  return <div className="mkt-sms-setup">
+    <p className="mkt-reason">{t(settingsPath ? 'widget.customer-groups.smsSetup' : 'widget.slot-coupon.smsSetup')}</p>
+    {openSettings && <ActionButton variant="secondary" onClick={openSettings}>{t(settingsPath ? 'widget.customer-groups.openSettings' : 'widget.slot-coupon.openSettings')}</ActionButton>}
+  </div>;
+}
+
+export function EditableSmsPreview({ body, onBodyChange, recipientCount }: { readonly body: string; readonly onBodyChange: (value: string) => void; readonly recipientCount?: number }) {
   const kit = useKitT();
   const storeName = useCouponStoreName();
   const id = useId();
+  const customerOnly = recipientCount === undefined;
   const adHelp = `${id}-ad`;
   const optOutHelp = `${id}-optout`;
-  const countLine = kit.t('ui.sms.line', { n: recipientCount });
-  // Assistive technology receives the two visible notes through the editor's description.
+  const countLine = kit.t('ui.sms.line', { n: recipientCount ?? 0 });
   return <div className="mkt-sms-preview">
     <div className="ui-sms-preview" role="group" aria-label={kit.t('marketing.messagePreview')}>
-      <CouponSmsFixedLine part="ad" storeName={storeName} descriptionId={adHelp} />
+      <CouponSmsFixedLine part="ad" storeName={storeName} customerOnly={customerOnly} descriptionId={customerOnly ? undefined : adHelp} />
       <div className="ui-field ui-sms-preview__body">
         <label className="ui-field__label" htmlFor={id}>{kit.t('ui.sms.bodyLabel')}</label>
         <div className="ui-field__control">
           <textarea id={id} className="ui-text-input ui-textarea" rows={3} value={body}
-            aria-describedby={`${adHelp} ${optOutHelp}`} onChange={event => onBodyChange(event.currentTarget.value)} />
+            aria-describedby={customerOnly ? undefined : `${adHelp} ${optOutHelp}`} onChange={event => onBodyChange(event.currentTarget.value)} />
         </div>
       </div>
-      <CouponSmsFixedLine part="optout" descriptionId={optOutHelp} />
-      <p className="ui-sms-preview__line">{kit.locale === 'ko' ? koreanScreenText(countLine) : countLine}</p>
+      <CouponSmsFixedLine part="optout" customerOnly={customerOnly} descriptionId={customerOnly ? undefined : optOutHelp} />
+      {!customerOnly && <p className="ui-sms-preview__line">{kit.locale === 'ko' ? koreanScreenText(countLine) : countLine}</p>}
     </div>
   </div>;
 }
 
 /** Read-only preview for expiry coupons and ending-soon reminders. */
-export function FixedSmsPreview({ body, recipientCount }: { readonly body: string; readonly recipientCount: number }) {
+export function FixedSmsPreview({ body, recipientCount, customerOnly }: { readonly body: string; readonly recipientCount: number; readonly customerOnly?: boolean }) {
   const { t, locale } = useMkt();
   const kit = useKitT();
   const storeName = useCouponStoreName();
   return <div className="ui-sms-preview mkt-sms-fixed" role="group" aria-label={t('marketing.messagePreview')}>
-    <CouponSmsFixedLine part="ad" storeName={storeName} />
+    <CouponSmsFixedLine part="ad" storeName={storeName} customerOnly={customerOnly} />
     <p className="mkt-sms-fixed__body">{body}</p>
-    <CouponSmsFixedLine part="optout" />
-    {locale !== 'ko' ? <p className="ui-sms-preview__line">{kit.t('ui.sms.line', { n: recipientCount })}</p> : null}
+    <CouponSmsFixedLine part="optout" customerOnly={customerOnly} />
+    {locale !== 'ko' && !customerOnly ? <p className="ui-sms-preview__line">{kit.t('ui.sms.line', { n: recipientCount })}</p> : null}
   </div>;
 }
 

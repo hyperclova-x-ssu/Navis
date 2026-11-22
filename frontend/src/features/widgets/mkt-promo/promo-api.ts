@@ -4,6 +4,7 @@
  * (status 0 = network), never an unhandled rejection.
  */
 import type { PromoCatalogInput, PromoFailReason, PromoReferenceId, PromoStage, PromoStageState, PromoVideoInput, VideoConcept, VideoMood } from '../../../data/widget-data';
+import { PROMO_REFERENCE_GALLERY_VERSION, PROMO_REFERENCE_IDS } from '../../../../shared/promo-references.mjs';
 
 export const PROMO_API = '/api/promo';
 
@@ -74,7 +75,29 @@ const post = <T>(path: string, body: unknown) => call<T>(path, { method: 'POST',
 
 export const getCatalog = () => call<PromoCatalogInput>('/catalog');
 export const getEstimateModel = () => call<EstimateModel>('/estimate-model');
-export const getReferences = () => call<ReferenceList>('/references');
+export async function getReferences(): Promise<ReferenceList> {
+  try {
+    return await call<ReferenceList>('/references');
+  } catch (error) {
+    // The static example build can open the same gallery before a promo service is available.
+    if (!(error instanceof PromoHttpError) || (error.code !== 'BAD_RESPONSE' && error.status !== 404)) throw error;
+    const metadata = import.meta.glob<{
+      id: PromoReferenceId; nameKey: string; cardAspect: string; moods: VideoMood[]; concepts: VideoConcept[]; previewFrom: number; previewTo: number;
+      motion?: { energy: 'fast' | 'medium' | 'calm'; concepts: VideoConcept[] };
+    }>('../../../../server/promo/references/ref-*/meta.json', { import: 'default' });
+    const assets = import.meta.glob<string>('../../../../server/promo/references/ref-*/{poster.jpg,preview.mp4}', { query: '?url', import: 'default' });
+    const moodsByEnergy = { fast: ['lively'], medium: ['warm', 'clean'], calm: ['elegant', 'warm'] } satisfies Record<string, VideoMood[]>;
+    const references = await Promise.all(PROMO_REFERENCE_IDS.map(async ref => {
+      const dir = `../../../../server/promo/references/${ref}/`;
+      const { id, nameKey, cardAspect, moods, concepts, previewFrom, previewTo, motion } = await metadata[`${dir}meta.json`]();
+      const [posterUrl, previewUrl] = await Promise.all([assets[`${dir}poster.jpg`](), assets[`${dir}preview.mp4`]()]);
+      return { id, nameKey, cardAspect, moods: motion ? moodsByEnergy[motion.energy] : moods,
+        concepts: motion?.concepts ?? concepts, posterUrl, previewUrl,
+        preview: { durationSec: Math.round((previewTo - previewFrom) * 100) / 100, width: 360, height: 640, fps: 30, hasAudio: false } };
+    }));
+    return { referenceVersion: PROMO_REFERENCE_GALLERY_VERSION, references };
+  }
+}
 export const startJob = (idempotencyKey: string, input: PromoVideoInput) => post<PromoJob>('/jobs', { idempotencyKey, input });
 export const getJob = (jobId: string) => call<PromoJob>(`/jobs/${encodeURIComponent(jobId)}`);
 export const retryJob = (jobId: string, idempotencyKey: string) => post<PromoJob>(`/jobs/${encodeURIComponent(jobId)}/retry`, { idempotencyKey });

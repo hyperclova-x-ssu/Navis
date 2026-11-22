@@ -41,6 +41,11 @@ export function addIsoDays(iso: string, days: number): string {
 }
 export const DAY_AFTER_TOMORROW = addIsoDays(TODAY, 2);
 
+export function supplyQuantity(x: SupplyText, value: number, unit: Parameters<SupplyText['format']['quantity']>[1]): string {
+  const text = x.format.quantity(value, unit);
+  return x.locale === 'ko' ? text.replace(/(?<=\d)\s+(?=mL$|kg$|L$|g$|개$)/u, '') : text;
+}
+
 /** ‘오늘’·‘내일’·‘모레’, otherwise the short date; null = ‘날짜 미정’. */
 export function relativeDay(x: SupplyText, iso: string | null): string {
   if (iso === null) return x.t('widget.suppliers.when.undated');

@@ -69,6 +69,7 @@
 .ms-month__caption { caption-side: top; text-align: start; padding-bottom: var(--space-2); font-size: var(--type-panel-title); line-height: var(--leading-panel-title); font-weight: var(--weight-bold); }
 .ms-month[data-detail="true"] { border-spacing: var(--space-2); }
 .ms-month[data-detail="true"] th { font-size: var(--type-control); line-height: var(--leading-control); }
+.ms-month[data-detail="true"] thead { position: sticky; inset-block-start: 0; z-index: 1; background: var(--card); }
 .ms-month[data-detail="true"] td { height: var(--target-primary); padding: var(--space-2); font-size: var(--type-body); line-height: var(--leading-body); }
 .ms-month[data-detail="true"] .ms-month__count { font-size: var(--type-caption); line-height: var(--leading-caption); }
 
@@ -251,7 +252,7 @@
 /* Form fields sit in a grid (SCR-210 NewRow / InlineForm) instead of one 1666px-wide field per line. */
 .ms-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-16) * 4), 1fr)); gap: var(--space-4) var(--space-6); align-items: start; }
 /* An order with several items: one value per line, aligned across the item, quantity and received cells. */
-.ms-lines { display: flex; flex-direction: column; align-items: flex-start; }
+.ms-lines { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25em; }
 .ms-lines > span { display: block; white-space: nowrap; }
 .ui-data-grid__cell[data-kind="computed"] .ms-lines, .ui-data-grid__cell[data-kind="number"] .ms-lines { align-items: flex-end; }
 .ms-muted { color: var(--muted-foreground); }
@@ -265,4 +266,24 @@
 .ms-list__heading { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); font-weight: var(--weight-bold); }
 .ms-form-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3) var(--space-6); }
 .ms-wrap { display: block; white-space: normal; overflow-wrap: anywhere; }
+.ms-supplier-product { white-space: nowrap; }
 .ms-lines[data-wrap] > span { white-space: normal; overflow-wrap: anywhere; }
+
+[data-widget='calendar'] .ms-calendar-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+[data-widget='calendar'][data-view='month'] .ms-month { border-spacing: var(--space-1) var(--stroke-control); }
+[data-widget='calendar'][data-view='month'] .ms-month td { padding-block: 0; }
+/* Keep both date and marker lines visible in a six-week month at large text size. */
+[data-text-scale='125'] [data-widget='calendar'][data-view='month'] .ms-month :is(th, td) { line-height: 1.2; }
+[data-widget='calendar'] .ms-month__count { flex-wrap: nowrap; }
+[data-widget='calendar'] .ms-month:not([data-detail]) .ms-month__today { display: none; }
+[data-widget='calendar'] .ms-row__name .ui-category-mark { word-break: keep-all; }
+[data-widget='calendar'] .ms-calendar-date-picker { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3); }
+
+[data-widget='calendar'] .ms-pickup-mark {
+  display: inline-block;
+  flex: none;
+  inline-size: var(--space-2);
+  block-size: var(--space-2);
+  border-radius: 50%;
+  background: var(--success);
+}

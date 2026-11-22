@@ -1,7 +1,7 @@
 /**
  * Screen-level flows across the three widgets on one store (F-25, AC-232·236·237·238·239), on the cafe seed:
- * milk is counted out (0 mL) with 20 L on order for today → 재고 → 발주 주문(출처 열기) → 8 L 기록 → 재고 8,000 mL·보충 필요 그대로 →
- * 나머지 12 L → 20,000 mL·보충 0·예정 0·캘린더/브리핑에서 빠짐.
+ * milk is counted out (0mL) with 20L on order for today → 재고 → 발주 주문(출처 열기) → 8L 기록 → 재고 8,000mL·보충 필요 그대로 →
+ * 나머지 12L → 20,000mL·보충 0·예정 0·캘린더/브리핑에서 빠짐.
  */
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
@@ -47,9 +47,9 @@ function board(root: Parameters<typeof DetailStack>[0]['root']) {
 const milk = (store: ReturnType<typeof createWidgetDataStore>) => readModel(store.getSnapshot(), 'inventory-booking').ingredients.find((r) => r.itemId === MILK)!;
 
 describe('receive flow (AC-236·237·238·239)', () => {
-  it('8 L then the rest, from 재고 through the linked supplier order', () => {
+  it('8L then the rest, from 재고 through the linked supplier order', () => {
     const { store, dispatched, poId } = board({ featureId: 'inventory-booking' });
-    // Milk is counted out, 20 L is due today: one item to restock, one delivery to come.
+    // Milk is counted out, 20L is due today: one item to restock, one delivery to come.
     expect(milk(store)).toMatchObject({ stock: 0, outOfStock: true, needsRestock: true });
     expect(k('inventory-booking')).toBe('1');
     expect(k('suppliers')).toBe('1');
@@ -61,27 +61,27 @@ describe('receive flow (AC-236·237·238·239)', () => {
     // 우유 → 발주 보기 → 발주 주문 상세
     const milkRow = within(detail('inventory-booking')).getByRole('grid', { name: '재료' }).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
     expect(milkRow).toHaveTextContent('품절');
-    expect(within(milkRow).getByRole('gridcell', { name: /현재 재고/ })).toHaveTextContent('0 mL');
+    expect(within(milkRow).getByRole('gridcell', { name: /현재 재고/ })).toHaveTextContent('0mL');
     fireEvent.click(within(milkRow).getByRole('button', { name: '발주 보기' }));
     expect(within(detail('suppliers')).getByRole('grid', { name: '발주 내역' }).querySelector(`[data-grid-row="${poId}"]`)).toHaveAttribute('aria-selected', 'true');
 
-    // 8 L, pressed twice in the same frame
+    // 8L, pressed twice in the same frame
     fireEvent.change(screen.getByRole('spinbutton', { name: '받은 수량' }), { target: { value: String(FIRST) } });
     const record = screen.getByRole('button', { name: '입고 기록하기' });
     act(() => { record.click(); record.click(); });
-    // the receipt is in litres, the stock in millilitres: 8 L = 8,000 mL
+    // the receipt is in litres, the stock in millilitres: 8L = 8,000mL
     expect(milk(store).stock).toBe(FIRST * 1000);
     const polIds = store.getSnapshot().tables.purchaseOrderLine.filter((l) => l.poId === poId).map((l) => l.polId);
     expect(store.getSnapshot().tables.receipt.filter((r) => polIds.includes(r.polId))).toHaveLength(1);
     expect(k('inventory-booking')).toBe('1');
     expect(document.querySelector('.ui-feature-panel [data-widget="inventory-booking"]')).not.toHaveTextContent('품절');
     expect(k('suppliers')).toBe('1');
-    // 12 L of the order is still open, so its calendar entry stays.
+    // 12L of the order is still open, so its calendar entry stays.
     expect(k('calendar')).toBe(String(calendarBefore));
     expect(screen.getByLabelText('briefing')).toHaveTextContent('restock:1;');
     const row = within(detail('suppliers')).getByRole('grid', { name: '발주 내역' }).querySelector(`[data-grid-row="${poId}"]`) as HTMLElement;
-    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent(`${FIRST} L / ${REST} L`);
-    // AC-239: an expense candidate (8 L × the milk's purchase price) that does not change the confirmed total.
+    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent(`${FIRST}L / ${REST}L`);
+    // AC-239: an expense candidate (8L × the milk's purchase price) that does not change the confirmed total.
     const ledgerBefore = readModel(store.getSnapshot(), 'ledger');
     const price = store.getSnapshot().tables.purchaseItem.find((p) => p.itemId === MILK)!.unitPrice;
     expect(ledgerBefore.candidates.map((c) => c.amount)).toContain(FIRST * price);
@@ -93,20 +93,20 @@ describe('receive flow (AC-236·237·238·239)', () => {
     expect(again).toMatchObject({ ok: true, duplicate: true });
     expect(milk(store).stock).toBe(FIRST * 1000);
 
-    // Back to 재고: the view comes back with milk at 8,000 mL.
+    // Back to 재고: the view comes back with milk at 8,000mL.
     fireEvent.click(screen.getByRole('button', { name: '돌아가기' }));
     const restored = within(detail('inventory-booking')).getByRole('grid', { name: '재료' }).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
-    expect(within(restored).getByRole('gridcell', { name: /현재 재고/ })).toHaveTextContent('8,000 mL');
+    expect(within(restored).getByRole('gridcell', { name: /현재 재고/ })).toHaveTextContent('8,000mL');
     expect(k('inventory-booking')).toBe('1');
 
-    // The rest (12 L): a new form, a new key.
+    // The rest (12L): a new form, a new key.
     fireEvent.click(within(restored).getByRole('button', { name: '발주 보기' }));
     expect(screen.getByRole('spinbutton', { name: '받은 수량' })).toHaveValue(REST);
     fireEvent.click(screen.getByRole('button', { name: '입고 기록하기' }));
     const keys = dispatched.filter((c) => c.type === 'suppliers.recordReceipt').map((c) => (c as { idempotencyKey: string }).idempotencyKey);
     expect(new Set(keys).size).toBe(2);
     expect(milk(store).stock).toBe(ORDER * 1000);
-    // 20,000 mL is above the 12,000 mL safe stock: nothing to restock, nothing coming.
+    // 20,000mL is above the 12,000mL safe stock: nothing to restock, nothing coming.
     expect(milk(store)).toMatchObject({ needsRestock: false, outOfStock: false });
     expect(k('suppliers')).toBe('0');
     expect(within(detail('suppliers')).getByRole('grid', { name: '발주 내역' }).querySelector(`[data-grid-row="${poId}"]`)).toHaveTextContent('입고 완료');

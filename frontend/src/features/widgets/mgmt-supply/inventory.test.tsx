@@ -23,8 +23,7 @@ const panel = (width: CellSpan, height: CellSpan, opts: Parameters<typeof render
 const body = () => document.querySelector<HTMLElement>('[data-widget="inventory-booking"]')!;
 const rowTexts = () => [...body().querySelectorAll('[data-row-id]')].map((r) => r.textContent);
 const model = (store: ReturnType<typeof createWidgetDataStore>) => readModel(store.getSnapshot(), 'inventory-booking');
-const grams = (n: number) => `${n.toLocaleString('en-US')} g`;
-const mL = (n: number) => `${n.toLocaleString('en-US')} mL`;
+const grams = (n: number) => `${n.toLocaleString('en-US')}g`;
 
 /** Reads the sell-today coupon from the same store (the marketing widget is another owner's; its model is the source). */
 function ExpiryProbe() {
@@ -71,7 +70,7 @@ describe('inventory panel (SCR-30·32, AC-268·269)', () => {
   it('1×2 lists stock / threshold out of stock first and never the sell-today items', () => {
     const { store } = staged(), milk = raw(store, MILK), beans = raw(store, BEANS), cups = raw(store, CUPS);
     renderWithKit(<SupplyPanel id="inventory-booking" width={1} height={2} host={createTestHost('inventory-booking')} />, { store });
-    expect(rowTexts()).toEqual([`${milk}품절0 mL안전 재고 12,000 mL`, `${beans}3,000 g안전 재고 4,000 g`, `${cups}400개안전 재고 500개`]);
+    expect(rowTexts()).toEqual([`${milk}품절0mL안전 재고 12,000mL`, `${beans}3,000g안전 재고 4,000g`, `${cups}400개안전 재고 500개`]);
     expect(body()).not.toHaveTextContent(raw(store, 'i-basque-cake'));
     cleanup();
     renderWithKit(<SupplyPanel id="inventory-booking" width={1} height={2} host={createTestHost('inventory-booking')} />, { store, locale: 'en' });
@@ -81,7 +80,7 @@ describe('inventory panel (SCR-30·32, AC-268·269)', () => {
   it('2×1 shows the ingredient row and the products line (248 = 180 + 68)', () => {
     const { store } = staged();
     renderWithKit(<SupplyPanel id="inventory-booking" width={2} height={1} host={createTestHost('inventory-booking')} />, { store });
-    expect(rowTexts()).toEqual([`재료${raw(store, MILK)}품절0 mL안전 재고 12,000 mL`, '판매 상품248개매장 180 · 온라인 68']);
+    expect(rowTexts()).toEqual([`재료${raw(store, MILK)}품절0mL안전 재고 12,000mL`, '판매 상품248개매장 180 · 온라인 68']);
     const products = body().querySelector('[data-row-id="products"]')!;
     expect(Number(products.getAttribute('data-drop'))).toBeGreaterThan(Number(body().querySelector(`[data-row-id="${MILK}"]`)!.getAttribute('data-drop')));
   });
@@ -91,15 +90,15 @@ describe('inventory panel (SCR-30·32, AC-268·269)', () => {
     renderWithKit(<SupplyPanel id="inventory-booking" width={2} height={2} host={createTestHost('inventory-booking')} />, { store });
     expect(screen.getByRole('img', { name: '매장 180개, 온라인 68개' })).toBeInTheDocument();
     expect(body()).toHaveTextContent('전체 재고 248개');
-    // the order is in litres: 12 L due today
-    expect(body()).toHaveTextContent('오늘 12 L 입고 예정');
+    // the order is in litres: 12L due today
+    expect(body()).toHaveTextContent('목장 1등급 우유 · 입고 예정 12L · 오늘');
     cleanup();
     renderWithKit(<SupplyPanel id="inventory-booking" width={3} height={3} host={createTestHost('inventory-booking')} />, { store, locale: 'en' });
     const table = screen.getByRole('table', { name: '원자재' });
     expect(table).toHaveTextContent(raw(store, BEANS));
     expect(body()).toHaveTextContent('보충 필요');
-    expect(table).toHaveTextContent(grams(3000));
-    expect(table).toHaveTextContent(mL(model(store).ingredients.find((r) => r.itemId === MILK)!.usedToday));
+    expect(table).toHaveTextContent('3,000 g');
+    expect(table).toHaveTextContent(`${model(store).ingredients.find((r) => r.itemId === MILK)!.usedToday.toLocaleString('en-US')} mL`);
   });
 
   it('key sentence (accessible name) in ko and en', () => {
@@ -132,7 +131,7 @@ describe('inventory states (AC-272, DS 11.5)', () => {
     expect(body()).toHaveTextContent('보충이 필요한 품목이 없어요');
     cleanup();
     panel(2, 1, { preview: preview('normal', { 'inventory-booking': 'no-products' }) });
-    expect(body()).toHaveTextContent('아직 등록한 판매 상품이 없어요');
+    expect(body()).not.toHaveTextContent('아직 등록한 판매 상품이 없어요');
     cleanup();
     const onReset = vi.fn();
     panel(1, 1, { preview: preview('error') }, createTestHost('inventory-booking', { onReset }));
@@ -146,7 +145,7 @@ describe('inventory states (AC-272, DS 11.5)', () => {
     fireEvent.change(screen.getByLabelText('코드(SKU)'), { target: { value: 'RM-NEW' } });
     fireEvent.change(screen.getByLabelText('이름'), { target: { value: '시럽' } });
     fireEvent.change(screen.getByLabelText('처음 수량'), { target: { value: '2' } });
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '품목 저장하기' }));
     const item = store.getSnapshot().tables.inventoryItem.find(i => i.sku === 'RM-NEW');
     expect(item).toBeTruthy();
     expect(store.getSnapshot().tables.stockAdjustment.filter(a => a.itemId === item?.itemId)).toMatchObject([{ reason: 'initial', deltaBase: 2 }]);
@@ -157,7 +156,7 @@ describe('inventory states (AC-272, DS 11.5)', () => {
   it('품목 추가하기: each empty or wrong field says what to enter and nothing is saved (AC-1046, AC-1049)', () => {
     const store = createWidgetDataStore(), revision = store.getSnapshot().revision;
     renderWithKit(<DetailStack root={{ featureId: 'inventory-booking', view: 'register', focus: 'action' }} />, { store });
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '품목 저장하기' }));
     const form = within(screen.getByRole('form', { name: '품목 추가하기' }));
     expect(form.getAllByRole('alert').map((a) => a.textContent)).toEqual([expect.stringContaining('코드(SKU)를 넣어 주세요'), expect.stringContaining('이름을 넣어 주세요')]);
     expect(form.getByLabelText('코드(SKU)')).toHaveAttribute('aria-invalid', 'true');
@@ -165,7 +164,7 @@ describe('inventory states (AC-272, DS 11.5)', () => {
     fireEvent.change(form.getByLabelText('이름'), { target: { value: '시럽' } });
     fireEvent.change(form.getByLabelText('처음 수량'), { target: { value: '-1' } });
     fireEvent.change(form.getByLabelText('안전 재고'), { target: { value: 'abc' } });
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '품목 저장하기' }));
     expect(form.getAllByRole('alert').map((a) => a.textContent)).toEqual([expect.stringContaining('0 이상의 숫자를 넣어 주세요'), expect.stringContaining('0 이상의 숫자를 넣어 주세요')]);
     expect(store.getSnapshot().revision).toBe(revision);
   });
@@ -183,7 +182,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
     const { store } = open();
     const grid = screen.getByRole('grid', { name: '재료' });
     const ids = [...grid.querySelectorAll('[data-grid-row]')].map(r => r.getAttribute('data-grid-row'));
-    expect(ids).toHaveLength(26);
+    expect(ids).toHaveLength(model(store).ingredients.length);
     expect(ids.slice(0, 3)).toEqual([MILK, BEANS, CUPS]);
     expect(ids.slice(-2).sort()).toEqual(['i-basque-cake', 'i-saltbread']);
     const sellToday = grid.querySelector(`[data-grid-row="${SELL_TODAY}"]`) as HTMLElement;
@@ -280,7 +279,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
     expect(model(store).products.total).toBe(248);
   });
 
-  it('edits stock and threshold of an ingredient (restock 3 → 2 when milk is 13,000 mL)', () => {
+  it('edits stock and threshold of an ingredient (restock 3 → 2 when milk is 13,000mL)', () => {
     const onNotify = vi.fn();
     const { store } = open({}, { onNotify });
     const row = screen.getByRole('grid', { name: '재료' }).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
@@ -317,7 +316,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
     open({ store });
     const grid = within(screen.getByRole('grid', { name: '재료' }));
     fireEvent.click(grid.getByRole('button', { name: `${raw(store, BEANS)} 재고 변동 기록` }));
-    expect(grid.getByRole('button', { name: /^5 kg · / })).toBeInTheDocument();
+    expect(grid.getByRole('button', { name: /^5kg · / })).toBeInTheDocument();
   });
 
   it.each(['Enter', ' '])('opens a linked order with %j from the focused grid cell', key => {
@@ -344,7 +343,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
     fireEvent.change(search, { target: { value: '없는 품목' } });
     expect(screen.getByText('찾는 항목이 없어요')).toBeInTheDocument();
     fireEvent.click(within(document.querySelector<HTMLElement>('.ui-data-grid__empty')!).getByRole('button', { name: '검색어 지우기' }));
-    expect(screen.getByRole('grid', { name: '재료' }).querySelectorAll('[data-grid-row]')).toHaveLength(26);
+    expect(screen.getByRole('grid', { name: '재료' }).querySelectorAll('[data-grid-row]')).toHaveLength(model(createWidgetDataStore()).ingredients.length);
     // the SKU is searched too (RM-004 is the milk)
     fireEvent.change(search, { target: { value: 'RM-004' } });
     expect([...screen.getByRole('grid', { name: '재료' }).querySelectorAll('[data-grid-row]')].map((r) => r.getAttribute('data-grid-row'))).toEqual([MILK]);

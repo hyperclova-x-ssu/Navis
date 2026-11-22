@@ -141,16 +141,16 @@ function Setup({ model, session, state }: { readonly model: PromoVideoModel; rea
     <>
       <StepTabs tab={draft.tab} ready={ready} onTab={goTab} />
       <div className="pv-body" key={draft.tab} ref={bodyRef} data-direction={direction} data-slot={`promo-video.step.${draft.tab}`}>
-        {real && model.current?.status === 'done' ? <p className="pv-caption">{realText.t('promo.real.oldVideo')} <ActionButton variant="link" onClick={() => session.setDraft({ composing: false })}>{t.t('promo.btn.view')}</ActionButton></p> : null}
+        {model.current?.status === 'done' ? <p className="pv-caption">{realText.t('promo.real.oldVideo')} <ActionButton variant="link" onClick={() => session.setDraft({ composing: false })}>{t.t('promo.btn.view')}</ActionButton></p> : null}
         {draft.tab === 0 ? <MenuPhotoStep model={model} session={session} draft={draft} headingRef={headingRef} catalog={state.catalog} photoTouched={photoTouched} onPhotoTouched={() => setPhotoTouched(true)} countId={countId} /> : null}
         {draft.tab === 1 ? <MoodStep model={model} session={session} draft={draft} headingRef={headingRef} /> : null}
         {draft.tab === 2 ? <ReferenceGallery session={session} state={state} headingRef={headingRef} /> : null}
         {draft.tab === 3 ? <LengthStep model={model} session={session} state={state} headingRef={headingRef} onTab={goTab} /> : null}
       </div>
-      {real && message ? <p className="pv-caption" role="status">{message.startsWith('promo.real.') ? realText.t(message) : t.t(message)}</p> : null}
+      {message ? <p className="pv-caption" role="status">{message.startsWith('promo.real.') ? realText.t(message) : t.t(message)}</p> : null}
       <Footer state={state} ready={ready} tab={draft.tab} onTab={goTab} canMake={all && model.current?.status !== 'making'} onMake={make} countId={countId}
-        confirmLabel={confirming ? realText.t('promo.real.generate') : undefined} saveLabel={real ? realText.t('promo.real.saveDraft') : undefined}
-        onSave={real ? () => { setMessage(undefined); void session.saveDraft(locale).then(result => setMessage(result.ok ? 'promo.real.draftSaved' : widgetFailureKey(result.messageKey))); } : undefined} />
+        confirmLabel={confirming ? realText.t('promo.real.generate') : undefined} saveLabel={realText.t('promo.real.saveDraft')}
+        onSave={() => { setMessage(undefined); void session.saveDraft(locale).then(result => setMessage(result.ok ? 'promo.real.draftSaved' : widgetFailureKey(result.messageKey))); }} />
     </>
   );
 }
@@ -219,6 +219,7 @@ function MenuPhotoStep({ model, session, draft, headingRef, catalog, photoTouche
     session.setDraft({ menuIds: toggle(draft.menuIds, menuId, on), photoIds: on ? draft.photoIds : draft.photoIds.filter((id) => !own.has(id)) });
   };
   const count = draft.photoIds.length;
+  const [beforeCount, afterCount] = t.t('promo.photo.count', { n: '\uFFFC' }).split('\uFFFC');
   const storeId = session.store.getSnapshot().tables.realPromo?.storeId;
   // Menus that have photos come first, so the owner does not scroll past many photo-less menus to reach them (display order only).
   const menusWithPhotosFirst = useMemo(() => [...model.menus].sort((a, b) => Number(b.hasPhotos) - Number(a.hasPhotos)), [model.menus]);
@@ -228,12 +229,16 @@ function MenuPhotoStep({ model, session, draft, headingRef, catalog, photoTouche
       <h3 className="pv-h ui-sr-only" id={`${fewId}-h`} ref={headingRef} tabIndex={-1}>{t.t('promo.tab.0')}</h3>
       <MultiChips label={t.t('promo.menu.title')} values={draft.menuIds} onChange={setMenu}
         options={menusWithPhotosFirst.map((m) => ({ value: m.menuId, label: text(t, m.name), extra: m.hasPhotos ? t.t('promo.menu.photos', { n: m.photos.length }) : t.t('promo.menu.noPhotos') }))} />
-      {storeId ? <PromoPhotoUpload menus={menusWithPhotosFirst} session={session} /> : null}
       <div className="pv-photos-head">
         <p className="pv-label">{chosen.length ? t.t('promo.photo.headline', { menu: chosen.map((m) => text(t, m.name)).join(', '), n: chosen.reduce((sum, m) => sum + m.photos.length, 0) }) : t.t('promo.photo.headNone')}</p>
-        <p className="pv-caption" data-slot="promo-video.store-photos">{t.t('common.linked.promo.photos', { n: model.photoCount })}</p>
+        <p className="pv-caption" data-slot="promo-video.store-photos">{t.t('promo.photo.available', { n: model.photoCount })}</p>
         <p className="pv-caption">{t.t('promo.photo.why')}</p>
-        <p className="pv-count" id={countId} data-slot="promo-video.photo-count" data-enough={count >= MIN_PHOTOS ? 'true' : count === 0 && !photoTouched ? 'neutral' : 'false'}>{count > 0 || photoTouched ? <Icon name={count >= MIN_PHOTOS ? 'check' : 'warning'} aria-hidden /> : null}{t.t('promo.photo.count', { n: count })}</p>
+        <p className="pv-count" id={countId} data-slot="promo-video.photo-count" data-enough={count >= MIN_PHOTOS ? 'true' : count === 0 && !photoTouched ? 'neutral' : 'false'}>
+          {count > 0 || photoTouched ? <Icon name={count >= MIN_PHOTOS ? 'check' : 'warning'} aria-hidden /> : null}
+          <span className="ui-sr-only">{t.t('promo.photo.count', { n: count })}</span>
+          <span aria-hidden="true">{beforeCount}<span className="pv-count__value">{count}</span>{afterCount}</span>
+        </p>
+        <PromoPhotoUpload menus={menusWithPhotosFirst} session={session} />
       </div>
       {catalog === 'error' ? (
         <p className="pv-inline-error" role="alert"><Icon name="error" aria-hidden /> {t.t('promo.photo.error')} <ActionButton variant="link" onClick={() => { void session.syncCatalog(); }}>{t.t('promo.retry')}</ActionButton></p>
@@ -471,18 +476,17 @@ function Footer({ state, ready, tab, onTab, canMake, onMake, countId, confirmLab
   const enabled = last ? canMake : canNext;
   return (
     <DetailFooterContent>
-      <div className="pv-footbar" data-slot="promo-video.footer">
+      <div className="pv-footbar pv-footbar--setup detail-footer-actions" data-slot="promo-video.footer">
         <p className="pv-footer__reason" id={reasonId} data-slot="promo-video.reason" title={reason ?? undefined}>{reason}</p>
         <div className="pv-footer__buttons">
           {onSave ? <ActionButton variant="secondary" disabled={!!state.writing} aria-busy={state.writing === 'draft' || undefined} onClick={onSave}>{saveLabel}</ActionButton> : null}
-          {tab !== 0 ? <ActionButton variant="secondary" size="primary" className="pv-prev" onClick={() => onTab(Math.max(0, tab - 1) as PromoTab)}>{t.t('promo.prev')}</ActionButton> : null}
+          {tab !== 0 ? <ActionButton variant="ghost" className="pv-prev" onClick={() => onTab(Math.max(0, tab - 1) as PromoTab)}>{t.t('promo.prev')}</ActionButton> : null}
           {last ? (
             <ActionButton size="primary" className="pv-make" disabled={!enabled || !!state.writing} aria-busy={state.writing === 'generate' || undefined} aria-describedby={describedBy} onClick={onMake}>{confirmLabel ?? t.t('marketing.makeVideo')}</ActionButton>
           ) : (
             <ActionButton size="primary" className="pv-make pv-next" disabled={!enabled} aria-disabled={!enabled} aria-describedby={describedBy} onClick={() => onTab((tab + 1) as PromoTab)}>{t.t('promo.next')}</ActionButton>
           )}
         </div>
-        <span aria-hidden="true" />
       </div>
     </DetailFooterContent>
   );

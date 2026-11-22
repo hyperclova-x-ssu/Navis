@@ -10,6 +10,7 @@ import { staffLocalTimestamp } from '../../../data/iteration7/staff/clock';
 import { exportReasonBundle, exportReasonKey } from '../../../data/reality/07/export-copy';
 import { exportOutcome, listWorksExports, worksExportChanged, type WorksListItem, type WorksTime } from '../../../data/reality/07/naver';
 import { useExportCard } from '../../../data/reality/07/use-export-card';
+import { fixtureExports } from '../../../data/reality/07/fixture-exports';
 import { addDays } from '../../../data/db/time';
 import { useBundle, useI18n } from '../../../i18n';
 import { ActionButton, DateStepper, Icon, InlineEmpty, Table } from '../../../ui';
@@ -73,14 +74,16 @@ export const worksBundle = {
 type ListState = { readonly status: 'loading' } | { readonly status: 'error'; readonly reason: string } | { readonly status: 'ready'; readonly items: readonly WorksListItem[] };
 
 /** This owner's WORKS exports for 31 days from `startDate` (store-local). A read failure is shown as such, never as an empty list. */
-export function useWorksList(startDate: string, enabled = true) {
+export function useWorksList(startDate: string) {
   const port = useRealPort();
+  const store = useWidgetDataStore();
+  const http = port?.state('staff').mode === 'http';
   const [version, setVersion] = useState(0);
   const key = `${startDate}|${version}`;
   /** The answer for one window and reload; any other key is still loading, so an old window never shows under a new heading. */
   const [result, setResult] = useState<{ readonly key: string; readonly state: ListState }>();
   useEffect(() => {
-    if (!port || !enabled) return;
+    if (!http) return;
     const controller = new AbortController();
     listWorksExports(port.transport, startDate, controller.signal).then(
       list => { if (!controller.signal.aborted) setResult({ key, state: { status: 'ready', items: Array.isArray(list?.items) ? list.items : [] } }); },
@@ -91,9 +94,10 @@ export function useWorksList(startDate: string, enabled = true) {
       },
     );
     return () => controller.abort();
-  }, [port, enabled, startDate, key]);
+  }, [port, http, startDate, key]);
   const reload = useCallback(() => setVersion(value => value + 1), []);
-  const state: ListState = result?.key === key ? result.state : { status: 'loading' };
+  const state: ListState = !http ? { status: 'ready', items: fixtureExports(store).listWorks(startDate) }
+    : result?.key === key ? result.state : { status: 'loading' };
   return { state, reload };
 }
 
@@ -118,24 +122,23 @@ export function WorksShiftSection({ row }: { readonly row: StaffSchedule }) {
   const headingId = useId();
   const shift = tables.staffSchedule.find(item => item.scheduleId === row.scheduleId) ?? row;
   const person: Staff | undefined = tables.staff.find(item => item.staffId === shift.staffId);
-  const enabled = port?.state('staff').mode === 'http';
-  const list = useWorksList(shift.date, enabled);
+  const http = port?.state('staff').mode === 'http';
+  const list = useWorksList(shift.date);
   const [summary, setSummary] = useState<Summary>();
   const card = useExportCard({ onDone: list.reload });
   const phase = card.state?.phase;
   useEffect(() => { if (phase === 'stale') void port?.retry('staff'); }, [phase, port]);
-  if (!enabled) return null;
 
   const sent = list.state.status === 'ready' ? list.state.items.find(item => item.scheduleId === shift.scheduleId) : undefined;
   const changed = !!sent && !!person && worksExportChanged(sent, shift, person.name);
   const open = (operation: Operation) => {
     const current = shift;
     const owner = person;
-    if (typeof current.revision !== 'number' || (operation !== 'works.delete' && typeof owner?.revision !== 'number')) return;
+    if (http && (typeof current.revision !== 'number' || (operation !== 'works.delete' && typeof owner?.revision !== 'number'))) return;
     setSummary({ staff: owner?.name ?? '', date: format.date(current.date, 'short'), time: shiftTime(current), operation });
     card.open({
-      operation, resourceId: current.scheduleId, expectedRevision: current.revision,
-      ...(operation !== 'works.delete' ? { expectedStaffRevision: owner!.revision } : {}),
+      operation, resourceId: current.scheduleId, expectedRevision: current.revision ?? 0,
+      ...(operation !== 'works.delete' ? { expectedStaffRevision: owner?.revision ?? 0 } : {}),
     });
   };
   const busy = phase === 'sending' || phase === 'confirm';
@@ -211,7 +214,7 @@ export function WorksSentTab({ today }: { readonly today: string }) {
   const { format } = useI18n();
   const tables = useTables();
   const [start, setStart] = useState(today);
-  const list = useWorksList(start, useRealPort()?.state('staff').mode === 'http');
+  const list = useWorksList(start);
   const captionId = useId();
   const nameOf = (item: WorksListItem) => {
     const staffId = tables.staffSchedule.find(row => row.scheduleId === item.scheduleId)?.staffId;
@@ -230,7 +233,7 @@ export function WorksSentTab({ today }: { readonly today: string }) {
     body = list.state.reason === 'WORKS_CALENDAR_REQUIRED' || list.state.reason === 'SESSION_ENDED'
       ? <p className="staff-empty">{t(exportReasonKey(list.state.reason))}</p>
       : <div className="staff-empty"><p role="alert">{t('works.loadFailed')}</p><ActionButton variant="secondary" onClick={list.reload}>{t('works.retry')}</ActionButton></div>;
-  } else if (!list.state.items.length) body = <div className="staff-history-empty"><InlineEmpty title={t('works.empty')} /></div>;
+  } else if (!list.state.items.length) body = <div className="staff-history-empty"><InlineEmpty title={t('works.empty')} description="근무를 고르면 그 일정에서 WORKS로 보낼 수 있어요" /></div>;
   else {
     const rows = [...list.state.items].sort((a, b) => dateOf(a.start).localeCompare(dateOf(b.start)) || a.scheduleId.localeCompare(b.scheduleId));
     body = <Table className="staff-history" aria-label={t('works.tab')} aria-describedby={captionId}>

@@ -40,7 +40,7 @@ const rows = {
 
   /* 매뉴얼 작성 */
   'widget.manuals.count': ['인수인계', 'Store manuals', '店铺手册', '店鋪手冊'],
-  'widget.manuals.fromNote': ['메모로 만들기', 'Create from a note', '从备忘生成', '從備忘產生'],
+  'widget.manuals.fromNote': ['메모로 매뉴얼 만들기', 'Create from a note', '从备忘生成', '從備忘產生'],
   'widget.manuals.recent': ['최근 고침', 'Recently edited', '最近修改', '最近修改'],
   'widget.manuals.all': ['전체', 'All', '全部', '全部'],
   'widget.manuals.todayChecklist': ['오늘 체크리스트', "Today's checklist", '今日清单', '今日清單'],
@@ -71,12 +71,12 @@ const rows = {
   'widget.interior.noMaterials': ['고른 재료가 없어요', 'No materials chosen', '尚未选择材料', '尚未選擇材料'],
   'widget.interior.materialsSeparator': [', ', ', ', '、', '、'],
 
-  'widget.manuals.createDocument': ['문서 만들기', 'Create a document', '创建手册', '建立文件'],
-  'widget.manuals.sampleNote': ['예시 메모', 'Sample note', '示例笔记', '範例筆記'],
+  'widget.manuals.createDocument': ['매뉴얼 만들기', 'Create a document', '创建手册', '建立文件'],
+  'widget.manuals.sampleNote': ['초안에 쓸 메모', 'Note for the draft', '草稿参考笔记', '草稿參考筆記'],
   'widget.manuals.note.mn-open': ['오픈 전 조명·장비·재고 점검', 'Check lights, equipment and stock before opening', '开店前检查照明、设备和库存', '開店前檢查照明、設備和庫存'],
   'widget.manuals.note.mn-close': ['마감 전 우유·청소·POS 확인', 'Check milk, cleaning and POS before closing', '打烊前检查牛奶、清洁和 POS', '打烊前檢查牛奶、清潔和 POS'],
   'widget.manuals.note.mn-newstaff': ['첫 출근 때 확인할 것', 'What to check on the first day', '上班第一天要检查的事项', '上班第一天要檢查的事項'],
-  'widget.manuals.generate': ['문서 초안 만들기', 'Create document draft', '生成手册草稿', '產生文件草稿'],
+  'widget.manuals.generate': ['매뉴얼 초안 만들기', 'Create document draft', '生成手册草稿', '產生文件草稿'],
   'widget.manuals.editStep': ['{n}단계', 'Step {n}', '第 {n} 步', '第 {n} 步'],
   'widget.manuals.addStep': ['단계 추가하기', 'Add a step', '添加步骤', '新增步驟'],
   'widget.manuals.optionalCautions': ['주의할 점(선택)', 'Cautions (optional)', '注意事项（可选）', '注意事項（選填）'],
@@ -112,13 +112,14 @@ const rows = {
 
 const mastermanageKo = {
   'widget.manuals.handover': '인수인계',
+  'widget.manuals.handoverPanel': '인수인계 문서',
   'widget.manuals.storeInfo': '매장 정보',
   'widget.manuals.sectionTabs': '문서 종류',
   'widget.manuals.create': '매뉴얼 만들기',
-  'widget.manuals.edit': '문서 고치기',
-  'widget.manuals.delete': '문서 지우기',
+  'widget.manuals.edit': '매뉴얼 고치기',
+  'widget.manuals.delete': '매뉴얼 지우기',
   'widget.manuals.category': '분류',
-  'widget.manuals.content': '내용',
+  'widget.manuals.content': '하는 방법',
   'widget.manuals.cautions': '주의할 점',
   'widget.manuals.titleRequired': '제목을 넣어 주세요',
   'widget.manuals.contentRequired': '내용을 넣어 주세요',

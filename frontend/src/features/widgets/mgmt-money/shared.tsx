@@ -9,7 +9,7 @@ import { dataBundle, type DataCommand, type DataCommandResult } from '../../../d
 import { useDataDispatch } from '../../../data/react';
 import { managementBundle } from '../../../data/messages/management';
 import type { ContentShape, FeatureId, WidgetHost, WidgetPanelProps } from '../../../contracts';
-import { ActionButton, Icon, MetricFit, PanelBody, PanelState, StatusBadge, useUi } from '../../../ui';
+import { ActionButton, Icon, MetricFit, PanelBody, PanelState, Spinner, StatusBadge, useUi } from '../../../ui';
 import { mgmtMoneyBundle } from './messages';
 import { FitProbe, keepDots, type FitPart } from './fit';
 import { ValueSlot } from './value-slot';
@@ -240,9 +240,9 @@ export function MoneyPanel({ spec, ctx, rowsInQ = false }: { readonly spec: Pane
 }
 
 /* ---------- state views ---------- */
-export function ViewState({ view, ctx, host, featureId, t }: {
+export function ViewState({ view, ctx, host, featureId, t, onRetry, message }: {
   readonly view: { readonly status: 'empty' | 'error'; readonly messageKey: string; readonly actionKey?: string };
-  readonly ctx: SizeCtx; readonly host: WidgetHost; readonly featureId: FeatureId; readonly t: T;
+  readonly ctx: SizeCtx; readonly host: WidgetHost; readonly featureId: FeatureId; readonly t: T; readonly onRetry?: () => void; readonly message?: string;
 }) {
   const failed = view.status === 'error';
   const actionKey = failed ? 'data.action.retry' : view.actionKey;
@@ -251,8 +251,8 @@ export function ViewState({ view, ctx, host, featureId, t }: {
       <PanelState
         tone={failed ? 'error' : 'info'}
         shape={ctx.shape}
-        message={t(view.messageKey)}
-        action={actionKey ? { label: t(actionKey), widgetName: t(`widget.${featureId}.title`), onPress: () => host.resetPreview() } : undefined}
+        message={message ?? t(view.messageKey)}
+        action={actionKey ? { label: t(actionKey), widgetName: t(`widget.${featureId}.title`), onPress: onRetry ?? host.resetPreview } : undefined}
       />
     </div>
   );
@@ -303,13 +303,13 @@ export function Kpi({ slot, label, value, unit, tone, semanticValue, details }: 
 export const PERIOD_KEYS = { today: 'format.period.today', last7: 'format.period.last7', last30: 'format.period.last30', month: 'format.period.thisMonth' } as const;
 
 /** Detail-sized empty/error view: sentence plus the one retry action (resets only this widget's sample state). */
-export function DetailViewState({ view, host, t, nextAction }: { readonly view: { readonly status: 'empty' | 'error'; readonly messageKey: string; readonly actionKey?: string }; readonly host: WidgetHost; readonly t: T; /** The widget's own next step for an empty view that has no data action (H1: a state sentence always comes with what to do next). */ readonly nextAction?: { readonly label: string; readonly onPress: () => void } }) {
+export function DetailViewState({ view, host, t, nextAction, onRetry, message }: { readonly view: { readonly status: 'empty' | 'error'; readonly messageKey: string; readonly actionKey?: string }; readonly host: WidgetHost; readonly t: T; readonly onRetry?: () => void; readonly message?: string; /** The widget's own next step for an empty view that has no data action (H1: a state sentence always comes with what to do next). */ readonly nextAction?: { readonly label: string; readonly onPress: () => void } }) {
   const failed = view.status === 'error';
   const actionKey = failed ? 'data.action.retry' : view.actionKey;
   return (
     <div className="mm-detail-state" lang={copyLang(t(view.messageKey))} data-tone={failed ? 'error' : 'info'}>
-      <p className="mm-detail-state__text" role={failed ? 'alert' : 'status'}><Icon name={failed ? 'error' : 'info'} />{t(view.messageKey)}</p>
-      {actionKey ? <ActionButton variant="outline" onClick={() => host.resetPreview()}>{t(actionKey)}</ActionButton> : nextAction ? <ActionButton variant="outline" onClick={nextAction.onPress}>{nextAction.label}</ActionButton> : null}
+      <p className="mm-detail-state__text" role={failed ? 'alert' : 'status'}>{view.messageKey === 'data.real.loading' ? <Spinner /> : failed ? <Icon name="error" /> : null}{message ?? t(view.messageKey)}</p>
+      {actionKey ? <ActionButton variant="outline" onClick={onRetry ?? host.resetPreview}>{t(actionKey)}</ActionButton> : nextAction ? <ActionButton variant="outline" onClick={nextAction.onPress}>{nextAction.label}</ActionButton> : null}
     </div>
   );
 }

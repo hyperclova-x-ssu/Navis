@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithKit } from '../../../ui/test-utils';
 import { createWidgetDataStore, selectMenus } from '../../../data/widget-data';
+import { normalizeMenuCategory } from '../../../contracts';
 import { MenuDetail, MenuPanel } from './menu';
 
 const host = { layer: 'management' as const, resetPreview: vi.fn(), openLinked: vi.fn(), openDetail: vi.fn(), notify: vi.fn(), acknowledgeBriefing: vi.fn(), openClosing: vi.fn(() => true) };
@@ -13,15 +14,17 @@ const common = { featureId: 'menu' as const, condition: { kind: 'default' as con
 const menuGridStyles = ['src/ui/mastermanage.css', 'src/features/widgets/mgmt-products/pos-menu.css']
   .map(path => readFileSync(path, 'utf8')).join('\n');
 afterEach(cleanup);
-/** The 안숭잘부 카페 menus the widget itself reads (24 on the demo day), so counts and prices are never retyped here. */
+/** The 안숭잘부 카페 menus the widget itself reads. */
 const cafeMenus = () => selectMenus(createWidgetDataStore().getSnapshot(), {}).rows;
-it('filters the 24 café menus by the five tabs and keeps season independent', async () => {
+it('filters the café menus by the five tabs and keeps season independent', async () => {
   const user = userEvent.setup();
   renderWithKit(<MenuDetail {...common} detailRef={{ featureId: 'menu' }} />);
   const tabs = screen.getAllByRole('tab');
   expect(tabs.map(tab => tab.textContent)).toEqual(['전체', '커피', '티', '음료', '디저트']);
   expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
-  for (const [index, count] of [24, 8, 4, 8, 4].entries()) {
+  const menus = cafeMenus();
+  const counts = ['coffee', 'tea', 'beverage', 'dessert'].map(category => menus.filter(menu => normalizeMenuCategory(menu.category) === category).length);
+  for (const [index, count] of [menus.length, ...counts].entries()) {
     await user.click(tabs[index]);
     expect(within(screen.getByRole('grid')).getAllByRole('row')).toHaveLength(count + 1);
     if (index === 2) expect(screen.getByRole('row', { name: /고흥 유자 캐모마일 티/ })).toHaveTextContent('시즌');
@@ -78,7 +81,7 @@ it('validates, adds, replaces and removes a local photo from the detail panel', 
   const notify = vi.fn();
   const { container } = renderWithKit(<MenuDetail {...common} host={{ ...host, notify }} detailRef={{ featureId: 'menu', itemId: 'm-americano' }} />, { store, reducedMotion: true });
   const section = within(screen.getByRole('region', { name: '메뉴 사진' }));
-  const upload = section.getByRole('button', { name: '사진 바꾸기' });
+  const upload = section.getByRole('button', { name: '메뉴 사진 바꾸기' });
   const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
   expect(input).toHaveAttribute('accept', 'image/*');
   const before = store.getSnapshot();
@@ -106,25 +109,25 @@ it('validates, adds, replaces and removes a local photo from the detail panel', 
     expect(section.queryByRole('alert')).not.toBeInTheDocument();
     expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 512, 256);
     expect(closeBitmap).toHaveBeenCalledOnce();
-    expect(section.getByRole('button', { name: '사진 바꾸기' })).toBe(upload);
+    expect(section.getByRole('button', { name: '메뉴 사진 바꾸기' })).toBe(upload);
     expect(notify).toHaveBeenLastCalledWith(expect.objectContaining({
       params: { message: '메뉴 사진을 바꿨어요' }, undoToken: expect.any(String),
     }));
     expect(photoCell.querySelector('img')).toHaveAttribute('src', customPhotoUrl);
     expect(screen.getByRole('region', { name: '메뉴 사진' }).querySelector('img')).toHaveAttribute('src', customPhotoUrl);
 
-    await user.click(section.getByRole('button', { name: '사진 빼기' }));
+    await user.click(section.getByRole('button', { name: '메뉴 사진 빼기' }));
     expect(section.getByText('사진 없음')).toBeInTheDocument();
-    expect(section.queryByRole('button', { name: '사진 빼기' })).not.toBeInTheDocument();
-    expect(section.getByRole('button', { name: '사진 올리기' })).toHaveFocus();
+    expect(section.queryByRole('button', { name: '메뉴 사진 빼기' })).not.toBeInTheDocument();
+    expect(section.getByRole('button', { name: '메뉴 사진 올리기' })).toHaveFocus();
     expect(screen.getByRole('gridcell', { name: /^아메리카노, 메뉴 사진, 사진 없음/ })).toBeInTheDocument();
     const notice = notify.mock.lastCall?.[0];
     expect(notice).toMatchObject({ kind: 'success', params: { message: '사진을 뺐어요' }, undoToken: expect.any(String) });
     act(() => { store.undo(notice.undoToken); });
     expect(selectMenus(store.getSnapshot(), {}).rows.find(row => row.menuId === 'm-americano')).toMatchObject({ photoKey: null, customPhotoUrl });
-    await user.click(section.getByRole('button', { name: '사진 빼기' }));
+    await user.click(section.getByRole('button', { name: '메뉴 사진 빼기' }));
     await user.upload(input, file);
-    expect(section.getByRole('button', { name: '사진 바꾸기' })).toBeInTheDocument();
+    expect(section.getByRole('button', { name: '메뉴 사진 바꾸기' })).toBeInTheDocument();
   } finally {
     context.mockRestore();
     encode.mockRestore();
@@ -230,6 +233,7 @@ it('edits name, status, category and price in the side panel and reports undo', 
   expect(menu()?.category).toBe('dessert');
 
   const price = panel.getByRole('spinbutton', { name: '판매가' });
+  expect(price).toHaveValue(originalPrice);
   await user.clear(price);
   await user.type(price, '0');
   const before = store.getSnapshot();
@@ -240,6 +244,7 @@ it('edits name, status, category and price in the side panel and reports undo', 
   await user.type(price, '4900');
   await user.click(panel.getByRole('button', { name: '판매가 저장하기' }));
   expect(menu()?.price).toBe(4900);
+  expect(price.closest('.ui-grouped-number')?.querySelector('.ui-grouped-number__value')).toHaveTextContent('4,900');
   expect(panel.queryByRole('alert')).not.toBeInTheDocument();
   const successfulNotices = notify.mock.calls.map(([notice]) => notice).filter(notice => notice.kind === 'success');
   expect(successfulNotices.map(notice => notice.undoToken)).toEqual(Array(4).fill(expect.any(String)));
@@ -316,6 +321,8 @@ it('archives a menu from the row action and restores it with the undo token', as
   const remove = () => table.queryByRole('button', { name: '아메리카노 지우기' });
 
   await userEvent.click(remove()!);
+  expect(store.getSnapshot().tables.menuItem.find(row => row.menuId === 'm-americano')?.deletedAt).toBeFalsy();
+  await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '지우기' }));
   expect(remove()).not.toBeInTheDocument();
   const notice = host.notify.mock.calls.at(-1)?.[0];
   expect(notice).toMatchObject({
@@ -352,6 +359,7 @@ it('saves a recipe quantity and archives a menu with undo', async () => {
   const usage=deriveUsage(store.getSnapshot(),{date:TODAY}).byItem[beans.itemId];
   expect(usage).toBe(usedBefore);
   await userEvent.click(screen.getByRole('button',{name:'메뉴 지우기'}));
+  await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '지우기' }));
   expect(deriveUsage(store.getSnapshot(),{date:TODAY}).byItem[beans.itemId]).toBe(usage);
   expect(selectMenus(store.getSnapshot(),{}).rows).toHaveLength(total-1);
   const notice=host.notify.mock.calls.at(-1)?.[0] as { undoToken?: string };

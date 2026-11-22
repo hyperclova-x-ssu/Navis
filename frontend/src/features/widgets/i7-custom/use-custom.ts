@@ -6,11 +6,11 @@ const noRead = () => null;
 export function useCustomOrderSource() {
   const context = useContext(CustomOrderContext);
   const read = useSyncExternalStore(context?.port.subscribe ?? noSubscription, context?.port.read ?? noRead, context?.port.read ?? noRead);
-  return { port: context?.port ?? null, read, state: context?.state ?? 'error' as const };
+  return { port: context?.port ?? null, read, retry: context?.retry, state: context?.state ?? 'error' as const };
 }
 export function useCustomOrderModel(query: Parameters<typeof selectCustomOrders>[1] = {}) {
   const source = useCustomOrderSource();
-  const model = source.read && source.state !== 'error' ? selectCustomOrders(source.read, query) : null;
+  const model = source.read && source.state !== 'error' && source.state !== 'loading' ? selectCustomOrders(source.read, query) : null;
   return { ...source, model, rows: source.state === 'empty' ? [] : model?.orders ?? [] };
 }
 
@@ -21,5 +21,5 @@ export function useCustomOrderSummary() {
 
 export function usePickupCount(date: string): number | null {
   const { rows, port, state } = useCustomOrderModel();
-  return port && state !== 'error' ? rows.filter(row => row.pickup?.date === date && row.pickup.status === 'confirmed').length : null;
+  return port && state !== 'error' && state !== 'loading' ? rows.filter(row => row.pickup?.date === date && row.pickup.status === 'confirmed').length : null;
 }

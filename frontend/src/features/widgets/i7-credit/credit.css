@@ -56,6 +56,17 @@
 .credit-panel-history--dated .credit-history-text { display: flex; flex-direction: column; min-width: 0; }
 .credit-panel-history--dated .credit-when { color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-regular); font-variant-numeric: tabular-nums; }
 .credit-panel .i7-panel-remainder { margin: var(--space-2) 0 0; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.credit-panel-history-wrap:not(:has(li:not([data-fit-hidden]))) > .i7-panel-remainder,
+.credit-panel-table:not(:has(tbody tr:not([data-fit-hidden]))) { display: none; }
+.credit-panel[data-width='1'] .credit-panel-history li {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1);
+}
+.credit-panel[data-width='1'] .credit-history-text { display: grid; min-inline-size: 0; }
+.credit-panel[data-width='1'] .credit-panel-history li strong { justify-self: end; white-space: nowrap; }
+.credit-panel[data-height='2'] { gap: var(--space-2); }
+.credit-panel[data-height='2'] .credit-panel-table .ui-table thead th { height: var(--target-min); }
+.credit-detail .ui-detail-side-panel header h3 { white-space: pre-line; word-break: keep-all; }
+.ui-root[data-text-scale='125'] article[data-feature-id='credit-receivable'][data-width='1'] .ui-panel-title { font-size: var(--type-caption); white-space: nowrap; }
 
 /* 원거래 column (DS 12.1 LinkCell): label + right chevron, the whole cell is one press target. */
 .ui-data-grid__cell:has(> .ui-data-grid__value > .credit-original-link) { display: flex; padding: 0; }

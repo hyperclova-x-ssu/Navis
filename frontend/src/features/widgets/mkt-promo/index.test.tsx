@@ -75,19 +75,19 @@ describe('오늘 할 홍보 sizes (AC-285)', () => {
     expect(screen.getByText('오늘')).toBeInTheDocument();
     expect(screen.getByText(text.quietKo)).toBeInTheDocument();
     expect(screen.queryByText(/그 시간에 자주 오던 단골이/)).toBeNull();
-    expect(screen.getByText(text.repliesKo)).toBeInTheDocument();
+    expect(screen.getByText(text.repliesKo.replace('메시지·리뷰', '메시지\u2060·\u2060리뷰'))).toBeInTheDocument();
     expect(screen.queryByText(/답변 초안을 써 뒀어요/)).toBeNull();
-    expect(screen.getByText(`영상에 쓸 매장 사진 ${text.photos}장이 있어요`)).toBeInTheDocument();
+    expect(screen.getByText(`영상에 쓸 사진 ${text.photos}장이 있어요`)).toBeInTheDocument();
     expect(screen.queryByText(/짧은 영상으로 만들어 볼까요\?/)).toBeNull();
     expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
-      '단골에게 쿠폰 보내기, 오늘 할 홍보', '답변 확인하기, 오늘 할 홍보', '홍보 영상 만들기, 오늘 할 홍보',
+      '쿠폰 보내기, 오늘 할 홍보', '답변 확인하기, 오늘 할 홍보', '영상 만들기, 오늘 할 홍보',
     ]);
     expect(document.querySelector('.mp-today')).toHaveAttribute('data-layout', 'columns');
     cleanup();
     panel(4, 2, makeHost(), { store });
     expect(screen.getByText(new RegExp(`그 시간에 자주 오던 단골이 ${text.regulars}명 있어요`))).toBeInTheDocument();
     expect(screen.getByText(/답변 초안을 써 뒀어요/)).toBeInTheDocument();
-    expect(screen.getByText(/짧은 영상으로 만들어 볼까요\?/)).toBeInTheDocument();
+    expect(screen.queryByText(/짧은 영상으로 만들어 볼까요\?/)).toBeNull();
   });
   it('1x1 shows the first slot only with the short label; 2x1 the top two; 2x2 and larger all three', () => {
     expect(slotCount(1, 1)).toBe(1); expect(slotCount(2, 1)).toBe(2); expect(slotCount(4, 1)).toBe(3); expect(slotCount(1, 2)).toBe(2); expect(slotCount(1, 3)).toBe(3); expect(slotCount(2, 2)).toBe(3);
@@ -101,7 +101,7 @@ describe('오늘 할 홍보 sizes (AC-285)', () => {
     cleanup();
     panel(2, 1, makeHost(), { store });
     expect(screen.getAllByRole('button')).toHaveLength(2);
-    expect(screen.queryByText(/영상에 쓸 매장 사진 \d+장이/)).toBeNull();
+    expect(screen.queryByText(/영상에 쓸 사진 \d+장이/)).toBeNull();
     cleanup();
     panel(2, 2, makeHost(), { store });
     expect(screen.getAllByRole('button')).toHaveLength(3);
@@ -116,7 +116,7 @@ describe('오늘 할 홍보 sizes (AC-285)', () => {
     panel(4, 1, makeHost(), { locale: 'en', store });
     expect(screen.getByText(text.quietEn('long'))).toBeInTheDocument();
     expect(screen.queryByText(/regulars often come/)).toBeNull();
-    expect(screen.getByText('Now')).toBeInTheDocument();
+    expect(screen.getByText('Next 7 days')).toBeInTheDocument();
     cleanup();
     panel(4, 1, makeHost(), { textScale: 125, store });
     expect(screen.queryByText(/자주 오던 단골/)).toBeNull();
@@ -152,9 +152,9 @@ describe('오늘 할 홍보 buttons (AC-286)', () => {
   it('each slot button opens the target widget detail with its action open, not the widget itself', async () => {
     const host = makeHost();
     panel(4, 1, host, { store: syncedCafeStore(createWidgetDataStore()) });
-    await userEvent.click(screen.getByRole('button', { name: '단골에게 쿠폰 보내기, 오늘 할 홍보' }));
+    await userEvent.click(screen.getByRole('button', { name: '쿠폰 보내기, 오늘 할 홍보' }));
     await userEvent.click(screen.getByRole('button', { name: '답변 확인하기, 오늘 할 홍보' }));
-    await userEvent.click(screen.getByRole('button', { name: '홍보 영상 만들기, 오늘 할 홍보' }));
+    await userEvent.click(screen.getByRole('button', { name: '영상 만들기, 오늘 할 홍보' }));
     expect(host.openDetail.mock.calls.map(([ref]) => ref)).toEqual([
       { featureId: 'slot-coupon', view: 'send', focus: 'action' },
       { featureId: 'ai-response', focus: 'action' },

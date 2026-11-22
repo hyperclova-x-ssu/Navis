@@ -107,13 +107,13 @@ describe('진행 중인 쿠폰 (28) on large cards', () => {
     panel('coupon-status', 4, 4);
     const text = rows().map(rowText);
     const ended = m.ended[0]!; const name = (ended.name as { raw: string }).raw;
-    expect(text).toContain(`${name} · 사용 ${ended.used}/${ended.issued} · ${shortKo(ended.endsOn)} 종료`);
+    expect(text).toContain(`${name} · ${ended.issued}장 중 ${ended.used}장 사용 · ${shortKo(ended.endsOn)} · 끝남`);
     expect(text).toContain(`이번 달 사용 ${m.monthUsed}장 = 진행 중 ${m.runningUsed}장 + 끝난 쿠폰 ${m.endedUsed}장`);
     cleanup(); panel('coupon-status', 2, 2);
-    expect(rows().map(rowText).join('|')).not.toContain('종료');
+    expect(rows().map(rowText).join('|')).not.toContain('끝남');
     expect(rows().map(rowText)).toContain(`이번 달 사용 ${m.monthUsed}장`);
     cleanup(); panel('coupon-status', 4, 2);
-    expect(rows().map(rowText).join('|')).not.toContain('종료');
+    expect(rows().map(rowText).join('|')).not.toContain('끝남');
   });
   it('shows no ended-coupon line when none ended this month', () => {
     const base = createWidgetDataStore();

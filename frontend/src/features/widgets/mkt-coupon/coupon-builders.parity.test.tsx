@@ -4,7 +4,7 @@
  */
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import type { WidgetHost } from '../../../contracts';
 import { createWidgetDataStore } from '../../../data/widget-data';
@@ -47,7 +47,10 @@ it('renders the POS quiet-slot builder during a customer read failure and disabl
   expect(screen.getByRole('radio', { name: '월 19~20시' })).toBeInTheDocument();
   expect(screen.getByText(/일부 자료만/)).toBeInTheDocument();
   expect(container.querySelector('.mkt-detail-state')).toBeNull();
-  expect(screen.getByRole('button', { name: /0명에게 쿠폰 보내기/ })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '쿠폰 보내기' })).toBeDisabled();
+  const preview = screen.getByRole('group', { name: '문구 미리보기' });
+  expect((within(preview).getByRole('textbox') as HTMLTextAreaElement).value).toMatch(/\(월\) 19~20시/);
+  expect(preview).not.toHaveTextContent('번호를 먼저 등록');
   expect(backend.callsTo('POST', '/marketing/coupons/slot')).toHaveLength(0);
 });
 
@@ -57,6 +60,8 @@ it('renders the real expiring lot in the original builder during a forecast read
   for (const step of ['혜택', '보낼 곳']) expect(screen.getByRole('heading', { name: new RegExp(step) })).toBeInTheDocument();
   expect(container.querySelector('.mkt-columns')).toBeInTheDocument();
   expect(container.querySelector('[data-slot="expiry-coupon.items"]')).toHaveTextContent('레몬 타르트 3개');
+  expect(screen.getByText('62%까지 할인하면 원가 이상으로 팔아요')).toBeInTheDocument();
+  expect(screen.queryByText(/2차 할인을 제안/)).not.toBeInTheDocument();
   expect(screen.getByText(/일부 자료만/)).toBeInTheDocument();
   expect(container.querySelector('.mkt-detail-state')).toBeNull();
   expect(backend.callsTo('POST', '/marketing/coupons/expiry')).toHaveLength(0);

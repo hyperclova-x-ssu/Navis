@@ -7,7 +7,7 @@ import { useStaffCalendarCommand } from '../../../data/reality/07/use-staff-cale
 import type { ShiftConflict } from '../../../data/iteration7/staff';
 import { useBundle, useI18n } from '../../../i18n';
 import { dataBundle } from '../../../data/messages';
-import { ActionButton, DataGrid, DateField, DateStepper, DetailSidePanel, DetailTabs, IconButton, InlineEmpty, MetricFit, NumberField, PanelState, SegmentedControl, StatusBadge, Table, TextField, type DataGridHandle, type GridColumn, type GridFocus } from '../../../ui';
+import { ActionButton, DataGrid, DateField, DateStepper, DetailFooterContent, DetailSidePanel, DetailTabs, IconButton, InlineEmpty, MetricFit, NumberField, PanelState, SegmentedControl, Table, TextField, TimeField, type DataGridHandle, type GridColumn, type GridFocus } from '../../../ui';
 import { daysInPeriod, periodFor, shiftPeriod, validateSchedule, type PeriodMode } from './model';
 import { FitProbe } from '../mgmt-money/fit';
 import { PanelRemainder } from './panel-remainder';
@@ -77,21 +77,23 @@ export function StaffPanel(props: WidgetPanelProps) {
   const wide = props.width >= 3 && props.height >= 2;
   /** D-333: from 3x3 up the week grid also gets the handoff time, the break of each shift, the week total and the latest change (the reverse of the drop order). */
   const large = props.width >= 3 && props.height >= 3;
+  const tallest = props.height === 4;
   const compact = props.width === 1 && props.height === 1;
-  const weekTotal = <p className="staff-week-total">주간 총 {m.rows.filter(row => row.kind === 'work').length}건 · 휴무 {m.rows.filter(row => row.kind === 'off').length}건</p>;
+  const weekTotal = <p className="staff-week-total">이번 주 근무 {m.rows.filter(row => row.kind === 'work').length}건 · 휴무 {m.rows.filter(row => row.kind === 'off').length}건</p>;
   const metric = <div className="staff-primary"><div data-slot="staff-schedule.metric.value"><MetricFit value={String(m.today.workingCount)} unit="명" longest="999" stacked={false} /></div><p className="staff-label">오늘 근무</p></div>;
   const valueRow = (name: string, value: React.ReactNode, className = '') => <div className={`staff-value-row ${className}`} key={name}><span>{name}</span><strong>{value}</strong></div>;
   return <div className="staff-panel" data-width={props.width} data-height={props.height} lang="ko">
     <div className="staff-metrics">{metric}{(large || (props.width === 2 && props.height >= 2)) && m.today.nextHandoffAt && <div className="staff-primary"><MetricFit value={m.today.nextHandoffAt} stacked={false} /><p className="staff-label">교대</p></div>}</div>
     {note ? <p className="staff-recent" role="status">{note.messageKey === 'data.real.partial' ? '일부 근무만 보여드려요' : '최신 근무표가 아닐 수 있어요'}</p> : null}
     {!compact && (props.height === 1 ? <div className="staff-panel-list">
-      {valueRow('오전·낮', `${hourly(14)}명`)}{valueRow('오후', `${hourly(18)}명`)}
+      {valueRow('오전', `${hourly(10)}명`)}{valueRow('오후', `${hourly(18)}명`)}
       {props.width >= 3 && <>{valueRow('직원 휴무', `${m.today.offCount}명`, 'staff-extra-row')}{m.today.nextHandoffAt && valueRow('교대', m.today.nextHandoffAt, 'staff-extra-row')}</>}
-    </div> : wide ? <><MiniGrid model={m} dateLabel={dateLabel} today={today} breaks={large} />{large && <div className="staff-panel-list">
+    </div> : wide ? <><MiniGrid model={m} dateLabel={dateLabel} today={today} breaks={large}
+      maxRows={props.height === 2 ? 2 : props.width === 3 && props.height === 3 ? 4 : undefined} />{large && <div className="staff-panel-list">
       {weekTotal}
-      {m.changes.at(-1) && <p className="staff-recent">최근 변경 · {historyText(m.changes.at(-1)!.after ?? m.changes.at(-1)!.before, m.staff, dateLabel)}</p>}
+      {m.changes.slice(tallest ? -4 : -1).reverse().map((change, index) => <p className="staff-recent" key={change.changeId}>{index === 0 && '최근 변경 · '}{historyText(change.after ?? change.before, m.staff, dateLabel)}</p>)}
     </div>}</> : <div className="staff-panel-list">
-      {rows.slice(0, props.height === 2 && props.width === 2 ? 4 : 5).map(row => <div className="staff-value-row staff-person-row" key={row.scheduleId} aria-label={`${names.get(row.staffId)} ${rowText(row)}`}><span>{names.get(row.staffId)}</span><strong>{row.kind === 'off' ? <span className="staff-off">직원 휴무</span> : `${row.start}~${row.end}`}</strong></div>)}
+      {rows.slice(0, tallest ? undefined : props.height === 2 && props.width === 2 ? 4 : 5).map(row => <div className="staff-value-row staff-person-row" key={row.scheduleId} aria-label={`${names.get(row.staffId)} ${rowText(row)}`}><span>{names.get(row.staffId)}</span><strong>{row.kind === 'off' ? <span className="staff-off">직원 휴무</span> : `${row.start}~${row.end}`}</strong></div>)}
       {props.width === 1 && <PanelRemainder total={rows.length} rowSelector=".staff-person-row" unit="명" />}
       {props.width === 2 && weekTotal}
       {props.width === 2 && props.height >= 3 && m.changes.at(-1) && <p className="staff-recent">최근 변경 · {historyText(m.changes.at(-1)!.after ?? m.changes.at(-1)!.before, m.staff, dateLabel)}</p>}
@@ -99,9 +101,24 @@ export function StaffPanel(props: WidgetPanelProps) {
     <FitProbe order={[{ selector: '.staff-break' }, { selector: '.staff-recent' }, { selector: '.staff-week-total' }, { selector: '.staff-extra-row', last: true }, { selector: '.staff-person-row', last: true }, { selector: '.staff-mini tbody tr', last: true }]} deps={[props.width, props.height, m.rows.length, m.today.workingCount]} />
   </div>;
 }
-function MiniGrid({ model, dateLabel, today, breaks = false }: { model: StaffScheduleModel; dateLabel: DateLabel; today: string; breaks?: boolean }) {
+function MiniGrid({ model, dateLabel, today, breaks = false, maxRows }: { model: StaffScheduleModel; dateLabel: DateLabel; today: string; breaks?: boolean; maxRows?: number }) {
   const dates = daysInPeriod(model.period.start, model.period.end).slice(0, 7);
-  return <div className="staff-mini" aria-label="주간 근무표 미리보기"><table><thead><tr><th>직원</th>{dates.map((date, i) => <th key={date} className={i >= 5 ? 'staff-late-day' : undefined} data-today={date === today || undefined}>{dateLabel(date)}</th>)}</tr></thead><tbody>{model.staff.map(person => <tr key={person.staffId}><th>{person.name}</th>{dates.map((date, i) => <td key={date} className={i >= 5 ? 'staff-late-day' : undefined}>{model.rows.filter(row => row.staffId === person.staffId && row.date === date).map(row => <span data-kind={row.kind} aria-label={rowText(row)} key={row.scheduleId}>{row.kind === 'off' ? '직원 휴무' : `${row.start}~${row.end}`}{breaks && row.kind === 'work' && row.breakMinutes > 0 && <small className="staff-break">휴게 {row.breakMinutes}분</small>}</span>)}</td>)}</tr>)}</tbody></table></div>;
+  const working = new Set(model.rows.filter(row => row.date === today && row.kind === 'work').map(row => row.staffId));
+  const staff = maxRows === undefined ? model.staff
+    : [...model.staff].sort((a, b) => Number(working.has(b.staffId)) - Number(working.has(a.staffId))).slice(0, maxRows);
+  const compactStart = Math.max(0, Math.min(dates.indexOf(today), dates.length - 4));
+  const dayClass = (index: number) => index >= compactStart && index < compactStart + 4 ? undefined : 'staff-extra-day';
+  return <div className="staff-mini" aria-label="주간 근무표 미리보기">
+    <table>
+      <thead><tr><th>직원</th>{dates.map((date, i) => <th key={date} className={dayClass(i)} data-today={date === today || undefined} aria-current={date === today ? 'date' : undefined}>{dateLabel(date)}</th>)}</tr></thead>
+      <tbody>{staff.map(person => <tr key={person.staffId}><th>{person.name}</th>{dates.map((date, i) => <td key={date} className={dayClass(i)}>
+        {model.rows.filter(row => row.staffId === person.staffId && row.date === date).map(row => <span data-kind={row.kind} aria-label={rowText(row)} key={row.scheduleId}>
+          {row.kind === 'off' ? '직원 휴무' : `${row.start}~${row.end}`}
+          {breaks && row.kind === 'work' && row.breakMinutes > 0 && <small className="staff-break">휴게 {row.breakMinutes}분</small>}
+        </span>)}</td>)}</tr>)}</tbody>
+    </table>
+    <PanelRemainder total={model.staff.length} rowSelector="tbody tr" unit="명" />
+  </div>;
 }
 
 export function useStaffSummary() {
@@ -149,7 +166,10 @@ function StaffDetailContent({ host, detailRef }: WidgetDetailProps) {
   useLayoutEffect(() => {
     if (!routedShift || view.status !== 'ready') return;
     const shift = detail.current?.querySelector(`button[data-schedule-id="${CSS.escape(routedShift)}"]`);
-    if (shift instanceof HTMLButtonElement) shift.focus();
+    if (shift instanceof HTMLButtonElement) {
+      shift.focus({ preventScroll: true });
+      shift.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    }
   }, [routedShift, view.status]);
   const grid = useRef<DataGridHandle>(null);
   const firstFieldRef = useRef<HTMLElement | null>(null);
@@ -183,7 +203,7 @@ function StaffDetailContent({ host, detailRef }: WidgetDetailProps) {
   };
   return <div ref={detail} className="staff-detail" data-widget="staff-schedule" lang="ko">
     <DetailTabs value={tab} onValueChange={changeTab} label="직원 스케줄표 보기" tabs={[{ value: 'week', label: '주간 근무표' }, { value: 'month', label: '월간 근무표' }, { value: 'staff', label: '직원 목록' }, { value: 'history', label: '근무 변경 이력' },
-      ...(real ? [{ value: 'works' as const, label: worksT('works.tab') }] : [])]} />
+      { value: 'works', label: worksT('works.tab') }]} />
     {view.status === 'error' ? <State view={view} host={host} detail /> : <>
       {note ? <div className="staff-toolbar"><p role="status">{note.messageKey === 'data.real.partial' ? '일부 근무만 보여드려요' : '최신 근무표가 아닐 수 있어요'}</p>
         <ActionButton variant="outline" onClick={retry}>다시 불러오기</ActionButton></div> : null}
@@ -192,18 +212,20 @@ function StaffDetailContent({ host, detailRef }: WidgetDetailProps) {
         <div className="staff-toolbar__add">
           <ActionButton variant="secondary" onClick={event => openEditor({ kind: 'staff' }, event.currentTarget)}>직원 추가하기</ActionButton>
           {model?.staff.length ? <><ActionButton variant="secondary" onClick={event => openEditor({ kind: 'schedule' }, event.currentTarget)}>근무 추가하기</ActionButton><ActionButton variant="secondary" onClick={event => openEditor({ kind: 'schedule', off: true }, event.currentTarget)}>휴무 등록하기</ActionButton></> : null}
-          {model?.today.nextHandoffAt ? <ActionButton variant="secondary" onClick={event => openEditor({ kind: 'handoff', from: model.today.nextHandoffAt!, shiftRevision: store.getSnapshot().tables.staffShiftRevision }, event.currentTarget)}>교대 시각 고치기</ActionButton> : null}
+          <ActionButton variant="secondary" disabled={!model?.today.nextHandoffAt}
+            title={!model?.today.nextHandoffAt ? '예정된 교대가 없어요' : undefined}
+            onClick={event => { if (model?.today.nextHandoffAt) openEditor({ kind: 'handoff', from: model.today.nextHandoffAt, shiftRevision: store.getSnapshot().tables.staffShiftRevision }, event.currentTarget); }}>교대 시각 고치기</ActionButton>
         </div>
       </div> : null}
       {tab === 'history' ? <History changes={model?.changes ?? []} staff={model?.staff ?? []} real={real} />
         : tab === 'works' ? <WorksSentTab today={clock.date} />
         : !model || !model.staff.length ? <div className="staff-empty"><p>아직 등록한 직원이 없어요</p></div>
         : tab === 'staff' ? <StaffList staff={model.staff} grid={grid} selectedId={editor?.kind === 'staff' || editor?.kind === 'deleteStaff' ? editor.person?.staffId ?? null : null} onEdit={person => openEditor({ kind: 'staff', person })} onClose={closeEditor} onDelete={person => openEditor({ kind: 'deleteStaff', person, shiftRevision: store.getSnapshot().tables.staffShiftRevision })} />
-        : <ScheduleGrid model={model} dates={daysInPeriod(period.startDate, period.endDate)} mode={mode} orientation={orientation} clock={clock} onEdit={editShift} />}
+        : <ScheduleGrid model={model} dates={daysInPeriod(period.startDate, period.endDate)} mode={mode} orientation={orientation} clock={clock} selectedId={editedShift?.scheduleId ?? routedShift} onEdit={editShift} />}
       <DetailSidePanel open={!!editor} selectedRowId={editor ? JSON.stringify(editor) : null} title={panelTitle} onClose={closeEditor}
         returnFocusKey={editor ? editorFocusKey(editor) : ''} onRestoreFocus={restoreFocus} initialFocusRef={firstFieldRef} danger={danger}>
         {editor && <EditorForm key={JSON.stringify(editor)} editor={editor} model={model} date={date} today={clock.date} host={host} firstFieldRef={firstFieldRef} onClose={closeEditor} />}
-        {real && editor?.kind === 'schedule' && editor.row ? <WorksShiftSection key={editor.row.scheduleId} row={editor.row} /> : null}
+        {editor?.kind === 'schedule' && editor.row ? <WorksShiftSection key={editor.row.scheduleId} row={editor.row} /> : null}
       </DetailSidePanel>
     </>}
   </div>;
@@ -243,25 +265,25 @@ function StaffList({ staff, grid, selectedId, onEdit, onClose, onDelete }: { sta
   </div>;
 }
 
-function ShiftButton({ row, label, prefix, pastLabel, clock, onEdit }: {
-  row: StaffSchedule; label: string; prefix?: string; pastLabel: string; clock: StaffClock;
+function ShiftButton({ row, label, prefix, pastLabel, clock, selected, onEdit }: {
+  row: StaffSchedule; label: string; prefix?: string; pastLabel: string; clock: StaffClock; selected: boolean;
   onEdit: (row: StaffSchedule, from: HTMLElement) => void;
 }) {
-  const warningId = useId();
+  const pastId = useId();
   const { time, rest } = shiftLabels(row);
   const ended = row.kind === 'work' && (row.date < clock.date || row.date === clock.date && row.end !== null && row.end <= clock.time);
   return (
-    <button type="button" className="staff-shift" data-kind={row.kind} data-schedule-id={row.scheduleId}
-      onClick={event => onEdit(row, event.currentTarget)} aria-label={label} aria-describedby={ended ? warningId : undefined}>
+    <button type="button" className="staff-shift" data-kind={row.kind} data-schedule-id={row.scheduleId} data-ended={ended || undefined} aria-pressed={selected}
+      onClick={event => onEdit(row, event.currentTarget)} aria-label={label} aria-describedby={ended ? pastId : undefined}>
       {prefix}
       {row.kind === 'off' ? time : <span className="staff-shift__time">{time}</span>}
       {rest && <span className="staff-shift__rest">{rest}</span>}
-      {ended && <span id={warningId} className="staff-shift__warning"><StatusBadge semantic="warning" label={pastLabel} /></span>}
+      {ended && <span id={pastId} className="ui-sr-only">{pastLabel}</span>}
     </button>
   );
 }
 
-function ScheduleGrid({ model, dates, mode, orientation, clock, onEdit }: { model: StaffScheduleModel; dates: string[]; mode: PeriodMode; orientation: 'employee' | 'date'; clock: StaffClock; onEdit: (row: StaffSchedule, from: HTMLElement) => void }) {
+function ScheduleGrid({ model, dates, mode, orientation, clock, selectedId, onEdit }: { model: StaffScheduleModel; dates: string[]; mode: PeriodMode; orientation: 'employee' | 'date'; clock: StaffClock; selectedId?: string; onEdit: (row: StaffSchedule, from: HTMLElement) => void }) {
   const dateLabel = useDateLabel();
   const { t } = useBundle(staffWarnings);
   const pastLabel = t('staffSchedule.pastShift');
@@ -291,14 +313,14 @@ function ScheduleGrid({ model, dates, mode, orientation, clock, onEdit }: { mode
   if (!hasRows) return <p className="staff-empty">등록된 근무 일정이 없어요</p>;
   const cell = (person: Staff, date: string) => <td key={`${person.staffId}-${date}`} data-today={date === clock.date || undefined}>
     {model.rows.filter(row => row.staffId === person.staffId && row.date === date).map(row =>
-      <ShiftButton key={row.scheduleId} row={row} label={`${person.name} ${dateLabel(date)} ${rowText(row)} 고치기`} pastLabel={pastLabel} clock={clock} onEdit={onEdit} />)}
+      <ShiftButton key={row.scheduleId} row={row} label={`${person.name} ${dateLabel(date)} ${rowText(row)} 고치기`} pastLabel={pastLabel} clock={clock} selected={row.scheduleId === selectedId} onEdit={onEdit} />)}
   </td>;
   const mobile = <div className="staff-mobile-list">{dates.map(day => <section key={day}>
     <h3>{dateLabel(day)}</h3>
     {model.rows.filter(row => row.date === day).map(row => {
       const name = model.staff.find(person => person.staffId === row.staffId)?.name;
       return <ShiftButton key={row.scheduleId} row={row} label={`${name ?? ''} · ${rowText(row)}`} prefix={name ? `${name} · ` : undefined}
-        pastLabel={pastLabel} clock={clock} onEdit={onEdit} />;
+        pastLabel={pastLabel} clock={clock} selected={row.scheduleId === selectedId} onEdit={onEdit} />;
     })}
   </section>)}</div>;
   return <>{mobile}
@@ -342,7 +364,7 @@ function historyText(value: unknown, staff: readonly Staff[], dateLabel: DateLab
   const time = item.kind === 'off' ? '직원 휴무' : item.start && item.end ? `${item.start}~${item.end} · 휴게 ${item.breakMinutes ?? 0}분` : '';
   return [name, item.date ? dateLabel(item.date) : '', time].filter(Boolean).join(' · ');
 }
-const editorTitle = (editor: Editor) => editor.kind === 'staff' ? editor.person ? '직원 고치기' : '직원 추가하기' : editor.kind === 'schedule' ? editor.row ? '근무 고치기' : '근무 추가하기' : editor.kind === 'handoff' ? '교대 시각 고치기' : editor.kind === 'deleteStaff' ? '직원 지우기' : '근무 지우기';
+const editorTitle = (editor: Editor) => editor.kind === 'staff' ? editor.person ? '직원 고치기' : '직원 추가하기' : editor.kind === 'schedule' ? editor.row ? '근무 고치기' : editor.off ? '휴무 등록하기' : '근무 추가하기' : editor.kind === 'handoff' ? '교대 시각 고치기' : editor.kind === 'deleteStaff' ? '직원 지우기' : '근무 지우기';
 /** Where focus goes when the panel closes: the pressed row when there is one, otherwise whatever opened it. */
 const editorFocusKey = (editor: Editor) => editor.kind === 'schedule' && editor.row ? `shift:${editor.row.scheduleId}` : editor.kind === 'deleteSchedule' ? `shift:${editor.row.scheduleId}`
   : (editor.kind === 'staff' || editor.kind === 'deleteStaff') && editor.person ? `person:${editor.person.staffId}` : 'opener';
@@ -367,6 +389,7 @@ function EditorForm({ editor, model, date, today, host, firstFieldRef, onClose }
   /** Rows the handler said this shift runs into (GD-2): shown at the time fields, one of them can be replaced. */
   const [overlap, setOverlap] = useState<readonly ShiftConflict[] | null>(null);
   const [requestKey] = useState(requestId);
+  const formId = useId();
   const [saving, setSaving] = useState(false);
   const pending = useRef(false);
   const title = editorTitle(editor);
@@ -419,16 +442,16 @@ function EditorForm({ editor, model, date, today, host, firstFieldRef, onClose }
     });
   };
   const touch = <T,>(set: (value: T) => void) => (value: T) => { set(value); setOverlap(null); };
-  const overlapText = overlap ? errorMessage('STAFF_SHIFT_OVERLAP') : undefined;
+  const overlapText = overlap ? kind === 'off' && overlap.some(item => item.kind === 'work') ? '이날 근무가 있어요' : errorMessage('STAFF_SHIFT_OVERLAP') : undefined;
   /** Only a new row can replace the one it runs into; editing a row keeps its own identity. */
   const replaceable = !row && overlap?.length === 1 ? overlap[0]! : null;
-  return <form ref={form} className="staff-editor" aria-label={title} tabIndex={-1} onSubmit={event => { event.preventDefault(); save(); }}>
+  return <form id={formId} ref={form} className="staff-editor" aria-label={title} tabIndex={-1} onSubmit={event => { event.preventDefault(); save(); }}>
     {editor.kind === 'staff' && <TextField label="직원 이름" value={name} onValueChange={value => { setName(value); setError(undefined); }} error={error} />}
     {editor.kind === 'schedule' && <>
       <label className="staff-field">직원<select className="ui-text-input" value={staffId} onChange={event => touch(setStaffId)(event.currentTarget.value)}>{model?.staff.map(p => <option key={p.staffId} value={p.staffId}>{p.name}</option>)}</select></label>
       <DateField label="날짜" value={workDate} today={today} onValueChange={next => { if (next) touch(setWorkDate)(next); }} />
       <div><SegmentedControl label="근무 종류" value={kind} onChange={touch(setKind)} options={[{ value: 'work', label: '근무' }, { value: 'off', label: '직원 휴무' }]} /></div>
-      {kind === 'work' && <><div className="staff-editor__times"><TextField label="출근 시각" value={start} onValueChange={touch(setStart)} placeholder="09:00" /><TextField label="퇴근 시각" value={end} onValueChange={touch(setEnd)} placeholder="18:00" error={overlapText} /></div><NumberField label="휴게 시간" value={breakMinutes} onValueChange={setBreak} min={0} step={1} unit="분" /></>}
+      {kind === 'work' && <><div className="staff-editor__times"><TimeField label="출근 시각" value={start} onValueChange={next => touch(setStart)(next ?? "")} step={1} native /><TimeField label="퇴근 시각" value={end} onValueChange={next => touch(setEnd)(next ?? "")} step={1} native error={overlapText} /></div><NumberField label="휴게 시간" value={breakMinutes} onValueChange={setBreak} min={0} step={1} unit="분" /></>}
       {kind === 'off' && overlapText && <p role="alert" className="staff-error">{overlapText}</p>}
       {overlap && <ul className="staff-overlap" aria-label="겹치는 근무">{overlap.map(item => <li key={item.scheduleId}>{item.kind === 'off' ? '직원 휴무' : `${item.start}~${item.end} 근무`}</li>)}</ul>}
       {replaceable && <ActionButton variant="secondary" disabled={saving} onClick={() => save(replaceable.scheduleId)}>{replaceable.kind === 'off' ? '겹치는 휴무를 이 내용으로 바꾸기' : kind === 'off' ? '겹치는 근무를 휴무로 바꾸기' : '겹치는 근무를 이 시간으로 바꾸기'}</ActionButton>}
@@ -437,7 +460,10 @@ function EditorForm({ editor, model, date, today, host, firstFieldRef, onClose }
     {editor.kind === 'handoff' && <><p>{editor.from} 교대에 연결된 근무를 함께 바꿔요</p><TextField label="교대 시각" value={handoff} onValueChange={setHandoff} error={error} /></>}
     {editor.kind === 'deleteStaff' && <><p>{editor.person.name}의 근무 일정도 함께 지워요. 지운 뒤 되돌릴 수 있어요.</p>{error && <p role="alert">{error}</p>}</>}
     {editor.kind === 'deleteSchedule' && <><p>{dateLabel(editor.row.date)} {rowText(editor.row)} 일정을 지워요. 지운 뒤 되돌릴 수 있어요.</p>{error && <p role="alert">{error}</p>}</>}
-    <div className="staff-editor__actions"><ActionButton type="submit" loading={saving}>{editor.kind === 'deleteStaff' || editor.kind === 'deleteSchedule' ? '지우기' : '저장하기'}</ActionButton></div>
+    {editor.kind === 'deleteStaff' || editor.kind === 'deleteSchedule'
+      ? <div className="staff-editor__actions"><ActionButton variant="secondary" onClick={onClose} disabled={saving}>취소</ActionButton>
+          <ActionButton type="submit" variant="destructive" loading={saving}>{editor.kind === 'deleteStaff' ? '직원 지우기' : '지우기'}</ActionButton></div>
+      : <DetailFooterContent><div className="detail-footer-actions"><ActionButton type="submit" form={formId} loading={saving}>저장하기</ActionButton></div></DetailFooterContent>}
   </form>;
 }
 

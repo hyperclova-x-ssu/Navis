@@ -1,7 +1,7 @@
 /** 매뉴얼 작성 (manuals, F-39): manual list, today's checklist, note-to-draft flow. */
 import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import type { WidgetDetailProps, WidgetModule, WidgetPanelProps, WidgetHost } from '../../../contracts';
-import { ActionButton, ChipChoice, ChecklistProgress, ChecklistRow, DetailTabs, Icon, InlineEmpty, InlineError, InlineForm, MasterDetail, StatusBadge, Textarea, TextField } from '../../../ui';
+import { ActionButton, ChipChoice, ChecklistProgress, ChecklistRow, DetailFooterContent, DetailTabs, Icon, InlineEmpty, InlineError, InlineForm, MasterDetail, StatusBadge, Textarea, TextField } from '../../../ui';
 import { useRealPort, useRealRetry, useWidgetDataStore, useWidgetView } from '../../../data/react';
 import type { ManualRow, ManualsModel } from '../../../data/widget-data';
 import { businessDayForManual } from '../../../data/reality/11/adapter';
@@ -17,6 +17,10 @@ import { naverDraftErrorText, setDraftInputLanguage, useNaverDraft, useNaverDraf
 /** Opening, closing and new-staff first (the 1×2 list in plan-1), then the rest. */
 const PRIORITY = ['opening', 'closing', 'new-staff', 'recipe', 'cleaning', 'hygiene'];
 const byPriority = (a: ManualRow, b: ManualRow): number => PRIORITY.indexOf(a.category) - PRIORITY.indexOf(b.category);
+const storeInfoBody = (t: T, manual: ManualRow) => {
+  const body = text(t, manual.body).trim() || manual.steps.map(step => text(t, step.body)).join('\n');
+  return body.replace(/,\s*가상 주소(?=\))|\s*\(가상 주소\)/gu, '').trim();
+};
 const doneOf = (m: ManualRow): number => m.steps.filter((s) => s.checkedToday).length;
 const CATEGORIES = ['opening', 'closing', 'recipe', 'cleaning', 'new-staff', 'hygiene'] as const;
 const manualCautions = (t: T, manual: ManualRow) => {
@@ -61,16 +65,18 @@ function ManualsPanel({ shape, width, height, host, condition }: WidgetPanelProp
     /** D-333: the big sizes (3x3 up, 4x2) name the manuals of each category and list every checklist of today (the reverse of the drop order). */
     const large = (width >= 3 && height >= 3) || (width === 4 && height >= 2);
     const titlesOf = (category: string): string => model.manuals.filter((m) => m.category === category).map((m) => text(t, m.title)).join(' · ');
-    const categoryRows = model.byCategory.map((c) => ({ id: c.category, name: t.t(c.categoryKey), value: format.count(c.count, 'item'), sub: large && titlesOf(c.category) ? keepDots(titlesOf(c.category)) : undefined }));
+    const fullList = width === 4 && height === 4;
+    const categoryRows = model.byCategory.map((c) => ({ id: c.category, name: t.t(c.categoryKey), value: format.count(c.count, 'item'), sub: large && !fullList && titlesOf(c.category) ? keepDots(titlesOf(c.category)) : undefined }));
     const checklistRows = model.todayChecklist.map((c) => ({ id: `check-${c.manualId}`, name: text(t, c.title), value: <ValueSlot slotId={`manuals.dashboard.checklist.${c.manualId}`} featureId="manuals" scope="dashboard" semanticValue={`${c.done}/${c.total}`}><ManualProgress done={c.done} total={c.total} /></ValueSlot> }));
     list = (
       <>
-        <RowList slot="manuals" rows={categoryRows} label={t.t('widget.manuals.listLabel')} />
+        <RowList slot="manuals" rows={categoryRows} title={t.t('widget.manuals.category')} label={t.t('widget.manuals.listLabel')} />
         <RowList slot="manuals" title={t.t('widget.manuals.todayChecklist')} rows={large ? checklistRows : checklistRows.slice(0, 2)} />
+        {fullList && <RowList slot="manuals" title={t.t('widget.manuals.listLabel')} rows={ordered.filter(m => !m.checklist).map(m => ({ id: m.manualId, name: text(t, m.title), sub: t.t(m.categoryKey) }))} label={t.t('widget.manuals.listLabel')} />}
       </>
     );
   }
-  return <PanelLayout id="manuals" shape={shape} width={width} height={height} label={t.t('widget.manuals.handover')} sub={t.t('widget.manuals.storeCount', { n: model.storeInfoCount })} subSemanticValue={model.storeInfoCount} value={count.value} semanticValue={model.publishedCount} unit={count.unit} longest="888" list={list} />;
+  return <PanelLayout id="manuals" shape={shape} width={width} height={height} label={t.t('widget.manuals.handoverPanel')} sub={t.t('widget.manuals.storeCount', { n: model.storeInfoCount })} subSemanticValue={model.storeInfoCount} value={count.value} semanticValue={model.publishedCount} unit={count.unit} longest="888" list={list} />;
 }
 
 /** Note → draft form. `onCreated` runs after the draft exists. */
@@ -113,7 +119,7 @@ function DraftFace({ draft, host }: { readonly draft: ManualsModel['drafts'][num
       <span className="ui-draft-card__label">{t.t('common.draft')}</span>
       {http ? <>
         <TextField label={t.t('widget.manuals.draftTitle')} value={title} onValueChange={setTitle} />
-        {draft.category !== 'store-info' && <ChipChoice label={t.t('widget.manuals.category')} value={category} onChange={setCategory} options={CATEGORIES.map(value => ({ value, label: t.t(`data.manualCategory.${value}`) }))} />}
+        {draft.category !== 'store-info' && <ChipChoice label={t.t('widget.manuals.category')} value={category} onChange={setCategory} options={CATEGORIES.map(value => ({ value, label: value === 'cleaning' && t.locale === 'ko' ? '청소' : t.t(`data.manualCategory.${value}`) }))} />}
         <Textarea label={t.t('widget.manuals.content')} value={content} onValueChange={setContent} />
       </> : <p className="ui-draft-card__text"><strong>{text(t, draft.title)}</strong>{'\n'}{draft.steps.map((s, i) => `${i + 1}. ${text(t, s)}`).join('\n')}</p>}
       <p className="mgmt-note">{t.t('widget.manuals.draftNote')}</p>
@@ -140,7 +146,7 @@ function ManualBody({ manual, host }: { readonly manual: ManualRow; readonly hos
         {manual.checklist ? <span className="mgmt-progress"><ValueSlot slotId={`manuals.detail.progress.${manual.manualId}`} featureId="manuals" scope="detail" semanticValue={`${done}/${manual.steps.length}`}><ManualProgress done={done} total={manual.steps.length} /></ValueSlot></span> : null}
       </header>
       {manual.section === 'store-info' ? (
-        <p className="mgmt-lead mgmt-manual__body" data-slot="manuals.body"><ValueSlot slotId={`manuals.detail.body.${manual.manualId}`} featureId="manuals" scope="detail" semanticValue={text(t, manual.body)}>{text(t, manual.body)}</ValueSlot></p>
+        <p className="mgmt-lead mgmt-manual__body" data-slot="manuals.body"><ValueSlot slotId={`manuals.detail.body.${manual.manualId}`} featureId="manuals" scope="detail" semanticValue={storeInfoBody(t, manual)}>{storeInfoBody(t, manual)}</ValueSlot></p>
       ) : (
         <section className="mgmt-manual__procedure">
           <h4 className="mgmt-manual__section-title">{t.t('widget.manuals.procedures')}</h4>
@@ -207,7 +213,7 @@ function ManualsDetail({ condition, host, detailRef }: WidgetDetailProps) {
     );
   }
   const model = view.model;
-  const tabs = [{ value: 'all', label: t.t('widget.manuals.all') }, ...model.byCategory.map((c) => ({ value: c.category as string, label: `${t.t(c.categoryKey)} ${c.count}` }))];
+  const tabs = [{ value: 'all', label: t.t('widget.manuals.all') }, ...model.byCategory.map((c) => ({ value: c.category as string, label: `${t.t(c.categoryKey)} ${format.count(c.count, 'item')}` }))];
   const effectiveSection = selected && model.storeInfo.some(manual => manual.manualId === selected) ? 'store-info' : section;
   const visible = (effectiveSection === 'handover' ? model.manuals : model.storeInfo).filter((m) => effectiveSection === 'store-info' || tab === 'all' || m.category === tab);
   const current = selected ? visible.find((m) => m.manualId === selected) ?? null : visible[0] ?? null;
@@ -241,16 +247,12 @@ function ManualsDetail({ condition, host, detailRef }: WidgetDetailProps) {
       {editor === 'edit' && current ? <ManualEditor key={current.manualId} manual={current} focusTitle={seedActive} host={host} onClose={() => setEditor(null)} /> : current ? (
         <>
           <ManualBody key={current.manualId} manual={current} host={host} />
-          <div className="mgmt-actions mgmt-manual__actions">
+          <DetailFooterContent><div className="mgmt-actions mgmt-manual__actions">
             <ActionButton variant="outline" onClick={() => setEditor('edit')}>{t.t('widget.manuals.edit')}</ActionButton>
-            <ActionButton variant="destructive" onClick={() => { setDeleteError(undefined); setDeleteId(current.manualId); }}>{t.t('widget.manuals.delete')}</ActionButton>
-          </div>
+            <ActionButton variant="destructive" onClick={() => { host.supersedeSuccessNotice?.(); setDeleteError(undefined); setDeleteId(current.manualId); }}>{t.t('widget.manuals.delete')}</ActionButton>
+          </div></DetailFooterContent>
         </>
       ) : http && !visible.length ? <InlineEmpty title={t.t('data.state.manuals.none')} /> : null}
-      <div className="mgmt-block mgmt-manual-checklist">
-        <div className="mgmt-block__head"><h3 className="mgmt-h3">{t.t('widget.manuals.todayChecklist')}</h3></div>
-        <RowList slot="manuals" rows={model.todayChecklist.map((c) => ({ id: `check-${c.manualId}`, name: text(t, c.title), value: <ValueSlot slotId={`manuals.detail.checklist.${c.manualId}`} featureId="manuals" scope="detail" semanticValue={`${c.done}/${c.total}`}><ManualProgress done={c.done} total={c.total} /></ValueSlot> }))} label={t.t('widget.manuals.todayChecklist')} />
-      </div>
       <div className="mgmt-block">
         {formOpen ? <MemoForm host={host} onClose={() => setFormOpen(false)} /> : <div><ActionButton variant="secondary" onClick={() => setFormOpen(true)}>{t.t('widget.manuals.fromNote')}</ActionButton></div>}
         {model.drafts.map((d) => <DraftFace key={d.draftId} draft={d} host={host} />)}
@@ -371,13 +373,13 @@ function ManualDraftEditor({ initialSection, seed, focusTitle, host, button, onC
 
   return (
     <div className="mgmt-manual-draft">
-      <InlineForm title={t.t('widget.manuals.createDocument')} returnFocusRef={button} onClose={onClose} onSave={() => void save()} saveDisabled={loading || tooLong} saving={pending}>
+      <InlineForm footerActions title={t.t('widget.manuals.createDocument')} returnFocusRef={button} onClose={onClose} onSave={() => void save()} saveDisabled={loading || tooLong} saving={pending}>
         <p className="mgmt-note">{t.t('widget.manuals.category')}</p>
         <ChipChoice label={t.t('widget.manuals.category')} value={section} onChange={setSection} options={[
           { value: 'handover', label: t.t('widget.manuals.handover') }, { value: 'store-info', label: t.t('widget.manuals.storeInfo') },
         ]} />
         {http ? section === 'handover' && <ChipChoice label={t.t('widget.manuals.category')} value={generatedCategory} onChange={setGeneratedCategory}
-          options={CATEGORIES.map(value => ({ value, label: t.t(`data.manualCategory.${value}`) }))} /> : <>
+          options={CATEGORIES.map(value => ({ value, label: value === 'cleaning' && t.locale === 'ko' ? '청소' : t.t(`data.manualCategory.${value}`) }))} /> : <>
         <p className="mgmt-note">{t.t('widget.manuals.sampleNote')}</p>
         <ChipChoice label={t.t('widget.manuals.sampleNote')} value={sample} onChange={value => { if (value !== sample) { reset(); setSample(value); } }}
           options={[
@@ -438,17 +440,17 @@ function ManualEditor({ manual, focusTitle, host, onClose }: { manual: ManualRow
   const [title, setTitle] = useState(text(t, manual.title));
   const titleInput = useRef<HTMLInputElement>(null);
   useEffect(() => { if (focusTitle) titleInput.current?.focus(); }, [focusTitle]);
-  const [content, setContent] = useState(section === 'store-info' ? text(t, manual.body) : manual.steps.map(step => text(t, step.body)).join('\n'));
+  const [content, setContent] = useState(section === 'store-info' ? storeInfoBody(t, manual) : manual.steps.map(step => text(t, step.body)).join('\n'));
   const [cautions, setCautions] = useState(() => manualCautions(t, manual));
   const [category, setCategory] = useState(manual.category);
   const [error, setError] = useState<string>();
-  return <InlineForm title={t.t('widget.manuals.edit')} onClose={onClose} saving={pending} onSave={async () => {
+  return <InlineForm footerActions title={t.t('widget.manuals.edit')} onClose={onClose} saving={pending} onSave={async () => {
     if (!title.trim()) { setError(t.t('widget.manuals.titleRequired')); return; }
     const steps = section === 'store-info' ? (content.trim() ? [content.trim()] : []) : content.split('\n').map(s => s.trim()).filter(Boolean);
     if (!steps.length) { setError(t.t('widget.manuals.contentRequired')); return; }
     const result = await run({ type: 'manuals.update', manualId: manual.manualId, patch: { section, title: title.trim(), category, steps, cautions } });
     if (result?.ok) onClose(); else if (result) setError(t.t(result.messageKey));
-  }}><TextField label={t.t('widget.manuals.draftTitle')} value={title} inputRef={titleInput} onValueChange={setTitle} error={error} /><ChipChoice label={t.t('widget.manuals.category')} value={category} onChange={setCategory} options={(section === 'store-info' ? ['store-info'] as const : ['opening', 'closing', 'recipe', 'cleaning', 'new-staff', 'hygiene'] as const).map(value => ({ value, label: t.t(`data.manualCategory.${value}`) }))} /><Textarea label={t.t('widget.manuals.content')} value={content} onValueChange={setContent} /><Textarea label={t.t('widget.manuals.cautions')} value={cautions} onValueChange={setCautions} /></InlineForm>;
+  }}><TextField label={t.t('widget.manuals.draftTitle')} value={title} inputRef={titleInput} onValueChange={setTitle} error={error} /><ChipChoice label={t.t('widget.manuals.category')} value={category} onChange={setCategory} options={(section === 'store-info' ? ['store-info'] as const : ['opening', 'closing', 'recipe', 'cleaning', 'new-staff', 'hygiene'] as const).map(value => ({ value, label: value === 'cleaning' && t.locale === 'ko' ? '청소' : t.t(`data.manualCategory.${value}`) }))} /><Textarea label={t.t('widget.manuals.content')} value={content} onValueChange={setContent} /><Textarea label={t.t('widget.manuals.cautions')} value={cautions} onValueChange={setCautions} /></InlineForm>;
 }
 
 export const manualsModule: WidgetModule = { id: 'manuals', Panel: ManualsPanel, Detail: ManualsDetail, useSummary: useManualsSummary };

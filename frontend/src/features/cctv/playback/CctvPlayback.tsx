@@ -147,7 +147,7 @@ export function CctvPlayback({detectionsUrl, videoUrl = VIDEO_URL}: CctvPlayback
         </div>}
       </div>
       <div className="cctv-side">
-        <NowNumbers view={view} time={shownTime} duration={duration}/>
+        <NowNumbers view={view}/>
       </div>
     </div>
     <div className="cctv-controls" role="group">

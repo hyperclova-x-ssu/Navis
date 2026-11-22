@@ -17,7 +17,7 @@ export const menuPhotoBundle: MessageBundle<string> = {
   id: 'widget.menu.photo',
   ko: {
     'widget.menu.photo.label': menuPosKo.photo, 'widget.menu.photo.none': menuPosKo.noPhoto,
-    'widget.menu.photo.remove': menuPosKo.removePhoto, 'widget.menu.photo.upload': '사진 올리기', 'widget.menu.photo.replace': '사진 바꾸기',
+    'widget.menu.photo.remove': '메뉴 사진 빼기', 'widget.menu.photo.upload': '메뉴 사진 올리기', 'widget.menu.photo.replace': '메뉴 사진 바꾸기',
     'widget.menu.photo.custom': '내 사진', 'widget.menu.photo.uploaded': '메뉴 사진을 바꿨어요', 'widget.menu.photo.removed': '사진을 뺐어요',
     'widget.menu.photo.wrongType': 'PNG, JPEG 또는 WebP 사진을 골라 주세요',
     'widget.menu.photo.tooLarge': '5MB 이하 사진을 골라 주세요',

@@ -8,9 +8,41 @@ import { createRealPort } from '../../../data/reality/00';
 import { fakeBackend, reply } from '../../../data/reality/00/testing';
 import { couponsAdapter } from '../../../data/reality/14/adapter';
 import { renderWithKit } from '../../../ui/test-utils';
-import { ExpiryCouponDetail } from './expiry-coupon';
+import { ExpiryCouponDetail, ExpiryCouponPanel } from './expiry-coupon';
 
 afterEach(cleanup);
+
+it('keeps the original panel action, default SMS choice and two detail columns in both modes', async () => {
+  const condition = { kind: 'default' } as const;
+  const host: WidgetHost = { layer: 'marketing', openClosing: () => true, resetPreview() {}, openLinked() {}, openDetail() {}, notify() {}, acknowledgeBriefing() {} };
+  async function structure(http: boolean) {
+    const store = createWidgetDataStore();
+    const expiry = selectWidget(store.getSnapshot(), 'expiry-coupon', condition, 'normal');
+    const status = selectWidget(store.getSnapshot(), 'coupon-status', condition, 'normal');
+    if (expiry.status !== 'ready' || status.status !== 'ready') throw new Error('Expected coupon views');
+    if (http) store.bindReal(createRealPort({ store, source: () => 'http', fetch: fakeBackend().fetch, adapters: [{
+      ...couponsAdapter, tables: ['realCoupons'],
+      async load() {
+        return { tables: { realCoupons: { coupons: [], businessDate: TODAY, localAt: `${TODAY}T15:45`, status: status.model, expiry: expiry.model, slots: null, naver: null, missing: [] } },
+          asOf: `${TODAY}T06:45:00Z`, sourceRevision: 1, complete: true };
+      },
+    }] }));
+    const { container } = renderWithKit(<>
+      <ExpiryCouponPanel featureId="expiry-coupon" condition={condition} width={3} height={3} shape="S" presetId="A" editing={false} host={host} />
+      <ExpiryCouponDetail featureId="expiry-coupon" condition={condition} detailRef={{ featureId: 'expiry-coupon' }} host={host} />
+    </>, { store });
+    await screen.findByRole('radio', { name: /단골 문자/ });
+    const result = { headings: screen.getAllByRole('heading').map(el => el.textContent),
+      selected: screen.getAllByRole('radio', { checked: true }).map(el => el.textContent),
+      columns: Array.from(container.querySelectorAll('[data-slot="expiry-coupon.detail"] > div'), el => el.className),
+      actions: screen.getAllByRole('button', { name: /쿠폰 만들기/ }).map(el => el.className) };
+    cleanup();
+    return result;
+  }
+  const fixture = await structure(false);
+  expect(fixture.selected).toEqual(expect.arrayContaining([expect.stringContaining('단골 문자')]));
+  expect(await structure(true)).toEqual(fixture);
+});
 
 it('keeps HTTP publication in the same expiry coupon column and attests on the second press', async () => {
   const store = createWidgetDataStore();
@@ -75,6 +107,7 @@ it('shows the 게시 문구 title once when the picked lot already has its post'
   const host: WidgetHost = { layer: 'marketing', openClosing: () => true, resetPreview() {}, openLinked() {}, openDetail() {}, notify() {}, acknowledgeBriefing() {} };
   renderWithKit(<ExpiryCouponDetail featureId="expiry-coupon" condition={condition} detailRef={{ featureId: 'expiry-coupon' }} host={host} />, { store });
   await screen.findByText('오늘의 쿠폰 코드를 보여 주세요');
+  fireEvent.click(screen.getByRole('radio', { name: /플레이스 소식/ }));
   expect(screen.getAllByRole('heading', { name: '게시 문구' })).toHaveLength(1);
   expect(screen.queryByText(/쿠폰을 만들면 게시 문구와 쿠폰 코드가 함께/)).toBeNull();
 });
@@ -100,10 +133,11 @@ it('keeps the create attempt key for equal submits and uses a new one for change
     store.bindReal(port);
     renderWithKit(<ExpiryCouponDetail featureId="expiry-coupon" condition={condition} detailRef={{ featureId: 'expiry-coupon' }} host={host} />, { store });
     await screen.findByRole('button', { name: '쿠폰 만들기' });
+    fireEvent.click(screen.getByRole('radio', { name: /플레이스 소식/ }));
   };
   const press = async (count: number) => {
     fireEvent.click(screen.getByRole('button', { name: '쿠폰 만들기' }));
-    fireEvent.click(await screen.findByRole('button', { name: '만들기' }));
+    fireEvent.click(await screen.findByRole('button', { name: '쿠폰 만들기' }));
     await waitFor(() => expect(backend.callsTo('POST', '/marketing/coupons/expiry')).toHaveLength(count));
     await screen.findByRole('button', { name: '쿠폰 만들기' }); // back on the form after the refusal
   };

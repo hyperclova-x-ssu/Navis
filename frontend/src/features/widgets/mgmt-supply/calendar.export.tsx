@@ -1,7 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import type { CalendarEntry } from '../../../data/models/types';
 import { useRealPort } from '../../../data/react';
 import { useBundle } from '../../../i18n';
 import { ActionButton } from '../../../ui';
+import { useSupplyText } from './shared';
 
 const bundle = {
   id: 'widget.calendar.export',
@@ -12,14 +14,14 @@ const bundle = {
 } as const;
 
 /** The calendar file is the supported handoff from Navis Calendar. */
-export function CalendarExport({ startDate, endDate }: { startDate: string; endDate: string }) {
+export function CalendarExport({ startDate, endDate, entries }: { startDate: string; endDate: string; entries: readonly CalendarEntry[] }) {
   const port = useRealPort();
+  const x = useSupplyText();
   const { t } = useBundle(bundle);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const active = useRef<AbortController | null>(null);
   useLayoutEffect(() => () => active.current?.abort(), []);
-  if (!port || port.state('staff').mode !== 'http') return null;
 
   const download = async () => {
     if (active.current) return;
@@ -28,8 +30,9 @@ export function CalendarExport({ startDate, endDate }: { startDate: string; endD
     setLoading(true);
     setFailed(false);
     try {
-      const file = await port.transport.request<Blob>({ method: 'GET', path: '/calendar/exports', query: { startDate, endDate },
-        responseAs: 'blob', signal: request.signal });
+      const file = port?.state('staff').mode === 'http'
+        ? await port.transport.request<Blob>({ method: 'GET', path: '/calendar/exports', query: { startDate, endDate }, responseAs: 'blob', signal: request.signal })
+        : fixtureCalendarFile(entries.filter(row => row.date >= startDate && row.date <= endDate), x.text);
       if (request.signal.aborted) return;
       if (file.type.split(';')[0] !== 'text/calendar' || file.size === 0) throw new Error('Invalid calendar download');
       const url = URL.createObjectURL(file);
@@ -48,7 +51,35 @@ export function CalendarExport({ startDate, endDate }: { startDate: string; endD
     }
   };
   return <div>
-    <ActionButton variant="outline" loading={loading} onClick={() => void download()}>{t('download')}</ActionButton>
+    <ActionButton variant="secondary" loading={loading} onClick={() => void download()}>{t('download')}</ActionButton>
     {failed ? <p role="alert" className="ms-error">{t('error')}</p> : null}
   </div>;
+}
+
+function fixtureCalendarFile(entries: readonly CalendarEntry[], text: ReturnType<typeof useSupplyText>['text']) {
+  const escape = (value: string) => value.replace(/\\/gu, '\\\\').replace(/\r?\n/gu, '\\n').replace(/([;,])/gu, '\\$1');
+  const date = (value: string) => value.replaceAll('-', '');
+  const stamp = new Date().toISOString().replace(/[-:]|\.\d{3}/gu, '');
+  const lines = ['BEGIN:VCALENDAR', 'PRODID:-//Navis//Store Calendar//KO', 'VERSION:2.0', 'CALSCALE:GREGORIAN'];
+  for (const entry of entries) {
+    const kind = entry.kind === 'todo' ? 'VTODO' : 'VEVENT';
+    const utc = entry.time ? new Date(`${entry.date}T${entry.time}:00+09:00`).toISOString().replace(/[-:]|\.\d{3}/gu, '') : null;
+    lines.push(`BEGIN:${kind}`, `UID:${escape(entry.id)}@navis`, `DTSTAMP:${stamp}`,
+      utc ? `DTSTART:${utc}` : `DTSTART;VALUE=DATE:${date(entry.date)}`, `SUMMARY:${escape(text(entry.title))}`);
+    if (entry.memo) lines.push(`DESCRIPTION:${escape(text(entry.memo))}`);
+    lines.push(`END:${kind}`);
+  }
+  lines.push('END:VCALENDAR');
+  const encoder = new TextEncoder();
+  const fold = (line: string) => {
+    let column = 0, folded = '';
+    for (const character of line) {
+      const bytes = encoder.encode(character).length;
+      if (column + bytes > 75) { folded += '\r\n '; column = 1; }
+      folded += character;
+      column += bytes;
+    }
+    return folded;
+  };
+  return new Blob([`${lines.map(fold).join('\r\n')}\r\n`], { type: 'text/calendar;charset=utf-8' });
 }

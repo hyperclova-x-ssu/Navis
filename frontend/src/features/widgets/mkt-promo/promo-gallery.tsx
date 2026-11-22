@@ -93,7 +93,7 @@ function ReferenceCard({ reference, index, chosen, fit, autoplay, onChoose, card
   const [visible, setVisible] = useState(typeof IntersectionObserver === 'undefined');
   const [failed, setFailed] = useState(false);
   const height = POSTER_HEIGHT[reference.cardAspect] ?? 520;
-  const poster = new URL(`./gallery-media/${reference.id}.jpg`, import.meta.url).href;
+  const poster = new URL(`../../../../server/promo/references/${reference.id}/poster.jpg`, import.meta.url).href;
 
   // Only cards at least a quarter on screen play; the video is dropped when the card leaves the view.
   useEffect(() => {
@@ -130,7 +130,7 @@ function ReferenceCard({ reference, index, chosen, fit, autoplay, onChoose, card
 
 function GalleryPreview({ referenceId, onError }: { readonly referenceId: PromoReference['id']; readonly onError: () => void }) {
   const [playing, setPlaying] = useState(false);
-  const source = new URL(`./gallery-media/${referenceId}.mp4`, import.meta.url).href;
+  const source = new URL(`../../../../server/promo/references/${referenceId}/preview.mp4`, import.meta.url).href;
   return (
     <video
       className="pv-ref__video" src={source} muted playsInline autoPlay loop preload="auto" aria-hidden="true" tabIndex={-1}

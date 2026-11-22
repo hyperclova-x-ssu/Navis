@@ -2,7 +2,7 @@ import type { AccountTransaction, OriginalMoneyTransaction } from './types';
 
 export const creditCopy = {
   title: '충전금·외상 관리', empty: '아직 충전금·외상 거래가 없어요',
-  loading: '충전금·외상 내역을 불러오고 있어요',
+  loading: '불러오는 중이에요',
   error: '충전금·외상 내역을 불러오지 못했어요', shortError: '불러오지 못했어요',
   search: '이름이나 연락처 끝자리로 찾아보세요',
   positive: '1원 이상 넣어 주세요', memberRequired: '회원을 먼저 연결해 주세요',

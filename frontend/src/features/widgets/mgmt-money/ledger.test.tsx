@@ -143,7 +143,8 @@ it.each([
  expect(screen.getByText(sentence)).toBeInTheDocument();
  await userEvent.click(screen.getByRole('button', { name: '최근 7일 보기' }));
  expect(screen.getByRole('radio', { name: '최근 7일' })).toHaveAttribute('aria-checked', 'true');
- expect(screen.getByRole('button', { name: '최근 30일 보기' })).toBeInTheDocument();
+ expect(screen.getByRole('radio', { name: '최근 30일' })).toBeInTheDocument();
+ expect(screen.queryByRole('button', { name: '최근 30일 보기' })).not.toBeInTheDocument();
 });
 
 it('draws profit by hour for today, ending on the profit figure, and by category for expenses', async () => {

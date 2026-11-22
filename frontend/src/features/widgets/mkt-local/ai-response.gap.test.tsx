@@ -1,4 +1,4 @@
-/** GAPUI-MKT (SCR-31 · ai-response): separate NAVER/Navis draft buttons (previews only) and the `리뷰 AI 통계` tab with the conditional average. */
+/** SCR-31 · ai-response: read-only draft previews and the `리뷰 AI 통계` tab with the conditional average. */
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -28,14 +28,19 @@ const writes = (backend: ReturnType<typeof service>['backend']) => backend.calls
 it('fills the editor from a Navis or NAVER draft preview, labels its source and saves nothing until 초안 저장', async () => {
   const { backend, state } = service();
   const { store } = open(backend, { view: 'review' });
-  const navis = await screen.findByRole('button', { name: 'Navis 초안 만들기' });
+  const previewPath = `/marketing/inquiries/${ids.review}/navis-draft-preview`;
+  const fact = '매장 주소는 상도로 1입니다.';
+  const draft = `안녕하세요.\n${fact}\n감사합니다.`;
+  backend.on('POST', previewPath, () => ({ text: draft, facts: [fact] }));
+  const navis = await screen.findByRole('button', { name: 'Navis로 초안 쓰기' });
   const naver = screen.getByRole('button', { name: '네이버 초안 만들기' });
   expect(screen.getByText(/만든 초안은 미리보기예요/)).toBeInTheDocument();
   fireEvent.click(navis);
   fireEvent.click(navis);
-  expect(await screen.findByRole('textbox', { name: '답글 초안' })).toHaveValue('커피를 좋아해 주셔서 고맙습니다');
+  await waitFor(() => expect(screen.getByRole('textbox', { name: '답글 초안' })).toHaveValue(draft));
   expect(screen.getByText('Navis 초안')).toBeInTheDocument();
-  expect(state.log).toEqual(['preview:navis']);
+  expect(backend.callsTo('POST', previewPath)).toHaveLength(1);
+  expect(state.log).toEqual([]);
   expect(writes(backend)).toHaveLength(0);
   fireEvent.click(naver);
   await waitFor(() => expect(screen.getByRole('textbox', { name: '답글 초안' })).toHaveValue('방문해 주셔서 감사합니다. 또 들러 주세요'));
@@ -43,7 +48,7 @@ it('fills the editor from a Navis or NAVER draft preview, labels its source and 
   expect(screen.queryByText('Navis 초안')).toBeNull();
   // The owner edits the NAVER draft and saves it: it keeps its source and is still not posted.
   fireEvent.change(screen.getByRole('textbox', { name: '답글 초안' }), { target: { value: '방문해 주셔서 감사합니다. 라떼 맛있게 드셨다니 기뻐요' } });
-  fireEvent.click(screen.getByRole('button', { name: '초안 저장' }));
+  fireEvent.click(screen.getByRole('button', { name: '초안 저장하기' }));
   await waitFor(() => expect(backend.callsTo('PATCH', `/marketing/inquiries/${ids.review}/draft`)).toHaveLength(1));
   expect(backend.callsTo('PATCH', `/marketing/inquiries/${ids.review}/draft`)[0]!.body).toEqual({ text: '방문해 주셔서 감사합니다. 라떼 맛있게 드셨다니 기뻐요', draftSource: 'naver-ai', expectedRevision: 1 });
   await waitFor(() => expect(store.getSnapshot().tables.realInbox?.inquiries.find(row => row.id === ids.review)?.draft?.source).toBe('naver-ai'));
@@ -56,19 +61,19 @@ it('blocks a public review reply with a phone number or email before anything is
   open(backend, { view: 'review' });
   fireEvent.change(await screen.findByRole('textbox', { name: '답글 초안' }), { target: { value: '문의는 010-1234-5678로 주세요' } });
   expect(screen.getByText('전화번호나 이메일은 답글에 넣을 수 없어요')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '초안 저장' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '초안 저장하기' })).toBeDisabled();
   fireEvent.change(screen.getByRole('textbox', { name: '답글 초안' }), { target: { value: '메일 owner@example.com' } });
-  expect(screen.getByRole('button', { name: '초안 저장' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '초안 저장하기' })).toBeDisabled();
   expect(writes(backend)).toHaveLength(0);
 });
 
-it('keeps the owner text and offers a retry when a draft cannot be made, and has no draft buttons for TalkTalk', async () => {
+it('keeps the owner text and offers a retry when a draft cannot be made, with only the Navis draft button on TalkTalk', async () => {
   const { backend } = service();
   backend.on('POST', /navis-draft-preview$/, () => reply(503, { code: 'PROVIDER_UNAVAILABLE' }));
   open(backend, { view: 'review' });
   const field = await screen.findByRole('textbox', { name: '답글 초안' });
   fireEvent.change(field, { target: { value: '제가 쓰던 글' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Navis 초안 만들기' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Navis로 초안 쓰기' }));
   const alert = await screen.findByRole('alert');
   expect(alert).toHaveTextContent('초안을 만들지 못했어요');
   expect(within(alert).getByRole('button', { name: '다시 시도하기' })).toBeEnabled();
@@ -77,7 +82,7 @@ it('keeps the owner text and offers a retry when a draft cannot be made, and has
   backend.on('GET', '/marketing/talktalk/consultations/tt-1', () => ({ ref: 'tt-1', status: 'waiting', messages: [] }));
   open(backend, { itemId: ids.talk });
   expect(await screen.findByRole('textbox', { name: '답변 초안' })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Navis 초안 만들기' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Navis로 초안 쓰기' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '네이버 초안 만들기' })).toBeNull();
 });
 
@@ -86,7 +91,7 @@ it('shows review AI statistics with the two-day lag and the average only when NA
   open(backend, { view: 'stats' });
   expect(await screen.findByText('이틀 전까지의 자료예요')).toBeInTheDocument();
   expect(screen.getByText('평균 별점 4.6')).toBeInTheDocument();
-  expect(screen.getByText(/출처 네이버 리뷰 AI 통계/)).toBeInTheDocument();
+  expect(screen.getByText(/출처: 네이버 리뷰 AI 통계/)).toBeInTheDocument();
   expect(screen.getByText('긍정 4건 · 부정 1건')).toBeInTheDocument();
   expect(screen.getByText('고소한 라떼 · 3건')).toBeInTheDocument();
   expect(screen.getByText('좁은 자리 · 1건')).toBeInTheDocument();

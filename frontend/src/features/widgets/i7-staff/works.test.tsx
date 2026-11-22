@@ -8,7 +8,7 @@ import { createRealPort } from '../../../data/reality/00';
 import { fakeBackend, reply } from '../../../data/reality/00/testing';
 import { staffCalendarAdapter } from '../../../data/reality/07/adapter';
 import { renderWithKit } from '../../../ui/test-utils';
-import { StaffDetail } from './widget';
+import { StaffDetail, StaffPanel } from './widget';
 
 afterEach(cleanup);
 vi.setConfig({ testTimeout: 30_000 });
@@ -19,7 +19,7 @@ const staffId = '3f1c2b4a-5d6e-4f70-8a91-b2c3d4e5f601';
 const scheduleId = '7a1d3c55-2a8e-4c43-9f0e-3c1b2d4e5f60';
 const approvalId = 'd2a7a3f8-0c4b-4b8e-8f62-1f0c2e3d4b5a';
 const page = <T,>(items: readonly T[], sourceRevision = 1) => ({ items, asOf, nextCursor: null, sourceRevision });
-const shift = { scheduleId, staffId, date: day, kind: 'work', start: '09:00', end: '15:00', breakMinutes: 30, revision: 4 };
+const shift = { scheduleId, staffId, date: day, kind: 'work' as const, start: '09:00', end: '15:00', breakMinutes: 30, revision: 4 };
 const sentItem = (end = '15:00') => ({
   scheduleId, eventId: 'f'.repeat(64), summary: '김하나 근무', sentAt: '2026-11-17T01:30:00.000Z', revision: 4,
   start: { dateTime: `${day}T09:00:00`, timeZone: 'Asia/Seoul' }, end: { dateTime: `${day}T${end}:00`, timeZone: 'Asia/Seoul' },
@@ -33,7 +33,7 @@ const props = {
   host: { layer: 'management', resetPreview: vi.fn(), openClosing: vi.fn(), openLinked: vi.fn(), openDetail: vi.fn(), notify: vi.fn(), acknowledgeBriefing: vi.fn() },
 } satisfies WidgetDetailProps;
 
-function setup(list: () => unknown = () => ({ items: [] })) {
+function setup(list: () => unknown = () => ({ items: [] }), mode: 'http' | 'fixture' = 'http', withPanel = false) {
   const backend = fakeBackend();
   backend.on('GET', '/staff', () => page([{ staffId, name: '김하나', archivedAt: null, revision: 2 }]));
   backend.on('GET', '/shifts', () => page([shift], 9));
@@ -45,10 +45,11 @@ function setup(list: () => unknown = () => ({ items: [] })) {
     categoryVisibility: { 'store-operations': true, purchasing: true, 'tax-admin': true }, revision: 0,
   }));
   backend.on('GET', '/shifts/naver-works', list);
-  const store = createWidgetDataStore();
+  const staff = [{ staffId, name: '김하나', archivedAt: null, revision: 2 }];
+  const store = createWidgetDataStore(mode === 'fixture' ? { staff, staffSchedule: [shift], staffScheduleChange: [] } : undefined);
   const port = createRealPort({ store, fetch: backend.fetch, source: () => 'http', adapters: [staffCalendarAdapter] });
-  store.bindReal(port);
-  const view = renderWithKit(<StaffDetail {...props} />, { store });
+  if (mode === 'http') store.bindReal(port);
+  const view = renderWithKit(<>{withPanel && <StaffPanel {...props} width={1} height={1} shape="Q" editing={false} presetId="A" />}<StaffDetail {...props} /></>, { store });
   return { backend, view };
 }
 
@@ -161,7 +162,43 @@ describe('WORKS team schedule card (SCR-271, PN11, AC-1611)', () => {
   });
 });
 
-it('fixture builds show neither the WORKS tab nor the WORKS area', () => {
-  renderWithKit(<StaffDetail {...props} />, { store: createWidgetDataStore() });
-  expect(screen.queryByRole('tab', { name: 'WORKS로 보낸 일정' })).not.toBeInTheDocument();
+it('records a fixture WORKS receipt only on the card press and removes it only after the second press', async () => {
+  const { view, backend } = setup(undefined, 'fixture');
+  const section = await openShift(view.container);
+  fireEvent.click(section.getByRole('button', { name: 'WORKS로 보내기' }));
+  const card = within(screen.getByRole('region', { name: 'WORKS로 보내기' }));
+  expect(section.queryByText(/WORKS에 보냄 ·/)).toBeNull();
+  fireEvent.click(card.getByRole('button', { name: 'WORKS로 보내기' }));
+  expect(await card.findByText('WORKS에 보냈어요')).toBeInTheDocument();
+  expect(section.getByText(/WORKS에 보냄 ·/)).toBeInTheDocument();
+  fireEvent.click(section.getByRole('button', { name: 'WORKS에서 지우기' }));
+  const remove = within(screen.getByRole('region', { name: 'WORKS에서 지우기' }));
+  fireEvent.click(remove.getByRole('button', { name: 'WORKS에서 지우기' }));
+  expect(section.getByText(/WORKS에 보냄 ·/)).toBeInTheDocument();
+  fireEvent.click(remove.getByRole('button', { name: '지우기 확인하기' }));
+  expect(section.queryByText(/WORKS에 보냄 ·/)).toBeNull();
+  expect(backend.calls).toHaveLength(0);
+});
+it('uses the same schedule panel and all five detail tabs in HTTP and fixture mode', async () => {
+  const structures = [];
+  for (const mode of ['http', 'fixture'] as const) {
+    const { backend, view } = setup(undefined, mode, true);
+    await screen.findByRole('tab', { name: 'WORKS로 보낸 일정' });
+    const tabs = screen.getAllByRole('tab');
+    const views = [];
+    for (const tab of tabs) {
+      fireEvent.click(tab);
+      views.push({
+        name: tab.textContent,
+        buttons: Array.from(view.container.querySelectorAll('.staff-detail .staff-toolbar button:not([data-schedule-id])'), node => node.getAttribute('aria-label') ?? node.textContent),
+        tables: Array.from(view.container.querySelectorAll('.staff-detail table'), node => node.getAttribute('aria-label')),
+      });
+    }
+    expect(await screen.findByText('아직 WORKS로 보낸 일정이 없어요')).toBeInTheDocument();
+    structures.push({ panel: view.container.querySelector('.staff-label')?.textContent, selected: tabs[0]?.textContent, views });
+    expect(backend.calls.filter(call => call.method !== 'GET')).toHaveLength(0);
+    cleanup();
+  }
+  expect(structures[0]?.panel).toBe('오늘 근무');
+  expect(structures[1]).toEqual(structures[0]);
 });

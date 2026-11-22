@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithKit } from '../../../ui/test-utils';
+import { formatMaskedCustomer } from '../../../data/customer-display';
 import { createWidgetDataStore, selectReservations, TODAY } from '../../../data/widget-data';
 import { VoiceBookingDetail, VoiceBookingPanel } from './voice-booking';
 import { pastConfirmedBooking } from './booking-test-fixtures';
@@ -12,7 +13,10 @@ afterEach(cleanup);
 // The café sample (D-313): today's bookings are read from the selector the widget uses, never typed in.
 const seedRows = () => selectReservations(createWidgetDataStore().getSnapshot(), { date: TODAY }).rows;
 const byTime = (time: string) => seedRows().find(r => r.time === time)!;
-const nameOf = (r: { name: unknown }) => (r.name as { raw: string }).raw;
+const nameOf = (r: { name: unknown; memberId?: string | null }) => {
+  const name = typeof r.name === 'string' ? r.name : (r.name as { raw: string }).raw;
+  return r.memberId ? formatMaskedCustomer(name, r.memberId) : name;
+};
 const pastConfirmed = pastConfirmedBooking;
 
 it('shows the next time totals and the selector seat availability',()=>{
@@ -35,7 +39,7 @@ it('adds an over-capacity booking as waiting and allows manual confirmation',asy
   const seats = selectReservations(store.getSnapshot(),{date:TODAY}).totalSeats;
   await user.clear(screen.getByLabelText('예약 인원'));
   await user.type(screen.getByLabelText('예약 인원'),String(seats + 10));
-  await user.click(screen.getByRole('button',{name:'저장하기'}));
+  await user.click(screen.getByRole('button',{name:'예약 대기로 등록하기'}));
   const row=selectReservations(store.getSnapshot(),{date:TODAY}).rows.find(r=>r.partySize===seats + 10)!;
   expect(row.status).toBe('needs-check');
   expect(host.notify).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'success', messageKey: 'data.management.notice.bookingAdded', undoToken: expect.any(String) }));
@@ -74,6 +78,8 @@ it('cancels from the panel danger slot, says what was cancelled, and undo brings
   expect(within(panel).queryByRole('region', { name: '통화 요약' })).toBeNull();
   const before = selectReservations(store.getSnapshot(), { date: TODAY }).count;
   await userEvent.click(cancel);
+  expect(selectReservations(store.getSnapshot(), { date: TODAY }).count).toBe(before);
+  await userEvent.click(within(panel).getByRole('button', { name: '예약 취소 확정하기' }));
   const notice = localHost.notify.mock.calls.at(-1)![0];
   expect(notice).toMatchObject({ kind: 'success', messageKey: 'data.management.notice.bookingCanceled', undoToken: expect.any(String) });
   expect(selectReservations(store.getSnapshot(), { date: TODAY }).count).toBe(before - 1);
@@ -131,12 +137,12 @@ it('opens a reservation panel from the grid and returns focus on close and Escap
   expect(panel.getByRole('heading', { name: title })).toHaveFocus();
   expect(row).toHaveAttribute('aria-selected', 'true');
   const form = within(panel.getByRole('form', { name: '예약 고치기' }));
-  for (const label of ['예약자 이름', '연락처', '인원', '요청사항']) {
+  for (const label of ['예약자 이름', '연락처', '예약 인원', '요청사항']) {
     expect(form.getByLabelText(label)).toBeInTheDocument();
   }
   // the date and the time are kit pickers: the long date and the clock time, never an ISO string
   expect(form.getByRole('button', { name: /^예약 날짜 11월 17일 화요일$/ })).toBeInTheDocument();
-  expect(form.getByRole('button', { name: new RegExp(`^시각 ${past.time}$`) })).toBeInTheDocument();
+  expect(form.getByRole('button', { name: new RegExp(`^예약 시각 ${past.time}$`) })).toBeInTheDocument();
   expect(form.getByRole('button', { name: '예약 저장하기' })).toBeEnabled();
   for (const name of ['방문 완료로 바꾸기', '예약 취소하기', /오지 않음으로 바꾸기/]) {
     expect(panel.getByRole('button', { name })).toBeEnabled();
@@ -157,4 +163,33 @@ it('opens a reservation panel from the grid and returns focus on close and Escap
 
   await user.keyboard(' ');
   expect(within(screen.getByRole('region', { name: title })).getByLabelText('예약자 이름')).toHaveValue(guestName);
+});
+it('keeps the booking panel, tools and original grid columns in HTTP and fixture mode', async () => {
+  const { bookingService, naver } = await import('../../../data/reality/06/testing');
+  const { bookingAdapter } = await import('../../../data/reality/06/adapter');
+  const { createRealPort } = await import('../../../data/reality/00');
+  const { backend } = bookingService({ reservations: [naver('P-17', { date: TODAY })] });
+  const structures = [];
+  for (const mode of ['http', 'fixture'] as const) {
+    const store = createWidgetDataStore();
+    if (mode === 'http') store.bindReal(createRealPort({ store, source: () => mode, adapters: [bookingAdapter], fetch: backend.fetch }));
+    const props = { featureId: 'voice-booking' as const, condition: { kind: 'default' as const }, host };
+    const { container } = renderWithKit(<><VoiceBookingPanel {...props} width={1} height={1} shape="Q" editing={false} presetId="A" /><VoiceBookingDetail {...props} detailRef={{ featureId: 'voice-booking' }} /></>, { store });
+    await screen.findByRole('columnheader', { name: '종류' });
+    structures.push({
+      panel: Boolean(container.querySelector('[data-slot="voice-booking.metric.value"]')),
+      columns: screen.getAllByRole('columnheader').map(node => node.getAttribute('data-grid-column-id') ?? node.textContent),
+      search: Boolean(screen.queryByRole('searchbox')),
+      export: Boolean(container.querySelector('[data-slot="voice-booking.export"]')),
+      facts: Array.from(container.querySelectorAll('.mc-booking-content details summary'), node => node.textContent?.split(' · ')[0]),
+    });
+    if (mode === 'http') {
+      expect(screen.getByText('박○○')).toBeInTheDocument();
+      expect(backend.calls.filter(call => call.method !== 'GET')).toHaveLength(0);
+    }
+    cleanup();
+  }
+  expect(structures[0]?.export).toBe(true);
+  expect(structures[0]?.columns).not.toContain('예약번호');
+  expect(structures[1]).toEqual(structures[0]);
 });

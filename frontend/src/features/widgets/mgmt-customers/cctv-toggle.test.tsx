@@ -148,7 +148,7 @@ describe('detail by mode (D-230)', () => {
     expect(live.container.querySelector('[data-testid="cctv-live-area"]')).toBeInTheDocument();
     expect(live.container.querySelector('video[src="/cnn/store-sample.mp4"]')).not.toBeInTheDocument();
     expect(live.container.querySelector('[data-testid="cctv-day-record"] .mc-detail')).toHaveTextContent('시간대별 방문과 근무 인원');
-    expect(live.container.querySelector('[data-testid="cctv-day-record"]')).toHaveTextContent('예시');
+    expect(live.container.querySelector('[data-testid="cctv-day-record"]')).not.toHaveTextContent('예시');
     expect(live.container.querySelector('[data-testid="cctv-day-record"]')).toHaveTextContent('카메라 값이 아니에요');
     expect(live.container.querySelector('[data-testid="now-instore"]')).toHaveTextContent('2명');
   });

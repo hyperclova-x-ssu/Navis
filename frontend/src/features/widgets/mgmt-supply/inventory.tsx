@@ -12,7 +12,7 @@ import type { WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../..
 import { useDomainState, useRealRetry, useWidgetDataStore, useWidgetView } from '../../../data/react';
 import type { IngredientRow, InventoryModel } from '../../../data/widget-data';
 import { ActionButton, DetailTabs, Icon, MetricFit, PanelState, Spinner, SplitBar, StatusBadge, StatusChip } from '../../../ui';
-import { Flash, relativeDay, stateTone, SupplyPanelState, useFit, useSupplyText, SupplySurface, useTextScale, useViewMemory, WarnLine, type SupplyText } from './shared';
+import { Flash, relativeDay, stateTone, SupplyPanelState, useFit, useSupplyText, SupplySurface, useTextScale, useViewMemory, WarnLine, type SupplyText , supplyQuantity } from './shared';
 
 import { orderedStock, StockMiniTable, TALL_MINI_ROWS } from './mini-tables';
 import { inventoryDetailEntry } from '../../assistant/domains/inventory';
@@ -20,7 +20,7 @@ import { inventoryDetailEntry } from '../../assistant/domains/inventory';
 const ID = 'inventory-booking' as const;
 type Tab = 'ingredients' | 'products';
 
-const qty = (x: SupplyText, value: number | null, unit: IngredientRow['unit']) => (value === null ? '—' : x.format.quantity(value, unit));
+const qty = (x: SupplyText, value: number | null, unit: IngredientRow['unit']) => (value === null ? '—' : supplyQuantity(x, value, unit));
 /** ‘확인된 품목 중 보충 필요 0개’: values are missing and nothing confirmed needs restocking (DS 11.5). */
 const partialZero = (m: InventoryModel) => m.reviewCount > 0 && m.restockCount === 0;
 
@@ -36,7 +36,10 @@ function useInventoryView(condition: WidgetPanelProps['condition']) {
 function deliveryText(x: SupplyText, row: IngredientRow): string | null {
   const d = row.nextDelivery;
   if (!d) return null;
-  return x.t('widget.inventory-booking.nextDelivery', { when: relativeDay(x, d.date), qty: x.format.quantity(d.remaining.value, d.remaining.unit), supplier: x.tk(d.supplierNameKey) });
+  const supplier = x.tk(d.supplierNameKey);
+  if (x.locale === 'ko') return [x.text(row.name ?? { key: row.nameKey }),
+    `입고 예정 ${supplyQuantity(x, d.remaining.value, d.remaining.unit)}`, d.date ? relativeDay(x, d.date) : '날짜 미정', supplier].filter(Boolean).join(' · ');
+  return x.t('widget.inventory-booking.nextDelivery', { when: relativeDay(x, d.date), qty: supplyQuantity(x, d.remaining.value, d.remaining.unit), supplier });
 }
 
 /* ───────── Panel ───────── */
@@ -63,16 +66,16 @@ function IngredientLine({ x, row, index, area, drop, status=false }: { x: Supply
   return <li className="ms-row" data-row="" data-drop={drop ?? 500 + index} data-row-id={row.itemId} data-slot={`${ID}.list.row`}>
     {area ? <span className="ms-row__area" data-drop={960}>{area}</span> : null}
     <span className="ms-row__name">{x.text(row.name??{key:row.nameKey})}{row.outOfStock ? <span className="ms-mark" data-tone="danger">{x.t('widget.inventory-booking.outBadge')}</span> : status&&row.needsRestock?<span className="ms-mark">{x.t('widget.inventory-booking.restockNeeded')}</span>:row.trackExpiry?<span className="ms-mark">{x.t('widget.inventory-booking.expiry.badge')}</span>:null}</span>
-    <span className="ms-row__value"><Flash value={row.stock}>{qty(x, row.stock, row.unit)}</Flash>{row.threshold !== null ? <span className="ms-row__caption"><Flash value={row.threshold}>{x.t('widget.inventory-booking.thresholdShort', { threshold: x.format.quantity(row.threshold, row.unit) })}</Flash></span> : null}</span>
+    <span className="ms-row__value"><Flash value={row.stock}>{qty(x, row.stock, row.unit)}</Flash>{row.threshold !== null ? <span className="ms-row__caption"><Flash value={row.threshold}>{x.t('widget.inventory-booking.thresholdShort', { threshold: supplyQuantity(x, row.threshold, row.unit) })}</Flash></span> : null}</span>
   </li>;
 }
 
 function ProductsLine({ x, m, area, drop, complete }: { x: SupplyText; m: InventoryModel; area?: string; drop: number; complete: boolean }) {
   const p = m.products;
+  if (!p.items.length) return null;
   return <li className="ms-row" data-drop={drop} data-row-id="products" data-slot={`${ID}.list.row`}>
     {area ? <span className="ms-row__area" data-drop={960}>{area}</span> : <span className="ms-row__name">{x.t('common.inventoryTab.products')}</span>}
-    {p.items.length === 0 ? <span className="ms-row__name">{x.t('data.state.inventory-booking.no-products')}</span>
-      : !complete ? <span className="ms-row__name">{x.tk('data.real.partial')}</span>
+    {!complete ? <span className="ms-row__name">{x.tk('data.real.partial')}</span>
       : <span className="ms-row__value"><Flash value={p.total}>{x.format.count(p.total, 'pcs')}</Flash><span className="ms-row__caption">{x.t('widget.inventory-booking.channelLine', { store: x.format.number(p.byChannel.store), online: x.format.number(p.byChannel.online) })}</span></span>}
   </li>;
 }
@@ -80,7 +83,7 @@ function ProductsLine({ x, m, area, drop, complete }: { x: SupplyText; m: Invent
 function ProductsSplit({ x, m, drop=950, complete }: { x: SupplyText; m: InventoryModel; drop?: number; complete: boolean }) {
   const p = m.products;
   // SCR-32: the products area gives way before the ingredients (the 1×1 number is always ingredients).
-  if (p.items.length === 0) return <p className="ms-caption" data-drop={950}>{x.t('data.state.inventory-booking.no-products')}</p>;
+  if (p.items.length === 0) return null;
   if (!complete) return <p className="ms-caption" data-drop={drop}>{x.tk('data.real.partial')}</p>;
   return <div className="ms-split" data-drop={drop}>
     <p className="ms-split__total">{x.t('widget.inventory-booking.productsTotal')} <Flash value={p.total}><strong>{x.format.count(p.total, 'pcs')}</strong></Flash></p>
@@ -95,7 +98,7 @@ function InventoryPanelContent({ condition, width, height, shape, editing, host 
   const dataStore = useWidgetDataStore();
   const snapshot = useSyncExternalStore(dataStore.subscribe, dataStore.getSnapshot, dataStore.getSnapshot);
   const { ref, hiddenRows } = useFit<HTMLDivElement>([view, width, height, scale, x.locale, editing]);
-  if (loading) return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID}><span role="status"><Spinner /> {x.tk('data.real.loading')}</span></div>;
+  if (loading) return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID}><span role="status"><Spinner /> {x.locale === 'ko' ? '재고를 불러오는 중이에요' : x.tk('data.real.loading')}</span></div>;
   const empty = view.status === 'ready' && http && !view.model.ingredients.length && !view.model.products.items.length;
   if (view.status !== 'ready' || empty) {
     const registration = empty ? 'data.action.registerItem' : view.status === 'empty' ? view.actionKey : undefined;
@@ -150,7 +153,7 @@ function InventoryDetailContent({ condition, detailRef, host }: WidgetDetailProp
   const entry = inventoryDetailEntry(detailRef, view.status === 'ready' ? view.model : undefined);
   const [tab, setTab] = useViewMemory<Tab>('inventory.tab', () => entry.tab);
   const [register, setRegister] = useState(entry.register);
-  if (loading) return <div className="ms-detail ms-inv" data-widget={ID}><span role="status"><Spinner /> {x.tk('data.real.loading')}</span></div>;
+  if (loading) return <div className="ms-detail ms-inv" data-widget={ID}><span role="status"><Spinner /> {x.locale === 'ko' ? '재고를 불러오는 중이에요' : x.tk('data.real.loading')}</span></div>;
   if (view.status !== 'ready') {
     const isError = view.status === 'error';
     return <div className="ms-detail ms-inv" data-widget={ID}>

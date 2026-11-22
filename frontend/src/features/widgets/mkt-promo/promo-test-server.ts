@@ -5,6 +5,7 @@
 import type { PromoCatalogInput, PromoFailReason, PromoStage, WidgetDataStore } from '../../../data/widget-data';
 import { catalogForSource } from '../../../data/marketing/promo';
 import type { EstimateModel, PromoJob, ReferenceList } from './promo-api';
+import { PROMO_REFERENCE_GALLERY_VERSION, PROMO_REFERENCE_IDS } from '../../../../shared/promo-references.mjs';
 
 /** The cafe menu the tests give photos to (아메리카노) and one that stays without (구운 플레인 베이글), by the cafe seed's menu ids. */
 export const PHOTO_MENU = 'm-americano';
@@ -37,11 +38,12 @@ export function fakeReferences(): ReferenceList {
   const aspects = ['9:16', '1:1', '4:5', '9:16', '4:5', '1:1'];
   const moods = [['lively', 'warm'], ['warm'], ['clean'], ['lively'], ['warm', 'clean'], ['elegant']] as const;
   return {
-    referenceVersion: '1',
-    references: aspects.map((cardAspect, i) => ({
-      id: `ref-${i + 1}` as ReferenceList['references'][number]['id'], nameKey: `promo.ref.ref-${i + 1}.name`, cardAspect,
-      posterUrl: `/api/promo/references/ref-${i + 1}/poster.jpg`, previewUrl: `/api/promo/references/ref-${i + 1}/preview.mp4`,
-      preview: { durationSec: 4, width: 360, height: 640, fps: 30, hasAudio: false }, moods: [...moods[i]], concepts: i === 0 ? ['new-item', 'todays-deal'] : ['review-roundup'],
+    referenceVersion: PROMO_REFERENCE_GALLERY_VERSION,
+    references: PROMO_REFERENCE_IDS.map((id, i) => ({
+      id, nameKey: `promo.ref.${id}.name`, cardAspect: aspects[i % aspects.length],
+      posterUrl: `/api/promo/references/${id}/poster.jpg`, previewUrl: `/api/promo/references/${id}/preview.mp4`,
+      preview: { durationSec: 4, width: 360, height: 640, fps: 30, hasAudio: false },
+      moods: [...moods[i % moods.length]], concepts: i === 0 ? ['new-item', 'todays-deal'] : ['review-roundup'],
     })),
   };
 }

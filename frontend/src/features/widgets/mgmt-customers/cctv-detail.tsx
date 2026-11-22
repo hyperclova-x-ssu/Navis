@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import type { WidgetDetailProps } from '../../../contracts';
 import type { CctvMode, CctvView } from '../../cctv';
 import { CctvPlayback, CctvSetup, CctvStage, setCctvMode, useCctvMode, useCctvView } from '../../cctv';
-import { ActionButton, Badge } from '../../../ui';
+import { ActionButton } from '../../../ui';
 import { changeText } from './cctv-panel';
 import { ModeToggle, WidgetMenu, useCctvT, useSecondly, type CctvT } from './cctv-parts';
 import type { ZoneEditorProps } from '../../cctv/zones';
@@ -161,7 +161,7 @@ export function CctvAnalysisDetail({ host, detailRef, record, zonesApi, linkedTa
       <div className="cc-record" data-testid="cctv-day-record">
         <div className="cc-record__head">
           <h2 className="cc-record__title">{t('cctv.dayRecord.title')}</h2>
-          {live ? <><Badge>{t('cctv.example')}</Badge><span className="cc-record__note">{t('cctv.dayRecord.notCamera')}</span></> : null}
+          {live ? <span className="cc-record__note">{t('cctv.dayRecord.notCamera')}</span> : null}
         </div>
         {record}
       </div>

@@ -12,17 +12,44 @@ import { createRealPort } from '../../../data/reality/00';
 import { fakeBackend, reply } from '../../../data/reality/00/testing';
 import { insightAdapter } from '../../../data/reality/10/adapter';
 import { createEnvironmentWidget } from './module';
+import { ManualMeasurementEntry } from './manual';
 import { environmentView } from './source';
+import { beginDashboard } from '../../../app/test-session';
+import { getRegistry } from '../../../catalog';
+import { screenPresets } from '../../../layout/presets';
+import { DetailOverlay } from '../../../screens/detail';
+import { createRunStore } from '../../../state';
+import { timePolicy } from '../../../ui';
 
 afterEach(cleanup);
 /** Picks a time in the measurement form's kit time list (the field never takes typed text). */
 async function pickMeasuredTime(form: HTMLElement, time: string) {
-  fireEvent.click(within(form).getByRole('button', { name: /^측정 시각\(한국 시간\)/ }));
+  fireEvent.click(within(form).getByRole('button', { name: /^측정 시각/ }));
   fireEvent.click(await screen.findByRole('option', { name: time }));
 }
 const view ={ status: 'ready' as const, sensorStatus: 'connected' as const, current: { temperature: 22.5, humidity: 48 }, lastMeasuredAt: '15:40', ranges: { temperature: [18,25] as const, humidity: [40,60] as const }, trend: [{ time: '15:00', temperature: 22.5, humidity: 48 }], music: { deviceStatus: 'connected' as const, playing: true, volumePct: 55, track: '오후의 재즈 피아노', playlistId: 'p1', playlists: [{ playlistId: 'p1', name: '오후 잔잔한 로파이' }, { playlistId: 'p2', name: '아침 오픈 재즈' }] } };
 const port = { setPlaying: vi.fn(), skipTrack: vi.fn(), setVolume: vi.fn(), selectPlaylist: vi.fn(), retry: vi.fn() };
 describe('environment detail', () => {
+  it('closes only the measurement form on Escape and keeps its draft', async () => {
+    const run = createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: timePolicy, clock: () => performance.now(), theme: 'light', reducedMotion: true });
+    beginDashboard(run);
+    run.actions.applyLayoutIntent({ type: 'add-tap', featureId: 'store-environment' });
+    run.actions.openDetailRef({ featureId: 'store-environment' }, 'panel:store-environment');
+    renderWithKit(<DetailOverlay run={run} />, { reducedMotion: true, modules: [{ id: 'store-environment', Panel: () => null, useSummary: () => '', Detail: () => <ManualMeasurementEntry manual /> }] });
+    const trigger = await screen.findByRole('button', { name: '측정값 입력하기' });
+    fireEvent.click(trigger);
+    const temperature = screen.getByLabelText('온도(°C)');
+    fireEvent.change(temperature, { target: { value: '22.4' } });
+    temperature.focus();
+    fireEvent.keyDown(temperature, { key: 'Escape', code: 'Escape' });
+    fireEvent.keyUp(temperature, { key: 'Escape', code: 'Escape' });
+    expect(run.getState().overlay.type).toBe('detail');
+    expect(screen.queryByRole('form', { name: '측정값 입력' })).toBeNull();
+    expect(trigger).toHaveFocus();
+    fireEvent.click(trigger);
+    expect(screen.getByLabelText('온도(°C)')).toHaveValue(22.4);
+  });
+
   it('places HTTP measurements and the record form in the original climate section', async () => {
     const backend = fakeBackend();
     const asOf = '2026-11-17T06:45:00.000Z';
@@ -48,8 +75,9 @@ describe('environment detail', () => {
     renderWithKit(<Detail featureId="store-environment" condition={{ kind: 'default' }} detailRef={{ featureId: 'store-environment', view: 'sensor' }}
       host={{ layer: 'management', resetPreview: vi.fn(), notify: vi.fn(), openDetail: vi.fn(), openLinked: vi.fn(), acknowledgeBriefing: vi.fn(), openClosing: () => true }} />, { store });
     const climate = await screen.findByRole('group', { name: '온도와 습도' });
-    expect(within(climate).getByRole('group', { name: '현재 온도 29.0°C' })).toBeInTheDocument();
-    expect(within(climate).getAllByRole('img')[0]).toHaveAccessibleName(/온도: 15:45 29°C/);
+    expect(within(climate).getByRole('group', { name: '온도 29.0°C' })).toBeInTheDocument();
+    expect(within(climate).queryByRole('img')).toBeNull();
+    expect(within(climate).getByRole('table')).toHaveTextContent('29.0°C');
     expect(screen.getByRole('group', { name: '매장 음악' })).toBeInTheDocument();
     // FIX-RV3: the window opens as the original one; the entry form opens from its button inside the climate section.
     expect(within(climate).queryByRole('form', { name: '측정값 입력' })).toBeNull();
@@ -59,7 +87,9 @@ describe('environment detail', () => {
     // T-27 (gate r1a W11 D1): no browser date control ("2026. 11. 22. 오후 12:07"); the kit pickers show the weekday ("11월 17일 화요일").
     expect(form.querySelector('input[type="datetime-local"], input[type="date"], input[type="time"]')).toBeNull();
     expect(within(form).getByRole('button', { name: /^측정 날짜/ })).toHaveTextContent('11월 17일 화요일');
-    expect(within(form).getByRole('button', { name: /^측정 시각\(한국 시간\)/ })).toHaveTextContent('15:45');
+    expect(within(form).getByRole('button', { name: /^측정 시각/ })).toHaveTextContent('15:45');
+    fireEvent.submit(form);
+    expect(within(form).getAllByRole('alert')[0]).toHaveTextContent('온도를 넣어 주세요');
     await pickMeasuredTime(form, '15:40');
     fireEvent.change(within(form).getByLabelText('온도(°C)'), { target: { value: '22' } });
     fireEvent.change(within(form).getByLabelText('습도(%)'), { target: { value: '43' } });
@@ -74,7 +104,7 @@ describe('environment detail', () => {
       expect(backend.callsTo('POST', '/insight/environment-readings')).toHaveLength(0);
       await pickMeasuredTime(form, '15:40');
       fireEvent.submit(form);
-      expect(await within(climate).findByRole('group', { name: '현재 온도 22.0°C' })).toBeInTheDocument();
+      expect(await within(climate).findByRole('group', { name: '온도 22.0°C' })).toBeInTheDocument();
       expect(await within(form).findByText('측정값을 저장했어요')).toBeInTheDocument();
       // The time list also scrolls its chosen option into view when it opens; only the result line is under test here.
       expect(scrollIntoView.mock.results.map(result => result.value).filter(text => !/^\d\d:\d\d$/.test(text))).toEqual([
@@ -117,7 +147,7 @@ describe('environment detail', () => {
   });
 
   it('keeps both trend end values next to their own charts in the climate section', () => {
-    render(<EnvironmentDetail view={view} port={port} />);
+    render(<EnvironmentDetail view={{ ...view, trend: [...view.trend, { time: '15:40', temperature: 22.5, humidity: 48 }] }} port={port} />);
     const climate = screen.getByRole('group', { name: '온도와 습도' });
     const charts = within(climate).getAllByRole('img');
     expect(charts).toHaveLength(2);
@@ -191,7 +221,7 @@ describe('environment detail', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('연결된 음악 장치가 없어요');
     rerender(<EnvironmentDetail view={{ status: 'empty' }} port={port} />);
     const music = screen.getByRole('group', { name: '매장 음악' });
-    expect(within(music).getByText('연결된 음악 장치가 없어요')).toBeInTheDocument();
+    expect(within(music).queryByText('연결된 음악 장치가 없어요')).toBeNull();
     expect(within(music).getByText('음악 장치를 연결하면 바로 재생할 수 있어요')).toBeInTheDocument();
     // P-1 leftover: nothing to control, so no transport buttons, volume or playlists (they used to show disabled).
     expect(within(music).queryByRole('button')).toBeNull();
@@ -317,4 +347,50 @@ describe('environment detail', () => {
       expect(seen).toHaveBeenCalledTimes(1);
     } finally { document.removeEventListener('keydown', seen); }
   });
+});
+it('keeps the two environment sections and manual actions in HTTP and fixture mode', async () => {
+  const backend = fakeBackend();
+  const asOf = '2026-11-17T06:45:00.000Z';
+  const reading = { measuredAt: asOf, temperatureC: 22, humidityPct: 45 };
+  const page = (items: readonly unknown[] = []) => ({ items, nextCursor: null, asOf, sourceRevision: 1 });
+  for (const path of ['/insight/cameras', '/insight/zones', '/insight/table-links', '/insight/cctv-buckets', '/insight/cctv-reviews', '/pos/tables']) backend.on('GET', path, () => page());
+  backend.on('GET', '/insight/environment-readings', () => page([reading]));
+  backend.on('GET', '/insight/environment-summary', () => ({ current: reading, asOf, sourceRevision: 1, alerts: [],
+    limits: { revision: 0, temperatureRange: [18, 25], humidityRange: [40, 60] } }));
+  const module = createEnvironmentWidget('store-environment', () => {
+    const result = useStoreEnvironment();
+    return { view: result.status === 'ready' ? environmentView(result.model) : { status: 'empty' }, port };
+  });
+  const host = { layer: 'management' as const, resetPreview: vi.fn(), notify: vi.fn(), openDetail: vi.fn(), openLinked: vi.fn(), acknowledgeBriefing: vi.fn(), openClosing: () => true };
+  const props = { featureId: 'store-environment' as const, condition: { kind: 'default' as const }, host };
+  const Detail = module.Detail!;
+  const Panel = module.Panel;
+  const structures = [];
+  for (const mode of ['fixture', 'http'] as const) {
+    const store = createWidgetDataStore();
+    if (mode === 'http') store.bindReal(createRealPort({ store, adapters: [insightAdapter], source: () => 'http', fetch: backend.fetch }));
+    const { container } = renderWithKit(<><Panel {...props} width={1} height={1} shape="Q" editing={false} presetId="A" /><Detail {...props} detailRef={{ featureId: 'store-environment' }} /></>, { store });
+    await screen.findByRole('heading', { name: '환경 모니터링' });
+    const names = (query: string) => Array.from(container.querySelectorAll(query), node => node.getAttribute('aria-label') ?? node.textContent);
+    structures.push({
+      halves: names('.i7-environment-panel > [role=group]'), headings: names('.i7-environment-section > h3'),
+      actions: names('.i7-environment-manual-actions button'), columns: names('.i7-environment-table thead th'),
+    });
+    if (mode === 'http') {
+      expect(screen.getAllByText('연결된 음악 장치가 없어요')).toHaveLength(1);
+      expect(screen.getByText('음악 장치를 연결하면 바로 재생할 수 있어요')).toBeInTheDocument();
+    }
+    else {
+      fireEvent.click(screen.getByRole('button', { name: '적정 범위 바꾸기' }));
+      const form = screen.getByRole('form', { name: '적정 범위' });
+      fireEvent.change(within(form).getByLabelText('최고 습도(%)'), { target: { value: '62' } });
+      fireEvent.submit(form);
+      expect(await within(form).findByText('적정 범위를 저장했어요')).toBeInTheDocument();
+      expect(store.getSnapshot().tables.storeEnvironment.humidityRange[1]).toBe(62);
+    }
+    cleanup();
+  }
+  expect(structures[1]).toEqual(structures[0]);
+  expect(structures[0]?.actions).toEqual(['측정값 입력하기', '적정 범위 바꾸기']);
+  expect(backend.calls.filter(call => call.method !== 'GET')).toHaveLength(0);
 });

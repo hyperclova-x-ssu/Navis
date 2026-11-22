@@ -17,6 +17,14 @@
 .mm-row:last-child, .mm-row:not(:has(~ .mm-row:not([data-fit-hidden]))) { border-block-end: 0; }
 .mm-row__text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
 .mm-row__name { font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.dashboard-screen .ui-feature-panel:is([data-feature-id="margin"], [data-feature-id="grants"]) .mm-row__name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: normal;
+}
 .mm-row__sub { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
 .mm-row__value { flex: none; white-space: nowrap; font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-semibold); text-align: end; }
 .mm-row__badge { flex: none; }
@@ -101,6 +109,7 @@
 .mm-table thead th { font-size: var(--type-caption); color: var(--muted-foreground); font-weight: var(--weight-medium); }
 .mm-table tbody th { font-weight: var(--weight-medium); }
 .mm-table td:last-child, .mm-num { text-align: end; white-space: nowrap; }
+[data-slot="tax.export"] .mm-table thead th:last-child { text-align: end; }
 .mm-table__total th, .mm-table__total td { font-weight: var(--weight-bold); }
 .mm-table__caption { caption-side: top; text-align: start; padding-block: var(--space-3); color: var(--muted-foreground); font-size: var(--type-caption); }
 .mm-table tr[data-selected="true"] { background: var(--selection); }
@@ -226,6 +235,9 @@
 .mm-chart--detail .mm-chart__plot { min-height: var(--chart-plot-min-height); flex-shrink: 0; }
 .mm-ledger-chart { overflow-x: auto; }
 .mm-ledger-chart > .mm-chart { min-inline-size: calc(var(--ledger-chart-columns) * var(--type-body) * 4.25); }
+.mm-ledger-chart .mm-chart__bar, .mm-ledger-chart .mm-chart__paired-fill { max-inline-size: var(--space-16); margin-inline: auto; }
+.mm-ledger-chart .mm-chart__col:last-child .mm-chart__value { align-self: center; }
+.mm-ledger-loading { display: flex; align-items: center; gap: var(--space-2); margin: 0; }
 .mm-chart--labeled .mm-chart__groups { inset-block: calc(var(--leading-body) + var(--space-1)); }
 .mm-chart--labeled .mm-chart__group { justify-content: center; gap: var(--space-8); }
 .mm-chart--labeled .mm-chart__paired-bar { max-inline-size: var(--space-16); }
@@ -269,6 +281,8 @@
   word-break: keep-all;
 }
 .mm-tax-type__qualifier { display: inline-block; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: top; white-space: nowrap; }
+.mm-tax-payments .ui-data-grid { --table-name-min: 0; }
+.mm-tax-payments .ui-data-grid__table [data-grid-row] { box-shadow: inset 0 calc(-1 * var(--stroke-hairline)) var(--border); }
 .mm-tax-actions { display: grid; grid-template-columns: max-content var(--target-default); justify-content: end; align-items: center; white-space: nowrap; gap: var(--space-2); padding-inline-end: var(--space-2); }
 .mm-tax-actions__primary, .mm-tax-actions__sizer { grid-area: 1 / 1; }
 .mm-tax-actions__sizer { visibility: hidden; font-size: var(--type-control); font-weight: var(--weight-semibold); line-height: var(--leading-control); padding-inline: calc(var(--space-4) + var(--stroke-hairline)); }
@@ -289,6 +303,12 @@
 /* DS 12.1 NewRow: the add form is one compact editing row (type · amount · due date), not three full-width fields. */
 .mm-tax-payments .ui-grid-new-row .ui-inline-form__body { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 .mm-tax-payments .ui-grid-new-row .ui-inline-form__body > :nth-child(n + 4) { grid-column: 1 / -1; }
+.mm-tax-payments .ui-grid-new-row, .mm-tax-payments .ui-grid-new-row > td { background: var(--card); }
+[data-feature-id="margin"] .ui-panel-body:is([data-shape="T"],[data-shape="S"]) .mm-row__name {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal;
+  overflow: hidden; word-break: keep-all; overflow-wrap: anywhere;
+}
+[data-feature-id="margin"] .mm-row:has(.mm-row__value) { flex-wrap: nowrap; }
 
 .ui-root[data-text-scale="125"] [data-feature-id="margin"] .ui-panel-body[data-shape="W"] .ui-panel-chart { display: block; }
 
@@ -311,3 +331,6 @@
 .mm-briefing-link__value { font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 06 마진: the opened cost breakdown takes its content height too (C1: no scroll box inside the dialog body). */
 .mm-detail[data-widget="margin"] .ui-grid-expanded { max-height: none; overflow: visible; }
+
+[data-widget='grants'] .mm-funding-facts dd { font-weight: var(--weight-regular); }
+[data-widget='grants'] .mm-funding-open { text-decoration: none; }

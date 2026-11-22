@@ -5,7 +5,7 @@ import type { CctvMode, CctvView } from '../../cctv';
 import { CctvStage, PanelVideo, setCctvMode, useCctvMode, useCctvView, useLiveConnection } from '../../cctv';
 import { TODAY_AVG_DWELL_MIN } from '../../../data/cctv';
 import type { CustomerAnalysisModel } from '../../../data/models/types';
-import { Badge, MetricFit, PanelAction, panelShape, useUi } from '../../../ui';
+import { MetricFit, PanelAction, panelShape, useUi } from '../../../ui';
 import { DROP, ListBlock, Row, splitUnit, useFitDrop, useT } from './shared';
 import { ModeToggle, WidgetMenu, livePanelStatus, showsNumbers, useCctvT, useSecondly, type CctvT, type PanelRun } from './cctv-parts';
 
@@ -47,14 +47,13 @@ function NumberRows({ view, model, live }: RowsProps) {
   const avg = view.avgDwell.kind === 'mock-minutes'
     ? c('cctv.avg.minutes', { n: TODAY_AVG_DWELL_MIN })
     : view.avgDwell.seconds === null ? c('cctv.avg.none') : c('cctv.avg.minutes', { n: Math.max(1, Math.round(view.avgDwell.seconds / 60)) });
-  const sample = live ? <Badge>{c('cctv.example')}</Badge> : undefined;
   return (
     <ListBlock id={ID} title={undefined}>
       {view.zonesCount > 0 ? <Row id={ID} rowId="in-use" name={c('cctv.tables.inUse', { a: inUse(view), b: view.tables.length })} drop={DROP.row} /> : null}
       {view.zonesCount > 0 ? <Row id={ID} rowId="to-clear" name={c('cctv.tables.toClear', { n: toClear(view) })} drop={DROP.row} /> : null}
       <Row id={ID} rowId="avg" name={live ? c('cctv.avg.live') : c('cctv.avg.mock')} value={avg} drop={DROP.row} />
-      {peak ? <Row id={ID} rowId={`h${peak.hour}-visits`} name={<>{t.t('widget.customer-analysis.hourVisits', { hour: peak.hour })}{sample ? ' ' : ''}{sample}</>} value={peak.visits === null ? t.t('widget.customer-analysis.notCounted') : t.t('widget.customer-analysis.visitCount', { n: peak.visits })} drop={DROP.row + 1} /> : null}
-      {peak ? <Row id={ID} rowId={`h${peak.hour}-staff`} name={<>{t.t('widget.customer-analysis.hourStaff', { hour: peak.hour })}{sample ? ' ' : ''}{sample}</>} value={peak.staff === null ? t.t('widget.customer-analysis.noStaff') : t.t('widget.customer-analysis.staffCount', { n: peak.staff })} drop={DROP.row + 2} /> : null}
+      {peak ? <Row id={ID} rowId={`h${peak.hour}-visits`} name={<>{t.t('widget.customer-analysis.hourVisits', { hour: peak.hour })}</>} value={peak.visits === null ? t.t('widget.customer-analysis.notCounted') : t.t('widget.customer-analysis.visitCount', { n: peak.visits })} drop={DROP.row + 1} /> : null}
+      {peak ? <Row id={ID} rowId={`h${peak.hour}-staff`} name={<>{t.t('widget.customer-analysis.hourStaff', { hour: peak.hour })}</>} value={peak.staff === null ? t.t('widget.customer-analysis.noStaff') : t.t('widget.customer-analysis.staffCount', { n: peak.staff })} drop={DROP.row + 2} /> : null}
       {model ? <Row id={ID} rowId="today" name={t.t('widget.customer-analysis.todayVisits')} value={t.t('widget.customer-analysis.visitCount', { n: model.totalVisits })} drop={DROP.row + 3} /> : null}
     </ListBlock>
   );

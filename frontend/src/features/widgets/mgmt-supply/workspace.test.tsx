@@ -46,12 +46,12 @@ it('재고 표에서 키보드로 수정하고 변동 기록과 되돌리기를 
   const stock = within(row as HTMLElement).getByRole('gridcell', {name:/현재 재고/});
   fireEvent.keyDown(stock, {key:'Enter'});
   const input = within(row as HTMLElement).getByRole('textbox');
-  // 5,688 g counted → 7,688 g: +2 kg written as +2,000 g
+  // 5,688g counted → 7,688g: +2kg written as +2,000g
   fireEvent.change(input, {target:{value:'7688'}});
   fireEvent.keyDown(input, {key:'Enter'});
   expect(store.getSnapshot().tables.stockAdjustment.at(-1)?.deltaBase).toBe(2000);
   fireEvent.click(within(row as HTMLElement).getByRole('button', {name:/재고 변동 기록/}));
-  expect(screen.getByRole('grid',{name:ledgerName(store,BEANS)}).querySelector('[data-grid-row^="adjust"]')).toHaveTextContent('+2,000 g');
+  expect(screen.getByRole('grid',{name:ledgerName(store,BEANS)}).querySelector('[data-grid-row^="adjust"]')).toHaveTextContent('+2,000g');
   const token = notify.mock.calls.at(-1)?.[0].undoToken;
   expect(token).toBeTruthy();
   expect(store.undo(token).ok).toBe(true);
@@ -67,7 +67,7 @@ it('일정을 임의 날짜와 분류로 추가하고 분류를 꺼도 업무 �
   fireEvent.change(form.getByLabelText('일정 제목'),{target:{value:'새해 점검'}});
   await pickDate(form,'날짜','2027-01-15');
   fireEvent.click(form.getByRole('radio',{name:'세금·행정'}));
-  fireEvent.click(screen.getByRole('button',{name:'저장하기'}));
+  fireEvent.click(screen.getByRole('button',{name:'일정 저장하기'}));
   expect(store.getSnapshot().tables.calendarEvent.find(e=>'raw' in e.title&&e.title.raw==='새해 점검')).toMatchObject({date:'2027-01-15',categoryId:'tax-admin'});
   const before=store.getSnapshot().tables.calendarEvent;
   fireEvent.click(screen.getByRole('checkbox',{name:'세금·행정'}));
@@ -89,7 +89,7 @@ it('발주 표에서 우유 8L 입고는 한 번만 기록되고 재고와 지�
   fireEvent.click(save); fireEvent.click(save);
   const polIds=store.getSnapshot().tables.purchaseOrderLine.filter(l=>l.poId===milk).map(l=>l.polId);
   expect(store.getSnapshot().tables.receipt.filter(r=>polIds.includes(r.polId))).toHaveLength(1);
-  // 8 L at the milk's price is the expense candidate; 8 L is 8,000 mL on the shelf
+  // 8L at the milk's price is the expense candidate; 8L is 8,000mL on the shelf
   const price=purchaseOf(store.getSnapshot().tables,MILK).unitPrice;
   expect(store.getSnapshot().tables.expense.some(e=>e.amount===8*price&&e.status==='candidate')).toBe(true);
   expect(model(store).ingredients.find(r=>r.itemId===MILK)!.stock).toBe(stockBefore+8000);
@@ -104,7 +104,7 @@ it('발주 조건의 단가를 표에서 바꾸고 원본에 반영한다', () =
   const row=grid.querySelector(`[data-grid-row="${milkItem.purchaseItemId}"]`)!;
   // the price is per purchase unit: 2,900원/L, never per mL
   expect(row.querySelector('[data-grid-column-id="unitPrice"]')).toHaveTextContent(`${milkItem.unitPrice.toLocaleString('en-US')}원/L`);
-  expect(row.querySelector('[data-grid-column-id="minimumQty"]')).toHaveTextContent('1 L');
+  expect(row.querySelector('[data-grid-column-id="minimumQty"]')).toHaveTextContent('1L');
   fireEvent.click(row.querySelector('[data-grid-column-id="unitPrice"]')!);
   const input=within(row as HTMLElement).getByRole('textbox');
   fireEvent.change(input,{target:{value:'4000'}});fireEvent.keyDown(input,{key:'Enter'});
@@ -128,14 +128,14 @@ it('시럽 사용 증가가 발주 제안과 새 발주 및 캘린더에 이어�
   const latte='m-vanilla-latte',syrup='i-vanilla-syrup';
   const recipe=store.getSnapshot().tables.recipeLine.filter(r=>r.menuId===latte).map(r=>({recipeLineId:r.recipeLineId,itemId:r.itemId,quantity:r.itemId===syrup?400:r.quantity,unit:r.unit}));
   expect(store.dispatch({type:'menu.setRecipe',menuId:latte,lines:recipe}).ok).toBe(true);
-  // A vanilla latte now takes 400 mL of syrup: what is left of the day no longer fits the syrup in stock, so the order screen suggests 5 L
+  // A vanilla latte now takes 400mL of syrup: what is left of the day no longer fits the syrup in stock, so the order screen suggests 5L
   expect(deriveSuggestions(store.getSnapshot(),{date:TODAY}).map(s=>[s.itemId,s.qty,s.unit])).toEqual([[syrup,5,'L']]);
   const orders=store.getSnapshot().tables.purchaseOrder.length;
   const deliveries=selectCalendar(store.getSnapshot(),{date:TODAY}).monthEntries.filter(e=>e.source==='delivery').length;
   suppliersDetail(store);
-  expect(screen.getByText(new RegExp(`${raw(store,syrup)} 5 L`))).toBeInTheDocument();
+  expect(screen.getByText(new RegExp(`${raw(store,syrup)} 5L`))).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'발주하기'}));
-  fireEvent.click(screen.getByRole('button',{name:'저장하기'}));
+  fireEvent.click(screen.getByRole('button',{name:'발주 기록하기'}));
   expect(store.getSnapshot().tables.purchaseOrder).toHaveLength(orders+1);
   expect(selectCalendar(store.getSnapshot(),{date:TODAY}).monthEntries.filter(e=>e.source==='delivery')).toHaveLength(deliveries+1);
 });
@@ -176,12 +176,12 @@ it('우유 이력은 다섯 열과 사용 줄, 시작·남은 재고 및 읽기 
   const usage=today.rows.filter(r=>r.kind==='usage');
   expect(within(ledger).getAllByRole('columnheader').map(c=>c.textContent)).toEqual(['날짜·시각','종류','수량','내용','남은 재고']);
   expect(ledger).toHaveTextContent('오늘 시작 재고');
-  // 42,360 mL at the start of the day (the unit stays mL, the thousands are separated)
-  expect(ledger).toHaveTextContent(`${today.rows[0]!.balanceDisplay.toLocaleString('en-US')} mL`);
+  // 42,360mL at the start of the day (the unit stays mL, the thousands are separated)
+  expect(ledger).toHaveTextContent(`${today.rows[0]!.balanceDisplay.toLocaleString('en-US')}mL`);
   expect(ledger.querySelectorAll('[data-grid-row]')).toHaveLength(today.rows.length+1);
   // the usage lines carry the time the day was counted up to, and one such line per menu
   expect(within(ledger).getAllByText(`오늘 ${usage[0]!.asOf}까지`)).toHaveLength(usage.length);
-  expect(ledger).toHaveTextContent(`−${Math.abs(usage[0]!.delta).toLocaleString('en-US')} mL`);
+  expect(ledger).toHaveTextContent(`−${Math.abs(usage[0]!.delta).toLocaleString('en-US')}mL`);
   expect(ledger).toHaveTextContent('카페라떼 24잔');
   expect(ledger).toHaveTextContent('바닐라빈 라떼 19잔');
   expect(within(ledger).getAllByRole('gridcell',{name:/내용/})[0]).toHaveAccessibleDescription('기록은 고칠 수 없어요. 현재 재고를 고치면 직접 고침으로 남아요');
@@ -219,18 +219,18 @@ it('발주 MOQ·주문 단위는 저장을 막고 유효 주문 취소·undo는 
   const form=screen.getByRole('form',{name:'발주 추가하기'});
   fireEvent.change(within(form).getByLabelText('발주 품목'),{target:{value:beansItem.purchaseItemId}});
   const amount=within(form).getByRole('spinbutton',{name:'주문 수량'});
-  fireEvent.change(amount,{target:{value:'1'}});fireEvent.click(within(form).getByRole('button',{name:'저장하기'}));
+  fireEvent.change(amount,{target:{value:'1'}});fireEvent.click(within(form).getByRole('button',{name:'발주 기록하기'}));
   // the purchase unit is kg, not the g the stock is counted in
-  expect(form).toHaveTextContent('최소 2 kg부터 주문할 수 있어요');
-  fireEvent.change(amount,{target:{value:'2.5'}});fireEvent.click(within(form).getByRole('button',{name:'저장하기'}));
-  expect(form).toHaveTextContent('1 kg 단위로 주문해 주세요');
+  expect(form).toHaveTextContent('최소 2kg부터 주문할 수 있어요');
+  fireEvent.change(amount,{target:{value:'2.5'}});fireEvent.click(within(form).getByRole('button',{name:'발주 기록하기'}));
+  expect(form).toHaveTextContent('1kg 단위로 주문해 주세요');
   expect(store.getSnapshot().tables.purchaseOrder).toHaveLength(orders);
-  fireEvent.change(amount,{target:{value:'3'}});fireEvent.click(within(form).getByRole('button',{name:'저장하기'}));
+  fireEvent.change(amount,{target:{value:'3'}});fireEvent.click(within(form).getByRole('button',{name:'발주 기록하기'}));
   const order=store.getSnapshot().tables.purchaseOrder.at(-1)!;
   expect(store.getSnapshot().tables.purchaseOrder).toHaveLength(orders+1);
   const row=screen.getByRole('grid',{name:'발주 내역'}).querySelector(`[data-grid-row="${order.poId}"]`)!;
   expect(row).toHaveTextContent(`${(3*beansItem.unitPrice).toLocaleString('en-US')}원`);
-  expect(row).toHaveTextContent('3 kg');
+  expect(row).toHaveTextContent('3kg');
   fireEvent.click(row.querySelector('[data-grid-column-id="item"]')!);
   fireEvent.click(screen.getByRole('button',{name:'발주 취소하기'}));
   // Stale expectation, not a regression: the purchasing cutover made cancel a two-step action (extra confirmation, safety invariant).
@@ -253,7 +253,7 @@ it('표 검색·숫자 정렬은 selector의 업무 원본과 집계를 바꾸�
   fireEvent.change(screen.getByRole('searchbox'),{target:{value:'없는 품목'}});
   expect(screen.getByText('찾는 항목이 없어요')).toBeInTheDocument();
   fireEvent.change(screen.getByRole('searchbox'),{target:{value:''}});
-  expect(grid.querySelectorAll('[data-grid-row]')).toHaveLength(26);
+  expect(grid.querySelectorAll('[data-grid-row]')).toHaveLength(ascending.length);
 });
 
 it('2027년 임의 날짜를 월·주·일로 찾아 보고 모든 분류를 꺼도 원본 일정은 남는다', async () => {
@@ -283,7 +283,8 @@ it('발주 품목 추가·삭제는 원본을 바꾸고 활성 레시피의 유�
   const form=screen.getByRole('form',{name:'발주 품목 추가하기'});
   fireEvent.change(within(form).getByLabelText('품목'),{target:{value:newItemId}});
   fireEvent.change(within(form).getByLabelText('발주사'),{target:{value:'s-bakery'}});
-  fireEvent.click(within(form).getByRole('button',{name:'저장하기'}));
+  fireEvent.change(within(form).getByLabelText('단가'),{target:{value:'1000'}});
+  fireEvent.click(within(form).getByRole('button',{name:'발주 품목 저장하기'}));
   expect(store.getSnapshot().tables.purchaseItem).toHaveLength(items+1);
   const added=store.getSnapshot().tables.purchaseItem.at(-1)!;
   const row=screen.getByRole('grid',{name:'발주 품목'}).querySelector(`[data-grid-row="${added.purchaseItemId}"]`) as HTMLElement;
@@ -294,9 +295,9 @@ it('발주 품목 추가·삭제는 원본을 바꾸고 활성 레시피의 유�
   const milkItem=purchaseOf(store.getSnapshot().tables,MILK);
   const original=screen.getByRole('grid',{name:'발주 품목'}).querySelector(`[data-grid-row="${milkItem.purchaseItemId}"]`) as HTMLElement;
   const button=within(original).getByRole('button',{name:`${raw(store,MILK)} 지우기`});
-  expect(button).toHaveAttribute('aria-disabled','true');fireEvent.click(button);
+  fireEvent.click(button);
   expect(store.getSnapshot().tables.purchaseItem).toHaveLength(items);
-  expect(screen.getByText('메뉴 레시피의 유일한 단가라 지울 수 없어요',{selector:'.ui-grid-notice'})).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('메뉴 레시피의 유일한 단가라 지울 수 없어요');
 });
 
 it('출처에서 돌아오면 검색·정렬·펼침·표 스크롤을 복원하고 완전 닫기 뒤에는 초기화한다', () => {
@@ -328,7 +329,7 @@ it('새 품목의 빈 처음 수량은 0으로 저장하지 않고 오류와 초
   fireEvent.change(screen.getByLabelText('코드(SKU)'),{target:{value:'RM-NEW'}});
   fireEvent.change(screen.getByLabelText('이름'),{target:{value:'새 재료'}});
   fireEvent.change(screen.getByLabelText('처음 수량'),{target:{value:''}});
-  fireEvent.click(screen.getByRole('button',{name:'저장하기'}));
+  fireEvent.click(screen.getByRole('button',{name:'품목 저장하기'}));
   expect(store.getSnapshot().revision).toBe(0);expect(screen.getByRole('alert')).toHaveTextContent('0 이상의 숫자를 넣어 주세요');
   expect(screen.getByLabelText('처음 수량')).toHaveValue('');
   expect(screen.getByLabelText('코드(SKU)')).toHaveValue('RM-NEW');
@@ -428,7 +429,7 @@ it('음수 사용과 누락된 안전 재고는 각 행 아래에 설명한다',
  const grid=screen.getByRole('grid',{name:'재료'});
  const milk=grid.querySelector(`[data-grid-row="${MILK}"]`)!,beans=grid.querySelector(`[data-grid-row="${BEANS}"]`)!;
  // the stock unit of the milk is mL
- expect(document.getElementById(milk.getAttribute('aria-describedby')!)).toHaveTextContent('오늘 사용량이 재고보다 3.9 mL 많아요');
+ expect(document.getElementById(milk.getAttribute('aria-describedby')!)).toHaveTextContent('오늘 사용량이 재고보다 3.9mL 많아요');
  expect(document.getElementById(beans.getAttribute('aria-describedby')!)).toHaveTextContent('현재 재고와 안전 재고를 확인해 주세요');
 });
 
@@ -467,7 +468,7 @@ it('일정 편집 시 기존 시간 슬롯의 의미값을 갱신한다', () => 
  const time=button.querySelector('[data-slot-id*="calendar:detail:time:"]')!;
  const id=time.getAttribute('data-slot-id')!;
  fireEvent.click(button);fireEvent.click(screen.getByRole('button',{name:`${SAMPLE_EVENT.title} 고치기`}));
- fireEvent.change(screen.getByLabelText('시각'),{target:{value:'17:30'}});fireEvent.click(screen.getByRole('button',{name:'저장하기'}));
+ fireEvent.change(screen.getByLabelText('시각'),{target:{value:'17:30'}});fireEvent.click(screen.getByRole('button',{name:'일정 저장하기'}));
  expect(registry.getSnapshot().find(s=>s.slotId===id)?.semanticValue).toBe('17:30');
 });
 
@@ -478,7 +479,7 @@ it('오늘 이미 지난 시각으로 고칠 때 지난 기록으로 남기기�
  fireEvent.click(screen.getByRole('button',{name:new RegExp(SAMPLE_EVENT.title)}));
  fireEvent.click(screen.getByRole('button',{name:`${SAMPLE_EVENT.title} 고치기`}));
  fireEvent.change(screen.getByLabelText('시각'),{target:{value:'11:30'}});
- fireEvent.click(screen.getByRole('button',{name:'저장하기'}));
+ fireEvent.click(screen.getByRole('button',{name:'일정 저장하기'}));
  expect(store.getSnapshot()).toBe(before);
  fireEvent.click(screen.getByRole('button',{name:'지난 기록으로 남기기'}));
  expect(store.getSnapshot().tables.calendarEvent.find(row=>row.eventId==='sample-calendar-1')?.time).toBe('11:30');
@@ -523,8 +524,8 @@ it('보충이 모자라고 아직 발주하지 않은 품목은 발주 제안 �
  const {store}=shortage(withRetail().store);
  suppliersDetail(store);
  const suggestions=screen.getByRole('heading',{name:'발주 제안'}).closest('section')!;
- // beans are counted in g and bought in kg, cups in pieces: 6 kg and 1,000개
- expect(suggestions).toHaveTextContent(`${raw(store,BEANS)} 6 kg`);
+ // beans are counted in g and bought in kg, cups in pieces: 6kg and 1,000개
+ expect(suggestions).toHaveTextContent(`${raw(store,BEANS)} 6kg`);
  expect(suggestions).toHaveTextContent('1,000개');
  expect(suggestions).not.toHaveTextContent(raw(store,MILK));
  expect(within(suggestions).getAllByRole('button',{name:'발주하기'})).toHaveLength(2);

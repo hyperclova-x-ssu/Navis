@@ -15,7 +15,7 @@ import { NoticeEditor } from './widget';
 import { createNoticePort, noticeView } from './source';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
-const STALE = '휴무 일정이 바뀌었어요. 공지 초안에 다시 가져와 주세요';
+const STALE = '휴무 일정이 바뀌었어요. 휴무를 다시 불러와 주세요';
 const format = createTranslator('ko').format;
 /** The name of a day button in the kit calendar and the text of a filled DateField. */
 const longDate = (iso: string) => format.date(iso, 'long');

@@ -26,7 +26,7 @@ function setup(sourceRevision?: number, approvalsEnabled = typeof sourceRevision
   backend.on('GET', '/marketing/coupons', () => ({ items, nextCursor: null, sourceRevision: 1, asOf: '2026-11-22T13:00:00Z', businessDate: '2026-11-22' }));
   backend.on('GET', '/marketing/naver-coupons', () => ({
     sourceRevision, approvalsEnabled,
-    placeCoupons: { items: [{ ref: 'place-1', name: '플레이스 첫 방문' }], nextCursor: null },
+    placeCoupons: { items: [{ ref: 'place-1', name: '플레이스 첫 방문', displayPeriod: { from: '2026-11-01', to: '2026-12-01' } }], nextCursor: null },
     orderPromotions: { items: [{ ref: 'order-1', name: '주문 스탬프' }], nextCursor: null },
     membership,
   }));
@@ -61,6 +61,7 @@ it('shows the NAVER read ledger with disabled coupon and promotion writes while 
   await screen.findByText('플레이스 첫 방문');
   const ledger = within(screen.getByRole('region', { name: '네이버 쿠폰' }));
   expect(ledger.getByText('주문 스탬프')).toBeInTheDocument();
+  expect(ledger.getByText('12/1(화)까지')).toBeInTheDocument();
   expect(ledger.getByText('회원 스탬프')).toBeInTheDocument();
   expect(ledger.getByText('준비 중', { exact: true })).toBeInTheDocument();
   const create = ledger.getByRole('button', { name: '네이버 쿠폰 만들기' });
@@ -74,11 +75,12 @@ it('holds NAVER deletion until the extra owner press and uses the approval and s
   const backend = setup(9);
   backend.on('POST', '/marketing/naver-coupon-approvals', () => ({ approvalId: 'approval-1' }));
   backend.on('DELETE', '/marketing/naver-coupons/place/place-1', () => ({ receiptId: 'delete-1', state: 'applied', changed: true }));
-  const remove = await screen.findByRole('button', { name: '쿠폰 삭제' });
+  const remove = await screen.findByRole('button', { name: '쿠폰 지우기' });
   fireEvent.click(remove);
   expect(backend.callsTo('POST', '/marketing/naver-coupon-approvals')).toHaveLength(0);
-  fireEvent.click(screen.getByRole('button', { name: '내용 확인하기' }));
-  const second = await screen.findByRole('button', { name: '변경 한 번 더 확인하기' });
+  const review = within(screen.getByRole('region', { name: '플레이스 첫 방문을 지울까요?' }));
+  fireEvent.click(review.getByRole('button', { name: '지울 쿠폰 확인하기' }));
+  const second = await review.findByRole('button', { name: '쿠폰 지우기' });
   expect(backend.callsTo('DELETE', /naver-coupons/)).toHaveLength(0);
   fireEvent.click(second);
   await waitFor(() => expect(backend.callsTo('DELETE', /naver-coupons/)).toHaveLength(1));
@@ -104,7 +106,7 @@ it('checks a pending NAVER application with the original key and never treats 20
     : { receiptId: 'place-12', changed: true, state: 'applied' });
   fireEvent.click(await screen.findByRole('button', { name: '네이버 쿠폰 만들기' }));
   fireEvent.change(screen.getByLabelText('쿠폰 이름'), { target: { value: '첫 방문 할인' } });
-  fireEvent.click(screen.getByRole('radio', { name: '마케팅 메시지용' }));
+  fireEvent.click(screen.getByRole('radio', { name: '마케팅 메시지를 받는 손님' }));
   fireEvent.change(screen.getByRole('spinbutton', { name: '금액 할인' }), { target: { value: '500' } });
   fireEvent.click(screen.getByRole('button', { name: '만들 내용 확인하기' }));
   expect(backend.callsTo('POST', /^\/marketing/)).toEqual([]);
@@ -135,7 +137,7 @@ const endingCoupon = (over: Partial<CouponDto>): CouponDto => ({
 
 it('says why no reminder can go out instead of "no coupon is ending" while a coupon is ending (no reminder targets)', async () => {
   setup(undefined, false, [endingCoupon({})]);
-  expect(await screen.findByText('곧 끝나는 쿠폰 1장')).toBeInTheDocument();
+  expect(await screen.findByText('곧 끝나는 쿠폰 1개')).toBeInTheDocument();
   expect(screen.queryByText('곧 끝나는 쿠폰이 없어요')).not.toBeInTheDocument();
   expect(screen.getByText('알림을 보낼 수 있는 손님이 없어요')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '끝나기 전 알림 보내기' })).not.toBeInTheDocument();

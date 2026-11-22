@@ -43,16 +43,17 @@ it('smoke 1 default tax month uses canonical sales and deposits, including its e
   // The cafe seed has a payment record for every day of the month: deposits equal the ledger's month sales, nothing predates the payments.
   const displayed = (scope: ReturnType<typeof within>, value: string) => scope.getAllByText((_: string, node: Element | null) => node?.textContent === value, {selector:'.ui-pos-money--display'});
   expect(displayed(split, monthlySales)).toHaveLength(2);
-  expect(displayed(ledgerSplit, monthlySales)).toHaveLength(2);
+  expect(displayed(ledgerSplit, monthlySales)).toHaveLength(1);
+  expect(screen.getByRole('region', { name: '손익 확인' }).querySelector('[data-slot="ledger.kpi.sales"] .ui-metric-fit')).toHaveTextContent(monthlySales);
   expect(tax.queryByText(/자료만 있어요/)).toBeNull();
   expect(split.queryByText(/이전 날짜 매출/)).toBeNull();
   const exported = document.querySelector('[data-slot="tax.export"]')! as HTMLElement;
   const exportHeading = within(exported).getByRole('heading', { level: 3 });
   expect(within(exportHeading.parentElement!).queryByText('예시')).toBeNull();
   expect(tax.queryByText('예시')).toBeNull();
-  expect(within(exported).getByRole('row', { name: `매출 합계 ${monthlySales}` })).toBeInTheDocument();
+  expect(within(exported).queryByRole('row', { name: `매출 합계 ${monthlySales}` })).toBeNull();
   expect(within(exported).queryByRole('row', { name: /이전 날짜 매출/ })).toBeNull();
-  expect(within(exported).getByRole('row', { name: `실제 입금 ${monthlySales}` })).toBeInTheDocument();
+  expect(within(exported).queryByRole('row', { name: `실제 입금 ${monthlySales}` })).toBeNull();
   expect(within(exported).getByRole('button', { name: '세무사 자료 받기' })).toBeEnabled();
   act(() => {
     const money = h.actions.money;
@@ -64,18 +65,18 @@ it('smoke 1 default tax month uses canonical sales and deposits, including its e
   const depositsAfterTopup = won(ledgerMonth.model.sales.net + 50000);
   expect(displayed(split, monthlySales)).toHaveLength(1);
   expect(displayed(split, depositsAfterTopup)).toHaveLength(1);
-  expect(displayed(ledgerSplit, monthlySales)).toHaveLength(1);
+  expect(ledgerSplit.queryByText((_, node) => node?.textContent === monthlySales, { selector: '.ui-pos-money--display' })).toBeNull();
   expect(displayed(ledgerSplit, depositsAfterTopup)).toHaveLength(1);
-  expect(within(exported).getByRole('row', { name: `매출 합계 ${monthlySales}` })).toBeInTheDocument();
-  expect(within(exported).getByRole('row', { name: `실제 입금 ${depositsAfterTopup}` })).toBeInTheDocument();
+  expect(within(exported).queryByRole('row', { name: `매출 합계 ${monthlySales}` })).toBeNull();
+  expect(within(exported).queryByRole('row', { name: `실제 입금 ${depositsAfterTopup}` })).toBeNull();
   fireEvent.click(tax.getByRole('radio', { name: '지난달' }));
   // The cafe seed keeps closed days for last month too: the cards and the export preview read the same canonical projection.
   expect(tax.getByText('자료 기간 10월 1일(목)~31일(토)', { exact: false })).toBeInTheDocument();
   const [lastSales, lastDeposits] = Array.from(tax.getByRole('region', { name: '매출 · 실제 입금' }).querySelectorAll('.ui-pos-money--display'), node => node.textContent ?? '');
   expect(lastSales).toMatch(/^[1-9][\d,]*원$/);
   expect(lastDeposits).toMatch(/^[1-9][\d,]*원$/);
-  expect(within(exported).getByRole('row', { name: `매출 합계 ${lastSales}` })).toBeInTheDocument();
-  expect(within(exported).getByRole('row', { name: `실제 입금 ${lastDeposits}` })).toBeInTheDocument();
+  expect(within(exported).queryByRole('row', { name: `매출 합계 ${lastSales}` })).toBeNull();
+  expect(within(exported).queryByRole('row', { name: `실제 입금 ${lastDeposits}` })).toBeNull();
   expect(within(exported).getByRole('button', { name: '세무사 자료 받기' })).toBeEnabled();
 });
 

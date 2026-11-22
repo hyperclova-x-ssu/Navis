@@ -4,7 +4,8 @@ import { TODAY } from '../../../data/widget-data';
 import { useDomainState } from '../../../data/react';
 import { commandFailureText } from '../../../data/commands/failure-copy';
 import { dataBundle } from '../../../data/messages';
-import { useBundle, useI18n } from '../../../i18n';
+import { useBundle } from '../../../i18n';
+import { membershipPosBundle } from '../../../i18n/messages/membership-pos';
 import { ActionButton, ChipChoice, StatusChip } from '../../../ui';
 import { memberMoneyCopy as copy } from '../mgmt-customers/iteration7-member-messages';
 import { useMemberMoney } from './context';
@@ -25,7 +26,7 @@ function ProductTerms({ product }: { readonly product: PassProduct }) {
 }
 
 function PassCard({ pass, port, detailRef }: { readonly pass: MemberPass; readonly port: CreditPort; readonly detailRef: DetailRef }) {
-  const t = useI18n();
+  const t = useBundle(membershipPosBundle);
   const http = useDomainState('members').mode === 'http';
   const sale = useRef<HTMLButtonElement>(null), use = useRef<HTMLButtonElement>(null);
   const context = (returnFocusRef: MemberReturnContext['returnFocusRef']): MemberReturnContext => ({ detailRef, selectedId: pass.memberId, returnFocusRef });
@@ -36,18 +37,28 @@ function PassCard({ pass, port, detailRef }: { readonly pass: MemberPass; readon
     <ProductTerms product={{ productId: pass.membershipId, label: pass.productLabel, kind: pass.kind, price: pass.soldPrice, totalUses: pass.totalUses, validDays: pass.validDays }} />
     <p>{pass.kind === 'count' ? `남은 횟수 ${pass.usesRemaining ?? '—'}회 · ` : ''}{t.format.date(pass.startsOn, 'short')} ~ {t.format.date(pass.endsOn, 'short')}</p>
     <p>회원권 이용분 {pass.recognizedValue === null ? '—' : money(pass.recognizedValue)} · 남은 몫 {pass.unrecognizedValue === null ? '—' : money(pass.unrecognizedValue)}{pass.refundedValue !== null && pass.refundedValue > 0 && <> · {copy.refund} {money(pass.refundedValue)}</>}</p>
-    <div className="credit-actions"><ActionButton ref={use} variant="secondary" disabled={!canUse} onClick={() => port.openMembershipUse(pass.memberId, pass.membershipId, context(use))}>{copy.use}</ActionButton><ActionButton ref={sale} variant="ghost" disabled={!pass.saleSettlementId} onClick={() => port.openOriginalTransaction({ settlementId: pass.saleSettlementId, membershipId: pass.membershipId, ...(http && pass.saleSettlementId ? { fundingId: pass.saleSettlementId } : {}) }, context(sale))}>{copy.original}</ActionButton></div>
+    <div className="credit-actions"><ActionButton ref={use} variant="secondary" disabled={!canUse} onClick={() => port.openMembershipUse(pass.memberId, pass.membershipId, context(use))}>{http ? t.t('membershipPos.recordFromMember') : copy.use}</ActionButton><ActionButton ref={sale} variant="ghost" disabled={!pass.saleSettlementId} onClick={() => port.openOriginalTransaction({ settlementId: pass.saleSettlementId, membershipId: pass.membershipId, ...(http && pass.saleSettlementId ? { fundingId: pass.saleSettlementId } : {}) }, context(sale))}>{copy.original}</ActionButton></div>
     <ul className="credit-history">{pass.uses.map(entry => <PassUse key={entry.useId} entry={entry} pass={pass} port={port} detailRef={detailRef} />)}</ul>
   </div>;
 }
 function PassUse({ entry, pass, port, detailRef }: { readonly entry: MemberPass['uses'][number]; readonly pass: MemberPass; readonly port: CreditPort; readonly detailRef: DetailRef }) {
-  const ref = useRef<HTMLButtonElement>(null), t = useI18n(), data = useBundle(dataBundle);
+  const ref = useRef<HTMLButtonElement>(null), t = useBundle(dataBundle, membershipPosBundle);
   const command = useMemberCommand(), projection = useMemberProjection();
   const [confirm, setConfirm] = useState(false), [error, setError] = useState('');
   const canCancel = command.http && entry.settlementId && !entry.canceledAt;
+  const openOriginal = () => port.openOriginalTransaction({
+    useId: entry.useId, membershipId: pass.membershipId, settlementId: entry.settlementId,
+    sourceRef: entry.sourceRef ?? { kind: 'membership_use', id: entry.useId },
+  }, { detailRef, selectedId: pass.memberId, returnFocusRef: ref });
   const cancel = () => command.run({ type: 'memberships.cancelUse', useId: entry.useId }, result => {
     if (!result.ok) {
-      setError(result.outcomeUnknown ? '취소 결과를 확인하지 못했어요. 다시 확인해 주세요' : commandFailureText(data.t, result));
+      if (result.reason === 'MEMBERSHIP_POS_CONTEXT_REQUIRED' || result.reason === 'USE_REFUND') {
+        setConfirm(false);
+        setError('');
+        openOriginal();
+        return;
+      }
+      setError(result.outcomeUnknown ? '취소 결과를 확인하지 못했어요. 다시 확인해 주세요' : commandFailureText(t.t, result));
       return;
     }
     setConfirm(false);
@@ -56,9 +67,9 @@ function PassUse({ entry, pass, port, detailRef }: { readonly entry: MemberPass[
   });
   return <li><div className="credit-stack"><span>{t.format.dateTime(entry.usedAt, { today: TODAY })}{entry.canceledAt ? ' · 사용 취소됨' : ''}</span>
     <div className="credit-actions">
-      <ActionButton ref={ref} variant="ghost" onClick={() => port.openOriginalTransaction({ useId: entry.useId, membershipId: pass.membershipId, settlementId: entry.settlementId, sourceRef: entry.sourceRef ?? { kind: 'membership_use', id: entry.useId } }, { detailRef, selectedId: pass.memberId, returnFocusRef: ref })}>원거래 보기</ActionButton>
-      {canCancel && !projection.status && <ActionButton variant="ghost" disabled={command.pending} aria-expanded={confirm} onClick={() => setConfirm(!confirm)}>사용 취소하기</ActionButton>}
-      {canCancel && confirm && <ActionButton variant="destructive" loading={command.pending} onClick={cancel}>사용 취소 확인</ActionButton>}
+      <ActionButton ref={ref} variant="ghost" onClick={openOriginal}>원거래 보기</ActionButton>
+      {canCancel && !projection.status && <ActionButton variant="ghost" disabled={command.pending} aria-expanded={confirm} onClick={() => setConfirm(!confirm)}>{t.t('membershipPos.cancel')}</ActionButton>}
+      {canCancel && confirm && <ActionButton variant="destructive" loading={command.pending} onClick={cancel}>{t.t('membershipPos.confirmCancel')}</ActionButton>}
       {projection.status === 'retry' && <ActionButton variant="secondary" onClick={projection.retry}>다시 시도하기</ActionButton>}
     </div>
     {projection.status && <p role="status">{projection.status === 'loading' ? '사용 취소를 불러오고 있어요' : '사용 취소를 아직 불러오지 못했어요'}</p>}

@@ -1,25 +1,34 @@
 /** 세무관리 (SCR-219): POS payment records, review and accountant data. */
-import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { DetailRef, QueryCondition, WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../../contracts';
-import { useDataDispatch, useDomainState, useRealRetry, useWidgetView } from '../../../data/react';
+import { useDataDispatch, useDomainState, useRealPort, useRealRetry, useWidgetView } from '../../../data/react';
 import { resolveDataText, TODAY, supportedConditions, type TaxItemRow, type TaxModel } from '../../../data/widget-data';
 import { ActionButton, AnchoredPopover, ChipChoice, DataGrid, DateField, DetailDialog, DetailTabs, Icon, InlineForm, MasterDetail, NumberField, StatusBadge, StatusChip, Table, TextField, type GridAction, type GridColumn, type GridFocus, type GridSort, type DataGridHandle } from '../../../ui';
 import { compareTaxDue, selectNextTaxPayment } from '../../../data/commands/management-guards';
 import type { FitPart } from './fit';
 import { DetailViewState, Kpi, MoneyPanel, MONEY_FIT, NoteLine, ViewState, splitMoney, useMoneyT, useRunCommand, useSizeCtx, type PanelSpec, type RowData, type T } from './shared';
 
-import { accountingForPeriod, SalesDepositSplitCard, useAccountingPresentation, type AccountingDetailProps } from './ledger';
+import { accountingForPeriod, SalesDepositSplitCard, useAccountingPresentation, type AccountingDetailProps, type AccountingView } from './ledger';
 import { accountingCopy } from './iteration7-accounting-messages';
 import { moneyDetailPrefill } from '../../assistant/domains/money';
 import { useRunTaxCommand } from './tax.commands';
 import { useTaxCopy } from './tax.copy';
 import { TaxEvidence } from './tax.evidence';
-import { TaxExportActions } from './tax.export';
-import { downloadTaxFile } from './tax.file';
+import { ExampleTaxExportActions, TaxExportActions } from './tax.export';
+import { exampleTaxFile, type ExampleTaxFormat, type ExampleTaxRow } from './tax.example-file';
 import { commandFailureText } from '../../../data/commands/failure-copy';
 import { dateRangeWithWeekdays } from '../date-range';
 
 const ID = 'tax' as const;
+const HOMETAX = 'https://www.hometax.go.kr/';
+
+/** What the service's export preview counts, over the example payments: due or paid inside the period, the paid and unpaid sums, and those with an evidence file. */
+function examplePaymentTotals(model: TaxModel) {
+  const { period } = model;
+  const rows = model.payments.filter(row => !period || (row.dueOn >= period.start && row.dueOn <= period.end) || (!!row.paidOn && row.paidOn >= period.start && row.paidOn <= period.end));
+  const sum = (status: 'paid' | 'unpaid') => rows.filter(row => row.status === status).reduce((total, row) => total + row.amount, 0);
+  return { paidTotal: sum('paid'), unpaidTotal: sum('unpaid'), withEvidenceFile: rows.filter(row => row.evidence === 'example').length };
+}
 
 function memoText(t: T, item: TaxItemRow): string {
   return item.memo ? ('raw' in item.memo ? item.memo.raw : t(item.memo.key, item.memo.params)) : t(item.categoryKey);
@@ -90,9 +99,13 @@ export function TaxDetail({ condition, detailRef, host, accounting: explicitAcco
   const state = useDomainState(ID);
   const retry = useRealRetry(ID);
   const real = state.mode === 'http';
+  // PAR-1: the sales and deposit cards of the original window come from the finance service over HTTP; load that domain with this window.
+  const money = useDomainState('money');
+  const retryMoney = useRealRetry('money');
+  const port = useRealPort();
+  useEffect(() => { if (real && port && money.mode === 'http' && money.status === 'idle') void port.load('money'); }, [real, port, money.mode, money.status]);
   const [period, setPeriod] = useState<PeriodKey>(() => (condition.kind === 'dateRange' ? 'last' : 'month'));
   const [selectedId, setSelectedId] = useState<string | null>(() => detailRef.itemId ?? null);
-  const [exportStatus, setExportStatus] = useState<'done' | 'error'>();
   const [chosenTab, setTab] = useState<'data' | 'payments'>();
   const [listOpen, setListOpen] = useState(false);
   const view = useWidgetView(ID, conditionFor(period));
@@ -101,12 +114,23 @@ export function TaxDetail({ condition, detailRef, host, accounting: explicitAcco
   const runTax = useRunTaxCommand(host, real);
   const busy = useRef(false);
   const [checking, setChecking] = useState(false);
-  const chips = <ChipChoice label={t('widget.tax.period')} value={period} onChange={(p) => { setPeriod(p); setExportStatus(undefined); }} options={[{ value: 'month', label: t('widget.tax.thisMonth') }, { value: 'last', label: t('widget.tax.lastMonth') }]} />;
+  const chips = <ChipChoice label={t('widget.tax.period')} value={period} onChange={setPeriod} options={[{ value: 'month', label: t('widget.tax.thisMonth') }, { value: 'last', label: t('widget.tax.lastMonth') }]} />;
   if (view.status !== 'ready') return <div className="mm-detail" data-widget={ID}>{chips}<DetailViewState view={view} host={real ? { ...host, resetPreview: retry } : host} t={t} /></div>;
   const m = view.model;
   const linkedPayment = real && (detailRef.view === 'evidence' || !detailRef.view && m.payments.some(row => row.taxPaymentId === detailRef.itemId));
   const tab = chosenTab ?? (detailRef.view === 'payments' || linkedPayment ? 'payments' : 'data');
   const accounting = !real && m.period ? accountingForPeriod(presentation, m.period, explicitAccounting) : undefined;
+  /** The sales and deposit cards: the example day's figures, or over HTTP the finance service's once that domain has loaded (never the seed's). */
+  const financeLoaded = money.mode !== 'http' || money.status === 'ready' || money.status === 'stale';
+  const cards: AccountingView | undefined = !m.period ? undefined : !real ? accounting
+    : money.mode === 'http' && money.status === 'error' ? { status: 'error', period: m.period }
+      : financeLoaded ? accountingForPeriod(presentation, m.period, explicitAccounting) : { status: 'loading', period: m.period };
+  /** The payment totals of the export table: the service's preview, or the same sums over the example payments due or paid in the period. */
+  const paymentTotals = m.real?.preview.taxPayments ?? examplePaymentTotals(m);
+  const exportSales = accounting ? accounting.status === 'ready' ? accounting.summary.sales.total : null : m.exportPreview.salesTotal;
+  const exportDeposits = m.real ? m.real.preview.deposits.total : accounting?.status === 'ready' ? accounting.summary.deposits.total : null;
+  const repeatSales = cards?.status === 'ready' && cards.summary.sales.total === exportSales;
+  const repeatDeposits = cards?.status === 'ready' && cards.summary.deposits.total === exportDeposits;
   const cashReceipts = m.exportPreview.cashReceipts;
   const selected = m.items.find((i) => i.refId === selectedId) ?? m.items.find((i) => i.status === 'needs-check') ?? m.items[0] ?? null;
   const full = (n: number) => t.format.money(n, 'full');
@@ -117,29 +141,28 @@ export function TaxDetail({ condition, detailRef, host, accounting: explicitAcco
     try { await runTax({ type: 'tax.markChecked', refId }); }
     finally { busy.current = false; setChecking(false); }
   };
-  const doExport = () => {
-    if (!m.period || busy.current || accounting && accounting.status !== 'ready') return;
+  /** The example data's accountant file: the rows of the table above in the chosen format (the command records the export like before). */
+  const exampleFile = (format: ExampleTaxFormat) => {
+    if (!m.period || busy.current || accounting && accounting.status !== 'ready') throw new Error('Export is not available');
     busy.current = true;
     try {
       const result = dispatch({ type: 'tax.export', period: m.period });
-      if (!result.ok) { setExportStatus('error'); return; }
+      if (!result.ok) throw new Error(result.messageKey);
       const preview = m.exportPreview;
-      const rows: [string, string | number][] = [
+      const rows: ExampleTaxRow[] = [
         [t('widget.tax.exportItem'), t('widget.tax.exportValue')],
         [t('widget.tax.period'), `${m.period.start} – ${m.period.end}`],
         [t('widget.tax.salesTotal'), accounting?.summary.sales.total ?? preview.salesTotal],
         [t('widget.tax.expenseTotal'), preview.expenseTotal],
         [t('widget.tax.withEvidence'), preview.withEvidence],
         [t('widget.tax.missingEvidence'), preview.missingEvidence],
+        [copy('paidTotal'), paymentTotals.paidTotal],
+        [copy('unpaidTotal'), paymentTotals.unpaidTotal],
+        [copy('paymentsWithFiles'), paymentTotals.withEvidenceFile],
       ];
       if (accounting) rows.push([accountingCopy.deposits, accounting.summary.deposits.total]);
       if (cashReceipts) rows.push([t('widget.tax.cashReceipts'), cashReceipts.amount]);
-      const csv = rows.map(row => row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');
-      const blob = new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' });
-      downloadTaxFile(URL.createObjectURL(blob), `tax-${m.period.start}-${m.period.end}.csv`);
-      setExportStatus('done');
-    } catch {
-      setExportStatus('error');
+      return { blob: exampleTaxFile(rows, format), filename: `tax-${m.period.start}-${m.period.end}.${format}` };
     } finally {
       busy.current = false;
     }
@@ -179,14 +202,14 @@ export function TaxDetail({ condition, detailRef, host, accounting: explicitAcco
   ) : <p className="mm-muted">{t('widget.tax.selectItem')}</p>;
   return (
     <div className={`mm-detail${tab === 'payments' ? ' mm-detail--grid' : ''}`} data-widget={ID}>
-      <DetailTabs value={tab} onValueChange={setTab} label={t('widget.tax.tabs')} tabs={[{ value: 'data', label: t('widget.tax.dataTab') }, { value: 'payments', label: real ? copy('payments') : t('widget.tax.paymentsTab') }]} />
-      {real ? <p className="mm-detail__note">{t('common.linked.tax.paymentNote')}</p> : null}
+      <DetailTabs value={tab} onValueChange={setTab} label={t('widget.tax.tabs')} tabs={[{ value: 'data', label: t('widget.tax.dataTab') }, { value: 'payments', label: t('widget.tax.paymentsTab') }]} />
+      {tab === 'payments' && <p className="mm-detail__note">{t('common.linked.tax.paymentNote')}</p>}
       {real && view.notes?.length ? <div className="mm-actions"><NoteLine notes={view.notes} t={t} /><ActionButton variant="secondary" onClick={retry}>{t('data.action.retry')}</ActionButton></div> : null}
       {tab === 'payments' ? <TaxPayments payments={view.variant === 'all-checked' ? [] : m.payments} host={host} detailRef={detailRef} emptyPreview={view.variant === 'all-checked'} real={real} today={m.today ?? TODAY} /> : <>
       <div className="mm-detail__tools">{chips}</div>
       {m.period ? <p className="mm-detail__note">{t('widget.tax.period')} {dateRangeWithWeekdays(t, m.period.start, m.period.end)}</p> : <p className="mm-detail__note" role="status"><StatusBadge kind="needsReview" label={t('data.state.tax.missing-data')} /></p>}
       <MasterDetail list={list} detail={detail} listLabel={t('widget.tax.list')} detailLabel={t('widget.tax.check')} />
-      {accounting ? <SalesDepositSplitCard view={accounting} featureId="tax" onRetry={presentation?.onRetry ?? host.resetPreview} /> : null}
+      {cards ? <SalesDepositSplitCard view={cards} featureId="tax" onRetry={real ? retryMoney : presentation?.onRetry ?? host.resetPreview} /> : null}
       <section className="mm-card" aria-label={t('widget.tax.estimate')} data-slot="tax.estimate">
         <h3 className="mm-card__title">{t('widget.tax.estimate')}</h3>
         {m.estimate ? (
@@ -203,29 +226,21 @@ export function TaxDetail({ condition, detailRef, host, accounting: explicitAcco
         <Table className="mm-table">
           <thead><tr><th scope="col">{t('widget.tax.exportItem')}</th><th scope="col">{t('widget.tax.exportValue')}</th></tr></thead>
           <tbody>
-            <tr><th scope="row">{t('widget.tax.salesTotal')}</th><td>{accounting ? accounting.status === 'ready' ? full(accounting.summary.sales.total) : '—' : full(m.exportPreview.salesTotal)}</td></tr>
+            {!repeatSales ? <tr><th scope="row">{t('widget.tax.salesTotal')}</th><td>{exportSales === null ? '—' : full(exportSales)}</td></tr> : null}
             {accounting?.status === 'ready' && accounting.legacySales !== undefined ? <tr><th scope="row">{accountingCopy.legacySales}</th><td>{full(accounting.legacySales)}</td></tr> : null}
-            {m.real ? <tr><th scope="row">{accountingCopy.deposits}</th><td>{full(m.real.preview.deposits.total)}</td></tr> : accounting ? <tr><th scope="row">{accountingCopy.deposits}</th><td>{accounting.status === 'ready' ? full(accounting.summary.deposits.total) : '—'}</td></tr> : null}
+            {!repeatDeposits && (m.real || accounting) ? <tr><th scope="row">{accountingCopy.deposits}</th><td>{exportDeposits === null ? '—' : full(exportDeposits)}</td></tr> : null}
             <tr><th scope="row">{t('widget.tax.cashReceipts')}</th><td>{cashReceipts ? t('widget.tax.cashReceiptTotal', { n: cashReceipts.count, amount: full(cashReceipts.amount) }) : copy(m.real ? 'cashReceiptsUnavailable' : 'noData')}</td></tr>
             <tr><th scope="row">{t('widget.tax.expenseTotal')}</th><td>{full(m.exportPreview.expenseTotal)}</td></tr>
-            <tr><th scope="row">{m.real ? copy('classifiedExpenses') : t('widget.tax.withEvidence')}</th><td>{t.format.count(m.exportPreview.withEvidence, 'count')}</td></tr>
-            <tr><th scope="row">{m.real ? copy('unclassifiedExpenses') : t('widget.tax.missingEvidence')}</th><td>{t.format.count(m.exportPreview.missingEvidence, 'count')}</td></tr>
-            {m.real ? <>
-              <tr><th scope="row">{copy('paidTotal')}</th><td>{full(m.real.preview.taxPayments.paidTotal)}</td></tr>
-              <tr><th scope="row">{copy('unpaidTotal')}</th><td>{full(m.real.preview.taxPayments.unpaidTotal)}</td></tr>
-              <tr><th scope="row">{copy('paymentsWithFiles')}</th><td>{t.format.count(m.real.preview.taxPayments.withEvidenceFile, 'count')}</td></tr>
-            </> : null}
+            <tr><th scope="row">{t('widget.tax.withEvidence')}</th><td>{t.format.count(m.exportPreview.withEvidence, 'count')}</td></tr>
+            <tr><th scope="row">{t('widget.tax.missingEvidence')}</th><td>{t.format.count(m.exportPreview.missingEvidence, 'count')}</td></tr>
+            <tr><th scope="row">{copy('paidTotal')}</th><td>{full(paymentTotals.paidTotal)}</td></tr>
+            <tr><th scope="row">{copy('unpaidTotal')}</th><td>{full(paymentTotals.unpaidTotal)}</td></tr>
+            <tr><th scope="row">{copy('paymentsWithFiles')}</th><td>{t.format.count(paymentTotals.withEvidenceFile, 'count')}</td></tr>
           </tbody>
         </Table>
-        {m.real ? <>
-          {m.real.officialLinks.hometax === 'https://www.hometax.go.kr/' ?
-            <div className="mm-actions"><a className="ui-button ui-button--secondary ui-button--default" href={m.real.officialLinks.hometax} target="_blank" rel="noopener noreferrer"><span className="ui-press-surface">{t('common.linked.tax.openHometax')}</span></a></div> : null}
-          <TaxExportActions key={period} read={m.real} disabled={state.refreshing || state.status === 'stale'} />
-        </> : <div className="mm-actions">
-          <ActionButton variant="outline" disabled={m.period === null || !!accounting && accounting.status !== 'ready'} onClick={doExport}>{t('common.linked.tax.accountantFile')}</ActionButton>
-          {exportStatus === 'done' ? <p className="mm-done" role="status"><Icon name="check" /> {copy('downloaded')}</p> : null}
-          {exportStatus === 'error' ? <p className="mm-muted" role="alert">{copy('exportError')}</p> : null}
-        </div>}
+        {!m.real || m.real.officialLinks.hometax === HOMETAX ? <div className="mm-actions"><a className="ui-button ui-button--secondary ui-button--default" href={HOMETAX} target="_blank" rel="noopener noreferrer"><span className="ui-press-surface">{t('common.linked.tax.openHometax')}</span></a></div> : null}
+        {m.real ? <TaxExportActions key={period} read={m.real} disabled={state.refreshing || state.status === 'stale'} />
+          : <ExampleTaxExportActions key={period} build={exampleFile} disabled={m.period === null || !!accounting && accounting.status !== 'ready'} />}
       </section>
       </>}
     </div>
@@ -303,7 +318,7 @@ function TaxPayments({ payments, host, detailRef, emptyPreview, real, today }: {
   type Row = TaxModel['payments'][number];
   const editable = () => !working;
   const columns: GridColumn<Row>[] = [
-    { id: 'type', header: t('widget.tax.type'), kind: 'text', sortable: true, minWidth: 180, value: p => resolveDataText(t, p.type), render: p => <TaxTypeName name={resolveDataText(t, p.type)} />, editable },
+    { id: 'type', header: t('widget.tax.type'), kind: 'text', sortable: true, minWidth: 180, fixedWidth: true, value: p => resolveDataText(t, p.type), render: p => <TaxTypeName name={resolveDataText(t, p.type)} />, editable },
     { id: 'amount', header: t('widget.tax.amount'), kind: 'number', sortable: true, minWidth: 160, fixedWidth: true, value: p => p.amount, render: p => t.format.money(p.amount, 'full'), accessibleValue: p => t.format.money(p.amount, 'full'), editable },
     { id: 'dueOn', header: t('widget.tax.due'), kind: 'text', sortable: true, minWidth: 160, fixedWidth: true, value: p => p.dueOn, render: p => t.format.date(p.dueOn, 'short'), accessibleValue: p => t.format.date(p.dueOn, 'short'), editable, editor: 'date' },
     { id: 'paidOn', header: t('widget.tax.paidOn'), kind: 'text', minWidth: 130, fixedWidth: true, value: p => p.paidOn ? t.format.date(p.paidOn, 'short') : '–' },
@@ -324,8 +339,7 @@ function TaxPayments({ payments, host, detailRef, emptyPreview, real, today }: {
   const deleteRow = payments.find(row => row.taxPaymentId === deleteId);
   const evidenceRow = payments.find(row => row.taxPaymentId === evidenceId);
   return <section className="mm-card mm-detail__grid mm-tax-payments">
-    {real && working ? <p className="mm-note" role="status">{copy('loading')}</p> : null}
-    {nextDue ? <p className="mm-note" data-slot="tax.nextDue">{t('widget.tax.nextDue', { date: t.format.date(nextDue.dueOn, 'short') })}</p> : null}<DataGrid ref={grid} id="tax-payments" label={real ? copy('payments') : t('widget.tax.paymentsTab')} rows={[...payments].sort((a, b) => { const field = sort?.columnId; const av = field === 'amount' ? a.amount : field === 'type' ? resolveDataText(t, a.type) : a.dueOn; const bv = field === 'amount' ? b.amount : field === 'type' ? resolveDataText(t, b.type) : b.dueOn; return (typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv))) * (sort?.direction === 'asc' ? 1 : -1) || a.taxPaymentId.localeCompare(b.taxPaymentId); })} getRowId={p => p.taxPaymentId} getRowLabel={p => resolveDataText(t, p.type)} columns={columns} sort={sort} onSortChange={setSort} selectedRowId={null} expandedRowIds={new Set()} focus={focus} onFocusChange={setFocus} emptyContent={t('widget.tax.emptyPayments')} addAction={{ id: 'add', label: t('widget.tax.addPayment'), disabled: working, onPress: () => { if (emptyPreview) host.resetPreview(); setAdding(true); } }} getRowActions={p => [
+    {nextDue ? <p className="mm-note" data-slot="tax.nextDue">{t('widget.tax.nextDue', { date: t.format.date(nextDue.dueOn, 'short') })}</p> : null}<DataGrid ref={grid} id="tax-payments" label={t('widget.tax.paymentsTab')} rows={[...payments].sort((a, b) => { const field = sort?.columnId; const av = field === 'amount' ? a.amount : field === 'type' ? resolveDataText(t, a.type) : a.dueOn; const bv = field === 'amount' ? b.amount : field === 'type' ? resolveDataText(t, b.type) : b.dueOn; return (typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv))) * (sort?.direction === 'asc' ? 1 : -1) || a.taxPaymentId.localeCompare(b.taxPaymentId); })} getRowId={p => p.taxPaymentId} getRowLabel={p => resolveDataText(t, p.type)} columns={columns} sort={sort} onSortChange={setSort} selectedRowId={null} expandedRowIds={new Set()} focus={focus} onFocusChange={setFocus} emptyContent={t('widget.tax.emptyPayments')} addAction={{ id: 'add', label: t('widget.tax.addPayment'), disabled: working, onPress: () => { if (emptyPreview) host.resetPreview(); setAdding(true); } }} getRowActions={p => [
     ...(p.status === 'unpaid' ? [{ id: 'paid', label: markPaidLabel, onPress: () => void perform(async () => {
       await runTax({ type: 'tax.markPaid', taxPaymentId: p.taxPaymentId }, t.locale === 'ko' ? { messageKey: 'data.management.notice.taxPaid', params: { name: resolveDataText(t, p.type) } } : undefined);
     }) }] : []),
@@ -333,7 +347,7 @@ function TaxPayments({ payments, host, detailRef, emptyPreview, real, today }: {
       : p.evidence === 'example' ? [] : [{ id: 'evidence', label: t('widget.tax.addEvidence'), onPress: () => { run({ type: 'tax.setEvidence', taxPaymentId: p.taxPaymentId, evidence: 'example' }); } }]),
     { id: 'edit', label: t.locale === 'ko' ? '납부 기록 고치기' : 'Edit payment', onPress: () => { grid.current?.focusCell(p.taxPaymentId, 'type'); document.activeElement?.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})); } },
     { id: 'delete', label: t('widget.tax.delete'), onPress: () => setDeleteId(p.taxPaymentId) },
-  ]} renderRowActions={(p, actions) => <TaxRowActions actions={actions} label={t.locale === 'ko' ? `${resolveDataText(t, p.type)} 더 보기` : 'More'} longestLabel={markPaidLabel} busy={working} />} renderAddRow={() => adding ? <InlineForm title={t('widget.tax.addPayment')} onClose={() => { setAdding(false); setExisting(null); }} onSave={() => save(false)} saving={working}><TextField label={t('widget.tax.type')} value={taxType} onValueChange={setType} /><NumberField label={t('widget.tax.amount')} value={amount} onValueChange={setAmount} min={1} error={error} /><DateField label={t('widget.tax.due')} value={due} onValueChange={value => setDue(value ?? today)} />{existing ? <><p className="mm-note" data-slot="tax.existing">{t('widget.tax.existing', { type: existing.type, amount: t.format.money(existing.amount, 'full'), date: t.format.date(existing.dueOn, 'short') })}</p><ActionButton variant="secondary" disabled={working} onClick={() => save(true)}>{t('widget.tax.addAnyway')}</ActionButton></> : null}</InlineForm> : null} onCommit={({ rowId, columnId, raw }) => {
+  ]} renderRowActions={(p, actions) => <TaxRowActions actions={actions} label={t.locale === 'ko' ? `${resolveDataText(t, p.type)} 더 보기` : 'More'} longestLabel={markPaidLabel} busy={working} />} renderAddRow={() => adding ? <InlineForm footerActions title={t('widget.tax.addPayment')} onClose={() => { setAdding(false); setExisting(null); setError(undefined); }} onSave={() => save(false)} saving={working} saveLabel={t.locale === 'ko' ? '납부 기록 저장하기' : undefined}><TextField label={t('widget.tax.type')} value={taxType} onValueChange={setType} /><NumberField label={t('widget.tax.amount')} value={amount} onValueChange={value => { setAmount(value); setError(undefined); setExisting(null); }} min={1} error={error} /><DateField label={t('widget.tax.due')} value={due} onValueChange={value => setDue(value ?? today)} />{existing ? <><p className="mm-note" data-slot="tax.existing">{t('widget.tax.existing', { type: existing.type, amount: t.format.money(existing.amount, 'full'), date: t.format.date(existing.dueOn, 'short') })}</p><ActionButton variant="secondary" disabled={working} onClick={() => save(true)}>{t('widget.tax.addAnyway')}</ActionButton></> : null}</InlineForm> : null} onCommit={({ rowId, columnId, raw }) => {
     const patch = columnId === 'amount' ? { amount: Number(raw) } : columnId === 'type' ? { type: raw } : { dueOn: raw };
     const command = { type: 'tax.updatePayment', taxPaymentId: rowId, patch } as const;
     if (real) {

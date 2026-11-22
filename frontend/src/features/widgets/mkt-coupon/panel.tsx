@@ -27,9 +27,10 @@ export function CouponSourceNote({ id }: { readonly id: 'slot-coupon' | 'expiry-
 export interface PanelKpi { readonly value: string; readonly unit: string; /** longest value the widget can show (stable stage) */ readonly longest?: string }
 export interface PanelActionSpec { readonly label: string; readonly widgetName: string; readonly onPress: () => void }
 
-export function MktPanel({ id, shape, width, height, editing, label, kpi, descs, aside, rows, action }: {
+export function MktPanel({ id, shape, width, height, editing, label, labelFirst = false, kpi, descs, aside, rows, action, primaryRow }: {
   readonly id: string; readonly shape: ContentShape; readonly width: number; readonly height: number; readonly editing: boolean;
-  readonly label: string; readonly kpi: PanelKpi;
+  readonly label: string; readonly labelFirst?: boolean; readonly kpi: PanelKpi;
+  readonly primaryRow?: string;
   /** one-line description candidates, most informative first (the next one is used when the first does not fit) */ readonly descs?: readonly string[];
   /** not Q: extra line next to / under the description (e.g. the ‘확인 필요’ note) */ readonly aside?: ReactNode;
   /** T / S / L only: one node per row */ readonly rows?: readonly ReactNode[]; readonly action: PanelActionSpec | null;
@@ -44,14 +45,17 @@ export function MktPanel({ id, shape, width, height, editing, label, kpi, descs,
   usePanelFit(root, fitCouponPanel);
   const button=action?<PanelAction label={action.label} widgetName={action.widgetName} hidden={editing || undefined} onPress={action.onPress}/>:undefined;
   const description=list.length&&(!mode.isQ||list[0]!==label)?<div className="mkt-desc" data-slot={`${id}.metric.desc`}>{list.map((desc,index)=><span key={desc} data-mkt-desc-candidate="" hidden={index!==0} lang={koreanLang(desc)}>{keepDots(desc)}</span>)}</div>:null;
+  const metricLabel = <p className="mkt-label" data-slot={`${id}.metric.label`} lang={koreanLang(label)}>{label}</p>;
   const primary = <>
+    {labelFirst ? metricLabel : null}
     <div className="mkt-number-row">
       <Live value={kpi.value}>
         <span data-slot={`${id}.metric.value`} className="mkt-kpi"><MetricFit value={kpi.value} unit={kpi.unit} longest={kpi.longest ?? kpi.value} stacked={false} minStage={mode.isQ ? mode.minStage : 0} /></span>
       </Live>
       {mode.isQ?button:null}
     </div>
-    <p className="mkt-label" data-slot={`${id}.metric.label`} lang={koreanLang(label)}>{label}</p>
+    {labelFirst ? null : metricLabel}
+    {primaryRow && <p className="mkt-primary-row" lang={koreanLang(primaryRow)}>{keepDots(primaryRow)}</p>}
     {mode.isQ?<div className="ui-sr-only">{description}</div>:!mode.isW?description:null}
   </>;
   return <div ref={root} className="mkt-panel" data-widget={id} data-shape={shape} data-width={width} data-height={height}>

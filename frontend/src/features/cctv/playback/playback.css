@@ -30,7 +30,7 @@
 .cctv-zone--occupied { stroke:var(--det-seated); fill:color-mix(in srgb, var(--det-seated) 16%, transparent); }
 .cctv-zone--empty { stroke:var(--det-empty); fill:color-mix(in srgb, var(--det-empty) 16%, transparent); stroke-dasharray:6 4; }
 .cctv-zone--clear { stroke:var(--det-clear); fill:color-mix(in srgb, var(--det-clear) 16%, transparent); stroke-width:3; stroke-dasharray:8 4; }
-.cctv-zone-label { position:absolute; padding:2px 6px; border-radius:4px; background:var(--det-chip-bg); color:var(--det-chip-fg); font-size:14px; line-height:18px; font-weight:700; white-space:nowrap; }
+.cctv-zone-label { position:absolute; padding:2px 6px; border-radius:4px; background:var(--det-chip-bg); color:var(--det-chip-fg); font-size:var(--type-body); line-height:var(--leading-body); font-weight:700; white-space:nowrap; }
 .cctv-skeleton, .cctv-box-error { position:absolute; left:0; right:0; bottom:0; padding:var(--space-3) var(--space-4); background:var(--det-chip-bg); color:var(--det-chip-fg); font-size:var(--type-body); }
 .cctv-skeleton { inset:0; display:flex; align-items:center; justify-content:center; bottom:auto; height:100%; }
 .cctv-box-error { display:flex; gap:var(--space-3); align-items:center; flex-wrap:wrap; }

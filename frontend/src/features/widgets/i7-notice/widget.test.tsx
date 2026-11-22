@@ -26,20 +26,42 @@ const sentRows = [
 ];
 
 describe('notice editor', () => {
+  it('shows the delivery channel before its recipient controls and keeps draft deletion out of a blank editor', () => {
+    render(<NoticeEditor view={view} port={makePort()} deliveryChannels />);
+    expect(screen.getByText('공지 종류', { exact: true })).toBeVisible();
+    expect(screen.getByText('보낼 곳', { exact: true })).toBeVisible();
+    expect(screen.queryByRole('button', { name: '임시 저장 지우기' })).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: '톡톡 마케팅' }));
+    expect(screen.queryByRole('radio', { name: '연락처가 있는 회원 전체' })).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: '문자' }));
+    expect(screen.getByRole('button', { name: '예약하기' })).toHaveClass('ui-button--default');
+    expect(screen.getByText('보낼 시각을 골라 주세요')).toBeVisible();
+  });
   it('keeps the compact action alongside the number and hides the third line', () => {
     const open = vi.fn();
     const { container } = renderBare(<NoticePanel view={view} width={1} height={1} onOpen={open} onRetry={() => {}} />);
     expect(screen.queryByText('11/02 임시 휴무')).toBeNull();
     expect(container.querySelector('.i7-notice-metric-line button')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /공지 쓰기/ }));
+    fireEvent.click(screen.getByRole('button', { name: /공지 보내기/ }));
     expect(open).toHaveBeenCalledOnce();
   });
   it('shows the source closure count in every panel size', () => {
     for (const width of [1, 2, 3, 4]) for (const height of [1, 2, 3, 4]) {
       renderBare(<NoticePanel view={view} width={width} height={height} onOpen={() => {}} onRetry={() => {}} />);
-      expect(screen.getByText('공지 미발송')).toBeTruthy();
+      expect(screen.getByText('안 보낸 공지')).toBeTruthy();
       cleanup();
     }
+  });
+  it('gives a wide notice panel source labels and a next step on the empty scheduled tab', () => {
+    render(<>
+      <NoticePanel view={view} width={4} height={4} onOpen={() => {}} onRetry={() => {}} />
+      <NoticeEditor view={view} port={makePort()} detailRef={{ featureId: 'notice-send', view: 'scheduled' }} />
+    </>);
+    expect(screen.getByRole('heading', { name: '다가오는 매장 휴무' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: '임시 저장한 공지' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: '보낸 기록' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '공지 작성하기' }));
+    expect(screen.getByRole('tab', { name: '공지 작성' })).toHaveAttribute('aria-selected', 'true');
   });
   it('writes the panel history times as 오늘 {time} or {M/D(요일)} {time}, never ISO', () => {
     renderBare(<NoticePanel view={{ ...view, sent: sentRows }} width={2} height={3} onOpen={() => {}} onRetry={() => {}} />);
@@ -130,7 +152,8 @@ describe('notice editor', () => {
     render(<DetailFooterContext.Provider value={{ slot, claim: () => {} }}><NoticeEditor view={view} port={port} /></DetailFooterContext.Provider>);
     for (const name of ['임시 저장하기', '미리보기', '공지 보내기']) expect(within(slot).getByRole('button', { name })).toBeInTheDocument();
     expect(within(slot).queryByRole('button', { name: '임시 저장 지우기' })).not.toBeInTheDocument();
-    expect(within(slot).getByRole('button', { name: '미리보기' })).not.toHaveClass('ui-button--secondary');
+    expect(within(slot).getByRole('button', { name: '미리보기' })).toHaveClass('ui-button--secondary');
+    expect(within(slot).getByRole('button', { name: '공지 보내기' })).toHaveClass('ui-button--default');
     expect(within(slot).getByRole('button', { name: '공지 보내기' })).toBeDisabled();
     expect(screen.getByRole('tab', { name: '공지 작성' }).closest('.i7-notice-detail')!.contains(slot)).toBe(false);
     fireEvent.click(within(slot).getByRole('button', { name: '미리보기' }));
@@ -189,7 +212,7 @@ describe('notice editor', () => {
     memory.write({ noticeId: 'gone', revision: 3, kind: 'other', title: '지워진 초안', body: '내용', startDate: TODAY, endDate: TODAY, audience: 'all_contactable', groupIds: [] });
     render(<NoticeEditor view={view} port={makePort()} memory={memory} />);
     expect(screen.getByLabelText('공지 제목')).toHaveValue('지워진 초안');
-    expect(screen.getByRole('button', { name: '임시 저장 지우기' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '임시 저장 지우기' })).toBeNull();
   });
   it('lists the sent notices in the kit grid: 56 rows, aligned recipients, short dates, a next action when empty', () => {
     const full = render(<NoticeEditor view={{ ...view, sent: sentRows } as NoticeView} port={makePort()} />);

@@ -11,10 +11,46 @@ import { reply } from '../../../data/reality/00/testing';
 import { closureId, ids, service } from '../../../data/reality/15/testing';
 import { renderWithKit } from '../../../ui/test-utils';
 import { createNoticeWidget } from './module';
+import { widgetModules } from '../registry';
 
 afterEach(cleanup);
 beforeEach(() => { noticeClock.now = () => new Date('2026-11-21T03:00:00.000Z'); }); // 12:00 in Seoul
 const widget = createNoticeWidget('notice-send', () => ({ view: { status: 'empty' }, port: {} as never }));
+
+it('keeps the panel, recipient and channel controls, and all detail tabs in both data modes', async () => {
+  async function structure(http: boolean) {
+    const { backend } = service();
+    const store = createWidgetDataStore();
+    if (http) store.bindReal(createRealPort({ store, fetch: backend.fetch, adapters: autoloadedAdapters(),
+      source: domain => domain === 'inbox' ? 'http' : 'fixture' }));
+    const host: WidgetHost = { layer: 'marketing', openClosing: () => true, resetPreview() {}, openLinked() {}, openDetail() {}, notify() {}, acknowledgeBriefing() {} };
+    const { Panel, Detail } = widgetModules.find(widget => widget.id === 'notice-send')!;
+    const NoticeDetail = Detail!;
+    const { container } = renderWithKit(<>
+      <Panel featureId="notice-send" condition={{ kind: 'default' }} width={3} height={3} shape="S" presetId="A" editing={false} host={host} />
+      <NoticeDetail featureId="notice-send" condition={{ kind: 'default' }} detailRef={{ featureId: 'notice-send' }} host={host} />
+    </>, { store, modules: widgetModules });
+    await screen.findByRole('tab', { name: '공지 작성' });
+    const names = (selector: string) => Array.from(container.querySelectorAll(selector), el => {
+      const labelId = el.getAttribute('aria-labelledby');
+      return el.getAttribute('aria-label') ?? (labelId && document.getElementById(labelId)?.textContent) ?? el.textContent;
+    });
+    const result = { panel: !!container.querySelector('.i7-notice-panel'),
+      controls: names('.i7-notice-form [role="radiogroup"]'),
+      footer: names('.i7-notice-footbar button'),
+      tabs: screen.getAllByRole('tab').map(tab => {
+        fireEvent.click(tab);
+        return tab.textContent;
+      }) };
+    expect(container.querySelector('.i7-notice-sent-grid')).toBeInTheDocument();
+    expect(backend.calls.filter(call => call.method !== 'GET')).toHaveLength(0);
+    cleanup();
+    return result;
+  }
+  const real = await structure(true);
+  expect(real.controls).toEqual(['공지 종류', '보낼 곳']);
+  expect(await structure(false)).toEqual(real);
+});
 
 function open(backend: ReturnType<typeof service>['backend'], detailRef: { itemId?: string; view?: string } = {}, seed?: (store: ReturnType<typeof createWidgetDataStore>) => void) {
   const store = createWidgetDataStore();
@@ -58,7 +94,7 @@ it('previews a new TalkTalk notice without writes and sends it once on the owner
   fireEvent.change(screen.getByRole('textbox', { name: /제목/ }), { target: { value: '신메뉴' } });
   fireEvent.change(screen.getByRole('textbox', { name: '공지 내용' }), { target: { value: '새 메뉴가 나왔어요' } });
   expect(screen.getByRole('button', { name: '임시 저장하기' })).toBeDisabled(); // an audience is required
-  fireEvent.click(await screen.findByRole('radio', { name: '혜택 알림받기 손님 · 12명' }));
+  fireEvent.click(await screen.findByRole('radio', { name: '혜택 알림받기 손님' }));
   expect(screen.getByText('이번 달 배정 3건')).toBeInTheDocument();
   expect(screen.queryByText(/남은/)).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '미리보기' }));
@@ -113,7 +149,7 @@ it('asks for a fresh calendar import when the closure moved and does not allow t
   state.notices = state.notices.map(row => row.id === ids.notice ? { ...row, closure: { eventId: closureId, revision: 2 } } : row);
   open(backend, { itemId: ids.notice }, store => store.hydrate({ calendarEvent: [{ eventId: closureId, revision: 3, kind: 'event', categoryId: 'store-operations', date: '2026-11-22', time: null,
     title: { raw: '임시 휴무' }, memo: { raw: '정비' }, storeClosure: { kind: 'temporary', endDate: '2026-11-22' } }] }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('휴무 일정이 바뀌었어요. 공지 초안에 다시 가져와 주세요');
+  expect(await screen.findByRole('alert')).toHaveTextContent('휴무 일정이 바뀌었어요. 휴무를 다시 불러와 주세요');
   expect(screen.getByRole('button', { name: '직접 알렸다고 기록하기' })).toBeDisabled();
 });
 
@@ -126,7 +162,7 @@ it('does not say saved for a stale draft that was not edited: no write, the re-i
   const { backend, state } = service();
   staleSeed(state);
   open(backend, { itemId: ids.notice }, movedClosure);
-  expect(await screen.findByRole('alert')).toHaveTextContent('휴무 일정이 바뀌었어요. 공지 초안에 다시 가져와 주세요');
+  expect(await screen.findByRole('alert')).toHaveTextContent('휴무 일정이 바뀌었어요. 휴무를 다시 불러와 주세요');
   fireEvent.click(screen.getByRole('button', { name: '임시 저장하기' }));
   await waitFor(() => expect(screen.getByRole('button', { name: '캘린더에서 다시 가져오기' })).toHaveFocus());
   expect(screen.queryByText('임시 저장했어요')).toBeNull();

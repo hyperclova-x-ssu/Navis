@@ -65,6 +65,11 @@ export function createWidgetHost(run: Pick<RunStore, 'actions'> & Partial<Pick<R
   return {
     layer,
     resetPreview: () => actions.resetWidgetPreview(featureId),
+    openSettings: () => actions.openSettings(),
+    hasSmsSettings: () => {
+      const sms = getState?.().shopSettings.smsSettings;
+      return !!(sms?.senderNumber && sms.optOutNumber);
+    },
     openClosing: (returnFocusKey) => actions.openClosing(returnFocusKey),
     openLinked: (ref) => { actions.openLinkedDetail(ref); },
     openDetail: (ref) => { actions.openDetailRef(ref, focusKey ?? `panel:${featureId}`); },

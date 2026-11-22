@@ -73,10 +73,10 @@ it('re-reads a sourced change and its acknowledgement in a fresh store', async (
   expect(screen.getByRole('heading', { name: '동작구 거리 축제' }).closest('li')).toHaveClass('mkt-card');
   expect(document.querySelector('.mkt-detail-state__message')).toBeNull();
   expect(screen.getByRole('link', { name: '원문 열기' })).toHaveAttribute('href', 'https://www.dongjak.go.kr/notice');
-  expect(screen.getByText(/공식 공고와 직접 적은 변화만 보여요.*동작구/)).toBeInTheDocument();
+  expect(screen.getByText(/공식 공고.*기준.*동작구/)).toBeInTheDocument();
   expect(screen.getByText(/행사일/)).toBeInTheDocument();
   expect(backend.callsTo('POST', /marketing/)).toHaveLength(0);
-  fireEvent.click(screen.getByRole('button', { name: /확인 완료로 표시하기.*동작구 거리 축제/ }));
+  fireEvent.click(screen.getByRole('button', { name: /확인 표시하기.*동작구 거리 축제/ }));
   await waitFor(() => expect(store.getSnapshot().tables.localChange.find(row => row.changeId === changeId)?.ackedAt).toBe(at));
   const [call] = backend.callsTo('POST', /\/ack$/u);
   expect(call.body).toEqual({ expectedRevision: 1 });
@@ -139,8 +139,8 @@ it('shows POS sales in the hour chart when Seoul data is missing', async () => {
   open(backend, 'trade-area');
   expect(await screen.findByText('우리 매장 시간대별 판매')).toBeInTheDocument();
   expect(screen.getByRole('group', { name: /시간대별/ }).querySelectorAll('.mkt-hour__track')).toHaveLength(1);
-  expect(screen.getByText(/자료가 없어요/)).toBeInTheDocument();
-  expect(screen.getByText(/판매 수량 9/)).toBeInTheDocument();
+  expect(screen.getByText(/자료가 없어요/, { selector: '.mkt-card__line' })).toBeInTheDocument();
+  expect(screen.getByText(/판매 수량/, { selector: '.mkt-card__line' })).toHaveTextContent('판매 수량 9개');
   expect(screen.getByRole('button', { name: /14~15시, 9개/ })).toBeInTheDocument();
 });
 
@@ -159,7 +159,8 @@ it('shows Seoul estimates in the original hourly chart and hour card with their 
   const card = container.querySelector('[data-slot="trade-area.metric.value"]');
   expect(card).toHaveClass('mkt-card');
   expect(card?.querySelector('.ui-master-detail')).toBeNull();
-  expect(card?.querySelector('.mkt-card__meta')).toHaveTextContent('서울 공개 자료');
+  expect(container).toHaveTextContent('출처: 서울 공개 자료');
+  expect(card?.querySelector('.mkt-card__meta')).not.toHaveTextContent('서울 공개 자료');
   // FIX-PKG-A T-27: the service's quarter code is written as the owner reads it.
   expect(card?.querySelector('.mkt-card__meta')).toHaveTextContent('2026년 4분기');
   expect(card?.textContent).not.toContain('2026-Q4');
@@ -167,18 +168,12 @@ it('shows Seoul estimates in the original hourly chart and hour card with their 
   expect(screen.getByRole('link', { name: '원문 열기' })).toHaveAttribute('href', 'https://data.seoul.go.kr/');
 });
 
-it('shows menu sales in the original expandable rows and treats a keyword lookup as a read', async () => {
+it('keeps Widget 20 free of POS rows and result fetching', async () => {
   const backend = setup();
-  open(backend, 'local-trends');
-  // FIX-RV3: no second heading above the original keyword rows; the lookup comes after them.
-  const row = await screen.findByRole('button', { name: /카페라떼.*9/ });
-  expect(screen.queryByRole('heading', { name: '우리 메뉴 판매 추이' })).toBeNull();
-  expect(row).toHaveAttribute('aria-expanded', 'true');
-  expect(row.compareDocumentPosition(screen.getByRole('textbox', { name: '검색어' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  fireEvent.change(screen.getByRole('textbox', { name: '검색어' }), { target: { value: '카페라떼' } });
-  fireEvent.click(screen.getByRole('button', { name: '관심도 보기' }));
-  expect(await screen.findByText('37.5')).toBeInTheDocument();
-  expect(backend.callsTo('GET', `${base}/local-trends`).at(-1)?.query.keyword).toBe('카페라떼');
+  const { container } = open(backend, 'local-trends');
+  await screen.findByText('후보 검색어 관리');
+  expect(container).not.toHaveTextContent(/우리 메뉴 판매 추이|판매 수량/);
+  expect(backend.callsTo('GET', `${base}/local-trends`).every(call => call.query.keyword === undefined)).toBe(true);
   expect(backend.callsTo('POST', /marketing/)).toHaveLength(0);
 });
 

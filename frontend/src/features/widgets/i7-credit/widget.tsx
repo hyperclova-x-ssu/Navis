@@ -8,11 +8,11 @@ import { useI18n } from '../../../i18n';
 import { ActionButton, ChipChoice, DataGrid, DetailSidePanel, DetailTabs, Icon, MetricFit, PanelAction, PanelState, SearchField, Table, layoutTokens, type DataGridHandle, type GridColumn, type GridFocus } from '../../../ui';
 import { FitProbe } from '../mgmt-money/fit';
 import { PanelFrame } from '../mgmt-customers/shared';
-import { memberDisplayId } from '../mgmt-customers/member-display-id';
+import { formatMaskedCustomer, memberDisplayId } from '../../../data/customer-display';
 import { restoreGrid, useSideGrid } from '../mgmt-customers/workspace';
 import { AccountActions, OriginalTransactionButton } from './account-controls';
 import { useMemberFunding } from './use-member-funding';
-import { creditCopy, hasOriginal, maskedName, maskedPhone, money, noKindRows, number, signedMoney, transactionLabel } from './copy';
+import { creditCopy, hasOriginal, maskedPhone, money, noKindRows, number, signedMoney, transactionLabel } from './copy';
 import type { AccountMember, AccountTransaction, CreditBinding, CreditPort } from './types';
 import { PanelRemainder } from '../i7-staff/panel-remainder';
 import './credit.css';
@@ -50,29 +50,34 @@ export function CreditPanel(props: WidgetPanelProps & CreditBinding) {
   const t = useI18n();
   const when = (at: string) => t.format.dateTime(props.today ? memberDateTime(at) : at, { today });
   const state = useDomainState('members'), retry = useRealRetry('members');
+  const { memberProfile } = useWidgetDataStore().getSnapshot().tables;
+  const codes = new Map(memberProfile.map(row => [row.memberId, row.memberCode]));
   // From a dashboard panel the members window opens like the panel's own windows (focus returns to this panel); openLinked is for windows already open.
   const openMembers = () => props.host.openDetail({ featureId: 'members' });
   if (state.status === 'idle' || state.status === 'loading') return <p role="status">{creditCopy.loading}</p>;
   if (view.status !== 'ready') return <CreditState status={view.status} compact={props.height === 1 && props.width <= 2} retry={state.mode === 'http' ? retry : props.host.resetPreview} openMembers={openMembers} />;
   const model = view.model;
+  const names = new Map(model.members.map(row => [row.memberId, row.name]));
+  const displayName = (id: string) => formatMaskedCustomer(names.get(id), id, codes.get(id));
   const rows = [...model.transactions].sort((a, b) => b.at.localeCompare(a.at));
   const compact = props.width === 1 && props.height === 1;
   const longest = [number(model.chargeBalance), number(model.receivableBalance)].sort((a, b) => b.length - a.length)[0]!;
   const metrics = <div className="credit-metrics"><Metric amount={model.chargeBalance} label="총 충전금" longest={longest} />{!compact && <Metric amount={model.receivableBalance} label="총 외상" longest={longest} />}</div>;
-  const history = <div className="credit-panel-history-wrap"><ul className="credit-history credit-panel-history" aria-label="최근 거래 내역">{rows.slice(0, props.height >= 3 ? 4 : props.height > 1 ? 3 : 2).map(txn => <li key={txn.txnId}><span>{maskedName(model.members.find(member => member.memberId === txn.memberId)?.name ?? '')} {transactionLabel(txn)}</span><strong>{signedMoney(txn.amount)}</strong></li>)}</ul>{props.width === 1 && <PanelRemainder total={rows.length} rowSelector=".credit-panel-history li" unit="건" />}</div>;
+  const tallHistory = props.width === 1 && props.height === 4;
+  const history = <div className="credit-panel-history-wrap"><ul className={`credit-history credit-panel-history${tallHistory ? ' credit-panel-history--dated' : ''}`} aria-label="최근 거래 내역">{rows.slice(0, tallHistory ? RECENT_ROWS : props.height >= 3 ? 4 : props.height > 1 ? 3 : 2).map(txn => <li key={txn.txnId}><span className="credit-history-text"><span>{displayName(txn.memberId)}</span><span>{transactionLabel(txn)}</span>{tallHistory && <span className="credit-when">{when(txn.at)}</span>}</span><strong>{signedMoney(txn.amount)}</strong></li>)}</ul>{props.width === 1 && <PanelRemainder total={rows.length} rowSelector=".credit-panel-history li" unit="건" />}</div>;
   const members = model.members.filter(hasBalance);
   const latest = (row: AccountMember) => [...row.transactions].sort((a, b) => b.at.localeCompare(a.at))[0]?.at;
-  const table = <div className="credit-panel-table"><Table aria-label="회원별 현황"><thead><tr><th scope="col">회원</th><th scope="col">충전금 잔액</th><th scope="col">외상 잔액</th><th scope="col" className="credit-last-column">최근 거래</th></tr></thead><tbody>{members.slice(0, props.height >= 3 ? 6 : 4).map(row => <tr key={row.memberId}><td>{maskedName(row.name)}</td><td>{money(row.chargeBalance)}</td><td>{money(row.receivableBalance)}</td><td className="credit-last-column">{latest(row) ? when(latest(row)!) : '—'}</td></tr>)}</tbody></Table></div>;
+  const table = <div className="credit-panel-table"><Table aria-label="회원별 현황"><thead><tr><th scope="col">회원</th><th scope="col">충전금 잔액</th><th scope="col">외상 잔액</th><th scope="col" className="credit-last-column">최근 거래</th></tr></thead><tbody>{members.slice(0, props.height === 4 ? undefined : props.height >= 3 ? 6 : 4).map(row => <tr key={row.memberId}><td>{displayName(row.memberId)}</td><td>{money(row.chargeBalance)}</td><td>{money(row.receivableBalance)}</td><td className="credit-last-column">{latest(row) ? when(latest(row)!) : '—'}</td></tr>)}</tbody></Table></div>;
   // D-333: a card 4 rows high has room for the recent transactions the account holds too, each with its date (the reverse of the short cards' drop order); no transaction, no block.
   const dated = props.width >= 3 && props.height >= 4 && rows.length > 0;
   const recent = dated ? <div className="credit-panel-history-wrap credit-panel-recent"><p className="credit-label credit-history-title">최근 거래 내역</p>
-    <ul className="credit-history credit-panel-history credit-panel-history--dated" aria-label="최근 거래 내역">{rows.slice(0, RECENT_ROWS).map(txn => <li key={txn.txnId}><span className="credit-history-text"><span>{maskedName(model.members.find(member => member.memberId === txn.memberId)?.name ?? '')} {transactionLabel(txn)}</span><span className="credit-when">{when(txn.at)}</span></span><strong>{signedMoney(txn.amount)}</strong></li>)}</ul></div> : null;
+    <ul className="credit-history credit-panel-history credit-panel-history--dated" aria-label="최근 거래 내역">{rows.slice(0, RECENT_ROWS).map(txn => <li key={txn.txnId}><span className="credit-history-text"><span>{displayName(txn.memberId)}</span><span>{transactionLabel(txn)}</span><span className="credit-when">{when(txn.at)}</span></span><strong>{signedMoney(txn.amount)}</strong></li>)}</ul></div> : null;
   const action = props.width >= 2 && props.height >= 2 ? <div className="credit-actions"><PanelAction label="충전하기" widgetName={creditCopy.title} onPress={() => props.host.openDetail({ featureId: props.featureId, view: 'charge_topup' })} /><PanelAction label="외상 수금하기" widgetName={creditCopy.title} onPress={() => props.host.openDetail({ featureId: props.featureId, view: 'receivable_collection' })} /></div> : undefined;
   return <PanelFrame id={props.featureId}><div lang="ko" className="credit-root credit-panel" data-width={props.width} data-height={props.height}>
     {metrics}
     {!compact && (props.width >= 3 && props.height >= 2 ? table : props.height > 1 || props.width >= 3 ? history : null)}
     {recent}
-    {props.width === 2 && props.height >= 3 && <div className="credit-member-rows">{members.slice(0, 4).map(member => <div className="credit-value-row" key={member.memberId}><span>{maskedName(member.name)}</span><strong>충전금 {money(member.chargeBalance)}</strong></div>)}</div>}
+    {props.width === 2 && props.height >= 3 && <div className="credit-member-rows">{members.slice(0, 4).map(member => <div className="credit-value-row" key={member.memberId}><span>{displayName(member.memberId)}</span><strong>충전금 {money(member.chargeBalance)}</strong></div>)}</div>}
     {action}
     <FitProbe order={dated ? LARGE_FIT : SHORT_FIT} deps={[props.width, props.height, model.chargeBalance, model.receivableBalance, rows.length]} />
   </div></PanelFrame>;
@@ -100,7 +105,8 @@ export function CreditDetail(props: WidgetDetailProps & CreditBinding) {
   const { realMembers, memberProfile } = useWidgetDataStore().getSnapshot().tables;
   const profiles = realMembers?.profiles;
   const memberCodes = new Map(memberProfile.map(row => [row.memberId, row.memberCode]));
-  const displayId = (memberId: string) => memberDisplayId(memberId, memberCodes.get(memberId));
+  const displayId = (memberId: string, name?: string) => memberDisplayId(memberId, memberCodes.get(memberId), profiles?.[memberId]?.name ?? name);
+  const displayName = (memberId: string, name?: string, separator?: string) => formatMaskedCustomer(profiles?.[memberId]?.name ?? name, memberId, memberCodes.get(memberId), separator);
   const t = useI18n();
   const when = (at: string) => t.format.dateTime(props.today ? memberDateTime(at) : at, { today: props.today ?? TODAY });
   const [entry] = useState(() => creditDetailEntry(detailRef));
@@ -112,15 +118,15 @@ export function CreditDetail(props: WidgetDetailProps & CreditBinding) {
   }, [detailRef.focus, entry.memberId]);
   const model = view.status === 'ready' ? view.model : null;
   const q = query.trim().toLocaleLowerCase();
-  const members = holdersFirst(model?.members.filter(row => !q || (profiles?.[row.memberId]?.name ?? row.name).toLocaleLowerCase().includes(q) || maskedName(row.name).includes(q) || displayId(row.memberId).toLocaleLowerCase().includes(q) || row.memberId.toLocaleLowerCase().includes(q) || row.phone.replace(/\D/g, '').slice(-4).includes(q)) ?? []);
+  const members = holdersFirst(model?.members.filter(row => !q || (profiles?.[row.memberId]?.name ?? row.name).toLocaleLowerCase().includes(q) || displayName(row.memberId, row.name).includes(q) || displayId(row.memberId, row.name).toLocaleLowerCase().includes(q) || row.memberId.toLocaleLowerCase().includes(q) || row.phone.replace(/\D/g, '').slice(-4).includes(q)) ?? []);
   const ids = new Set(members.map(row => row.memberId));
   const txns = model?.transactions.filter(txn => ids.has(txn.memberId) && (tab === 'members' || txn.account === tab) && (kind === 'all' || txn.kind === kind)).slice().sort((a, b) => b.at.localeCompare(a.at) || b.txnId.localeCompare(a.txnId)) ?? [];
   const selectedMember = members.find(row => row.memberId === selected || row.memberId === txns.find(txn => txn.txnId === selected)?.memberId);
   const { root, obscured } = useSideGrid(!!selectedMember, JSON.stringify([tab, query, selected, view]));
-  const nameOf = (memberId: string) => maskedName(model?.members.find(member => member.memberId === memberId)?.name ?? '');
+  const nameOf = (memberId: string) => displayName(memberId, model?.members.find(member => member.memberId === memberId)?.name);
   const memberColumns: GridColumn<AccountMember>[] = [
-    { id: 'memberId', header: '회원 ID', kind: 'text', minWidth, value: row => displayId(row.memberId) },
-    { id: 'name', header: '이름', kind: 'text', minWidth, value: row => maskedName(row.name) },
+    { id: 'memberId', header: '회원 ID', kind: 'text', minWidth, value: row => displayId(row.memberId, row.name) || '—' },
+    { id: 'name', header: '이름', kind: 'text', minWidth, value: row => formatMaskedCustomer(row.name) },
     { id: 'charge', header: '충전금 잔액', kind: 'number', minWidth, value: row => money(row.chargeBalance) },
     { id: 'debt', header: '외상 잔액(미수금)', kind: 'number', minWidth, value: row => money(row.receivableBalance) },
   ];
@@ -155,9 +161,9 @@ export function CreditDetail(props: WidgetDetailProps & CreditBinding) {
     </div>
     <SummaryCards items={[{ label: '총 충전금 · 유효기간 없음', amount: model.chargeBalance }, { label: '총 외상(미수금)', amount: model.receivableBalance }]} />
     {tab !== 'members' && <ChipChoice label="거래 종류" value={kind} onChange={value => { setKind(value); setSelected(null); }} options={kindOptions} />}
-    {tab === 'members' ? <DataGrid key="credit-members" ref={grid} id="credit-members" label="회원별 현황" rows={members} columns={memberColumns} getRowId={row => row.memberId} getRowLabel={row => `${displayId(row.memberId)} ${maskedName(row.name)}`} sort={null} onSortChange={() => {}} selectedRowId={selected} onSelectionChange={setSelected} focus={focus} onFocusChange={setFocus} expandedRowIds={new Set()} obscuredCells={obscured} emptyContent={zeroRows} />
+    {tab === 'members' ? <DataGrid key="credit-members" ref={grid} id="credit-members" label="회원별 현황" rows={members} columns={memberColumns} getRowId={row => row.memberId} getRowLabel={row => displayName(row.memberId, row.name)} sort={null} onSortChange={() => {}} selectedRowId={selected} onSelectionChange={setSelected} focus={focus} onFocusChange={setFocus} expandedRowIds={new Set()} obscuredCells={obscured} emptyContent={zeroRows} />
       : <DataGrid key={`credit-history-${tab}`} ref={grid} id="credit-history" label={tab === 'charge' ? '충전금 내역' : '외상·수금 내역'} rows={txns} columns={historyColumns} getRowId={row => row.txnId} getRowLabel={row => `${nameOf(row.memberId)} ${transactionLabel(row)}`} sort={null} onSortChange={() => {}} selectedRowId={selected} onSelectionChange={setSelected} focus={focus} onFocusChange={setFocus} expandedRowIds={new Set()} obscuredCells={obscured} emptyContent={zeroRows} />}
-    <DetailSidePanel open={!!selectedMember} selectedRowId={selected} title={selectedMember ? `${displayId(selectedMember.memberId)} ${maskedName(selectedMember.name)}` : '회원별 현황'} onClose={() => setSelected(null)} returnFocusKey={selected ?? ''} onRestoreFocus={key => restoreGrid(grid, key, tab === 'members' ? 'memberId' : 'at', tab === 'members' ? members.map(row => row.memberId) : txns.map(row => row.txnId))}>
+    <DetailSidePanel open={!!selectedMember} selectedRowId={selected} title={selectedMember ? displayName(selectedMember.memberId, selectedMember.name, '\n') : '회원별 현황'} onClose={() => setSelected(null)} returnFocusKey={selected ?? ''} onRestoreFocus={key => restoreGrid(grid, key, tab === 'members' ? 'memberId' : 'at', tab === 'members' ? members.map(row => row.memberId) : txns.map(row => row.txnId))}>
       {selectedMember && <div className="credit-stack" key={selectedMember.memberId}>
         <p>{maskedPhone(selectedMember.phone)}</p>
         <SummaryCards items={[{ label: '충전금 잔액 · 유효기간 없음', amount: selectedMember.chargeBalance }, { label: '외상 잔액(미수금)', amount: selectedMember.receivableBalance }]} />

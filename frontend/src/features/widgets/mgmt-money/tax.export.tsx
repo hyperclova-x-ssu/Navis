@@ -1,13 +1,13 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useDataExecute, useRealPort, useRealRetry } from '../../../data/react';
 import type { TaxExportFile, TaxExportFormat, TaxExportPreviewDto, TaxExportReceipt } from '../../../data/reality/18/dto';
-import { ActionButton, ChipChoice, Icon } from '../../../ui';
+import { ActionButton, ChipChoice, DetailFooterContent, Icon } from '../../../ui';
 import { useMoneyT } from './shared';
 import { useTaxCopy } from './tax.copy';
 import { downloadTaxFile, verifiedTaxFile } from './tax.file';
+import type { ExampleTaxFormat } from './tax.example-file';
 
 export function TaxExportActions({ read, disabled }: { read: TaxExportPreviewDto; disabled: boolean }) {
-  const t = useMoneyT();
   const copy = useTaxCopy();
   const execute = useDataExecute();
   const port = useRealPort();
@@ -65,12 +65,43 @@ export function TaxExportActions({ read, disabled }: { read: TaxExportPreviewDto
       pending.current = false;
     }
   };
-  return <div className="mm-actions">
-    <ChipChoice label={copy('format')} value={format} onChange={value => { if (!pending.current) { setFormat(value); setStatus('idle'); } }}
-      options={[{ value: 'csv', label: 'CSV' }, { value: 'xlsx', label: 'XLSX' }]} />
-    <ActionButton size="primary" disabled={disabled || !port || read.verification.status !== 'verified'} loading={status === 'working'} onClick={() => void getFile()}>{t('common.linked.tax.accountantFile')}</ActionButton>
+  return <ExportControls format={format} onFormat={value => { if (!pending.current) { setFormat(value); setStatus('idle'); } }}
+    disabled={disabled || !port || read.verification.status !== 'verified'} working={status === 'working'} onExport={() => void getFile()}>
     {read.verification.status !== 'verified' ? <p className="mm-muted" role="status">{copy('unverified')}</p> : null}
     {status === 'done' ? <p className="mm-done" role="status"><Icon name="check" /> {copy('downloaded')}</p> : null}
     {status === 'error' || status === 'preview-changed' ? <p className="mm-muted" role="alert">{copy(status === 'error' ? 'exportError' : 'previewChanged')}</p> : null}
-  </div>;
+  </ExportControls>;
+}
+
+/** The one row of format choice and the accountant-file button, the same in both modes (PAR-1). */
+function ExportControls({ format, onFormat, disabled, working, onExport, children }: {
+  readonly format: TaxExportFormat; readonly onFormat: (format: TaxExportFormat) => void; readonly disabled: boolean; readonly working: boolean; readonly onExport: () => void; readonly children?: ReactNode;
+}) {
+  const t = useMoneyT();
+  const copy = useTaxCopy();
+  return <DetailFooterContent><div className="detail-footer-actions mm-actions">
+    <ChipChoice label={copy('format')} value={format} onChange={onFormat} options={[{ value: 'csv', label: 'CSV' }, { value: 'xlsx', label: 'XLSX' }]} />
+    <ActionButton variant="outline" disabled={disabled} loading={working} onClick={onExport}>{t('common.linked.tax.accountantFile')}</ActionButton>
+    {children}
+  </div></DetailFooterContent>;
+}
+
+/** With the example data the file is built in the browser from the rows shown above it; `build` throws when the export is refused. */
+export function ExampleTaxExportActions({ build, disabled }: { readonly build: (format: ExampleTaxFormat) => { readonly blob: Blob; readonly filename: string }; readonly disabled: boolean }) {
+  const copy = useTaxCopy();
+  const [format, setFormat] = useState<ExampleTaxFormat>('csv');
+  const [status, setStatus] = useState<'idle' | 'done' | 'error'>('idle');
+  const exportFile = () => {
+    try {
+      const { blob, filename } = build(format);
+      downloadTaxFile(URL.createObjectURL(blob), filename);
+      setStatus('done');
+    } catch {
+      setStatus('error');
+    }
+  };
+  return <ExportControls format={format} onFormat={value => { setFormat(value); setStatus('idle'); }} disabled={disabled} working={false} onExport={exportFile}>
+    {status === 'done' ? <p className="mm-done" role="status"><Icon name="check" /> {copy('downloaded')}</p> : null}
+    {status === 'error' ? <p className="mm-muted" role="alert">{copy('exportError')}</p> : null}
+  </ExportControls>;
 }

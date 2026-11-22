@@ -10,6 +10,8 @@
 
 .ms-order-due-date {
   position: relative;
+  min-block-size: var(--target-min);
+  min-inline-size: var(--target-min);
 }
 
 .ms-order-due-date::after {
@@ -20,3 +22,19 @@
   transform: translateX(-50%);
   content: '';
 }
+
+.ms-inv .ui-grid-expanded { max-block-size: none; overflow: visible; }
+.ms-product-empty { display: grid; justify-items: start; gap: var(--space-2); padding: var(--space-4); }
+.ms-product-empty p { margin: 0; }
+.ms-panel[data-widget='inventory-booking'][data-shape='T'] .ms-row[data-row] { flex-wrap: nowrap; }
+.ms-panel[data-widget='inventory-booking'][data-shape='T'] .ms-row[data-row] .ms-row__name {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; min-inline-size: 0;
+  overflow: hidden; overflow-wrap: anywhere; word-break: keep-all;
+}
+.ms-panel[data-widget='inventory-booking'] .ms-rows:not(:has([data-row]:not([hidden]))) [data-more] { display: none; }
+.ms-detail:is(.ms-inv,.ms-sup) .ui-status-chip { min-block-size: var(--space-7, 28px); }
+.ms-inv .ui-grid-help { display: grid; gap: var(--space-2); }
+.ms-inv .ui-grid-help > .ui-button { justify-self: end; }
+.ms-inv .ui-data-grid__toolbar .ui-search-field__control,
+.ms-sup .ui-data-grid__toolbar .ui-search-field__control { min-block-size: var(--target-default); }
+.ms-inv .ui-data-grid:has(> #stock-grid-label) > .ui-data-grid__toolbar .ui-search-field__control > .ui-input { min-block-size: var(--target-default); }

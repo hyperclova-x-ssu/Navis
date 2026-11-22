@@ -85,7 +85,7 @@ describe('예약 form', () => {
     await userEvent.type(screen.getByRole('textbox', { name: '예약자 이름' }), '김서연');
     await pickDate(addDays(TODAY, -1));
     const before = store.getSnapshot().tables.reservation.length;
-    await userEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    await userEvent.click(screen.getByRole('button', { name: '예약 저장하기' }));
     expect(store.getSnapshot().tables.reservation.length).toBe(before);
     expect(screen.getByRole('alert')).toHaveTextContent('지난 시간에는 새 예약을 넣을 수 없어요');
   });
@@ -94,12 +94,12 @@ describe('예약 form', () => {
     const fill = async (name: string) => { await userEvent.clear(screen.getByRole('textbox', { name: '예약자 이름' })); await userEvent.type(screen.getByRole('textbox', { name: '예약자 이름' }), name); };
     await pickDate(addDays(TODAY, 1));
     await fill('김서연');
-    await userEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    await userEvent.click(screen.getByRole('button', { name: '예약 저장하기' }));
     const after1 = store.getSnapshot().tables.reservation.length;
     await userEvent.click(screen.getByRole('button', { name: '예약 추가하기' }));
     await fill('김서연');
     await pickDate(addDays(TODAY, 1));
-    await userEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    await userEvent.click(screen.getByRole('button', { name: '예약 저장하기' }));
     expect(store.getSnapshot().tables.reservation.length).toBe(after1);
     expect(screen.getByRole('alert')).toHaveTextContent('같은 시간에 비슷한 예약이 있어요');
     await userEvent.click(screen.getByRole('button', { name: '그래도 예약하기' }));

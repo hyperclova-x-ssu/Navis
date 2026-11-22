@@ -32,20 +32,23 @@ export function createNoticePort(dispatch: DispatchNotice, getDraft: (id: string
       return draft ? { ok: true, draft: noticeDraftInput(draft) } : { ok: false };
     },
     async saveDraft(draft) {
-      const result = dispatch({ type: 'notice.saveDraft', ...(draft.noticeId ? { noticeId: draft.noticeId } : { idempotencyKey: key() }), kind: draft.kind, title: draft.title, body: draft.body, startDate: draft.startDate, endDate: draft.endDate, ...(draft.closureEventId ? { closureEventId: draft.closureEventId } : {}), audience: draft.audience, groupIds: draft.groupIds });
+      const result = dispatch({ type: 'notice.saveDraft', ...(draft.noticeId ? { noticeId: draft.noticeId } : { idempotencyKey: key() }), kind: draft.kind, title: draft.title, body: draft.body, startDate: draft.startDate, endDate: draft.endDate, ...(draft.closureEventId ? { closureEventId: draft.closureEventId } : {}), audience: draft.audience, groupIds: draft.groupIds,
+        ...(draft.channel ? { channel: draft.channel, talkAudience: draft.talkAudience } : {}) });
       return result.ok ? savedValue(result.value) ? { ok: true, ...result.value } : { ok: false } : result;
     },
     async cancelSchedule(sentId) { return dispatch({ type: 'notice.cancelSchedule', sentId, idempotencyKey: key() }); },
     async deleteDraft(noticeId) { return dispatch({ type: 'notice.deleteDraft', noticeId, idempotencyKey: key() }); },
-    async preview(noticeId, draftRevision) {
-      const result = dispatch({ type: 'notice.preview', noticeId, draftRevision });
+    async preview(noticeId, draftRevision, sendAt) {
+      const result = dispatch({ type: 'notice.preview', noticeId, draftRevision, ...(sendAt ? { sendAt } : {}) });
       return result.ok ? previewValue(result.value) ? { ok: true, preview: result.value } : { ok: false } : result;
     },
-    async send(noticeId, draftRevision, previewId) {
-      const result = dispatch({ type: 'notice.send', noticeId, draftRevision, previewId, idempotencyKey: key() });
+    async send(noticeId, draftRevision, previewId, sendAt) {
+      const result = dispatch({ type: 'notice.send', noticeId, draftRevision, previewId, idempotencyKey: key(), ...(sendAt ? { sendAt } : {}) });
       if (!result.ok) return result;
       const value = result.value;
-      return typeof value === 'object' && value !== null && 'sentId' in value && typeof value.sentId === 'string' && 'status' in value && value.status === 'sent_example' && 'recipientCount' in value && typeof value.recipientCount === 'number' && 'sentAt' in value && typeof value.sentAt === 'string' ? { ok: true } : { ok: false };
+      if (typeof value !== 'object' || value === null || !('sentId' in value) || typeof value.sentId !== 'string' || !('status' in value)) return { ok: false };
+      if (value.status === 'scheduled' && 'sendAt' in value && value.sendAt === sendAt) return { ok: true, deliveryState: 'scheduled' };
+      return value.status === 'sent_example' && 'recipientCount' in value && typeof value.recipientCount === 'number' && 'sentAt' in value && typeof value.sentAt === 'string' ? { ok: true } : { ok: false };
     },
   };
 }

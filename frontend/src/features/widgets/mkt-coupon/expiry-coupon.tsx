@@ -1,5 +1,5 @@
 /**
- * 당일 소진 쿠폰 (expiry-coupon, F-49, SCR-37/38): panel (크루아상 6개 + PanelAction) and the make flow
+ * 당일 소진 쿠폰 (expiry-coupon, F-49, SCR-37/38): panel (item count + PanelAction) and the make flow
  * (item -> one ordinary benefit: 정률 할인 % / 금액 할인 원 / 세트 가격 원, a segmented choice and one value field -> where to send -> confirm).
  * Text coupons are queued; Place News codes activate after the owner's publication attestation.
  */
@@ -11,11 +11,11 @@ import { useWidgetView } from '../../../data/react';
 import { expirySmsCopy, smsSenderConfigured } from '../../../data/reality/14/sms';
 import { benefitMax, benefitName, benefitPrice, benefitProblem, expiryDiscount, expirySmsBody } from '../../../data/widget-data';
 import type { CouponBenefit, CouponBenefitKind, ExpiryCouponModel, ExpiryItem } from '../../../data/widget-data';
-import { ActionButton, ChipChoice, ConfirmStep, CopyThenPosted, DiscountSummary, FormulaRow, Icon, NumberField, Spinner, useKitT } from '../../../ui';
+import { ActionButton, ChipChoice, ConfirmStep, CopyThenPosted, DetailFooterContent, DiscountSummary, FormulaRow, Icon, NumberField, Spinner, useKitT } from '../../../ui';
 import { isLargeCard, koreanLang } from '../mkt-local/fit';
 import { CouponSourceNote, MktPanel } from './panel';
 import { useCouponAction } from './panel.actions';
-import { DetailNotReady, FixedSmsPreview, NoteLine, PanelNotReady, useActionFocus, useMkt, useSendPhase, SentStatus } from './shared';
+import { DetailNotReady, FixedSmsPreview, NoteLine, PanelNotReady, useActionFocus, useMkt, useSendPhase, SentStatus, SmsSetupHelp } from './shared';
 
 const ID = 'expiry-coupon' as const;
 type Route = 'sms' | 'place_news';
@@ -37,44 +37,49 @@ export function ExpiryCouponPanel({ width, height, shape, editing, host }: Widge
   if (view.status !== 'ready') return <PanelNotReady view={view} widgetName={name} host={host} shape={shape} width={width} />;
   const m = view.model;
   const item = m.target;
-  if (!item) return <MktPanel id={ID} shape={shape} width={width} height={height} editing={editing} label={name}
-    kpi={{ value: String(m.pendingPosts.length), unit: t('widget.coupon-status.unitName') }}
+  const itemCount = m.items.filter(row => row.qty > 0).length;
+  const itemKpi = { value: f.number(itemCount), unit: t('widget.expiry-coupon.unitName', { n: itemCount }) };
+  const itemLabel = t('widget.expiry-coupon.sellTodayCount');
+  if (!item) return <MktPanel id={ID} shape={shape} width={width} height={height} editing={editing}
+    label={m.pendingPosts.length ? t('widget.expiry-coupon.postTitle') : itemLabel} labelFirst={m.pendingPosts.length === 0}
+    kpi={m.pendingPosts.length ? { value: f.number(m.pendingPosts.length), unit: t('widget.coupon-status.unitName') } : itemKpi}
     action={m.pendingPosts.length ? { label: t('widget.expiry-coupon.postTitle'), widgetName: name, onPress: () => host.openDetail({ featureId: ID }) } : null} />;
-  const itemName = item.name ? dt(item.name) : t(item.nameKey);
   const note = view.notes?.[0];
   const canMake = m.canCreate && !item.handled;
-  const short = t('widget.expiry-coupon.panelQ', { item: itemName });
+  const short = t('widget.expiry-coupon.sellToday');
   const descs = item.handled ? [t('widget.expiry-coupon.alreadyMade')]
     : shape === 'Q' ? [note ? t(note.messageKey) : short]
-      : item.recommendedRate === null || shape === 'T' ? [short] : [t('widget.expiry-coupon.panelW', { item: itemName, p: item.recommendedRate }), short];
-  const itemLine = (it: ExpiryItem) => t('widget.expiry-coupon.itemLine', { item: it.name ? dt(it.name) : t(it.nameKey), qty: f.count(it.qty, 'pcs'), until: t('widget.coupon-status.untilToday') });
+      : [short];
+  const itemQuantity = (it: ExpiryItem) => ({ item: it.name ? dt(it.name) : t(it.nameKey), qty: f.count(it.qty, 'pcs') });
+  const itemLine = (it: ExpiryItem) => t('widget.expiry-coupon.itemLine', { ...itemQuantity(it), until: t('widget.coupon-status.untilToday') });
   // D-333: the 4-high card adds what the suggested discount means in money (the same numbers the make window shows) and the other items still to sell today.
   // Nothing is written when the cost is unknown (no suggested discount) or the coupon for this item was already made.
-  const large = isLargeCard(shape, height);
+  const large = isLargeCard(shape, height) || width === 1 && height === 4;
   const calc = large && !item.handled ? item.atRecommended : null;
   const otherItems = large ? m.items.filter((it) => it.itemId !== item.itemId) : [];
   const rows = [
-    ...(shape === 'T' ? [<li key="item" lang={koreanLang(itemName)} data-row-id={item.itemId}>{itemLine(item)}</li>] : []),
-    ...(item.maxSliderRate !== null ? [<li key="limit">{t('widget.expiry-coupon.limit', { p: item.maxRatePercent ?? 0 })}</li>] : []),
+    <li key={item.itemId} lang={koreanLang(t(item.nameKey))}>{t('widget.expiry-coupon.itemQuantity', itemQuantity(item))}</li>,
+    ...(item.maxSliderRate !== null ? [<li key="limit">{t('widget.expiry-coupon.limit', { p: item.maxSliderRate })}</li>] : []),
     ...(calc ? [
       <li key="money" data-mkt-extra="">{locale === 'ko'
-        ? t('widget.expiry-coupon.moneySummary', { price: money(calc.discountedPrice), profit: money(calc.marginEach), total: money(calc.ifAllSold) })
+        ? t(item.qty === 1 ? 'widget.expiry-coupon.moneySummary.single' : 'widget.expiry-coupon.moneySummary', { price: money(calc.discountedPrice), profit: money(calc.marginEach), total: money(calc.ifAllSold) })
         : kit.t('ui.discount.summary', { price: money(calc.discountedPrice), profit: money(calc.marginEach), total: money(calc.ifAllSold) })}</li>,
       <li key="loss" data-mkt-extra="">{kit.t('ui.discount.loss', { amount: money(calc.lossIfDiscarded) })}</li>,
     ] : []),
     ...otherItems.map((it) => <li key={it.itemId} lang={koreanLang(t(it.nameKey))} data-row-id={it.itemId} data-mkt-extra="">{itemLine(it)}</li>),
   ];
   return <MktPanel id={ID} shape={shape} width={width} height={height} editing={editing}
-    label={itemName} kpi={{ value: String(item.qty), unit: item.unit === 'pcs' ? t('widget.expiry-coupon.unitName') : '' }}
+    label={itemLabel} labelFirst kpi={itemKpi}
     descs={descs} aside={view.notes?.length ? <NoteLine notes={view.notes} compact={editing} /> : undefined} rows={rows}
     action={canMake ? { label: t('marketing.createCoupon'), widgetName: name, onPress: () => host.openDetail({ featureId: ID, focus: 'action' }) } : null} />;
 }
 
 export function useExpiryCouponSummary(): string {
-  const { t, f, dt } = useMkt();
+  const { t, f } = useMkt();
   const view = useWidgetView(ID);
   if (view.status !== 'ready' || !view.model.target) return view.status === 'ready' ? t('widget.expiry-coupon.title') : t(view.messageKey);
-  return t('widget.expiry-coupon.summary', { item: view.model.target.name ? dt(view.model.target.name) : t(view.model.target.nameKey), qty: f.count(view.model.target.qty, 'pcs') });
+  const count = view.model.items.filter(item => item.qty > 0).length;
+  return t('widget.expiry-coupon.summary', { qty: f.number(count), unit: t('widget.expiry-coupon.unitName', { n: count }) });
 }
 
 export function ExpiryCouponDetail({ detailRef, host }: WidgetDetailProps) {
@@ -133,7 +138,7 @@ function PendingExpiryPosts({ posts, host }: { readonly posts: ExpiryCouponModel
         else markPosted(post.codeId);
       }} />}
     </section>)}
-    {status ? <p className="mkt-reason" role={status.error ? 'alert' : 'status'}><Icon name={status.error ? 'error' : 'check'} aria-hidden />{status.text}</p> : null}
+    {status ? <DetailFooterContent><p className="mkt-reason" role={status.error ? 'alert' : 'status'}><Icon name={status.error ? 'error' : 'check'} aria-hidden />{status.text}</p></DetailFooterContent> : null}
   </>;
 }
 
@@ -141,41 +146,44 @@ function ExpiryFlow({ model, item, onPick, notes, host, rate, initialRoute }: { 
   const { t, f, dt, money, locale } = useMkt();
   const kit = useKitT();
   const { http, pending, run } = useCouponAction(host);
+  const smsConfigured = smsSenderConfigured || (http && host.hasSmsSettings?.());
   const { phase, setPhase, startSending } = useSendPhase();
   // T-07: one key per submitted values (PKG-F helper): equal submits keep it, changed values or a reopened form get their own.
   const [keyFor] = useState(() => createCommandAttemptKeys('expiry'));
   const [kind, setKind] = useState<CouponBenefitKind>('percent');
   const [value, setValue] = useState<number | null>(rate ?? item.recommendedRate ?? 0);
-  const [route, setRoute] = useState<Route>(initialRoute ?? (http ? 'place_news' : 'sms'));
+  const [route, setRoute] = useState<Route>(initialRoute ?? 'sms');
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<{ readonly route: Route; readonly count: number; readonly benefit: string } | null>(null);
 
-  const itemName = item.name ? dt(item.name) : t(item.nameKey);
+  const itemName = item.menuName ?? (item.name ? dt(item.name) : t(item.nameKey));
   const known = item.unitCost !== null && item.maxSliderRate !== null;
   const cost = item.unitCost ?? 0;
   const benefit: CouponBenefit | null = value === null ? null : { kind, value };
   const problem = benefit ? benefitProblem(benefit, item.price, item.unitCost) : kind === 'percent' ? 'percentRange' : kind === 'amount' ? 'amountRange' : 'setPriceRange';
-  // The text, the summary and the confirmation show the real benefit; while the field is wrong they show the starting one.
-  const shown: CouponBenefit = benefit && !problem ? benefit : { kind, value: startValue(kind, item) };
+  const shown = problem ? null : benefit;
   const calc = known ? expiryDiscount(item.price, cost, 0, item.qty) : null;
-  const paid = benefitPrice(item.price, shown);
+  const paid = shown ? benefitPrice(item.price, shown) : 0;
   const profit = paid - cost;
   const recipients = model.routes.sms.recipients;
   const made = item.handled;
   const disabled = pending || !model.canCreate || made;
-  const routeBlocked = route === 'sms' && (!smsSenderConfigured || recipients === 0);
-  const smsBody = http ? expirySmsCopy(item.menuName ?? itemName, shown) : dt(expirySmsBody(item.nameKey, shown));
+  const routeBlocked = route === 'sms' && (!smsConfigured || recipients === 0);
+  const smsBody = !shown ? null : locale === 'ko' ? expirySmsCopy(itemName, shown) : dt(expirySmsBody(item.nameKey, shown));
   const routeName = route === 'sms' ? t('data.marketing.route.sms') : t('data.marketing.route.placeNews');
-  const benefitText = dt(benefitName(shown));
+  const benefitText = shown ? dt(benefitName(shown)) : '';
   const unit = kind === 'percent' ? '%' : t('widget.expiry-coupon.unitWon');
   const pickKind = (next: string) => { const k = next as CouponBenefitKind; setKind(k); setValue(startValue(k, item)); setError(null); };
-  const itemLine = (row: ExpiryItem) => t('widget.expiry-coupon.itemLine', { item: row.name ? dt(row.name) : t(row.nameKey), qty: f.count(row.qty, 'pcs'), until: t('widget.coupon-status.untilToday') });
-  const limitText = !known ? '' : kind === 'percent' ? t('widget.expiry-coupon.limit', { p: item.maxRatePercent ?? 0 })
+  const itemLine = (row: ExpiryItem) => t('widget.expiry-coupon.itemLine', { item: row.menuName ?? (row.name ? dt(row.name) : t(row.nameKey)), qty: f.count(row.qty, 'pcs'), until: t('widget.coupon-status.untilToday') });
+  const limitText = !known ? '' : kind === 'percent' ? t('widget.expiry-coupon.limit', { p: item.maxSliderRate ?? 0 })
     : kind === 'amount' ? t('widget.expiry-coupon.limitAmount', { amount: money(benefitMax('amount', item.price, cost)) }) : t('widget.expiry-coupon.limitSetPrice', { price: money(cost) });
+  const problemText = problem === 'overLimit' && kind === 'percent' && known
+    ? t('widget.expiry-coupon.overLimit', { p: item.maxSliderRate ?? 0 })
+    : problem ? t(problem === 'kind' ? 'data.marketing.error.benefitInvalid' : `data.marketing.error.${problem}`) : undefined;
 
   const create = () => {
     if (disabled || routeBlocked) return;
-    if (problem) { setError(t(problem === 'kind' ? 'data.marketing.error.benefitInvalid' : `data.marketing.error.${problem}`)); setPhase('form'); return; }
+    if (!shown) { setError(problemText ?? null); setPhase('form'); return; }
     setSubmitted({ route, count: recipients, benefit: benefitText });
     if (http) setPhase('sending');
     run({ type: 'coupon.createExpiry', itemId: item.lotId ?? item.itemId, benefit: shown, route, idempotencyKey: keyFor(JSON.stringify([item.lotId ?? item.itemId, shown.kind, shown.value, route])) }, 'data.marketing.notice.couponCreated',
@@ -206,33 +214,33 @@ function ExpiryFlow({ model, item, onPick, notes, host, rate, initialRoute }: { 
           </div>
           <NumberField label={t(`widget.expiry-coupon.valueLabel.${kind}`)} name="expiry-benefit-value" value={value} onValueChange={(v) => { setValue(v); setError(null); }}
             min={1} max={kind === 'percent' ? 100 : item.price} step={1} unit={unit} disabled={disabled}
-            error={problem ? t(problem === 'kind' ? 'data.marketing.error.benefitInvalid' : `data.marketing.error.${problem}`) : undefined} />
-          {locale === 'ko' ? <div className="ui-discount-summary"><p>{t('widget.expiry-coupon.moneySummary', { price: money(paid), profit: money(profit), total: money(profit * item.qty) })}</p><p className="ui-discount-summary__loss">{kit.t('ui.discount.loss', { amount: money(calc.lossIfDiscarded) })}</p></div> : <DiscountSummary price={money(paid)} profit={money(profit)} total={money(profit * item.qty)} lossCost={money(calc.lossIfDiscarded)} />}
-          <p className="mkt-limit"><Icon name="info" aria-hidden />{limitText}</p>
+            error={problemText} />
+          {shown && (locale === 'ko' || item.qty === 1 ? <div className="ui-discount-summary"><p>{t(item.qty === 1 ? 'widget.expiry-coupon.moneySummary.single' : 'widget.expiry-coupon.moneySummary', { price: money(paid), profit: money(profit), total: money(profit * item.qty) })}</p><p className="ui-discount-summary__loss">{kit.t('ui.discount.loss', { amount: money(calc.lossIfDiscarded) })}</p></div> : <DiscountSummary price={money(paid)} profit={money(profit)} total={money(profit * item.qty)} lossCost={money(calc.lossIfDiscarded)} />)}
+          <p className="mkt-limit">{limitText}</p>
           {kind === 'percent' ? <FormulaRow><p className="mkt-formula">{t('widget.expiry-coupon.formula', { max: item.maxRatePercent ?? 0, cost: money(cost), price: money(item.price) })}</p></FormulaRow> : null}
-        </div> : http ? <p role="status">{t('data.state.expiry-coupon.partial')}</p> : null}
-        <p className="mkt-hint">{t('widget.expiry-coupon.second')}</p>
+        </div> : <p role="status">{t('data.state.expiry-coupon.partial')}</p>}
       </section>
       <section aria-labelledby="exp-step3">
         <h2 id="exp-step3">{t('widget.expiry-coupon.step3')}</h2>
         <ChipChoice label={t('marketing.sendTo')} value={route} onChange={(v) => setRoute(v as Route)}
           options={[{ value: 'sms', label: t('widget.expiry-coupon.routeSms', { n: recipients }) }, { value: 'place_news', label: t('widget.expiry-coupon.routePlace') }]} />
-        {phase === 'form' ? <div className="mkt-expiry-action">
+        {phase === 'form' ? <DetailFooterContent><div className="mkt-expiry-action">
           <ActionButton disabled={disabled || !known || routeBlocked || problem !== null} onClick={() => { setError(null); setPhase('confirm'); }} data-slot="expiry-coupon.create">{t('marketing.createCoupon')}</ActionButton>
           {route === 'sms' && recipients === 0 ? <p className="mkt-reason" role="status">{t('marketing.noRecipients')}</p> : null}
+          {route === 'sms' && !smsConfigured && <SmsSetupHelp openSettings={host.openSettings} />}
           {error ? <p className="mkt-reason" role="alert"><Icon name="error" aria-hidden />{error}</p> : null}
-        </div> : null}
+        </div></DetailFooterContent> : null}
       </section>
     </div>
     <div className="mkt-col-side">
-      {phase === 'form' ? route === 'place_news' && made ? null : <>
+      {phase === 'form' ? (route === 'place_news' ? !made : smsBody !== null) && <>
         {/* T-29: once this lot's coupon exists its generated post (below) is the 게시 문구; the generic hint would repeat the title. */}
         <section aria-labelledby="exp-preview">
           <h2 id="exp-preview">{route === 'sms' ? t('marketing.messagePreview') : t('widget.expiry-coupon.postTitle')}</h2>
-          {route === 'sms' ? <FixedSmsPreview body={smsBody} recipientCount={recipients} /> : <p className="mkt-hint">{t('widget.expiry-coupon.placeHint')}</p>}
+          {route === 'sms' ? smsBody && <FixedSmsPreview body={smsBody} recipientCount={recipients} customerOnly /> : <p className="mkt-hint">{t('widget.expiry-coupon.placeHint')}</p>}
         </section>
       </> : (submitted?.route ?? route) === 'sms' ? (
-        phase === 'sent' ? <SentStatus /> : <ConfirmStep count={submitted?.count ?? recipients} phase={phase === 'confirm' ? 'ask' : phase} onCancel={() => { setSubmitted(null); setPhase('form'); }} onSend={create}
+        phase === 'sent' ? <DetailFooterContent><SentStatus /></DetailFooterContent> : <ConfirmStep footerActions count={submitted?.count ?? recipients} phase={phase === 'confirm' ? 'ask' : phase} onCancel={() => { setSubmitted(null); setPhase('form'); }} onSend={create}
           summary={[
             { label: t('widget.expiry-coupon.summaryItem'), value: itemName },
             { label: t('widget.expiry-coupon.summaryRoute'), value: routeName },
@@ -242,10 +250,10 @@ function ExpiryFlow({ model, item, onPick, notes, host, rate, initialRoute }: { 
         <section className="mkt-confirm" aria-labelledby={phase === 'sent' ? undefined : 'exp-confirm'}>
           {phase !== 'sent' ? <h3 id="exp-confirm" tabIndex={-1} ref={(node) => node?.focus()}>{t('widget.expiry-coupon.confirmCreate')}</h3> : null}
           <dl><div><dt>{t('widget.expiry-coupon.summaryItem')}</dt><dd>{itemName}</dd></div><div><dt>{t('widget.expiry-coupon.summaryRoute')}</dt><dd>{routeName}</dd></div><div><dt>{t('widget.expiry-coupon.summaryPrice')}</dt><dd>{submitted?.benefit ?? benefitText}</dd></div></dl>
-          {phase === 'sent' ? <p role="status"><Icon name="check" aria-hidden />{t('marketing.couponCreated')}</p> : <div className="mkt-actions">
+          <DetailFooterContent>{phase === 'sent' ? <p role="status"><Icon name="check" aria-hidden />{t('marketing.couponCreated')}</p> : <div className="detail-footer-actions mkt-actions">
             <ActionButton disabled={pending} onClick={create}>{pending ? <Spinner /> : null}{t('widget.expiry-coupon.create')}</ActionButton>
             <ActionButton disabled={pending} variant="secondary" onClick={() => { setSubmitted(null); setPhase('form'); }}>{t('widget.expiry-coupon.notNow')}</ActionButton>
-          </div>}
+          </div>}</DetailFooterContent>
         </section>
       )}
       <PendingExpiryPosts posts={model.pendingPosts} host={host} />

@@ -5,15 +5,16 @@ import { useRealPort } from '../../../data/react';
 import { InlineError, StatusChip } from '../../../ui';
 import { useGrantsCopy } from './grants.copy';
 import { useMoneyT } from './shared';
-import { noticeDay, noticeStamp } from './grants.dates';
+import { noticeDay } from './grants.dates';
 
 function useFundingRead<T>(read: (transport: PortTransport, signal: AbortSignal) => Promise<T>) {
   const port = useRealPort();
+  const http = port?.mode('manuals') === 'http';
   const [value, setValue] = useState<T>();
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!port) return;
+    if (!http) return;
     const controller = new AbortController();
     const { signal } = controller;
     void read(port.transport, signal).then(
@@ -21,8 +22,8 @@ function useFundingRead<T>(read: (transport: PortTransport, signal: AbortSignal)
       () => { if (!signal.aborted) setFailed(true); },
     );
     return () => controller.abort();
-  }, [port, read, attempt]);
-  return { value, failed, retry: () => { setFailed(false); setAttempt(value => value + 1); } };
+  }, [port, http, read, attempt]);
+  return { value, http, failed, retry: () => { setFailed(false); setAttempt(value => value + 1); } };
 }
 
 export function FinancialCenterRecommendations({ selected, onSelect }: {
@@ -30,10 +31,11 @@ export function FinancialCenterRecommendations({ selected, onSelect }: {
   readonly onSelect: (ref: string) => void;
 }) {
   const { t } = useGrantsCopy();
-  const { value: list, failed, retry } = useFundingRead(readFundingList);
+  const { value: list, http, failed, retry } = useFundingRead(readFundingList);
   return (
     <section aria-label={t('funding.title')} data-slot="grants.financial-center">
-      {failed ? <InlineError message={t('funding.error')} onRetry={retry} />
+      <h3 className="mm-card__title">{t('funding.title')}</h3>
+      {!http ? <p>{t('funding.empty')}</p> : failed ? <InlineError message={t('funding.error')} onRetry={retry} />
         : !list ? <p role="status">{t('funding.loading')}</p>
         : list.state === 'not-connected' ? <p>{t('funding.disconnected')}</p>
         : !list.items.length ? <p>{t('funding.empty')}</p>
@@ -60,17 +62,16 @@ export function FundingNotice({ refId }: { readonly refId: string }) {
     <div className="mm-item" data-slot="grants.financial-center.detail">
       <h3 className="mm-card__title">{detail.title}</h3>
       <p className="mm-muted">{t('funding.source')} {detail.status === 'closed' && <StatusChip semantic="none">{t('funding.closed')}</StatusChip>}</p>
-      <p>{detail.overview}</p>
-      <dl className="mm-dl mm-grant-facts">
+      <p><span className="mm-muted">{t('funding.original')} · </span>{detail.overview}</p>
+      <dl className="mm-dl mm-grant-facts mm-funding-facts">
         {detail.startDate && <div><dt>{t('grants.start')}</dt><dd>{noticeDay(format, detail.startDate)}</dd></div>}
         {detail.endDate && <div><dt>{t('funding.end')}</dt><dd>{noticeDay(format, detail.endDate)}</dd></div>}
         <div><dt>{t('grants.target')}</dt><dd>{detail.eligibility}</dd></div>
         <div><dt>{t('grants.method')}</dt><dd>{detail.applicationMethod}</dd></div>
         {!!detail.documents?.length && <div><dt>{t('funding.documents')}</dt><dd><ul className="mm-bullets">{detail.documents.map(document => <li key={document}>{document}</li>)}</ul></dd></div>}
-        <div><dt>{t('funding.basis')}</dt><dd><time dateTime={detail.asOf}>{noticeStamp(format, detail.asOf)}</time></dd></div>
       </dl>
       <div className="mm-actions">
-        <a className="ui-button ui-button--secondary ui-button--default" href={detail.officialNoticeUrl} target="_blank" rel="noopener noreferrer">
+        <a className="ui-button ui-button--secondary ui-button--default mm-funding-open" href={detail.officialNoticeUrl} target="_blank" rel="noopener noreferrer">
           <span className="ui-press-surface">{t('funding.open')}</span>
         </a>
       </div>

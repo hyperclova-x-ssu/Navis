@@ -27,6 +27,12 @@ const sourced: Readonly<Record<string, Row>> = {
     '有 {n} 条消息和评论等待回复。',
     '有 {n} 則訊息和評論等待回覆。',
   ],
+  [`${PREFIX_TODAY}replies.recorded`]: [
+    '기록한 문의 {n}건이 답변을 기다려요',
+    '{n, plural, one {# recorded inquiry is} other {# recorded inquiries are}} waiting for a reply.',
+    '已记录的询问中，有 {n} 条等待回复。',
+    '已記錄的詢問中，有 {n} 則等待回覆。',
+  ],
   [`${PREFIX_TODAY}replies.s2`]: ['답변 초안을 써 뒀어요', 'Drafts are ready.', '已写好回复草稿。', '已寫好回覆草稿。'],
   [`${PREFIX_TODAY}video.s2`]: ['짧은 영상으로 만들어 볼까요?', 'Turn them into a short video?', '要做成短视频吗？', '要做成短影片嗎？'],
 };
@@ -47,8 +53,16 @@ const written: Readonly<Record<string, Row>> = {
   /* 마케팅 성과 */
   // GD-3 (S6): the lines are this period's codes (ended coupons included) and add up to the route row.
   'promo.need.menu': ['메뉴를 하나 골라 주세요', 'Choose one menu item', '请选择一个菜单品项', '請選擇一個菜單品項'],
+  'promo.error.selectionUnavailable': ['메뉴·사진에서 사용할 메뉴와 사진을 다시 골라 주세요', 'Choose the menu items and photos again in Menu & photos', '请在菜品和照片中重新选择菜品和照片', '請在品項和照片中重新選擇品項和照片'],
+  'promo.error.notReady': ['완성된 홍보 영상을 골라 주세요', 'Choose a finished promo video', '请选择已完成的宣传视频', '請選擇已完成的宣傳影片'],
   /* PROMO-UI (D-326 Q12): SCR-52 PhotoCountLine "{n}장 골랐어요 · 5장 이상" and SCR-55 summary chip name "{값}, 바꾸려면 누르기, ① 메뉴·사진" */
   'promo.photo.count': ['{n}장 골랐어요 · 5장 이상', '{n} picked · 5 or more', '已选 {n} 张 · 至少 5 张', '已選 {n} 張 · 至少 5 張'],
+  'promo.photo.available': ['영상에 쓸 사진 {n}장', '{n, plural, one {# photo} other {# photos}} for the video', '可用于视频的照片 {n} 张', '可用於影片的照片 {n} 張'],
+  'promo.stage.look': ['미리 분석한 사진 정보', 'Pre-analyzed photo details', '预先分析的照片信息', '預先分析的照片資訊'],
+  'promo.stage.story': ['HyperCLOVA X 기획', 'HyperCLOVA X planning', 'HyperCLOVA X 策划', 'HyperCLOVA X 規劃'],
+  'promo.stage.scenes': ['Claude 영상 제작', 'Claude video production', 'Claude 制作视频', 'Claude 製作影片'],
+  'promo.stage.merge': ['완성', 'Finish', '完成', '完成'],
+  'promo.prog.looking': ['사진 {n}장', '{n, plural, one {# photo} other {# photos}}', '{n} 张照片', '{n} 張照片'],
   'promo.sum.changeName': ['{value}, 바꾸려면 누르기, {tab}', '{value}, press to change, {tab}', '{value}，点按可修改，{tab}', '{value}，點按可修改，{tab}'],
   /* Gallery and its steps (LOCALES 9.4, 20 and the D-347 approved design names used by Navis). */
   'promo.retry': ['다시 시도하기', 'Try again', '重试', '重試'],
@@ -76,6 +90,18 @@ const written: Readonly<Record<string, Row>> = {
   'promo.ref.ref-4.name': ['손에 든 한 입 클로즈업', 'Close-up of a bite in hand', '手持一口特写', '手持一口特寫'],
   'promo.ref.ref-5.name': ['우리 가게 하루 타임라인', 'A day at our shop timeline', '我们店的一天时间线', '我們店的一天時間軸'],
   'promo.ref.ref-6.name': ['손글씨 감성 카드', 'Handwritten-note cards', '手写感卡片', '手寫感卡片'],
+  'promo.ref.ref-7.name': ['비트 컷', 'Beat cut', '节拍剪辑', '節拍剪輯'],
+  'promo.ref.ref-8.name': ['줌 렌즈 투어', 'Zoom lens tour', '变焦镜头漫游', '變焦鏡頭漫遊'],
+  'promo.ref.ref-9.name': ['스티커 팝', 'Sticker pop', '贴纸弹跳', '貼紙彈跳'],
+  'promo.ref.ref-10.name': ['스플릿 듀오', 'Split duo', '双画面分屏', '雙畫面分割'],
+  'promo.ref.ref-11.name': ['폴라로이드 스크랩북', 'Polaroid scrapbook', '即影即有剪贴簿', '即影即有剪貼簿'],
+  'promo.ref.ref-12.name': ['티커 헤드라인', 'Ticker headline', '滚动头条', '跑馬燈頭條'],
+  'promo.ref.ref-13.name': ['하루 타임라인', 'Day timeline', '一天的时间线', '一天的時間軸'],
+  'promo.ref.ref-14.name': ['타이포 포스터 / 매거진 커버', 'Typography poster / magazine cover', '文字海报 / 杂志封面', '文字海報 / 雜誌封面'],
+  'promo.ref.ref-15.name': ['메뉴판', 'Menu board', '菜单板', '菜單板'],
+  'promo.ref.ref-16.name': ['필름 스트립', 'Film strip', '胶片条', '底片條'],
+  'promo.ref.ref-17.name': ['패럴랙스 플로트 카드', 'Parallax float card', '视差浮动卡片', '視差浮動卡片'],
+  'promo.ref.ref-18.name': ['무디 나이트 / 소프트포커스', 'Moody night / soft focus', '夜色氛围 / 柔焦', '夜色氛圍 / 柔焦'],
   'promo.sum.ref': ['디자인', 'Design', '设计', '設計'],
 };
 
@@ -90,7 +116,7 @@ const koOnly: Readonly<Record<string, string>> = {
   [`${PREFIX_TODAY}state.none.short`]: '지금 급한 홍보는 없어요',
   [`${PREFIX_VIDEO}state.few-photos.short`]: '사진이 5장 필요해요',
   /* 오늘 할 홍보 이번 주 칸 (LOCALES 9.3 D-347: the video uses the shop's own photos, not review photos) */
-  [`${PREFIX_TODAY}video.photos`]: '영상에 쓸 매장 사진 {n}장이 있어요',
+  [`${PREFIX_TODAY}video.photos`]: '영상에 쓸 사진 {n}장이 있어요',
   /* 위젯 (SCR-50) */
   [`${PREFIX_VIDEO}materials.label`]: '사진',
   [`${PREFIX_VIDEO}materials.unit`]: '장',
@@ -175,11 +201,6 @@ const koOnly: Readonly<Record<string, string>> = {
   'promo.list': '{a}, {b}',
   /* 만드는 중 (SCR-56) */
   'promo.prog.title': '영상을 만들고 있어요',
-  'promo.stage.look': '사진 살펴보기',
-  'promo.stage.story': '이야기 짜기',
-  'promo.stage.scenes': '장면 만들기',
-  'promo.stage.merge': '영상 합치기',
-  'promo.prog.looking': '{n}장 살펴보는 중',
   'promo.prog.elapsed': '{t} 지났어요',
   'promo.prog.slow': '조금 더 걸리고 있어요',
   'promo.prog.keep': '창을 닫아도 계속 만들어요',

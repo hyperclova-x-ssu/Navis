@@ -57,7 +57,7 @@ describe('a repeated payment is surfaced before it is added', () => {
     await userEvent.type(screen.getByRole('spinbutton', { name: /납부 금액/ }), String(row.amount));
     await pickDue(row.dueOn);
     const before = store.getSnapshot().tables.taxPayment.length;
-    await userEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    await userEvent.click(screen.getByRole('button', { name: '납부 기록 저장하기' }));
     expect(store.getSnapshot().tables.taxPayment.length).toBe(before);
     // T-17: a refusal reads "실행하지 못했어요 · {이유}" (the form already shows its next step, so no second one is added).
     expect(screen.getByText('실행하지 못했어요 · 같은 세금 납부 일정이 있어요. 기존 일정을 확인해 주세요')).toBeInTheDocument();

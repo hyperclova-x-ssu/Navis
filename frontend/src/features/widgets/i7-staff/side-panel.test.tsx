@@ -18,6 +18,20 @@ const props = {
 const format = createTranslator('ko').format;
 const css = () => readFileSync('src/features/widgets/i7-staff/staff.css', 'utf8');
 const panelOf = (name: string) => screen.getByRole('region', { name });
+it('lets the side panel own vertical scrolling only when large text is on', async () => {
+  for (const textScale of [100, 125] as const) {
+    const view = renderWithKit(<><style>{`.ui-overlay-body { overflow-y: auto; } ${css()}`}</style>
+      <div className="ui-overlay-body"><StaffDetail {...props} /></div></>, { textScale, reducedMotion: true });
+    const body = view.container.querySelector<HTMLElement>('.ui-overlay-body')!;
+    expect(getComputedStyle(body).overflowY).toBe('auto');
+    fireEvent.click(screen.getByRole('button', { name: '근무 추가하기' }));
+    panelOf('근무 추가하기').setAttribute('data-layout', 'overlay');
+    expect(getComputedStyle(body).overflowY).toBe(textScale === 125 ? 'hidden' : 'auto');
+    fireEvent.click(within(panelOf('근무 추가하기')).getByRole('button', { name: '닫기' }));
+    await waitFor(() => expect(getComputedStyle(body).overflowY).toBe('auto'));
+    cleanup();
+  }
+});
 const gone = (name: string) => waitFor(() => expect(screen.queryByRole('region', { name })).not.toBeInTheDocument());
 /** First person who works today, with their shift button in the weekly table. */
 const firstShift = (store: ReturnType<typeof createWidgetDataStore>) => {
@@ -49,7 +63,7 @@ describe('D-326 Q11: staff shifts open in the right DetailSidePanel', () => {
     const names = () => within(container.querySelector<HTMLElement>('.staff-toolbar__add')!).getAllByRole('button').map(button => button.textContent);
     expect(names()).toEqual(['직원 추가하기', '근무 추가하기', '휴무 등록하기', '교대 시각 고치기']);
     fireEvent.click(screen.getByRole('button', { name: '휴무 등록하기' }));
-    expect(panelOf('근무 추가하기')).toBeInTheDocument();
+    expect(panelOf('휴무 등록하기')).toBeInTheDocument();
     expect(names()).toEqual(['직원 추가하기', '근무 추가하기', '휴무 등록하기', '교대 시각 고치기']);
   });
 
@@ -142,7 +156,7 @@ describe('D-326 Q11: staff shifts open in the right DetailSidePanel', () => {
     fireEvent.click(screen.getAllByRole('button', { name: '직원 지우기' })[0]!);
     const panel = panelOf('직원 지우기');
     expect(within(panel).getByText(/근무 일정도 함께 지워요/)).toBeInTheDocument();
-    expect(within(panel).queryByRole('button', { name: '직원 지우기' })).not.toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: '직원 지우기' })).toHaveClass('ui-button--destructive');
   });
 
   it('shrinks the table beside the panel instead of hiding columns under it', () => {

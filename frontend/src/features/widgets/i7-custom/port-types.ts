@@ -22,7 +22,7 @@ export interface CustomOrderPort {
   readonly execute?: (command: CustomOrderCommand) => Promise<CustomUiResult>;
   readonly openSettlement: (target: { readonly purpose: 'custom_order'; readonly customOrderId: string }, context: CustomReturnContext) => void;
   readonly openReversal: (target: { readonly customOrderId: string; readonly cancelOrder: boolean }, context: CustomReturnContext) => void;
-  readonly members?: readonly { readonly memberId: string; readonly label: string }[];
+  readonly members?: readonly { readonly memberId: string; readonly label: string; readonly code?: string | null }[];
   /** Present only on an HTTP build (`VITE_NAVIS_DATA_SOURCE=http`): payments are recorded through the service, photos through the account files. */
   readonly real?: RealPort;
   /** HTTP builds: record the owner's terminal slip or cash (`customOrder.recordPayment` / `recordCorrection`). Resolves when the service has confirmed or refused. */

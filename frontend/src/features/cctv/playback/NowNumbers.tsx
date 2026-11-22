@@ -6,7 +6,7 @@ import type {CctvMessageKey} from '../messages';
 import {tableStateText} from './tableStateText';
 
 /** Numbers come straight from the `CctvView`; never recomputed from persons/cups. */
-export function NowNumbers({view, time, duration}: {readonly view: CctvView; readonly time: number; readonly duration: number}) {
+export function NowNumbers({view, clock}: {readonly view: CctvView; readonly clock?: { readonly time: number; readonly duration: number }}) {
   const {t} = useBundle(cctvBundle);
   const inUse = view.tables.filter(x => x.state === 'occupied').length;
   const clear = view.tables.filter(x => x.state === 'clear').length;
@@ -18,7 +18,7 @@ export function NowNumbers({view, time, duration}: {readonly view: CctvView; rea
     <p className="cctv-now__row" data-testid="now-change">{change}</p>
     <p className="cctv-now__row" data-testid="now-seats">{t('cctv.tables.inUse', {a: inUse, b: view.tables.length})}</p>
     <p className="cctv-now__row" data-testid="now-clear">{t('cctv.tables.toClear', {n: clear})}</p>
-    <p className="cctv-now__time">{formatClock(time)} / {formatClock(duration)}</p>
+    {clock ? <p className="cctv-now__time">{formatClock(clock.time)} / {formatClock(clock.duration)}</p> : null}
     <details className="cctv-now__states"><summary>{t('cctv.tables.showStates')}</summary>
       <ul>{view.tables.map(x => <li key={x.id}>{t('cctv.table.row', {name: t(x.label.key as CctvMessageKey, x.label.params), state: tableStateText(x, t)})}</li>)}</ul>
     </details>

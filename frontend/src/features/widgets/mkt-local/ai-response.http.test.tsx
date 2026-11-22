@@ -45,9 +45,9 @@ it('saves a draft, then records the reply once on a double press, and the sent r
   expect(send.closest('.mkt-reply-footer')).toBeInTheDocument();
   expect(send).toBeDisabled();
   fireEvent.change(field, { target: { value: '일요일은 쉬어요' } });
-  expect(screen.getByText('초안을 저장한 뒤에 보낼 수 있어요')).toBeInTheDocument();
-  expect(send).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: '초안 저장' }));
+  expect(send).toBeEnabled();
+  expect(writes(backend)).toHaveLength(0);
+  fireEvent.click(screen.getByRole('button', { name: '초안 저장하기' }));
   await waitFor(() => expect(screen.getByRole('button', { name: '톡톡으로 답변 보내기' })).toBeEnabled());
   expect(state.log).toEqual([]);
   expect(writes(backend).map(call => call.method + ' ' + call.path)).toEqual([`PATCH /marketing/inquiries/${ids.talk}/draft`]);
@@ -72,10 +72,11 @@ it('shows the review author-notification sentence from the service and asks twic
   // T-52 (D-381/D-382, W21-F9): before the press, the same line also says not to write personal information.
   expect(screen.getByText('개인정보는 적지 않아요')).toBeInTheDocument();
   fireEvent.change(screen.getByRole('textbox', { name: '답글 초안' }), { target: { value: '감사합니다' } });
-  fireEvent.click(screen.getByRole('button', { name: '초안 저장' }));
+  fireEvent.click(screen.getByRole('button', { name: '초안 저장하기' }));
   await waitFor(() => expect(screen.getByRole('button', { name: '답글 올리기' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: '답글 올리기' }));
-  fireEvent.click(await screen.findByRole('button', { name: '답글 지우기' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: '답글 지우기' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: '답글 지우기' }));
   expect(screen.getByText(/이 리뷰 답글을 지울까요/)).toBeInTheDocument();
   expect(backend.callsTo('DELETE', /reply/)).toHaveLength(0);
   state.log.length = 0;
@@ -90,7 +91,7 @@ it('records a typed inquiry and takes a visible NAVER review into the queue', as
   fireEvent.click(await screen.findByRole('button', { name: '문의 직접 적기' }));
   fireEvent.change(screen.getByRole('textbox', { name: /제목/ }), { target: { value: '단체 예약' } });
   fireEvent.change(screen.getByRole('textbox', { name: '받은 내용' }), { target: { value: '10명 가능한가요?' } });
-  fireEvent.click(screen.getByRole('button', { name: '기록하기' }));
+  fireEvent.click(screen.getByRole('button', { name: '문의 기록하기' }));
   await waitFor(() => expect(backend.callsTo('POST', '/marketing/inquiries')).toHaveLength(1));
   expect(backend.callsTo('POST', '/marketing/inquiries')[0]!.body).toEqual({ source: 'manual', type: 'message', title: '단체 예약', text: '10명 가능한가요?' });
   // The created record is read back from the service and opens in the reply pane (not only as a list excerpt).
@@ -113,10 +114,11 @@ it('makes the reply delete confirm one Esc step that backs out and returns focus
   open(backend, { view: 'review' });
   await screen.findByText('답글을 올리면 리뷰 작성자에게 알림이 가요.');
   fireEvent.change(screen.getByRole('textbox', { name: '답글 초안' }), { target: { value: '감사합니다' } });
-  fireEvent.click(screen.getByRole('button', { name: '초안 저장' }));
+  fireEvent.click(screen.getByRole('button', { name: '초안 저장하기' }));
   await waitFor(() => expect(screen.getByRole('button', { name: '답글 올리기' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: '답글 올리기' }));
-  fireEvent.click(await screen.findByRole('button', { name: '답글 지우기' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: '답글 지우기' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: '답글 지우기' }));
   const layer = screen.getByRole('group', { name: '답글 지우기' });
   expect(layer).toHaveAttribute('data-esc-layer');
   const close = layer.querySelector<HTMLElement>('[data-esc-close]');
@@ -158,7 +160,7 @@ it.each([
   backend.on('POST', `/marketing/inquiries/${ids.talk}/reply`, () => reply(409, { code }));
   open(backend);
   fireEvent.change(await screen.findByRole('textbox', { name: '답변 초안' }), { target: { value: '일요일은 쉬어요' } });
-  fireEvent.click(screen.getByRole('button', { name: '초안 저장' }));
+  fireEvent.click(screen.getByRole('button', { name: '초안 저장하기' }));
   await waitFor(() => expect(screen.getByRole('button', { name: '톡톡으로 답변 보내기' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: '톡톡으로 답변 보내기' }));
   expect(await screen.findByText(line)).toBeInTheDocument();

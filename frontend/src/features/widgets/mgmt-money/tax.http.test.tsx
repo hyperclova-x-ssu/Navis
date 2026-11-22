@@ -62,7 +62,7 @@ it('shows the POS preview, uses its revision for export and sends the review exp
   expect(preview.getByRole('row', { name: '매출 합계 12,000원' })).toBeVisible();
   expect(preview.getByRole('row', { name: '실제 입금 16,000원' })).toBeVisible();
   expect(preview.getByRole('row', { name: '현금영수증 발행 앱에서는 볼 수 없어요' })).toBeVisible();
-  expect(preview.getByRole('row', { name: '증빙 종류를 적은 지출 0건' })).toBeVisible();
+  expect(preview.getByRole('row', { name: '증빙 있음 0건' })).toBeVisible();
   expect(preview.getByRole('row', { name: '증빙 파일을 붙인 납부 기록 0건' })).toBeVisible();
   await userEvent.click(screen.getByRole('button', { name: '확인 완료로 표시하기' }));
   await waitFor(() => expect(backend.callsTo('POST', '/pos/tax-reviews/expense-1/check')[0]?.body).toEqual({ expenseRevision: 4 }));

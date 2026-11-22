@@ -2,9 +2,14 @@ export const customAccountingCopy = {
   title: '주문제작 수령 매출', product: '상품', sales: '매출', cost: '원가', unknownCost: '원가 미등록',
 } as const;
 
-const coverageDate = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+const coverageDate = new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', timeZone: 'UTC' });
 export function depositCoverageNote(start: string, end: string): string {
-  const date = (value: string) => coverageDate.format(new Date(`${value}T00:00:00Z`));
+  const date = (value: string) => {
+    const parts = coverageDate.formatToParts(new Date(`${value}T00:00:00Z`));
+    const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(item => item.type === type)?.value;
+    const weekday = new Intl.DateTimeFormat('ko-KR', { weekday: 'short', timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`));
+    return `${part('month')}/${part('day')}(${weekday})`;
+  };
   return `실제 입금은 ${start === end ? date(start) : `${date(start)}~${date(end)}`} 자료만 있어요`;
 }
 

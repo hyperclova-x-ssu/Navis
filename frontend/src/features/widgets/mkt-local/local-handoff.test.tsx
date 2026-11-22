@@ -50,13 +50,12 @@ describe('N20 local widget hand-off', () => {
     expect(document.querySelector('[data-slot="trade-area.metric.value"]')?.textContent).toContain(String(model.peak.people));
   });
 
-  it('expands the keyword the hand-off names', () => {
-    const model = readModel(createWidgetDataStore(createSeedTables()).getSnapshot(), 'local-trends');
+  it('prefills the candidate editor with the keyword the hand-off names', () => {
+    const store = createWidgetDataStore({ ...createSeedTables(), exampleLocalTrends: { candidates: [] } });
+    const model = readModel(store.getSnapshot(), 'local-trends');
     const keyword = model.keywords[model.keywords.length - 1];
-    detail('local-trends', { view: 'keywords', itemId: keyword.keywordId });
-    const expanded = document.querySelector('button[aria-expanded="true"]');
-    expect(expanded).toBeInTheDocument();
-    expect(expanded?.textContent).toContain(String(keyword.changePercent ?? ''));
-    expect(screen.getAllByRole('heading', { level: 4 })[0].textContent).toBe(keyword.keywordKey.replace(/^seed:/u, ''));
+    detail('local-trends', { view: 'keywords', itemId: keyword.keywordId }, store);
+    expect(screen.getByRole('textbox', { name: /검색어/ })).toHaveValue(keyword.keywordKey.replace(/^seed:/u, ''));
+    expect(screen.getByRole('button', { name: '검색어 추가하기' })).toBeEnabled();
   });
 });

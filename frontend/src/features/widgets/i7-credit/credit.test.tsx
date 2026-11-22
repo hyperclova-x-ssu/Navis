@@ -33,7 +33,7 @@ it('announces loading while the credit balance is still being read', () => {
     return <p>{text}</p>;
   }
   renderWithKit(<Summary />, { store });
-  expect(screen.getByText('충전금·외상 내역을 불러오고 있어요')).toBeVisible();
+  expect(screen.getByText('불러오는 중이에요')).toBeVisible();
   expect(screen.queryByText('아직 충전금·외상 거래가 없어요')).toBeNull();
 });
 
@@ -41,13 +41,13 @@ it('shows a compact member number while preserving the row ID', async () => {
   const fixture = binding();
   if (fixture.view.status !== 'ready') throw new Error('Expected members');
   const memberId = 'e79a88b6-e6a5-4d5b-b23a-78c7f72e2dcc';
-  const model = { ...fixture.view.model, members: [{ ...fixture.view.model.members[0], memberId }] };
+  const model = { ...fixture.view.model, members: [{ ...fixture.view.model.members[0], name: '손님 M-0008', memberId }] };
   const { container } = renderWithKit(<CreditDetail {...detail} {...fixture} view={{ status: 'ready', model }} />);
   const row = container.querySelector<HTMLElement>(`[data-grid-row="${memberId}"]`)!;
-  expect(row).toHaveTextContent('M-E79A88B6');
+  expect(row).toHaveTextContent('M-0008');
   expect(row).not.toHaveTextContent(memberId);
-  await userEvent.click(within(row).getByText('M-E79A88B6'));
-  expect(screen.getByRole('region', { name: 'M-E79A88B6 김○현' })).toBeInTheDocument();
+  await userEvent.click(within(row).getByText('M-0008'));
+  expect(screen.getByRole('region', { name: /^손○○\s+M-0008$/ })).toBeInTheDocument();
 });
 
 it('omits the compact third line and gives both larger balances equal metric blocks', () => {
@@ -77,11 +77,11 @@ it('searches a member by name or phone suffix while masking both displayed value
   renderWithKit(<CreditDetail {...detail} {...binding()} />);
   const search = screen.getByRole('searchbox');
   await userEvent.type(search, '지현');
-  expect(screen.getByRole('grid', { name: '회원별 현황' }).textContent).toContain('김○현');
+  expect(screen.getByRole('grid', { name: '회원별 현황' }).textContent).toContain('김○○');
   expect(document.body.textContent).not.toContain('김지현');
   await userEvent.clear(search); await userEvent.type(search, '7711');
-  expect(screen.getByRole('grid').textContent).toContain('정○아');
-  expect(screen.getByRole('grid').textContent).not.toContain('김○현');
+  expect(screen.getByRole('grid').textContent).toContain('정○○');
+  expect(screen.getByRole('grid').textContent).not.toContain('김○○');
 });
 
 it('uses the standard table search field across all three tabs', async () => {
@@ -145,6 +145,8 @@ it('waits for the explicit cash record press before writing an HTTP top-up', asy
   expect(dialog.querySelector('.shared-settlement')).toBeInTheDocument();
   expect(backend.callsTo('POST', path)).toHaveLength(0);
   await userEvent.click(within(dialog).getByRole('button', { name: '현금' }));
+  expect(backend.callsTo('POST', path)).toHaveLength(0);
+  await userEvent.click(within(dialog).getByRole('button', { name: '받은 현금 기록하기' }));
   expect(backend.callsTo('POST', path).map(call => call.body)).toEqual([
     { purpose: 'charge_topup', amount: 5000, expectedRevision: 7, splits: [{ method: 'cash', amount: 5000 }] },
   ]);
@@ -241,6 +243,9 @@ it('requires an extra press before cancelling a recorded pass use', async () => 
     recognizedValue: null, unrecognizedValue: null, refundedValue: null, status: 'active',
     uses: [{ useId: 'use', usedAt: '2026-11-21T15:00:00', settlementId: 'settlement' }],
   }] }}><MemberMoneySection memberId="M-0001" detailRef={{ featureId: 'members' }} /></MemberMoneyProvider>, { store });
+  await userEvent.click(screen.getByRole('button', { name: '1회 사용 기록하기' }));
+  expect(fixture.port.openMembershipUse).toHaveBeenCalledWith('M-0001', 'pass', expect.objectContaining({ selectedId: 'M-0001' }));
+  expect(backend.callsTo('POST', /\/uses/u)).toHaveLength(0);
   await userEvent.click(screen.getByRole('button', { name: '사용 취소하기' }));
   expect(backend.callsTo('POST', /\/uses\//u)).toHaveLength(0);
   await userEvent.click(screen.getByRole('button', { name: '사용 취소 확인' }));
@@ -336,7 +341,7 @@ it('shows the cafe sample members by their already masked names and the cafe tot
   const firstRow = screen.getAllByRole('row').find(row => row.hasAttribute('data-grid-row'))!;
   const first = model.members.find(member => member.memberId === firstRow.getAttribute('data-grid-row'))!;
   expect(first.chargeBalance + first.receivableBalance).toBeGreaterThan(0);
-  expect(firstRow.textContent).toContain(first.name);
+  expect(firstRow.querySelector('[data-grid-column-id="name"]')).toHaveTextContent(`${first.name[0]}○○`);
   expect(firstRow.textContent).not.toMatch(/○{3}/);
   expect(screen.queryByRole('columnheader', { name: '연락처' })).not.toBeInTheDocument();
 });

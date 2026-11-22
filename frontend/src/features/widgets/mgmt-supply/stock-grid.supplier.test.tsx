@@ -27,7 +27,7 @@ it('fixture mode: the expanded next-delivery link keeps the seeded supplier name
   const { supplierId } = purchaseOf(store.getSnapshot().tables, BEANS);
   const seeded = raw(store.getSnapshot().tables.supplier.find(s => s.supplierId === supplierId)!.name);
   const grid = openStockDetail(store);
-  expect(grid.getByRole('button', { name: `5 kg · ${seeded}` })).toBeInTheDocument();
+  expect(grid.getByRole('button', { name: `5kg · ${seeded}` })).toBeInTheDocument();
 });
 
 it('real mode: the expanded next-delivery link shows the real supplierName when there is no message key', () => {
@@ -38,5 +38,5 @@ it('real mode: the expanded next-delivery link shows the real supplierName when 
   const store = createWidgetDataStore({ supplier: base.supplier.map(s => (s.supplierId === supplierId ? { ...s, nameKey: '', name: { raw: real } } : s)) });
   placeOrder(store, BEANS, 5, addIsoDays(TODAY, 1));
   const grid = openStockDetail(store);
-  expect(grid.getByRole('button', { name: `5 kg · ${real}` })).toBeInTheDocument();
+  expect(grid.getByRole('button', { name: `5kg · ${real}` })).toBeInTheDocument();
 });

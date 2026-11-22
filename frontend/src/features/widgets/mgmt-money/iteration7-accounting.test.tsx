@@ -91,12 +91,13 @@ const m3 = {
 };
 const fixture: AccountingView = m3;
 const host: WidgetHost = { layer: 'management', resetPreview: vi.fn(), openClosing: vi.fn(() => true), openLinked: vi.fn(), openDetail: vi.fn(), notify: vi.fn(), acknowledgeBriefing: vi.fn() };
+const salesMetric = () => document.querySelector('[data-slot="ledger.kpi.sales"] .ui-metric-fit');
 
 describe('M3 financial presentation', () => {
   it.each(['ko', 'en', 'zh-Hans'] as const)('separates actual receipts from recognized sales and settlement kinds in %s', locale => {
     renderWithKit(<LedgerDetail featureId="ledger" condition={{ kind: 'default' }} detailRef={{ featureId: 'ledger' }} host={host} {...{ accounting: m3 }} />, { locale });
-    const sales = screen.getByRole('region', { name: '오늘 매출' });
-    expect(within(sales).getByText((_,node) => node?.textContent === '1,284,000원', {selector:'.ui-pos-money--display'})).toBeInTheDocument();
+    const sales = screen.getByRole('region', { name: '매출 계산' });
+    expect(salesMetric()?.textContent?.match(/[\d,]+/u)?.[0]).toBe('1,284,000');
     const methods = within(sales).getByRole('table', { name: '판매분 결제 수단' });
     expect(within(methods).getByText('864,336원')).toBeInTheDocument();
     expect(within(methods).queryByText('충전금 사용액')).not.toBeInTheDocument();
@@ -113,7 +114,7 @@ describe('M3 financial presentation', () => {
   it('takes authoritative totals including corrections without recomputing or subtracting refunds twice', () => {
     const accounting = { ...m3, summary: { ...m3.summary, sales: { ...m3.summary.sales, total: 1274000, byRealMethodSale: { ...m3.summary.sales.byRealMethodSale, card: 854336 }, refund: 20000 }, deposits: { ...m3.summary.deposits, total: 1376336, byMethod: { ...m3.summary.deposits.byMethod, card: 949336 }, byPurpose: { ...m3.summary.deposits.byPurpose, sale: 1226336 }, returned: 20000 } } };
     renderWithKit(<LedgerDetail featureId="ledger" condition={{ kind: 'default' }} detailRef={{ featureId: 'ledger' }} host={host} {...{ accounting }} />);
-    expect(within(screen.getByRole('region', { name: '오늘 매출' })).getByText((_,node) => node?.textContent === '1,274,000원', {selector:'.ui-pos-money--display'})).toBeInTheDocument();
+    expect(salesMetric()).toHaveTextContent('1,274,000원');
     expect(within(screen.getByRole('region', { name: '실제 입금' })).getByText((_,node) => node?.textContent === '1,376,336원', {selector:'.ui-pos-money--display'})).toBeInTheDocument();
   });
   it('shows non-sale receipts, signed refunds and opens the original receipt', async () => {
@@ -176,9 +177,8 @@ it('M3 provider publishes the five PRD12.6 cumulative deltas without widget-owne
   ];
   for (const next of cases) {
     rerender(renderLedger({ ...m3, summary: { ...m3.summary, sales: { ...m3.summary.sales, total: next.sales, chargeUsed: next.chargeUsed, receivableCreated: next.receivableCreated, customPickup: next.custom }, deposits: { ...m3.summary.deposits, total: next.deposits, byMethod: { ...m3.summary.deposits.byMethod, card: next.card, cash: next.cash }, byPurpose: { ...m3.summary.deposits.byPurpose, charge_topup: next.chargeTopup, receivable_collection: next.collected } } } }));
-    const sales = within(screen.getByRole('region', { name: '오늘 매출' }));
     const deposits = within(screen.getByRole('region', { name: '실제 입금' }));
-    expect(sales.getByText((_,node) => node?.textContent === `${next.sales.toLocaleString('ko-KR')}원`, {selector:'.ui-pos-money--display'})).toBeInTheDocument();
+    expect(salesMetric()).toHaveTextContent(`${next.sales.toLocaleString('ko-KR')}원`);
     expect(deposits.getByText((_,node) => node?.textContent === `${next.deposits.toLocaleString('ko-KR')}원`, {selector:'.ui-pos-money--display'})).toBeInTheDocument();
   }
 });

@@ -43,7 +43,7 @@ it('UX-A-14 starts at the first valid order quantity and resets it for a differe
   fireEvent.change(item, { target: { value: next.purchaseItemId } });
   expect(quantity).toHaveValue(minimum(next.purchaseItemId));
   fireEvent.change(quantity, { target: { value: 0 } });
-  fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+  fireEvent.click(screen.getByRole('button', { name: '발주 기록하기' }));
   expect(quantity.closest('.ms-order-quantity')?.querySelector('[role="alert"]')).toHaveTextContent('0보다 큰 숫자를 넣어 주세요');
   expect(quantity).toHaveAttribute('aria-invalid', 'true');
 });
@@ -76,13 +76,13 @@ describe('suppliers panel (SCR-30, AC-273)', () => {
     expect(body().querySelector('.ui-metric-fit__value')).toHaveTextContent('0');
     expect(body()).not.toHaveTextContent('입고 확인 필요');
   });
-  it('2×1: 오늘 우유 · 한강목장 first; 1×2: 오늘 우유 12 L · 내일 원두 5 kg · 모레 컵 500개', () => {
+  it('2×1: 오늘 우유 · 한강목장 first; 1×2: 오늘 우유 12L · 내일 원두 5kg · 모레 컵 500개', () => {
     const { store } = week(), n = names(store);
     renderWithKit(<SupplyPanel id="suppliers" width={2} height={1} host={createTestHost('suppliers')} />, { store });
     expect(rowTexts()).toEqual([`오늘 ${n.milk}${DOT}${n.milkSupplier}`, `내일 ${n.beans}${DOT}${n.beansSupplier}`]);
     cleanup();
     renderWithKit(<SupplyPanel id="suppliers" width={1} height={2} host={createTestHost('suppliers')} />, { store });
-    expect(rowTexts()).toEqual([`오늘 ${n.milk} 12 L`, `내일 ${n.beans} 5 kg`, `모레 ${n.cups} 500개`]);
+    expect(rowTexts()).toEqual([`오늘 ${n.milk} 12L`, `내일 ${n.beans} 5kg`, `모레 ${n.cups} 500개`]);
     cleanup();
     renderWithKit(<SupplyPanel id="suppliers" width={1} height={2} host={createTestHost('suppliers')} />, { store, locale: 'en' });
     expect(rowTexts()).toEqual([`Today${DOT}${n.milk}${DOT}12 L`, `Tomorrow${DOT}${n.beans}${DOT}5 kg`, `In 2 days${DOT}${n.cups}${DOT}500 pcs`]);
@@ -130,7 +130,7 @@ describe('suppliers states (AC-274)', () => {
     cleanup();
     const onReset = vi.fn();
     panel(1, 1, { preview: preview('error') }, createTestHost('suppliers', { onReset }));
-    expect(screen.getByText('입고 일정을 불러오지 못했어요')).toBeInTheDocument();
+    expect(screen.getByText('발주를 불러오지 못했어요')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '다시 시도하기, 발주' }));
     expect(onReset).toHaveBeenCalledWith('suppliers');
   });
@@ -138,7 +138,7 @@ describe('suppliers states (AC-274)', () => {
     const store = createWidgetDataStore();
     renderWithKit(<DetailStack root={{ featureId: 'suppliers', view: 'register' }} />, { store, locale: 'en' });
     fireEvent.change(within(screen.getByRole('form', { name: '발주사 추가하기' })).getByRole('textbox',{name:'발주사'}), { target: { value: '새 농장' } });
-    fireEvent.change(screen.getByLabelText('담당'), { target: { value: '김사장' } });
+    fireEvent.change(screen.getByLabelText('메일 주소'), { target: { value: 'supplier@example.com' } });
     fireEvent.change(screen.getByLabelText('연락처'), { target: { value: '01012345678' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(store.getSnapshot().tables.supplier.some(r => r.name && 'raw' in r.name && r.name.raw === '새 농장')).toBe(true);
@@ -149,7 +149,7 @@ describe('suppliers states (AC-274)', () => {
   it('발주사 추가하기: an empty name says 발주사 이름을 넣어 주세요 and saves nothing', () => {
     const store = createWidgetDataStore(), suppliers = store.getSnapshot().tables.supplier.length;
     renderWithKit(<DetailStack root={{ featureId: 'suppliers', view: 'register' }} />, { store });
-    fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '발주사 저장하기' }));
     expect(within(screen.getByRole('form', { name: '발주사 추가하기' })).getByRole('alert')).toHaveTextContent('발주사 이름을 넣어 주세요');
     expect(store.getSnapshot().tables.supplier).toHaveLength(suppliers);
   });
@@ -175,15 +175,16 @@ describe('suppliers detail (SCR-31, AC-273, AC-236~238 order side)', () => {
     const row = grid.querySelector(`[data-grid-row="${milkPo}"]`) as HTMLElement;
     const price = store.getSnapshot().tables.purchaseItem.find((p) => p.itemId === MILK)!.unitPrice;
     expect(row).toHaveAttribute('aria-selected', 'true');
-    expect(within(row).getByRole('gridcell', { name: /주문 수량/ })).toHaveTextContent('12 L');
+    expect(within(row).getByRole('gridcell', { name: /주문 수량/ })).toHaveTextContent('12L');
     expect(within(row).getByRole('gridcell', { name: /총 주문 금액/ })).toHaveTextContent(`${(12 * price).toLocaleString('en-US')}원`);
-    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('0 L / 12 L');
+    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('0L / 12L');
     expect(within(row).getByRole('gridcell', { name: /입고 예정일/ })).toHaveTextContent(shortDate(TODAY));
     fireEvent.click(screen.getByRole('tab', { name: '발주사' }));
     const dairy = store.getSnapshot().tables.supplier.find((v) => v.supplierId === 's-dairy')!;
     const supplier = screen.getByRole('grid', { name: '발주사' }).querySelector('[data-grid-row="s-dairy"]') as HTMLElement;
-    expect(supplier).not.toHaveTextContent(dairy.phoneMask);
-    expect(within(supplier).getByRole('gridcell', { name: /연락처, —$/ })).toBeInTheDocument();
+    expect(supplier).toHaveTextContent(dairy.phoneMask);
+    expect(supplier).toHaveTextContent(/supplier\d@example\.com/);
+    expect(supplier).toHaveTextContent('테스트 담당');
     expect(supplier).not.toHaveTextContent(/010-?\d{4}-?\d{4}/);
   });
 
@@ -206,20 +207,20 @@ describe('suppliers detail (SCR-31, AC-273, AC-236~238 order side)', () => {
     expect([...status.querySelectorAll('.ui-status-chip')].map(chip => chip.textContent)).toEqual(['입고 대기', '입고 확인 필요']);
   });
 
-  it('records 8 L: remaining 4 L, still due, one receipt for a double press, undo offered', () => {
+  it('records 8L: remaining 4L, still due, one receipt for a double press, undo offered', () => {
     const onNotify = vi.fn();
     const { store, milkPo } = open({}, { onNotify });
     const stockBefore = readModel(store.getSnapshot(), 'inventory-booking').ingredients.find((r) => r.itemId === MILK)!.stock!;
     const amount = screen.getByRole('spinbutton', { name: '받은 수량' });
     expect(amount).toHaveValue(12);
-    expect(screen.getByText('받은·남은 수량 12 L')).toBeInTheDocument();
+    expect(screen.getByText('받은·남은 수량 12L')).toBeInTheDocument();
     fireEvent.change(amount, { target: { value: '8' } });
     const record = screen.getByRole('button', { name: '입고 기록하기' });
     fireEvent.click(record);
     fireEvent.click(record);
     const tables = store.getSnapshot().tables, polIds = tables.purchaseOrderLine.filter((l) => l.poId === milkPo).map((l) => l.polId);
     expect(tables.receipt.filter((r) => polIds.includes(r.polId))).toHaveLength(1);
-    // 8 L received = 8,000 mL on the shelf (the purchase unit is converted to the stock unit once)
+    // 8L received = 8,000mL on the shelf (the purchase unit is converted to the stock unit once)
     expect(readModel(store.getSnapshot(), 'inventory-booking').ingredients.find((r) => r.itemId === MILK)!.stock).toBe(stockBefore + 8000);
     expect(readModel(store.getSnapshot(), 'suppliers').upcomingCount).toBe(3);
     expect(screen.getByRole('button', { name: '입고 기록하기' })).toBeDisabled();
@@ -227,8 +228,8 @@ describe('suppliers detail (SCR-31, AC-273, AC-236~238 order side)', () => {
     expect(onNotify).toHaveBeenCalledTimes(1);
     expect(onNotify).toHaveBeenCalledWith(expect.objectContaining({ messageKey: 'data.notice.receiptRecorded', undoToken: expect.any(String) }));
     const row = screen.getByRole('grid', { name: '발주 내역' }).querySelector(`[data-grid-row="${milkPo}"]`) as HTMLElement;
-    expect(within(row).getByRole('gridcell', { name: /주문 수량/ })).toHaveTextContent('12 L');
-    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('8 L / 4 L');
+    expect(within(row).getByRole('gridcell', { name: /주문 수량/ })).toHaveTextContent('12L');
+    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('8L / 4L');
     expect(screen.getAllByText('일부 입고').length).toBeGreaterThan(0);
   });
 
@@ -270,7 +271,7 @@ describe('suppliers detail (SCR-31, AC-273, AC-236~238 order side)', () => {
     expect(onReset).toHaveBeenCalledWith('suppliers');
   });
 
-  it('the special state on the cafe seed alone shows PRD 2.4.7\'s 12 L milk order due yesterday first as ‘입고 확인 필요’, the same one the panel counts', () => {
+  it('the special state on the cafe seed alone shows PRD 2.4.7\'s 12L milk order due yesterday first as ‘입고 확인 필요’, the same one the panel counts', () => {
     const store = createWidgetDataStore();
     const real = readModel(store.getSnapshot(), 'suppliers');
     expect(real.overdueCount).toBe(0);
@@ -282,9 +283,9 @@ describe('suppliers detail (SCR-31, AC-273, AC-236~238 order side)', () => {
     const first = rows[0]!;
     expect(first).toHaveTextContent('입고 확인 필요');
     expect(first).toHaveTextContent(names(store).milk);
-    expect(within(first).getByRole('gridcell', { name: /주문 수량/ })).toHaveTextContent('12 L');
+    expect(within(first).getByRole('gridcell', { name: /주문 수량/ })).toHaveTextContent('12L');
     expect(within(first).getByRole('gridcell', { name: /입고 예정일/ })).toHaveTextContent(shortDate(addIsoDays(TODAY, -1)));
-    expect(within(first).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('0 L / 12 L');
+    expect(within(first).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('0L / 12L');
     // only the example is overdue: every other row is the cafe's own
     expect(rows.slice(1).some((row) => row.textContent?.includes('입고 확인 필요'))).toBe(false);
     expect(document.querySelector('.ui-feature-panel [data-widget="suppliers"]')).toHaveTextContent('입고 확인 필요 1건');

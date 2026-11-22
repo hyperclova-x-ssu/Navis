@@ -19,7 +19,6 @@ import { ActionButton, CategoryMark, Checkbox, ChipChoice, DateField, DateSteppe
 import { addIsoDays, Flash, notifyResult, stateTone, SupplyPanelState, useFit, useSupplyText, SupplySurface, useTextScale, useViewMemory, WarnLine, type SupplyText } from './shared';
 import { CalendarExport } from './calendar.export';
 import { CalendarNaverButton, CalendarNaverReview, CalendarNaverSent, useCalendarNaver } from './calendar.naver';
-import { dateRangeWithWeekdays } from '../date-range';
 
 const ID = 'calendar' as const;
 const calendarKo = { 'supply.calendar.closure':'매장 휴무', 'supply.calendar.closureKind':'휴무 종류', 'supply.calendar.regularClosure':'정기 휴무', 'supply.calendar.temporaryClosure':'임시 휴무', 'supply.calendar.closureEnd':'휴무 종료일', 'supply.calendar.pickup':'예약 픽업', 'supply.calendar.pickups':'예약 픽업도 보기', 'supply.calendar.pickupSummary':'오늘 픽업 {n}건', 'supply.calendar.date':'날짜','supply.calendar.title':'일정 제목','supply.calendar.dateTime':'날짜와 시간','supply.calendar.memo':'일정 내용','supply.calendar.titleRequired':'일정 제목을 넣어 주세요', 'supply.calendar.category':'분류', 'supply.calendar.categories':'분류별로 보기', 'supply.calendar.store':'매장 운영', 'supply.calendar.stock':'발주·입고', 'supply.calendar.finance':'세금·행정', 'supply.calendar.none':'보이는 분류가 없어요. 분류를 켜 주세요', 'supply.calendar.reservations':'예약도 보기', 'supply.calendar.keepPast':'지난 기록으로 남기기', 'supply.calendar.saveAnyway':'그래도 저장하기', 'supply.calendar.leaveAsIs':'그대로 두기', 'supply.calendar.editName':'{title} 고치기', 'supply.calendar.deleteName':'{title} 지우기' } as const;
@@ -27,12 +26,21 @@ const calendarBundle = {
   id: 'widget.mgmt-supply.calendar-v5',
   ko: {
     ...calendarKo,
+    'supply.calendar.saveEvent': '일정 저장하기',
+    'supply.calendar.saveTodo': '할 일 저장하기',
+    'supply.calendar.keepEvent': '일정 유지하기',
+    'supply.calendar.deleteEvent': '일정 지우기',
     'supply.calendar.confirmDelete': '일정을 지울까요?',
     'supply.calendar.confirmClosureDelete': '매장 휴무를 지울까요?',
     'supply.calendar.deleteClosure': '휴무 지우기',
     'supply.calendar.closureDraftsUnlinked': '연결된 공지 초안에서 휴무 연결이 끊겨요',
   },
   en: {
+    'supply.calendar.saveEvent': 'Save event',
+    'supply.calendar.saveTodo': 'Save to-do',
+    'supply.calendar.keepEvent': 'Keep event',
+    'supply.calendar.deleteEvent': 'Delete event',
+    'supply.calendar.editName': 'Edit {title}',
     'supply.calendar.deleteName': 'Delete {title}',
     'supply.calendar.leaveAsIs': 'Keep it',
     'supply.calendar.confirmDelete': 'Delete this event?',
@@ -41,6 +49,11 @@ const calendarBundle = {
     'supply.calendar.closureDraftsUnlinked': 'Linked notice drafts will lose their connection to this closure.',
   },
   'zh-Hans': {
+    'supply.calendar.saveEvent': '保存日程',
+    'supply.calendar.saveTodo': '保存待办',
+    'supply.calendar.keepEvent': '保留日程',
+    'supply.calendar.deleteEvent': '删除日程',
+    'supply.calendar.editName': '修改{title}',
     'supply.calendar.deleteName': '删除{title}',
     'supply.calendar.leaveAsIs': '保留',
     'supply.calendar.confirmDelete': '要删除这条日程吗？',
@@ -49,6 +62,11 @@ const calendarBundle = {
     'supply.calendar.closureDraftsUnlinked': '相关通知草稿将解除与这条休息日程的关联。',
   },
   'zh-Hant': {
+    'supply.calendar.saveEvent': '儲存行程',
+    'supply.calendar.saveTodo': '儲存待辦',
+    'supply.calendar.keepEvent': '保留行程',
+    'supply.calendar.deleteEvent': '刪除行程',
+    'supply.calendar.editName': '修改{title}',
     'supply.calendar.deleteName': '刪除{title}',
     'supply.calendar.leaveAsIs': '保留',
     'supply.calendar.confirmDelete': '要刪除這筆行程嗎？',
@@ -76,6 +94,10 @@ function gridDays(start: string, end: string): string[] {
   for (let d = start; d <= end; d = addIsoDays(d, 1)) out.push(d);
   return out;
 }
+const shiftMonth = (iso: string, delta: number) => {
+  const [year, month] = iso.split('-').map(Number);
+  return new Date(Date.UTC(year!, month! - 1 + delta, 1)).toISOString().slice(0, 10);
+};
 const dayNumber = (iso: string) => Number(iso.slice(8, 10));
 
 /* ───────── Panel ───────── */
@@ -104,17 +126,33 @@ function EntryLines({ x, entries, withDate = false, hiddenRows, title, more = tr
 
 function WeekStrip({ x, model, compact }: { x: SupplyText; model: CalendarModel; compact?: boolean }) {
   const days = weekDays(model.week.start);
+  const weekEntries = [...model.weekEntries, ...model.pickupEntries];
   return <ol className="ms-week" data-compact={compact ? 'true' : undefined} aria-label={x.t('widget.calendar.thisWeek')} data-drop={200}>
     {days.map((d) => {
-      const count = model.weekEntries.filter((e) => e.date === d).length;
+      const entries = weekEntries.filter((e) => e.date === d);
+      const count = entries.length;
       return <li key={d} className="ms-week__day" data-today={d === model.today ? 'true' : undefined} aria-current={d === model.today ? 'date' : undefined}>
         <span className="ui-sr-only">{x.t('widget.calendar.dayCellName', { date: x.format.date(d, 'long'), count })}</span>
         <span className="ms-week__weekday" aria-hidden="true">{x.format.weekday(d, 'short')}</span>
         <span className="ms-week__date" aria-hidden="true">{dayNumber(d)}</span>
-        <span className="ms-week__count" aria-hidden="true">{count > 0 ? <><span className="ms-dot" />{x.format.number(count)}</> : null}</span>
+        <span className="ms-week__count" aria-hidden="true">{count > 0 ? <><CalendarMarks entries={entries} />{x.format.number(count)}</> : null}</span>
       </li>;
     })}
   </ol>;
+}
+
+function CalendarMarks({ entries }: { entries: readonly CalendarEntry[] }) {
+  return entries.slice(0, 3).map(entry => entry.source === 'pickup'
+    ? <span key={entry.id} className="ms-pickup-mark" />
+    : <CategoryMark key={entry.id} category={entry.categoryId === 'purchasing' ? 'stock' : entry.categoryId === 'tax-admin' ? 'finance' : 'store'}>{null}</CategoryMark>);
+}
+
+function CalendarLegend() {
+  const { t } = useBundle(calendarBundle);
+  return <div className="ms-calendar-legend">
+    {categories.map(category => <CategoryMark key={category.id} category={category.mark}>{t(category.key)}</CategoryMark>)}
+    <span className="ui-category-mark"><i className="ms-pickup-mark" aria-hidden="true" />{t('supply.calendar.pickup')}</span>
+  </div>;
 }
 
 function MonthGrid({ x, model, detail = false }: { x: SupplyText; model: CalendarModel; detail?: boolean }) {
@@ -124,16 +162,17 @@ function MonthGrid({ x, model, detail = false }: { x: SupplyText; model: Calenda
   const weeks = Array.from({ length: Math.ceil(days.length / 7) }, (_, i) => days.slice(i * 7, i * 7 + 7));
   const [year, month] = model.month.month.split('-').map(Number);
   const title = x.t('widget.calendar.monthTitle', { year: year!, month: month!, monthShort: x.tk(`format.month.short.${month}`) });
-  return <table className="ms-month" data-detail={detail ? 'true' : undefined} aria-label={x.t('widget.calendar.tableName', { title })} data-drop={detail ? undefined : 200}>
-    <caption className={detail ? 'ms-month__caption' : 'ui-sr-only'}>{title}</caption>
+  const monthEntries = [...model.monthEntries, ...model.pickupEntries];
+  return <table className="ms-month" data-detail={detail ? 'true' : undefined} aria-label={x.t('widget.calendar.tableName', { title })}>
+    <caption className="ms-month__caption">{title}</caption>
     <thead><tr>{weeks[0]!.map((d) => <th key={d} scope="col" abbr={x.format.weekday(d, 'long')}>{x.format.weekday(d, 'short')}</th>)}</tr></thead>
     <tbody>{weeks.map((week) => <tr key={week[0]}>{week.map((d) => {
-      const entries = model.monthEntries.filter((e) => e.date === d);
+      const entries = monthEntries.filter((e) => e.date === d);
       const inMonth = d.startsWith(model.month.month);
       return <td key={d} ref={d === model.today ? todayCell : undefined} data-in-month={String(inMonth)} data-today={d === model.today ? 'true' : undefined} aria-current={d === model.today ? 'date' : undefined}
         aria-label={x.t('widget.calendar.dayCellName', { date: x.format.date(d, 'long'), count: entries.length })}>
         <span className="ms-month__date" aria-hidden="true">{dayNumber(d)}{d === model.today ? <span className="ms-month__today">{x.t('widget.calendar.todayMark')}</span> : null}</span>
-        {entries.length > 0 ? <span className="ms-month__count" aria-hidden="true">{entries.slice(0, 3).map((e) => <span key={e.id} className="ms-dot" data-source={e.source} />)}{x.format.number(entries.length)}</span> : null}
+        {entries.length > 0 ? <span className="ms-month__count" aria-hidden="true"><CalendarMarks entries={entries} />{x.format.number(entries.length)}</span> : null}
       </td>;
     })}</tr>)}</tbody>
   </table>;
@@ -162,9 +201,16 @@ function CalendarPanelContent({ condition, width, height, shape, editing, host }
   const month = width >= 3 && height >= 3;
   /** D-333: from 4 rows up the month card also lists the rest of this week's entries under today's (dated, the same rows the week card shows). */
   const rest = month && height >= 4 ? m.weekEntries.filter((e) => e.date !== m.today).slice(0, 8) : [];
-  if (month) return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID} data-view="month">{today}<div className="ms-chart"><MonthGrid x={x} model={m} /></div><div className="ms-aside"><EntryLines x={x} title={x.t('widget.calendar.today')} entries={m.todayEntries.slice(0, 8)} hiddenRows={hiddenRows} more={rest.length === 0} />{rest.length > 0 ? <EntryLines x={x} title={x.t('widget.calendar.thisWeek')} entries={rest} withDate hiddenRows={hiddenRows} /> : null}</div></div>;
-  const week = <CalendarKey x={x} label={x.t('widget.calendar.thisWeek')} count={m.weekCount} sub={dateRangeWithWeekdays(x, m.week.start, m.week.end)} status={status} editing={editing} shape={shape} />;
-  return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID} data-view="week">{week}<div className="ms-chart"><WeekStrip x={x} model={m} compact={shape === 'S'} /></div><div className="ms-aside"><EntryLines x={x} entries={m.weekEntries.slice(0, 8)} withDate hiddenRows={hiddenRows} /></div></div>;
+  if (month) return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID} data-view="month">
+    {today}
+    <div className="ms-chart"><MonthGrid x={x} model={m} /></div>
+    <div className="ms-aside">
+      <CalendarLegend />
+      <EntryLines x={x} title={x.t('widget.calendar.today')} entries={m.todayEntries.slice(0, 8)} hiddenRows={hiddenRows} more={rest.length === 0} />
+      {rest.length > 0 ? <EntryLines x={x} title={x.t('widget.calendar.thisWeek')} entries={rest} withDate hiddenRows={hiddenRows} /> : null}
+    </div>
+  </div>;
+  return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID} data-view="week">{today}<div className="ms-chart"><WeekStrip x={x} model={m} compact={shape === 'S'} /></div><div className="ms-aside"><EntryLines x={x} title={x.t('widget.calendar.thisWeek')} entries={[...m.weekEntries.filter(e => e.date >= m.today), ...m.weekEntries.filter(e => e.date < m.today).reverse()].slice(0, 8)} withDate hiddenRows={hiddenRows} /></div></div>;
 }
 
 function useCalendarSummary({ condition }: { condition: WidgetPanelProps['condition'] }): string {
@@ -254,7 +300,7 @@ function EntryForm({ seed, onClose, onSaved, host }: { seed: FormSeed; onClose: 
   const heading = editing ? x.t('widget.calendar.form.edit') : kind === 'todo' ? x.t('common.addTodo') : x.t('common.addEvent');
   const answer = asked === 'past' ? <ActionButton variant="secondary" disabled={saving} onClick={() => save({ ...confirmation?.accepted, dateIntent: 'historical' })}>{ct('supply.calendar.keepPast')}</ActionButton>
     : asked === 'duplicate' ? <div className="ms-form-answer" style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)' }}><ActionButton variant="secondary" disabled={saving} onClick={() => save({ ...confirmation?.accepted, confirmDuplicate: true })}>{ct('supply.calendar.saveAnyway')}</ActionButton><ActionButton variant="outline" onClick={onClose}>{ct('supply.calendar.leaveAsIs')}</ActionButton></div> : null;
-  return <InlineForm title={heading} onSave={() => save()} onClose={onClose} saveLabel={x.t('common.saveAction')} closeLabel={x.t('common.close')} saving={saving}>
+  return <InlineForm footerActions title={heading} onSave={() => save()} onClose={onClose} saveLabel={ct(kind === 'todo' ? 'supply.calendar.saveTodo' : 'supply.calendar.saveEvent')} closeLabel={x.t('common.close')} saving={saving}>
     {!editing ? <SegmentedControl label={x.t('widget.calendar.form.kind')} value={kind} onChange={setKind} options={[{ value: 'event', label: x.t('widget.calendar.form.event') }, { value: 'todo', label: x.t('widget.calendar.form.todo') }]} /> : null}
     <TextField label={ct('supply.calendar.title')} value={title} onValueChange={(v) => { setTitle(v); if (errors.title) setErrors({ ...errors, title: undefined }); }} error={errors.title} name="calendar-title" />
     {asked === 'duplicate' ? answer : null}
@@ -274,7 +320,6 @@ function EntryForm({ seed, onClose, onSaved, host }: { seed: FormSeed; onClose: 
 
 function ConfirmDelete({ title, closure, hasLinkedDraft, revision, pending, onDelete }: { title: string; closure: boolean; hasLinkedDraft: boolean; revision?: number; pending: boolean; onDelete: (revision?: number) => void }) {
   const { t } = useBundle(calendarBundle);
-  const x = useSupplyText();
   const [confirmation, setConfirmation] = useState<{ revision?: number } | null>(null);
   const confirming = confirmation !== null;
   const trigger = useRef<HTMLButtonElement>(null);
@@ -286,8 +331,8 @@ function ConfirmDelete({ title, closure, hasLinkedDraft, revision, pending, onDe
     if (confirming) cancel.current?.focus();
   }, [confirming]);
   return <>
-    <ActionButton ref={trigger} variant="outline" aria-label={t('supply.calendar.deleteName', { title })}
-      aria-expanded={confirming} aria-controls={confirming ? id : undefined} onClick={() => setConfirmation({ revision })}>{x.t('widget.calendar.delete')}</ActionButton>
+    <ActionButton ref={trigger} variant="outline"
+      aria-expanded={confirming} aria-controls={confirming ? id : undefined} onClick={() => setConfirmation({ revision })}>{t('supply.calendar.deleteName', { title })}</ActionButton>
     {confirming && <div id={id} className="ms-closure-delete" data-esc-layer role="group" aria-labelledby={titleId} aria-describedby={warningId}>
       <p id={titleId} className="ms-caption">{t(closure ? 'supply.calendar.confirmClosureDelete' : 'supply.calendar.confirmDelete')}</p>
       {hasLinkedDraft && <div id={warningId}><WarnLine>{t('supply.calendar.closureDraftsUnlinked')}</WarnLine></div>}
@@ -295,8 +340,8 @@ function ConfirmDelete({ title, closure, hasLinkedDraft, revision, pending, onDe
         <ActionButton ref={cancel} variant="secondary" data-esc-close onClick={() => {
           setConfirmation(null);
           trigger.current?.focus();
-        }}>{t('supply.calendar.leaveAsIs')}</ActionButton>
-        <ActionButton variant="destructive" loading={pending} disabled={confirmation.revision !== revision} onClick={() => onDelete(confirmation.revision)}>{closure ? t('supply.calendar.deleteClosure') : x.t('widget.calendar.delete')}</ActionButton>
+        }}>{t('supply.calendar.keepEvent')}</ActionButton>
+        <ActionButton variant="destructive" loading={pending} disabled={confirmation.revision !== revision} onClick={() => onDelete(confirmation.revision)}>{t(closure ? 'supply.calendar.deleteClosure' : 'supply.calendar.deleteEvent')}</ActionButton>
       </div>
     </div>}
   </>;
@@ -305,7 +350,10 @@ function ConfirmDelete({ title, closure, hasLinkedDraft, revision, pending, onDe
 function EntryItem({ entry, selected, closures, revisions, deleting, onSelect, onEdit, onDelete, host, naver, compact = false }: { entry: CalendarEntry; selected: boolean; closures: ReadonlyMap<string, boolean>; revisions: ReadonlyMap<string, number | undefined>; deleting: string | null; onSelect: (id: string | null) => void; onEdit: (e: CalendarEntry) => void; onDelete: (e: CalendarEntry, revision?: number) => void; host: WidgetDetailProps['host']; naver?: ReturnType<typeof useCalendarNaver>; compact?: boolean }) {
   const x = useSupplyText();
   const instance=useId();
-  const text = x.text(entry.title);
+  const title = x.text(entry.title);
+  const rangeStart = entry.source === 'shift' && entry.time ? title.lastIndexOf(` · ${entry.time}~`) : -1;
+  const text = rangeStart < 0 ? title : title.slice(0, rangeStart);
+  const clockLabel = rangeStart < 0 ? entryTime(x, entry) : title.slice(rangeStart + 3);
   const {t:ct} = useBundle(calendarBundle);
   const source = entry.source === 'pickup' ? ct('supply.calendar.pickup') : x.t(`widget.calendar.source.${entry.source}`);
   const linkedClosureDraft = closures.get(entry.sourceId);
@@ -313,8 +361,8 @@ function EntryItem({ entry, selected, closures, revisions, deleting, onSelect, o
     const ref: DetailRef = entry.ref;
     return <li className="ms-entry-item" data-row-id={entry.id} data-source={entry.source}>
       <button type="button" className="ms-entry" data-compact={compact ? 'true' : undefined} aria-label={x.t('widget.calendar.openSource', { entry: `${entryTime(x, entry)} ${text}`, widget: x.tk(`widget.${ref.featureId}.title`) })} onClick={() => host.openLinked(ref)}>
-        <span className="ms-entry__time"><Flash slot={`calendar:detail:time:${entry.id}:${instance}`} value={entry.time ?? ''}>{entryTime(x, entry)}</Flash></span>
-        <span className="ms-entry__body"><span className="ms-entry__title"><CategoryMark category={entry.categoryId==='purchasing'?'stock':entry.categoryId==='tax-admin'?'finance':'store'}><TitleParts text={text} compact={compact} /></CategoryMark></span>{compact ? null : <span className="ms-entry__meta"><span className="ms-tag" data-source={entry.source}>{source}</span>{ref.featureId === 'staff-schedule' ? x.tk('data.staff.error.READ_ONLY_SOURCE') : x.t('widget.calendar.fromSource', { source })}</span>}</span>
+        <span className="ms-entry__time"><Flash slot={`calendar:detail:time:${entry.id}:${instance}`} value={clockLabel}>{clockLabel}</Flash></span>
+        <span className="ms-entry__body"><span className="ms-entry__title"><CategoryMark category={entry.categoryId==='purchasing'?'stock':entry.categoryId==='tax-admin'?'finance':'store'}><TitleParts text={text} compact={compact} /></CategoryMark></span>{compact ? null : <span className="ms-entry__meta"><span className="ms-tag" data-source={entry.source}>{source}</span>{ref.featureId !== 'staff-schedule' && x.t('widget.calendar.fromSource', { source })}</span>}</span>
         <Icon name="chevron-right" className="ms-entry__chevron" />
       </button>
     </li>;
@@ -328,7 +376,7 @@ function EntryItem({ entry, selected, closures, revisions, deleting, onSelect, o
     {selected ? <div className="ms-entry__actions">
       {entry.memo ? <p className="ms-caption"><Flash value={x.text(entry.memo)}>{x.t('widget.calendar.memoLine', { memo: x.text(entry.memo) })}</Flash></p> : null}
       {naver && entry.kind === 'event' ? <CalendarNaverSent naver={naver} eventId={entry.sourceId} /> : null}
-      <ActionButton variant="secondary" aria-label={ct('supply.calendar.editName',{title:text})} onClick={() => onEdit(entry)}>{x.t('widget.calendar.edit')}</ActionButton>
+      <ActionButton variant="secondary" onClick={() => onEdit(entry)}>{ct('supply.calendar.editName', { title: text })}</ActionButton>
       <ConfirmDelete title={text} closure={linkedClosureDraft !== undefined} hasLinkedDraft={linkedClosureDraft === true}
         revision={revisions.get(entry.sourceId)} pending={deleting === entry.id} onDelete={revision => onDelete(entry, revision)} />
     </div> : null}
@@ -417,8 +465,8 @@ function CalendarDetailContent({ condition, detailRef, host }: WidgetDetailProps
   const entriesOn = (date: string) => weekEntries.filter(entry => entry.date === date)
     .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99') || a.id.localeCompare(b.id));
   const dayEntries = mode === 'day' ? entriesOn(day) : m.todayEntries;
-  const dayPickups = m.pickupEntries.filter(entry => entry.date === day);
-  const dayStaff = m.staffEntries.filter(entry => entry.date === day);
+  const dayPickups = m.pickupEntries.filter(entry => entry.date === m.today);
+  const dayStaff = m.staffEntries.filter(entry => entry.date === m.today);
   const anyCategory = Object.values(m.categoryVisibility).some(Boolean);
   return <div ref={detail} className="ms-detail ms-cal" data-widget={ID}>
     <div className="ms-toolbar ms-calendar-toolbar">
@@ -430,7 +478,8 @@ function CalendarDetailContent({ condition, detailRef, host }: WidgetDetailProps
           <ActionButton variant="secondary" data-action="add-event" onClick={() => openAdd('event')}><Icon name="plus" />{x.t('common.addEvent')}</ActionButton>
           <ActionButton variant="secondary" data-action="add-todo" onClick={() => openAdd('todo')}><Icon name="plus" />{x.t('common.addTodo')}</ActionButton>
           <CalendarExport startDate={mode === 'day' ? day : mode === 'week' ? m.week.start : m.month.gridStart}
-            endDate={mode === 'day' ? day : mode === 'week' ? m.week.end : m.month.gridEnd} />
+            endDate={mode === 'day' ? day : mode === 'week' ? m.week.end : m.month.gridEnd}
+            entries={[...(mode === 'month' ? m.monthEntries : m.weekEntries).filter(entry => entry.source !== 'shift'), ...m.pickupEntries, ...m.staffEntries]} />
           <CalendarNaverButton naver={naver} />
         </div>
       </div>
@@ -443,9 +492,12 @@ function CalendarDetailContent({ condition, detailRef, host }: WidgetDetailProps
     {view.notes?.[0] ? <WarnLine slot={`${ID}.state.message`}>{x.tk(view.notes[0].messageKey)}</WarnLine> : null}
     <div className="ms-cal__body" data-view={mode}>
       <section className="ms-cal__main" aria-label={x.t(mode === 'month' ? 'widget.calendar.view.month' : mode === 'week' ? 'widget.calendar.view.week' : 'widget.calendar.view.day')}>
-        <DateField label={ct('supply.calendar.date')} value={day} today={today} onValueChange={(next) => { if (next) setDay(next); }} />
+        <div className="ms-calendar-date-picker">
+          <DateField label={ct('supply.calendar.date')} value={day} today={today} onValueChange={(next) => { if (next) setDay(next); }} />
+          {mode === 'month' && <DateStepper label={x.t('widget.calendar.view.month')} text={x.format.date(day, 'short')} onPrevious={() => setDay(shiftMonth(day, -1))} onNext={() => setDay(shiftMonth(day, 1))} />}
+        </div>
         {!anyCategory?<p>{ct('supply.calendar.none')}</p>:null}
-        {anyCategory && mode === 'month' ? <MonthGrid x={x} model={m} detail /> : null}
+        {anyCategory && mode === 'month' ? <><MonthGrid x={x} model={m} detail /><CalendarLegend /></> : null}
         {anyCategory && mode === 'week' ? <ol className="ms-week-grid">{weekDays(m.week.start).map((d) => {
           const list = entriesOn(d);
           return <li key={d} className="ms-week-grid__day" data-today={d === m.today ? 'true' : undefined} aria-current={d === m.today ? 'date' : undefined}>
@@ -467,7 +519,11 @@ function CalendarDetailContent({ condition, detailRef, host }: WidgetDetailProps
             {m.todayEntries.length ? <ul className="ms-entries" aria-label={x.t('widget.calendar.today')}>{m.todayEntries.map((e) => <EntryItem key={e.id} entry={e} selected={selected === e.id} {...entryProps} />)}</ul> : <p className="ms-caption">{x.t('data.state.calendar.none')}</p>}
             <p lang="ko">{ct('supply.calendar.pickupSummary',{n:m.pickupCount})}</p>
             {dayPickups.length ? <ul className="ms-entries" aria-label={x.tk('widget.custom-order.title')}>{dayPickups.map(e => <EntryItem key={e.id} entry={e} selected={selected === e.id} {...entryProps} />)}</ul> : null}
-            {dayStaff.length ? <><p className="ms-list__heading" aria-hidden="true">{x.tk('widget.staff-schedule.title')}</p><ul className="ms-entries" aria-label={x.tk('widget.staff-schedule.title')}>{dayStaff.map(e => <EntryItem key={e.id} entry={e} selected={selected === e.id} {...entryProps} />)}</ul></> : null}
+            {dayStaff.length ? <>
+              <h4 className="ms-list__title">{x.tk('widget.staff-schedule.title')} · {x.format.count(dayStaff.length, 'count')}</h4>
+              <p className="ms-caption">{x.tk('data.staff.error.READ_ONLY_SOURCE')}</p>
+              <ul className="ms-entries" aria-label={x.tk('widget.staff-schedule.title')}>{dayStaff.map(e => <EntryItem key={e.id} entry={e} selected={selected === e.id} {...entryProps} />)}</ul>
+            </> : null}
           </section>
           <p className="ms-count"><Flash value={m.weekCount}>{x.t('widget.calendar.weekSummary', { count: m.weekCount })}</Flash></p>
         </aside> : null}

@@ -1,7 +1,7 @@
 /** 마진·원가분석 (F-28, SCR-13/30/31): panel, detail with period/sort/menu breakdown and the price·cost calculator. */
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import type { QueryCondition, WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../../contracts';
-import { useWidgetView } from '../../../data/react';
+import { useRealPort, useRealRetry, useWidgetView } from '../../../data/react';
 import { resolveDataText, simulateMenuPrice, supportedConditions, type MarginMenuRow, type MarginModel } from '../../../data/widget-data';
 import { ActionButton, ChipChoice, DataGrid, NumberField, StatusBadge, renderStatusChip, type DataGridHandle, type GridColumn, type GridFocus, type GridSort } from '../../../ui';
 import {
@@ -14,6 +14,9 @@ import { AccountingUnknownCosts, SalesMethodCard, accountingForPeriod, useAccoun
 const ID = 'margin' as const;
 
 const rateText = (t: T, rate: number | null) => (rate === null ? t('widget.margin.unknown') : `${rate.toFixed(1)}%`);
+const salesQuantity = (t: T, row: MarginMenuRow) => row.categoryKey === 'data.management.category.dessert'
+  ? t.format.count(row.qty, 'pcs')
+  : `${t.format.number(row.qty)}${t.locale === 'en' ? ' ' : ''}${t('common.navis.agent.menuCups')}`;
 function compareText(t: T, model: MarginModel): string | undefined {
   const c = model.comparison;
   if (!c) return undefined;
@@ -23,16 +26,20 @@ const trendChart = (t: T, model: MarginModel): ChartData | undefined => {
   const points = model.trend.filter((p) => p.rate !== null);
   if (points.length === 0) return undefined;
   const week = points.length <= 7;
-  return { values: points.map((p) => p.rate ?? 0), labels: points.map((p) => week ? t.format.weekday(p.date, 'short') : t.format.date(p.date, 'short')), kind: 'line', ariaLabel: t('widget.margin.trend'), format: (n) => t.format.percent(n, 1) };
+  return { values: points.map((p) => p.rate ?? 0), labels: points.map((p) => week ? t.format.weekday(p.date, 'short') : t.format.date(p.date, 'short')), kind: 'line', ariaLabel: t('widget.margin.trend'), format: (n) => rateText(t, n) };
 };
 const menuRow = (t: T, m: MarginMenuRow): RowData => ({
   id: m.menuId, name: resolveDataText(t, m.name), semanticValue: m.rate,
   ...(m.rate === null ? { badge: <StatusBadge kind="needsReview" label={t('widget.margin.missingCost')} /> } : { value: rateText(t, m.rate) }),
 });
 
-function buildSpec(t: T, model: MarginModel, notes: ReactNode, shape: string): PanelSpec {
+const noSalesForDay = (model: MarginModel) => model.period.start === model.period.end && model.netSales === 0
+  && !model.costMissing && !model.menus.some(row => row.qty > 0);
+
+function buildSpec(t: T, model: MarginModel, notes: ReactNode, shape: string, fullHeight: boolean): PanelSpec {
   const known = model.rate !== null;
-  const value = known ? { value: t.format.percent(model.rate as number, 1), unit: '' } : { value: model.costMissing ? t('data.state.margin.missing-cost') : t('widget.margin.unknown'), unit: '' };
+  const noSales = noSalesForDay(model);
+  const value = noSales ? { value: t('data.state.margin.no-sales'), unit: '' } : known ? { value: rateText(t, model.rate), unit: '' } : { value: model.costMissing ? t('data.state.margin.missing-cost') : t('widget.margin.unknown'), unit: '' };
   const money = (n: number | null) => (n === null ? t('widget.margin.unknown') : t.format.money(n, 'compact'));
   const totals: RowData[] = [
     { id: 'netSales', name: t('widget.margin.netSales'), value: t.format.money(model.netSales, 'full'), semanticValue: model.netSales },
@@ -42,9 +49,9 @@ function buildSpec(t: T, model: MarginModel, notes: ReactNode, shape: string): P
   const menus = model.menus.map((m) => menuRow(t, m));
   const rows = shape === 'L' ? [...totals, ...menus] : shape === 'S' ? totals : menus;
   return {
-    slot: ID, label: t('widget.margin.rate'), value: value.value, semanticValue: model.rate, unit: value.unit, state: !known ? { message: value.value, tone: 'warning' } : undefined, sub: known ? compareText(t, model) : undefined,
+    slot: ID, label: t('widget.margin.rate'), value: value.value, semanticValue: model.rate, unit: value.unit, state: !known ? { message: value.value, tone: noSales ? 'info' : 'warning' } : undefined, sub: known ? compareText(t, model) : undefined,
     rows, rowsTitle: shape === 'T' || shape === 'L' ? t('widget.margin.menuBreakdown') : undefined,
-    chart: trendChart(t, model), chartInW: true, fitOrder: shape === 'W' ? MONEY_FIT.filter(part => part.selector !== '.mm-chart') : undefined, limitRows: shape === 'T' || shape === 'L', tightL: true, status: known ? notes : undefined,
+    chart: noSales ? undefined : trendChart(t, model), chartInW: true, fitOrder: shape === 'W' ? MONEY_FIT.filter(part => part.selector !== '.mm-chart') : undefined, limitRows: !fullHeight && (shape === 'T' || shape === 'L'), tightL: true, status: known ? notes : undefined,
   };
 }
 
@@ -52,14 +59,17 @@ export function MarginPanel(props: WidgetPanelProps) {
   const t = useMoneyT();
   const ctx = useSizeCtx(props);
   const view = useWidgetView(ID, props.condition);
-  if (view.status !== 'ready') return <ViewState view={view} ctx={ctx} host={props.host} featureId={ID} t={t} />;
-  return <MoneyPanel spec={buildSpec(t, view.model, <NoteLine notes={view.notes} t={t} />, ctx.shape)} ctx={ctx} />;
+  const retry = useRealRetry('money');
+  const http = useRealPort()?.mode('money') === 'http';
+  if (view.status !== 'ready') return <ViewState view={view} ctx={ctx} host={props.host} featureId={ID} t={t} onRetry={http ? retry : undefined} />;
+  return <MoneyPanel spec={buildSpec(t, view.model, <NoteLine notes={view.notes} t={t} />, ctx.shape, ctx.height === 4 && (ctx.width === 1 || ctx.width === 4))} ctx={ctx} />;
 }
 
 export function useMarginSummary({ condition }: { featureId: unknown; condition: QueryCondition }): string {
   const t = useMoneyT();
   const view = useWidgetView(ID, condition);
   if (view.status !== 'ready') return t(view.messageKey);
+  if (noSalesForDay(view.model)) return t('data.state.margin.no-sales');
   const label = t('widget.margin.rate'), rate = rateText(t, view.model.rate), compare = compareText(t, view.model);
   return view.model.rate !== null && compare ? t('widget.margin.summary', { label, rate, compare }) : t('widget.margin.summaryPlain', { label, rate: view.model.rate === null ? t('data.state.margin.missing-cost') : rate });
 }
@@ -85,6 +95,8 @@ export function MarginDetail({ condition, detailRef, host, accounting: explicitA
   const gridRef = useRef<DataGridHandle>(null);
   const simulatorPrice = useRef<HTMLInputElement>(null);
   const view = useWidgetView(ID, conditionFor(period));
+  const retry = useRealRetry('money');
+  const http = useRealPort()?.mode('money') === 'http';
   const ledgerView = useWidgetView('ledger', conditionFor(period));
   const presentation = useAccountingPresentation();
   const entryId = detailRef.itemId;
@@ -109,7 +121,7 @@ export function MarginDetail({ condition, detailRef, host, accounting: explicitA
   };
   const periodChips = <ChipChoice label={t('widget.margin.periodLabel')} value={period} onChange={setPeriod} options={PERIODS.map((p) => ({ value: p, label: t(PERIOD_KEYS[p]) }))} />;
   const widerPeriod = PERIODS[PERIODS.indexOf(period) + 1];
-  if (view.status !== 'ready') return <div className="mm-detail" data-widget={ID}>{periodChips}<DetailViewState view={view} host={host} t={t} nextAction={widerPeriod ? { label: t('widget.ledger.seePeriod', { period: t(PERIOD_KEYS[widerPeriod]) }), onPress: () => setPeriod(widerPeriod) } : undefined} /></div>;
+  if (view.status !== 'ready') return <div className="mm-detail" data-widget={ID}>{periodChips}<DetailViewState view={view} host={host} t={t} onRetry={http ? retry : undefined} nextAction={widerPeriod && view.messageKey !== 'data.real.loading' ? { label: t('widget.ledger.seePeriod', { period: t(PERIOD_KEYS[widerPeriod]) }), onPress: () => setPeriod(widerPeriod) } : undefined} /></div>;
   const m = view.model;
   const accounting = accountingForPeriod(presentation, m.period, explicitAccounting);
   const menus = [...m.menus].sort(gridSort && !(gridSort.columnId === 'rate' && gridSort.direction === 'asc') ? (a, b) => {
@@ -122,9 +134,10 @@ export function MarginDetail({ condition, detailRef, host, accounting: explicitA
   /** Table columns hold exact won, so one column never mixes 1.2만 원 with 5,500원 (DS 6.1). */
   const exact = (n: number | null) => (n === null ? t('widget.margin.unknown') : t.format.money(n, 'full'));
   const split = (n: number | null) => (n === null ? { value: t('widget.margin.unknown'), unit: '' } : splitMoney(t, n));
-  const rate = m.rate === null ? { value: m.costMissing ? t('data.state.margin.missing-cost') : t('widget.margin.unknown'), unit: '' } : splitFormatted(t.format.percent(m.rate, 1));
-  const chart = trendChart(t, m);
-  const compare = compareText(t, m);
+  const noSales = period === 'today' && noSalesForDay(m);
+  const rate = noSales ? { value: t('data.state.margin.no-sales'), unit: '' } : m.rate === null ? { value: m.costMissing ? t('data.state.margin.missing-cost') : t('widget.margin.unknown'), unit: '' } : splitFormatted(rateText(t, m.rate));
+  const chart = noSales ? undefined : trendChart(t, m);
+  const compare = noSales ? undefined : compareText(t, m);
   /** The picked period names every label and sentence below, so 7 and 30 days never read "오늘" (T-03). */
   const periodName = t(PERIOD_KEYS[period]);
   return (
@@ -132,7 +145,7 @@ export function MarginDetail({ condition, detailRef, host, accounting: explicitA
       <section className="mm-detail__overview" tabIndex={0} aria-label={t('widget.margin.title')}>
         <div className="mm-detail__tools">{periodChips}</div>
         <div className="mm-kpis" data-slot="margin.kpis">
-          <Kpi slot="margin.kpi.rate" label={t('widget.margin.ratePeriod', { period: periodName })} value={rate.value} unit={rate.unit} semanticValue={m.rate} tone={m.rate === null ? 'warning' : undefined} />
+          <Kpi slot="margin.kpi.rate" label={t('widget.margin.ratePeriod', { period: periodName })} value={rate.value} unit={rate.unit} semanticValue={m.rate} tone={!noSales && m.rate === null ? 'warning' : undefined} />
           <Kpi slot="margin.kpi.netSales" label={t('widget.margin.netSales')} value={split(m.netSales).value} unit={split(m.netSales).unit} semanticValue={m.netSales} />
           <Kpi slot="margin.kpi.cost" label={t('widget.margin.cost')} value={split(m.cost).value} unit={split(m.cost).unit} semanticValue={m.cost} />
           <Kpi slot="margin.kpi.grossProfit" label={t('widget.margin.grossProfit')} value={split(m.grossProfit).value} unit={split(m.grossProfit).unit} semanticValue={m.grossProfit} />
@@ -160,7 +173,7 @@ export function MarginDetail({ condition, detailRef, host, accounting: explicitA
           { id: 'unitCost', header: t('widget.margin.currentCost'), kind: 'number', sortable: true, minWidth: 120, value: row => exact(row.unitCost), render: row => row.unitCost === null ? renderStatusChip(t('widget.margin.missingCost'), 'warning') : exact(row.unitCost), accessibleValue: row => row.unitCost === null ? t('widget.margin.missingCost') : exact(row.unitCost) },
           { id: 'unitMargin', header: t('widget.margin.currentProfit'), kind: 'number', sortable: true, minWidth: 120, value: row => exact(row.unitMargin) },
           { id: 'rate', header: t('widget.margin.col.rate'), kind: 'number', sortable: true, minWidth: 120, value: row => row.rate === null ? t('widget.margin.missingCost') : rateText(t, row.rate), render: row => row.rate === null ? renderStatusChip(t('widget.margin.missingCost'), 'warning') : rateText(t, row.rate), accessibleValue: row => row.rate === null ? t('widget.margin.missingCost') : rateText(t, row.rate) },
-          { id: 'qty', header: t('widget.margin.col.qty'), kind: 'number', sortable: true, minWidth: 100, value: row => row.qty },
+          { id: 'qty', header: t('widget.margin.col.qty'), kind: 'number', sortable: true, minWidth: 100, value: row => salesQuantity(t, row) },
         ] satisfies GridColumn<MarginMenuRow>[]} sort={gridSort} onSortChange={setGridSort} focus={focus} onFocusChange={setFocus} selectedRowId={selected?.menuId ?? null} onSelectionChange={setSelectedId} expandedRowIds={new Set(selected ? [selected.menuId] : [])} renderExpanded={row => <MenuBreakdown key={`${row.menuId}:${row.price}:${row.unitCost}`} t={t} menu={row} host={host} prefill={row.menuId === entryId ? prefill : undefined} priceRef={simulatorEntry && row.menuId === entryId ? simulatorPrice : undefined} />} emptyContent={t('data.state.margin.no-sales')} />
       </section>
     </div>
@@ -178,6 +191,8 @@ function MenuBreakdown({ t, menu, host, prefill, priceRef }: {
   const base = menu.unitCost === null ? undefined : { price: menu.price, unitCost: menu.unitCost };
   const result = price !== null && cost !== null ? simulateMenuPrice({ price, unitCost: cost }, base) : null;
   const signed = (n: number) => `${n < 0 ? '−' : n > 0 ? '+' : ''}${full(Math.abs(n))}`;
+  const recipeName = (part: MarginMenuRow['recipe'][number]) => part.name || part.nameKey !== 'data.real.partial'
+    ? resolveDataText(t, part.name ?? { key: part.nameKey }) : '';
   const minus = (text: string) => text.replace(/^-/, '−');
   return (
     <section className="mm-card mm-menu" aria-label={resolveDataText(t, menu.name)} data-slot="margin.menu-detail" data-menu-id={menu.menuId}>
@@ -190,9 +205,10 @@ function MenuBreakdown({ t, menu, host, prefill, priceRef }: {
           </dl>
           <h4 className="mm-card__subtitle mm-spaced">{t('widget.margin.recipe')}</h4>
           <ul className="mm-plain-list" data-slot="margin.recipe">
-            {menu.recipe.map((part, i) => <li key={`${part.nameKey}-${i}`}><span>{resolveDataText(t, part.name ?? { key: part.nameKey })}{'\u00A0'}· {t.format.quantity(part.qty.value, part.qty.unit)}</span><strong>{full(part.cost)}</strong></li>)}
+            {menu.recipe.filter(part => recipeName(part)).map((part, i) => <li key={`${part.nameKey}-${i}`}><span>{recipeName(part)}{'\u00A0'}· {t.format.quantity(part.qty.value, part.qty.unit)}</span><strong>{full(part.cost)}</strong></li>)}
           </ul>
-          <p className="mm-muted">{t('widget.margin.effectiveFrom', { date: t.format.date(menu.costEffectiveFrom, 'long') })}</p><ActionButton variant="outline" onClick={() => host.openLinked({ featureId: 'menu', itemId: menu.menuId })}>{t('widget.margin.openMenu')}</ActionButton><ActionButton variant="outline" onClick={() => host.openLinked({ featureId: 'suppliers' })}>{t('widget.margin.openSuppliers')}</ActionButton>
+          {menu.recipe.some(part => !recipeName(part)) && <p className="mm-muted">이름을 확인할 수 없는 재료가 있어요. 메뉴에서 레시피를 확인해 주세요</p>}
+          <p className="mm-muted">{t('widget.margin.effectiveFrom', { date: t.format.date(menu.costEffectiveFrom, 'long') })}</p><div className="mm-actions"><ActionButton variant="outline" onClick={() => host.openLinked({ featureId: 'menu', itemId: menu.menuId })}>{t('widget.margin.openMenu')}</ActionButton><ActionButton variant="outline" onClick={() => host.openLinked({ featureId: 'suppliers' })}>{t('widget.margin.openSuppliers')}</ActionButton></div>
         </div>
         <div className="mm-sim" data-slot="margin.simulator">
           <h4 className="mm-card__subtitle">{t('widget.margin.simulate')}</h4>
@@ -204,7 +220,7 @@ function MenuBreakdown({ t, menu, host, prefill, priceRef }: {
               <><p className="mm-muted">{t('widget.margin.perUnit')}</p>
               <dl className="mm-dl" data-slot="margin.sim-result">
                 <div><dt>{t('widget.margin.simProfit')}</dt><dd data-slot="margin.sim-profit">{minus(full(result.profit))}</dd></div>
-                <div><dt>{t('widget.margin.simRate')}</dt><dd data-slot="margin.sim-rate">{minus(t.format.percent(result.rate, 1))}</dd></div>
+                <div><dt>{t('widget.margin.simRate')}</dt><dd data-slot="margin.sim-rate">{minus(rateText(t, result.rate))}</dd></div>
                 {result.profitDelta !== undefined && result.rateDelta !== undefined ? <div><dt>{t('widget.margin.simDiff')}</dt><dd data-slot="margin.sim-diff">{signed(result.profitDelta)}{'\u00A0'}· {t.format.delta(result.rateDelta, 'pp')}</dd></div> : null}
               </dl></>
             ) : <p className="mm-muted" data-slot="margin.sim-invalid">{t('widget.margin.simInvalid')}</p>}

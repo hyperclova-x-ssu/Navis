@@ -30,7 +30,7 @@ function ClimateReadout({ view, kind, variant, status = false, range = false }: 
   const temperature = kind === 'temperature';
   const value = temperature ? view.current.temperature.toFixed(1) : String(view.current.humidity);
   const unit = temperature ? '°C' : '%';
-  const label = temperature ? '현재 온도' : '현재 습도';
+  const label = temperature ? view.sensorStatus === 'manual' ? '온도' : '현재 온도' : view.sensorStatus === 'manual' ? '습도' : '현재 습도';
   const tone = view.sensorStatus === 'disconnected' ? 'stale' : outOfRange(view, kind) ? 'warning' : undefined;
   const icon = temperature ? <ThermometerIcon /> : <DropletIcon />;
   return <div className="i7-climate" data-variant={variant} data-tone={tone} role="group" aria-label={`${label} ${value}${unit}`}>
@@ -48,7 +48,7 @@ const keepControlKeys = (event: KeyboardEvent<HTMLElement>) => { if (event.key !
 function TransportIcon({ kind }: { kind: 'previous' | 'next' | 'play' | 'pause' }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true" width="24" height="24" fill="currentColor">{kind === 'pause' ? <path d="M6 4h4v16H6zM14 4h4v16h-4z" /> : kind === 'play' ? <path d="m7 4 13 8-13 8z" /> : kind === 'previous' ? <path d="M4 4h3v16H4zm16 0L8 12l12 8z" /> : <path d="M17 4h3v16h-3zM4 4l12 8-12 8z" />}</svg>;
 }
-function Player({ music, port, detail = false, controls = true, volume = false, playlists = false, playlistNameOnly = false, artist = false, hidden = false, next = false }: { music: Music; port: EnvironmentPort; detail?: boolean; controls?: boolean; volume?: boolean; playlists?: boolean; playlistNameOnly?: boolean; artist?: boolean; hidden?: boolean; next?: boolean }) {
+function Player({ music, port, detail = false, controls = true, volume = false, playlists = false, playlistNameOnly = false, artist = false, hidden = false }: { music: Music; port: EnvironmentPort; detail?: boolean; controls?: boolean; volume?: boolean; playlists?: boolean; playlistNameOnly?: boolean; artist?: boolean; hidden?: boolean }) {
   const [error, setError] = useState('');
   const invoke = (run: () => ControlResult) => {
     if (hidden || music.deviceStatus !== 'connected') return;
@@ -62,7 +62,7 @@ function Player({ music, port, detail = false, controls = true, volume = false, 
   return <div className="i7-environment-player" data-detail={detail || undefined}>
     <div className="i7-environment-art"><TurntableArt playing={playing && !error} detail={detail} /></div>
     <div className="i7-environment-now">
-      {disabled ? <><p>연결된 음악 장치가 없어요</p>{next && <p className="i7-environment-next">음악 장치를 연결하면 바로 재생할 수 있어요</p>}</> : <>
+      {disabled ? <p>{detail ? '음악 장치를 연결하면 바로 재생할 수 있어요' : '연결된 음악 장치가 없어요'}</p> : <>
         <p className="i7-environment-track" aria-label={`현재 재생 곡: ${music.track}`}>{titleBreak > 0 ? <>{title.slice(0, titleBreak)}<span className="i7-environment-track-tail">{' '}{title.slice(titleBreak + 1)}</span></> : title}</p>
         {artist && byline.length > 0 && <p className="i7-environment-artist">{byline.join(' · ')}</p>}
         <p className="i7-environment-music-state"><span aria-hidden="true">{playing ? '▶' : '‖'}</span>{playing ? '재생 중' : '일시정지'}</p>
@@ -82,15 +82,15 @@ function Player({ music, port, detail = false, controls = true, volume = false, 
   </div>;
 }
 function Trend({ view, detail = false }: { view: Ready; detail?: boolean }) {
-  return <div className="i7-environment-trend" data-detail={detail || undefined} aria-label="시간대별 변화"><h4>시간대별 변화</h4>
-    <div className="i7-environment-charts">{(['temperature', 'humidity'] as const).map(kind => <div className="i7-environment-trend-row" data-kind={kind} key={kind}><p>{kind === 'temperature' ? '온도' : '습도'}{!detail && <> · {kind === 'temperature' ? `${view.current.temperature.toFixed(1)}°C` : `${view.current.humidity}%`}</>}</p><MiniChart kind="line" compact seriesKeys={[kind === 'temperature' ? 'morning' : 'secondary']} data={{ axisLabels: view.trend.map(row => row.time), series: [{ name: kind === 'temperature' ? '온도' : '습도', unit: kind === 'temperature' ? '°C' : '%', values: view.trend.map(row => row[kind]) }] }} />{detail && <strong>{kind === 'temperature' ? `${view.current.temperature.toFixed(1)}°C` : `${view.current.humidity}%`}</strong>}</div>)}</div>
-    {detail && <div className="i7-environment-trend-axis" aria-hidden="true"><span>{view.trend[0]?.time}</span><span>{view.trend.at(-1)?.time}</span></div>}
+  return <div className="i7-environment-trend" data-detail={detail || undefined} aria-label={view.trend.length >= 2 ? "시간대별 변화" : "측정 기록"}><h4>{view.trend.length >= 2 ? "시간대별 변화" : "측정 기록"}</h4>
+    {view.trend.length >= 2 && <div className="i7-environment-charts">{(['temperature', 'humidity'] as const).map(kind => <div className="i7-environment-trend-row" data-kind={kind} key={kind}><p>{kind === 'temperature' ? '온도' : '습도'}</p><MiniChart kind="line" compact seriesKeys={[kind === 'temperature' ? 'morning' : 'secondary']} data={{ axisLabels: view.trend.map(row => row.time), series: [{ name: kind === 'temperature' ? '온도' : '습도', unit: kind === 'temperature' ? '°C' : '%', values: view.trend.map(row => row[kind]) }] }} />{detail && <strong>{kind === 'temperature' ? `${view.current.temperature.toFixed(1)}°C` : `${view.current.humidity}%`}</strong>}</div>)}</div>}
+    {detail && view.trend.length >= 2 && <div className="i7-environment-trend-axis" aria-hidden="true"><span>{view.trend[0]?.time}</span><span>{view.trend.at(-1)?.time}</span></div>}
     {detail && <Table className="i7-environment-table"><thead><tr><th scope="col">시간</th><th scope="col" data-numeric="true">온도</th><th scope="col" data-numeric="true">습도</th></tr></thead><tbody>{view.trend.map(row => <tr key={row.time}><th scope="row">{row.time}</th><td data-numeric="true">{row.temperature.toFixed(1)}°C</td><td data-numeric="true">{row.humidity}%</td></tr>)}</tbody></Table>}
   </div>;
 }
 const measured = (view: Ready) => `${view.sensorStatus === 'manual' ? '직접 측정' : '마지막 측정'} ${view.lastMeasuredAt}`;
 
-export function EnvironmentDetail({ view, port, focus, measurementEntry, stale }: { view: EnvironmentView; port: EnvironmentPort; focus?: string; measurementEntry?: ReactNode; stale?: boolean }) {
+export function EnvironmentDetail({ view, port, focus, measurementEntry, manual, stale }: { view: EnvironmentView; port: EnvironmentPort; focus?: string; measurementEntry?: ReactNode; manual?: boolean; stale?: boolean }) {
   // N19 deep link: a chat hand-off scrolls the named section ('sensor' or 'player') into view.
   const target = useRef<HTMLElement | null>(null);
   useEffect(() => { if (focus === 'sensor' || focus === 'player') target.current?.scrollIntoView?.({ block: 'start' }); }, [focus]);
@@ -102,14 +102,14 @@ export function EnvironmentDetail({ view, port, focus, measurementEntry, stale }
   return <div className="i7-environment-detail" lang="ko">
     <section ref={focus === 'sensor' ? target : undefined} data-focus={focus === 'sensor' || undefined} className="i7-environment-section" role="group" aria-label="온도와 습도"><h3>환경 모니터링</h3>
       {stale && <p role="status">마지막으로 불러온 측정값이에요 <ActionButton variant="secondary" onClick={port.retry}>다시 불러오기</ActionButton></p>}
-      {view.status === 'empty' ? measurementEntry ? <p>입력한 측정값이 없어요</p> : <><p>연결된 센서가 없어요</p><p className="i7-environment-next">센서를 연결하면 온도와 습도가 여기에 보여요</p></> : <>
+      {view.status === 'empty' ? manual ? <p>입력한 측정값이 없어요</p> : <><p>연결된 센서가 없어요</p><p className="i7-environment-next">센서를 연결하면 온도와 습도가 여기에 보여요</p></> : <>
         {view.sensorStatus === 'disconnected' && <Status view={view} />}
         <div className="i7-environment-readings"><ClimateReadout view={view} kind="temperature" variant="tile" status={view.sensorStatus === 'connected' && outOfRange(view, 'temperature')} /><ClimateReadout view={view} kind="humidity" variant="tile" status={view.sensorStatus === 'connected' && !outOfRange(view, 'temperature') && outOfRange(view, 'humidity')} /></div>
         <p className="i7-environment-measured">{measured(view)}</p><Trend view={view} detail />
       </>}
       {measurementEntry}
     </section>
-    <section ref={focus === 'player' ? target : undefined} data-focus={focus === 'player' || undefined} className="i7-environment-section" role="group" aria-label="매장 음악"><h3>매장 음악 관리</h3><Player music={view.status === 'ready' ? view.music : emptyMusic} port={port} detail volume playlists artist next /></section>
+    <section ref={focus === 'player' ? target : undefined} data-focus={focus === 'player' || undefined} className="i7-environment-section" role="group" aria-label="매장 음악"><h3>매장 음악 관리</h3><Player music={view.status === 'ready' ? view.music : emptyMusic} port={port} detail volume playlists artist /></section>
   </div>;
 }
 export function EnvironmentPanel({ view, port, width, height, manual, stale }: { view: EnvironmentView; port: EnvironmentPort; width: number; height: number; manual?: boolean; stale?: boolean }) {
@@ -126,12 +126,12 @@ export function EnvironmentPanel({ view, port, width, height, manual, stale }: {
     <div className="i7-environment-climate-half" role="group" aria-label="온도와 습도">{view.status === 'empty' ? <><p>{manual ? '입력한 측정값이 없어요' : '연결된 센서가 없어요'}</p>{!manual && !small && <p className="i7-environment-next">센서를 연결하면 온도와 습도가 여기에 보여요</p>}</> : <>
       <div className="i7-environment-readings"><ClimateReadout view={view} kind="temperature" variant={row ? 'row' : 'stack'} range={large} /><ClimateReadout view={view} kind="humidity" variant={row ? 'row' : 'stack'} range={large} /></div>
       {!small && (abnormal ? <Status view={view} single={(width === 2 && height === 1) || (width === 1 && height === 2)} /> : !shortColumn && <p className="i7-environment-measured">{measured(view)}</p>)}
-      {width === 2 && height >= 3 && <div className="i7-environment-trend-rows"><h4>시간대별 변화</h4>{view.trend.slice(-(height === 3 ? 3 : 5)).map(item => <div className="i7-environment-value-row" key={item.time}><span>{item.time}</span><strong>{item.temperature.toFixed(1)}°C · {item.humidity}%</strong></div>)}</div>}
-      {showChart && <Trend view={view} />}
+      {((width === 2 && height >= 3) || (width === 1 && height === 4)) && <div className="i7-environment-trend-rows"><h4>시간대별 변화</h4>{view.trend.slice(-(height === 3 ? 3 : 5)).map(item => <div className="i7-environment-value-row" key={item.time}><span>{item.time}</span><strong>{item.temperature.toFixed(1)}°C · {item.humidity}%</strong></div>)}</div>}
+      {showChart && view.trend.length >= 2 && <Trend view={view} />}
       {large && view.trend.length > 0 && <div className="i7-environment-large-rows" role="list" aria-label="시간대별 변화">{[...view.trend].reverse().map(item => <div className="i7-environment-value-row" role="listitem" key={item.time}><span>{item.time}</span><strong>{item.temperature.toFixed(1)}°C · {item.humidity}%</strong></div>)}</div>}
     </>}{stale && !small && <p role="status" className="i7-environment-next">마지막으로 불러온 측정값이에요</p>}</div>
     <div className="i7-environment-divider" aria-hidden="true" />
-    <div className="i7-environment-music-half" role="group" aria-label="매장 음악">{small && abnormal && view.status === 'ready' ? <Status view={view} block /> : <Player music={view.status === 'ready' ? view.music : emptyMusic} port={port} controls={height > 1 || width >= 3} volume={(width === 1 && height === 4) || (width === 2 && height >= 3) || (width >= 3 && height >= 2)} playlists={showChart} playlistNameOnly={width === 2 && height === 4} artist={width >= 2 && height >= 2} hidden={chrome.editing || chrome.waiting} next={!small} />}</div>
+    <div className="i7-environment-music-half" role="group" aria-label="매장 음악">{small && abnormal && view.status === 'ready' ? <Status view={view} block /> : <Player music={view.status === 'ready' ? view.music : emptyMusic} port={port} controls={height > 1 || width >= 3} volume={(width === 1 && height === 4) || (width === 2 && height >= 3) || (width >= 3 && height >= 2)} playlists={showChart} playlistNameOnly={width === 2 && height === 4} artist={width >= 2 && height >= 2} hidden={chrome.editing || chrome.waiting} />}</div>
     <FitProbe order={[{ selector: '.i7-environment-large-rows .i7-environment-value-row', last: true }, { selector: '.i7-climate-range' }, { selector: '.i7-environment-next' }, { selector: '.i7-environment-artist' }, { selector: '.i7-environment-volume' }, { selector: '.i7-environment-measured' }, { selector: '.i7-environment-track-tail' }, ...(small ? [{ selector: '.i7-environment-art' }] : [])]} deps={[width, height, view.status, abnormal]} />
   </div>;
 }

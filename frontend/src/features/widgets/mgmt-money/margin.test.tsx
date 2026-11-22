@@ -16,7 +16,7 @@ it('shows current unit economics separately from sales-time results', () => {
  const grid = screen.getByRole('grid', { name: '품목 표' });
  expect(within(grid).getAllByRole('row')).toHaveLength(marginOf().menus.length + 1);
  expect(within(grid).getByRole('columnheader', { name: '판매가' })).toBeInTheDocument();
- expect(screen.getByText('오늘 판매분은 판매할 때의 원가로 계산해요')).toBeInTheDocument();
+ expect(screen.getByText('판매할 때의 원가로 계산해요')).toBeInTheDocument();
  expect(screen.getByText('수익성 비교')).toBeInTheDocument();
 });
 it('simulates a price change without changing the current recipe cost', async () => {

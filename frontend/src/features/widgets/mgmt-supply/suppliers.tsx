@@ -13,7 +13,7 @@ import { widgetDomains } from '../../../data/reality/00';
 import { supplierDetailEntry } from '../../assistant/domains/suppliers';
 import { deriveOpenOrders, type OrderRow, type SuppliersModel } from '../../../data/widget-data';
 import { ActionButton, Icon, MetricFit, Spinner, StatusBadge } from '../../../ui';
-import { Flash, relativeDay, stateTone, SupplyPanelState, useFit, useSupplyText, SupplySurface, useTextScale, type SupplyText } from './shared';
+import { Flash, relativeDay, stateTone, SupplyPanelState, useFit, useSupplyText, SupplySurface, useTextScale, type SupplyText , supplyQuantity } from './shared';
 
 import { OrderMiniTable, OrderPanelSummary, TALL_MINI_ROWS } from './mini-tables';
 import { AddSupplier } from './purchase-grid';
@@ -54,7 +54,7 @@ function DeliveryRows({ x, orders, mode, hiddenRows, offset = 0 }: { x: SupplyTe
       const item = x.text(line.itemName ?? {key: line.itemNameKey});
       const text = mode === 'compact'
         ? x.t('widget.suppliers.deliveryRowCompact', { date: relativeDay(x, o.dueDate), item, supplier: x.text(o.supplierName ?? {key: o.supplierNameKey}) })
-        : x.t('widget.suppliers.deliveryRowQuantity', { date: relativeDay(x, o.dueDate), item, quantity: x.format.quantity(line.remaining, line.unit) });
+        : x.t('widget.suppliers.deliveryRowQuantity', { date: relativeDay(x, o.dueDate), item, quantity: supplyQuantity(x, line.remaining, line.unit) });
       return <li key={o.poId} className="ms-row" data-row="" data-drop={500 + offset + i} data-row-id={o.poId} data-slot={`${ID}.list.row`}>
         <span className="ms-row__name"><Flash value={text}>{text}</Flash></span>
         {o.overdue ? <span className="ms-mark">{x.t('widget.suppliers.group.overdue')}</span> : null}
@@ -71,22 +71,25 @@ function SuppliersPanelContent({ condition, width, height, shape, editing, host 
   const scale = useTextScale();
   const { ref, hiddenRows } = useFit<HTMLDivElement>([view, width, height, scale, x.locale, editing]);
   if (view.status !== 'ready') {
-    if (view.messageKey === 'data.real.loading') return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID}><span role="status"><Spinner /> {x.tk(view.messageKey)}</span></div>;
+    if (view.messageKey === 'data.real.loading') return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID}><span role="status"><Spinner /> {x.locale === 'ko' ? '발주를 불러오는 중이에요' : x.tk(view.messageKey)}</span></div>;
     const action = view.status === 'error' ? { label: x.t('common.retry'), run: retry }
       : view.actionKey ? { label: x.tk(view.actionKey), run: () => { host.resetPreview(); host.openDetail({ featureId: ID, view: 'register', focus: 'action' }); } } : null;
     const overdue = view.status === 'empty' ? view.partial?.overdueCount ?? 0 : 0;
-    return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID} data-state={view.status}><SupplyPanelState featureId={ID} tone={stateTone(view.status)} shape={shape} message={x.tk(view.messageKey)} actionLabel={action?.label} onAction={action?.run}>
+    return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID} data-state={view.status}><SupplyPanelState featureId={ID} tone={stateTone(view.status)} shape={shape} message={view.status === 'error' && x.locale === 'ko' ? '발주를 불러오지 못했어요' : x.tk(view.messageKey)} actionLabel={action?.label} onAction={action?.run}>
       {overdue > 0 ? <p className="ms-sup-state-note">{x.t('widget.suppliers.overdue', { count: overdue })}</p> : null}
     </SupplyPanelState></div>;
   }
   const m = view.model;
   const note = view.notes?.find(note => note.messageKey.startsWith('data.real.'))?.messageKey;
-  const key = <SuppliersKey x={x} m={m} editing={editing} shape={shape} note={note} />;
-  const upcoming = [...m.upcoming,...m.overdue];
+  const undated = (m.orders as readonly DeliveryOrder[]).filter(order => order.open && !order.dueDate);
+  const key = <><SuppliersKey x={x} m={{ ...m, overdueCount: m.overdueCount + undated.length }} editing={editing} shape={shape} note={note} />
+    {!m.upcomingCount && <p className="ms-caption" data-drop={900}>{x.tk('data.state.suppliers.no-upcoming')}</p>}
+  </>;
+  const upcoming = [...m.upcoming,...m.overdue,...undated];
   if (shape === 'Q') return <div ref={ref} className="ms-panel" data-shape="Q" data-widget={ID}>{key}</div>;
-  if (shape === 'W') return <div ref={ref} className="ms-panel" data-shape="W" data-wide={width>=3||undefined} data-widget={ID}>{key}<div className="ms-aside"><DeliveryRows x={x} orders={m.upcoming.slice(0, width >= 3 ? width : 2)} mode="compact" hiddenRows={hiddenRows} /></div></div>;
+  if (shape === 'W') return <div ref={ref} className="ms-panel" data-shape="W" data-wide={width>=3||undefined} data-widget={ID}>{key}<div className="ms-aside">{upcoming.length > 0 && <DeliveryRows x={x} orders={upcoming.slice(0, width >= 3 ? width : 2)} mode="compact" hiddenRows={hiddenRows} />}</div></div>;
   // UI-SMALL-3: a list title stands only over rows; with nothing due the panel keeps the key and the summary.
-  const tallRows=height>=3?upcoming.slice(0,4):m.upcoming.slice(0,3);
+  const tallRows=height>=3?upcoming.slice(0,4):[...m.upcoming,...undated].slice(0,3);
   if (shape === 'T') return <div ref={ref} className="ms-panel" data-shape="T" data-widget={ID}>{key}<hr className="ms-rule" /><div className="ms-list">
     {tallRows.length>0?<p className="ms-list__title" data-slot={`${ID}.list.title`} data-drop={150}>{x.t('widget.suppliers.listTitle')}</p>:null}
     <DeliveryRows x={x} orders={tallRows} mode="quantity" hiddenRows={hiddenRows} />
@@ -119,12 +122,12 @@ function SuppliersDetailContent({ condition, detailRef, host }: WidgetDetailProp
   const [addOrder, setAddOrder] = useState(false);
   const { t: ot } = useOrderText();
   if (view.status !== 'ready') {
-    if (view.messageKey === 'data.real.loading') return <div className="ms-detail ms-sup" data-widget={ID}><p role="status"><Spinner /> {x.tk(view.messageKey)}</p></div>;
+    if (view.messageKey === 'data.real.loading') return <div className="ms-detail ms-sup" data-widget={ID}><p role="status"><Spinner /> {x.locale === 'ko' ? '발주를 불러오는 중이에요' : x.tk(view.messageKey)}</p></div>;
     const isError = view.status === 'error';
     const overdue = view.status === 'empty' ? view.partial?.overdueCount ?? 0 : 0;
     return <div className="ms-detail ms-sup" data-widget={ID}>
       <div className="ms-detail-state" data-tone={stateTone(view.status)} data-slot={`${ID}.state.message`}>
-        <Icon name={isError ? 'error' : 'info'} /><p role={isError ? 'alert' : undefined}>{x.tk(view.messageKey)}</p>
+        <Icon name={isError ? 'error' : 'info'} /><p role={isError ? 'alert' : undefined}>{isError && x.locale === 'ko' ? '발주를 불러오지 못했어요' : x.tk(view.messageKey)}</p>
         {overdue > 0 ? <StatusBadge kind="needsReview" label={x.t('widget.suppliers.overdue', { count: overdue })} /> : null}
         {isError ? <ActionButton variant="outline" onClick={retry}>{x.t('common.retry')}</ActionButton>
           : view.actionKey && !register ? <ActionButton variant="secondary" onClick={() => {host.resetPreview(); setRegister(true);}}>{x.tk(view.actionKey)}</ActionButton>

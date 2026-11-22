@@ -83,7 +83,7 @@ describe('custom-order management boundaries', () => {
       expect(chip).toHaveAttribute('data-semantic');
     }
   });
-  it('shows the stage as a chip with its meaning: waiting ◷ on the warning face, done ✓, plain words for the first stages', () => {
+  it('shows stage icons with the existing warning and success tones', () => {
     mount('ready', undefined, acceptanceRead());
     const grid = screen.getByRole('grid', { name: '주문제작 목록' });
     const chipOf = (label: string) => within(grid).getByText(label).closest('.ui-status-chip')!;
@@ -95,12 +95,21 @@ describe('custom-order management boundaries', () => {
     expect(chipOf('결제 완료')).toHaveAttribute('data-semantic', 'done');
     expect(chipOf('결제 전')).toHaveAttribute('data-semantic', 'waiting');
   });
+  it('keeps received and in-production chips neutral without icons', () => {
+    mount();
+    const grid = within(screen.getByRole('grid', { name: '주문제작 목록' }));
+    for (const label of ['접수', '제작 중']) {
+      const chip = grid.getAllByText(label)[0]!.closest('.ui-status-chip')!;
+      expect(chip).toHaveAttribute('data-tone', 'neutral');
+      expect(chip.querySelector('svg')).toBeNull();
+    }
+  });
   it('gives a search with no result its own sentence and a [검색어 지우기] that brings the list back', () => {
     mount();
     fireEvent.change(screen.getByRole('searchbox', { name: '검색' }), { target: { value: '없는 주문' } });
-    expect(screen.getByText('검색 결과가 없어요')).toBeInTheDocument();
+    expect(screen.getByText('찾는 항목이 없어요')).toBeInTheDocument();
     expect(screen.queryByText('아직 등록한 주문제작이 없어요')).not.toBeInTheDocument();
-    const noResults = screen.getByText('검색 결과가 없어요').closest('.ui-data-grid__noresults') as HTMLElement;
+    const noResults = screen.getByText('찾는 항목이 없어요').closest('.ui-data-grid__noresults') as HTMLElement;
     fireEvent.click(within(noResults).getByRole('button', { name: '검색어 지우기' }));
     expect(screen.getByRole('searchbox', { name: '검색' })).toHaveValue('');
     expect(screen.getByRole('button', { name: /CO-001/ })).toBeInTheDocument();
@@ -133,7 +142,7 @@ describe('custom-order management boundaries', () => {
     const { port } = mount('ready', undefined, acceptanceRead());
     fireEvent.click(screen.getByRole('button', { name: /CO-002/ }));
     expect(screen.getByText('손님 승인을 먼저 기록해 주세요')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '결제 받기' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '결제 받기' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /CO-001/ }));
     const detail = screen.getByRole('region', { name: /CO-001/ });
     expect(within(detail).getByText('제작 완료')).toBeInTheDocument();
@@ -145,6 +154,7 @@ describe('custom-order management boundaries', () => {
   it('rejects a zero quote locally and records revision requests against the shown revision', () => {
     const { port, read } = mount('ready', undefined, acceptanceRead());
     fireEvent.click(screen.getByRole('button', { name: /CO-002/ }));
+    fireEvent.click(screen.getByRole('button', { name: '견적 고치기' }));
     fireEvent.change(screen.getByLabelText('견적 금액'), { target: { value: '0' } });
     fireEvent.click(screen.getByRole('button', { name: '견적 저장하기' }));
     expect(screen.getByRole('alert')).toHaveTextContent('견적 금액을 1원 이상 넣어 주세요');
@@ -198,13 +208,14 @@ describe('custom-order side panel (DS 12.2)', () => {
     const { read } = mount();
     const [first] = seedOrders(read);
     fireEvent.click(screen.getByRole('button', { name: /CO-001/ }));
-    expect(within(screen.getByRole('region', { name: /CO-001/ })).getByText(`${first!.quantity}개`)).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: /CO-001/ })).getByText(`수량 ${first!.quantity}개`)).toBeInTheDocument();
   });
   it('edits dates and times with the kit pickers, never a browser date control', () => {
     mount('ready', undefined, acceptanceRead());
     fireEvent.click(screen.getByRole('button', { name: /CO-002/ }));
     const panel = screen.getByRole('region', { name: /CO-002/ });
     expect(panel.querySelectorAll('input[type="date"], input[type="time"], input[type="datetime-local"]')).toHaveLength(0);
+    fireEvent.click(within(panel).getByRole('button', { name: '견적 고치기' }));
     expect(within(panel).getByRole('button', { name: /^확정 픽업 날짜 10월 27일 화요일$/ })).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: /^확정 픽업 시각 14:00$/ })).toBeInTheDocument();
   });
@@ -212,6 +223,7 @@ describe('custom-order side panel (DS 12.2)', () => {
     const { port } = mount('ready', undefined, acceptanceRead());
     fireEvent.click(screen.getByRole('button', { name: /CO-002/ }));
     // Unchanged (and still in the future): the quote saves.
+    fireEvent.click(screen.getByRole('button', { name: '견적 고치기' }));
     fireEvent.change(screen.getByLabelText('견적 금액'), { target: { value: '65000' } });
     // Today at 09:00 is before the clock (15:45): refused, nothing is sent.
     await pickDateTime(/^확정 픽업 날짜 /, /^확정 픽업 시각 /, '2026-10-26', '09:00');
@@ -234,7 +246,7 @@ describe('custom-order side panel (DS 12.2)', () => {
     for (const field of template.fields.filter(field => field.required && field.input === 'text')) fireEvent.change(within(form).getByLabelText(`${field.label} (필수 입력)`), { target: { value: '생일 축하해요' } });
     for (const field of template.fields.filter(field => field.required && field.input === 'single')) fireEvent.change(within(form).getByLabelText(`${field.label} (필수 입력)`), { target: { value: field.options[0]!.optionId } });
     await pickDateTime(/^희망 픽업 날짜 /, /^희망 픽업 시각 /, '2026-11-17', '09:00');
-    fireEvent.click(within(form).getByRole('button', { name: '주문 접수하기' }));
+    fireEvent.click(within(form).getByRole('button', { name: '접수하기' }));
     expect(within(form).getByRole('alert')).toHaveTextContent('지난 시간에는 새 예약을 넣을 수 없어요');
     expect(port.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'customOrder.create' }));
   });
@@ -247,17 +259,17 @@ describe('custom-order templates tab', () => {
     const kind = screen.getByLabelText('상품 종류');
     expect(kind).toHaveAccessibleDescription('템플릿 이름이 ‘상품 종류 + 주문서’로 만들어져요');
     expect(screen.getByLabelText('키워드')).toHaveAccessibleDescription('템플릿 이름 뒤에 붙어요(선택)');
-    fireEvent.click(screen.getByRole('button', { name: '양식 견본 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '템플릿 견본 만들기' }));
     expect(screen.getByLabelText('상품 종류')).toHaveAccessibleDescription(/상품 종류를 넣어 주세요/);
     expect(screen.queryByText('필수 항목을 모두 넣어 주세요')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '템플릿 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '템플릿 직접 만들기' }));
     fireEvent.click(screen.getByRole('button', { name: '템플릿 저장하기' }));
     expect(within(screen.getByRole('form', { name: '템플릿 만들기' })).getByRole('alert')).toHaveTextContent('필수 항목을 모두 넣어 주세요');
   });
   it('uses the kit checkbox for 필수 입력 and for the multiple-choice answers', () => {
     mount();
     fireEvent.click(screen.getByRole('tab', { name: '템플릿 관리' }));
-    fireEvent.click(screen.getByRole('button', { name: '템플릿 만들기' }));
+    fireEvent.click(screen.getByRole('button', { name: '템플릿 직접 만들기' }));
     const form = screen.getByRole('form', { name: '템플릿 만들기' });
     const required = within(form).getByRole('checkbox', { name: '필수 입력' });
     expect(required.closest('.ui-check')).not.toBeNull();

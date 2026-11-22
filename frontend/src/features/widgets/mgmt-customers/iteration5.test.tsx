@@ -1,6 +1,6 @@
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithKit } from '../../../ui/test-utils';
@@ -8,7 +8,7 @@ import { createWidgetDataStore, selectMembers, selectMenus, selectReservations, 
 import { MenuDetail } from '../mgmt-products/menu';
 import { MembersDetail } from './members';
 import { VoiceBookingDetail } from './voice-booking';
-import { CustomerAnalysisPanel } from './customer-analysis';
+import { CustomerAnalysisDetail, CustomerAnalysisPanel } from './customer-analysis';
 const makeHost = () => ({ layer:'management' as const, resetPreview:vi.fn(), openLinked:vi.fn(), openDetail:vi.fn(), notify:vi.fn(), acknowledgeBriefing:vi.fn(), openClosing:vi.fn(()=>true) });
 const condition = {kind:'default' as const};
 afterEach(cleanup);
@@ -22,11 +22,11 @@ it('adds and deletes recipe rows, changes price and archives with undo', async (
  await userEvent.selectOptions(choice,itemId);await userEvent.click(within(side).getByRole('button',{name:'재료 넣기'}));
  expect(americano().recipeLines.some(l=>l.itemId===itemId)).toBe(true);
  await userEvent.click(within(side).getByRole('button',{name:`${itemName} 지우기`}));expect(americano().recipeLines.some(l=>l.itemId===itemId)).toBe(false);
- const priceForm=within(side).getByRole('form',{name:'판매가'});const price=within(priceForm).getByLabelText('판매가');await userEvent.clear(price);await userEvent.type(price,'4700');await userEvent.click(within(priceForm).getByRole('button',{name:'판매가 저장하기'}));expect(americano().price).toBe(4700);
- await userEvent.click(within(side).getByRole('button',{name:'메뉴 지우기'}));act(()=>{store.undo(host.notify.mock.calls.at(-1)![0].undoToken!);});expect(selectMenus(store.getSnapshot(),{}).rows.find(r=>r.menuId==='m-americano')!.price).toBe(4700);
+ const priceForm=within(side).getByRole('form',{name:'판매가'});const price=within(priceForm).getByLabelText('판매가');fireEvent.change(price,{target:{value:'4700'}});await userEvent.click(within(priceForm).getByRole('button',{name:'판매가 저장하기'}));expect(americano().price).toBe(4700);
+ await userEvent.click(within(side).getByRole('button',{name:'메뉴 지우기'}));await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button',{name:'지우기'}));act(()=>{store.undo(host.notify.mock.calls.at(-1)![0].undoToken!);});expect(selectMenus(store.getSnapshot(),{}).rows.find(r=>r.menuId==='m-americano')!.price).toBe(4700);
 });
 it('creates a menu and opens its missing-cost side panel',async()=>{
- const store=createWidgetDataStore(),menusBefore=selectMenus(store.getSnapshot(),{}).rows.length;renderWithKit(<MenuDetail featureId="menu" condition={condition} detailRef={{featureId:'menu',view:'register'}} host={makeHost()}/>,{store});await userEvent.type(screen.getByLabelText('메뉴 이름'),'새 메뉴');await userEvent.type(screen.getByLabelText('판매가'),'6000');await userEvent.click(screen.getByRole('button',{name:'저장하기'}));expect(screen.getByRole('region',{name:'새 메뉴'})).toHaveTextContent('원가 미등록');expect(selectMenus(store.getSnapshot(),{}).rows).toHaveLength(menusBefore+1);
+ const store=createWidgetDataStore(),menusBefore=selectMenus(store.getSnapshot(),{}).rows.length;renderWithKit(<MenuDetail featureId="menu" condition={condition} detailRef={{featureId:'menu',view:'register'}} host={makeHost()}/>,{store});await userEvent.type(screen.getByLabelText('메뉴 이름'),'새 메뉴');await userEvent.type(screen.getByLabelText('판매가'),'6000');await userEvent.click(screen.getByRole('button',{name:'메뉴 저장하기'}));expect(screen.getByRole('region',{name:'새 메뉴'})).toHaveTextContent('원가 미등록');expect(selectMenus(store.getSnapshot(),{}).rows).toHaveLength(menusBefore+1);
 });
 it('validates member information before saving an edited phone number',async()=>{
  const store=createWidgetDataStore(),host=makeHost();renderWithKit(<MembersDetail featureId="members" condition={condition} detailRef={{featureId:'members',itemId:'M-0001'}} host={host}/>,{store});const side=screen.getByRole('region');
@@ -43,6 +43,16 @@ it('updates and deletes member notes while preserving the existing note',async()
 it('links the selected member to coupons and filters all four grades',async()=>{
  const store=createWidgetDataStore(),host=makeHost();renderWithKit(<MembersDetail featureId="members" condition={condition} detailRef={{featureId:'members',itemId:'M-0001'}} host={host}/>,{store});const side=screen.getByRole('region');
  await userEvent.click(within(side).getByRole('button',{name:'쿠폰 보내기'}));expect(host.openLinked).toHaveBeenCalledWith(expect.objectContaining({featureId:'customer-groups',focus:'action'}));await userEvent.click(within(side).getByRole('button',{name:'닫기'}));await userEvent.click(screen.getByRole('radio',{name:'오랜 기간 미방문'}));expect(screen.getByRole('grid',{name:'회원목록'}).querySelectorAll('tbody > tr')).toHaveLength(selectMembers(store.getSnapshot(),{grade:'inactive'}).rows.length);
+});
+it('keeps frequent and occasional visit chips neutral with an icon', () => {
+ renderWithKit(<MembersDetail featureId="members" condition={condition} detailRef={{featureId:'members'}} host={makeHost()}/>);
+ const grid = within(screen.getByRole('grid', { name: '회원목록' }));
+ for (const label of ['자주 방문', '가끔 방문']) {
+  const chip = grid.getAllByText(label)[0]!.closest('.ui-status-chip')!;
+  expect(chip).toHaveAttribute('data-tone', 'neutral');
+  expect(chip.querySelector('svg')).toBeNull();
+  expect(chip.querySelector('[aria-hidden="true"]')).toHaveTextContent('●');
+ }
 });
 it('restores focus on close and removes a filtered-out side panel',async()=>{
  renderWithKit(<MenuDetail featureId="menu" condition={condition} detailRef={{featureId:'menu'}} host={makeHost()}/>,{reducedMotion:true});await userEvent.click(screen.getByRole('gridcell',{name:/^아메리카노, 원가,/}));await userEvent.click(within(screen.getByRole('region',{name:'아메리카노'})).getByRole('button',{name:'닫기'}));expect(screen.getByRole('gridcell',{name:'아메리카노, 메뉴 이름, 아메리카노'})).toHaveFocus();await userEvent.click(screen.getByRole('gridcell',{name:/^아메리카노, 원가,/}));await userEvent.type(screen.getByRole('searchbox'),'없음');expect(screen.queryByRole('region',{name:'아메리카노'})).not.toBeInTheDocument();expect(document.activeElement).not.toBe(document.body);
@@ -61,7 +71,13 @@ it('edits reservations in a DataGrid, warns on capacity, confirms and cancels wi
  expect(selectReservations(store.getSnapshot(), { date: TODAY }).rows.find(r => r.reservationId === target.reservationId)!.status).toBe('needs-check');
  expect(panel.getByText(`좌석 ${today.totalSeats}석을 넘어요`)).toBeVisible();
  await userEvent.click(panel.getByRole('button', { name: new RegExp(`${name}.*예약 확정`) }));
+ const confirmed = store.getSnapshot();
+ // D-384: both modes open the cancellation confirmation on the first press and commit only on the second.
  await userEvent.click(panel.getByRole('button', { name: '예약 취소하기' }));
+ expect(store.getSnapshot()).toBe(confirmed);
+ const confirm = panel.getByRole('group', { name: '이 예약을 취소할까요?' });
+ expect(within(confirm).getByRole('button', { name: '예약 유지하기' })).toBeVisible();
+ await userEvent.click(within(confirm).getByRole('button', { name: '예약 취소 확정하기' }));
  expect(selectReservations(store.getSnapshot(), { date: TODAY }).count).toBe(today.count - 1);
  act(() => { store.undo(host.notify.mock.calls.at(-1)![0].undoToken!); });
  expect(selectReservations(store.getSnapshot(), { date: TODAY }).count).toBe(today.count);
@@ -74,6 +90,12 @@ it('restores the CCTV preview video when the panel is expanded again',()=>{
  expect(screen.queryByTestId('panel-video')).not.toBeInTheDocument();
  view.rerender(<CustomerAnalysisPanel {...props} width={2} height={2} shape="S"/>);
  expect(screen.getByTestId('panel-video')).toBeInTheDocument();
+});
+it('explains why the selected interval table has no rows', () => {
+ const store = createWidgetDataStore({ cctvHourly: [] });
+ renderWithKit(<CustomerAnalysisDetail featureId="customer-analysis" condition={condition} detailRef={{ featureId: 'customer-analysis' }} host={makeHost()} />, { store });
+ const interval = within(screen.getByRole('region', { name: '선택한 구간' }));
+ expect(interval.getByText('선택한 구간에 기록된 방문·근무 자료가 없어요')).toBeVisible();
 });
 it.each(['menu','members'] as const)('empty %s resets only its own example and opens a new row without changing data',async featureId=>{
  const {useState}=await import('react');const {WidgetDataProvider}=await import('../../../data/react');const {MenuPanel}=await import('../mgmt-products/menu');const {MembersPanel}=await import('./members');

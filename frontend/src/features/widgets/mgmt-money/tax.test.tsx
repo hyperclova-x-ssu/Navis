@@ -52,7 +52,7 @@ it('records a payment and removes its briefing alert when paid', async () => {
  // the due date is a DateField (never an ISO text box): pick a day in the calendar
  await userEvent.click(within(document.querySelector('tr.ui-grid-new-row') as HTMLElement).getByRole('button', { name: /^납부 기한/ }));
  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '11월 20일 금요일' }));
- await userEvent.click(screen.getByRole('button', { name: '저장하기' }));
+ await userEvent.click(screen.getByRole('button', { name: '납부 기록 저장하기' }));
  expect(store.getSnapshot().tables.taxPayment.some(p => 'raw' in p.type && p.type.raw === '부가가치세' && p.amount === 950000 && p.dueOn === '2026-11-20')).toBe(true);
 }, 20000);
 it('shows an empty payment history and resets its preview when adding', async () => {
@@ -97,13 +97,13 @@ it('formats payment amounts in both display and accessible cell names', async ()
   expect(screen.getByRole('gridcell', {name: new RegExp(amount)})).toHaveTextContent(amount);
  }
 });
-it('gives the tax type the remaining width and keeps its parenthetical qualifier together', async () => {
+it('keeps the tax type track compact while its parenthetical qualifier stays together', async () => {
  const store = createWidgetDataStore();
  store.dispatch({ type: 'tax.createPayment', taxType: '부가가치세(2026년 2기 예정 고지)', amount: 132000, dueOn: '2026-12-20', idempotencyKey: 'tax-test-vat' });
  renderWithKit(<TaxDetail featureId="tax" condition={{ kind: 'default' }} detailRef={{ featureId: 'tax' }} host={host} />, { store });
  await userEvent.click(screen.getByRole('tab', { name: '세금 납부 이력' }));
  const grid = screen.getByRole('grid', { name: '세금 납부 이력' });
- expect(grid.style.getPropertyValue('--data-grid-columns')).toBe('minmax(180px, 1fr) 160px 160px 130px 140px 120px var(--table-action-width)');
+ expect(grid.style.getPropertyValue('--data-grid-columns')).toBe('180px 160px 160px 130px 140px 120px var(--table-action-width)');
  const vat = within(grid).getByRole('gridcell', { name: /세금 종류, 부가가치세\(2026년 2기 예정 고지\)/ });
  const qualifier = within(vat).getByText('(2026년 2기 예정 고지)');
  expect(qualifier.previousElementSibling?.tagName).toBe('WBR');
@@ -188,7 +188,7 @@ it('puts the add form in the table as its first row and shows the due date as a 
  expect(newRow.closest('table')).not.toBeNull();
  expect(within(newRow).getByRole('button',{name:/^납부 기한/})).toHaveTextContent('11월 17일 화요일');
  expect(newRow.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
- await userEvent.click(within(newRow).getByRole('button',{name:'저장하기'}));
+ await userEvent.click(within(newRow).getByRole('button',{name:'납부 기록 저장하기'}));
  expect(within(newRow).getByText('납부 금액을 넣어 주세요')).toBeVisible();
 });
 

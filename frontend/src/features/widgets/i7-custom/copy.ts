@@ -13,7 +13,7 @@ export const customOrderListBundle = {
     'widget.custom-order.productKindRequired': '상품 종류를 넣어 주세요',
     'widget.custom-order.keywords': '키워드',
     'widget.custom-order.keywordsHint': '템플릿 이름 뒤에 붙어요(선택)',
-    'widget.custom-order.noResults': '검색 결과가 없어요',
+    'widget.custom-order.noResults': '찾는 항목이 없어요',
     'widget.custom-order.empty': '아직 등록한 주문제작이 없어요',
     'widget.custom-order.history.created': '주문을 접수했어요',
     'widget.custom-order.history.updated': '주문 내용을 고쳤어요',

@@ -59,6 +59,34 @@ function visitUnit(t: Translator, n: number) {
 const staffText = (t: Translator, n: number | null): string => (n === null ? t.t('widget.customer-analysis.noStaff') : t.t('widget.customer-analysis.staffCount', { n }));
 const visitsText = (t: Translator, row: CctvHourRow): string => (row.visits === null ? t.t('widget.customer-analysis.notCounted') : t.t('widget.customer-analysis.visitCount', { n: row.visits }));
 
+function IntervalTable({ model, selectedHour, t }: { model: CustomerAnalysisModel; selectedHour?: number; t: Translator }) {
+  return (
+    <table className="mc-table" aria-label={t.t('widget.customer-analysis.chartLabel')}>
+      <thead>
+        <tr>
+          <th scope="col">{t.t('widget.customer-analysis.colHour')}</th>
+          <th scope="col">{t.t('widget.customer-analysis.colVisits')}</th>
+          <th scope="col">{t.t('widget.customer-analysis.colStaff')}</th>
+          <th scope="col">{t.t('widget.customer-analysis.colStatus')}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {model.hours.length === 0 && (
+          <tr><td colSpan={4}>{t.t('widget.customer-analysis.intervalEmpty')}</td></tr>
+        )}
+        {model.hours.map(hour => (
+          <tr key={hour.hour} data-row-id={`h${hour.hour}`} data-selected={selectedHour === hour.hour ? 'true' : undefined}>
+            <th scope="row">{t.format.time(hh(hour.hour))}</th>
+            <td>{hour.visits === null ? '—' : t.t('widget.customer-analysis.visitCount', { n: hour.visits })}</td>
+            <td>{hour.staff === null ? '—' : staffText(t, hour.staff)}</td>
+            <td>{hour.status === 'none' ? t.t('widget.customer-analysis.notCounted') : hour.status === 'partial' ? t.t('widget.customer-analysis.partlyCounted') : hour.reviewMarked ? t.t('widget.customer-analysis.reviewBadge') : model.peak?.hour === hour.hour ? t.t('widget.customer-analysis.peakHour') : ''}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function useStaffingMetric(model: CustomerAnalysisModel | null) {
   const store = useWidgetDataStore();
   if (model?.peak) return model.peak.staff;
@@ -111,11 +139,9 @@ export function barItems(t: Translator, model: CustomerAnalysisModel): BarItem[]
 }
 
 function SampleCameraPanel({ editing }: { readonly editing: boolean }) {
-  const t = useCctvT();
   const { reducedMotion } = useUi();
   return <div className="mc-cctv-preview">
     <PanelVideo paused={editing} reducedMotion={reducedMotion} />
-    <span className="mc-cctv-preview__badge"><Badge>{t('cctv.example')}</Badge></span>
   </div>;
 }
 
@@ -123,6 +149,7 @@ function SampleCameraPanel({ editing }: { readonly editing: boolean }) {
 function MockCustomerAnalysisPanel(props:WidgetPanelProps) {
  const t=useT(),view=useWidgetView(ID,props.condition),c=useCctvT(),now=useCctvView({video:false});
  const http = useRealPort()?.mode('cctv') === 'http';
+ const cameraSources = useWidgetDataStore().getSnapshot().tables.realInsight?.cameras;
  const expanded = props.width > 1 && props.height > 1;
  const clip = expanded && view.variant !== 'camera-disconnected' ? <SampleCameraPanel editing={props.editing} /> : undefined;
  if(view.status!=='ready') {
@@ -131,12 +158,15 @@ function MockCustomerAnalysisPanel(props:WidgetPanelProps) {
  }
  // D-323 (owner): the big number is the headcount right now (the same count the detail's 지금 숫자 starts from); the day's visits become the smaller secondary line.
  const m=view.model,{value,unit}=now.inStore===null?{value:'—',unit:''}:splitUnit(c('cctv.guests',{n:now.inStore}),String(now.inStore)),visits=`${t.t('widget.customer-analysis.todayVisits')} ${t.t('widget.customer-analysis.visitCount',{n:m.totalVisits})}`,off=m.cameras.filter(c=>c.connection==='disconnected').length,sub=off>0?t.t('widget.customer-analysis.cameras.warning',{count:off}):t.t('widget.customer-analysis.cameras.normal',{count:m.cameras.length}),warnInLabel=off>0,nowLabel=c('cctv.nowNumbers.mock');
- const bars=<Bars items={barItems(t,m)} max={Math.max(...m.hours.map(h=>h.visits??0),1)} label={t.t('widget.customer-analysis.chartLabel')}/>;
- const cameras=<ListBlock id={ID}>{m.cameras.map(c=><Row key={c.cameraId} id={ID} rowId={c.cameraId} name={resolveDataText(t.t,c.name)} value={t.t(c.connection==='connected'?'widget.customer-analysis.cameras.connected':'widget.customer-analysis.cameras.disconnected')}/>)}</ListBlock>;
+ const cameraState = (camera: CustomerAnalysisModel['cameras'][number]) => cameraText(t, camera, cameraSources?.find(row => row.cameraId === camera.cameraId));
+ const cameraSummary = http && m.cameras.length > 0 && cameraSources?.every(row => row.measurementStatus === 'none')
+   ? t.t('widget.customer-analysis.cameras.registeredNoVideo') : sub;
+ const bars=m.hours.length ? <Bars items={barItems(t,m)} max={Math.max(...m.hours.map(h=>h.visits??0),1)} label={t.t('widget.customer-analysis.chartLabel')}/> : null;
+ const cameras=<ListBlock id={ID}>{m.cameras.map(c=><Row key={c.cameraId} id={ID} rowId={c.cameraId} name={resolveDataText(t.t,c.name)} value={cameraState(c)}/>)}</ListBlock>;
  // D-333: a wide card 4 rows high has room for what the one-line camera sentence summarizes: each camera with its connection and whether it records (the model's own fields).
  const tall=props.width>=3&&props.height>=4;
- const cameraStatus=tall?<ListBlock id={ID} title={t.t('widget.customer-analysis.cameras.title')}>{m.cameras.map(c=><Row key={c.cameraId} id={ID} rowId={c.cameraId} name={resolveDataText(t.t,c.name)} note={t.t(c.operation==='recording'?'widget.customer-analysis.cameras.recording':'widget.customer-analysis.cameras.stopped')} value={t.t(c.connection==='connected'?'widget.customer-analysis.cameras.connected':'widget.customer-analysis.cameras.disconnected')}/>)}</ListBlock>:null;
- return <PanelFrame id={ID}><Body props={props} primary={<Kpi id={ID} label={warnInLabel?`${nowLabel}\u00A0· ${sub}`:nowLabel} value={value} unit={unit} longest="888" sub={visits} subLang="ko" extra={view.variant==='camera-disconnected'?t.t('data.state.customer-analysis.gaps'):view.notes?.[0]?t.t(view.notes[0].messageKey):off>0||!m.cameras.length?undefined:sub}/>} chart={clip} list={props.height===1?<RushRows t={t} model={m} compact/>:props.width===1?cameras:props.height>=3||props.width>=3?<div className="mc-camera-chart">{bars}<RushRows t={t} model={m}/>{cameraStatus}</div>:undefined}/></PanelFrame>;
+ const cameraStatus=tall?<ListBlock id={ID} title={t.t('widget.customer-analysis.cameras.title')}>{m.cameras.map(c=><Row key={c.cameraId} id={ID} rowId={c.cameraId} name={resolveDataText(t.t,c.name)} note={t.t(c.operation==='recording'?'widget.customer-analysis.cameras.recording':'widget.customer-analysis.cameras.stopped')} value={cameraState(c)}/>)}</ListBlock>:null;
+ return <PanelFrame id={ID}><Body props={props} primary={<Kpi id={ID} label={warnInLabel?`${nowLabel}\u00A0· ${sub}`:nowLabel} value={value} unit={unit} longest="888" sub={visits} subLang="ko" extra={view.variant==='camera-disconnected'?t.t('data.state.customer-analysis.gaps'):view.notes?.[0]?t.t(view.notes[0].messageKey):off>0||!m.cameras.length?undefined:cameraSummary}/>} chart={clip} list={props.height===1?<RushRows t={t} model={m} compact/>:props.width===1?cameras:props.height>=3||props.width>=3?<div className="mc-camera-chart">{bars}<RushRows t={t} model={m}/>{cameraStatus}</div>:undefined}/></PanelFrame>;
 }
 
 /** Empty / error view of the detail. An empty view that has no action of its own (예시 `집계 불가`) gets the one next step: check the camera connection, which lives in the 실시간 view (H1). */
@@ -157,7 +187,7 @@ function DisconnectedCameraView({ t }: { readonly t: Translator }) {
         <div className="cctv-stage mc-camera-unavailable">{t.t('widget.customer-analysis.cameras.offlineFrame')}</div>
       </div>
       <div className="cctv-side">
-        <NowNumbers view={view} time={CCTV_SNAPSHOT.t} duration={CCTV_SNAPSHOT.totalVideoSeconds} />
+        <NowNumbers view={view} clock={{ time: CCTV_SNAPSHOT.t, duration: CCTV_SNAPSHOT.totalVideoSeconds }} />
       </div>
     </div>
     <StayCharts view={view} />
@@ -166,6 +196,12 @@ function DisconnectedCameraView({ t }: { readonly t: Translator }) {
 }
 
 /** 목업: 반복 5 CCTV 현황 자세히 보기와 카페 영상 재생. */
+function cameraText(t: Translator, camera: CustomerAnalysisModel['cameras'][number], source?: { deviceStatus: string; measurementStatus: string }) {
+  return t.t(source?.deviceStatus === 'registered' ? source.measurementStatus === 'none'
+    ? 'widget.customer-analysis.cameras.registeredNoVideo' : 'widget.customer-analysis.cameras.registered'
+    : camera.connection === 'connected' ? 'widget.customer-analysis.cameras.connected' : 'widget.customer-analysis.cameras.disconnected');
+}
+
 function MockCustomerAnalysisDetail({ condition, host, detailRef, ...links }: WidgetDetailProps & CctvLinksProps) {
   const t = useT();
   const view = useAnalysisView(condition);
@@ -175,12 +211,13 @@ function MockCustomerAnalysisDetail({ condition, host, detailRef, ...links }: Wi
   // N19 deep link: a chat hand-off can open the detail with one hour already selected.
   const [picked, setPicked] = useState<number | null>(detailRef?.hour ?? null);
   const [cameraFocus,setCameraFocus]=useState<GridFocus>(null),[cameraSort,setCameraSort]=useState<GridSort>(null);
+  const sources = useWidgetDataStore().getSnapshot().tables.realInsight?.cameras;
   const cameraColumns = useMemo<GridColumn<CustomerAnalysisModel['cameras'][number]>[]>(() => [
          {id:'camera',header:t.t('widget.customer-analysis.cameras.camera'),kind:'text',value:c=>resolveDataText(t.t,c.name),minWidth:200,sortable:true},
-         {id:'connection',header:t.t('widget.customer-analysis.cameras.connection'),kind:'status',value:c=>t.t(c.connection==='connected'?'widget.customer-analysis.cameras.connected':'widget.customer-analysis.cameras.disconnected'),render:c=>renderStatusChip(t.t(c.connection==='connected'?'widget.customer-analysis.cameras.connected':'widget.customer-analysis.cameras.disconnected'),c.connection==='connected'?'done':'warning'),minWidth:200},
+         {id:'connection',header:t.t('widget.customer-analysis.cameras.connection'),kind:'status',value:c=>cameraText(t,c,sources?.find(row=>row.cameraId===c.cameraId)),render:c=>renderStatusChip(cameraText(t,c,sources?.find(row=>row.cameraId===c.cameraId)),c.connection==='disconnected'?'warning':sources?'none':'done'),minWidth:200},
          {id:'operation',header:t.t('widget.customer-analysis.cameras.operation'),kind:'status',value:c=>t.t(c.operation==='recording'?'widget.customer-analysis.cameras.recording':'widget.customer-analysis.cameras.stopped'),render:c=>renderStatusChip(t.t(c.operation==='recording'?'widget.customer-analysis.cameras.recording':'widget.customer-analysis.cameras.stopped'),c.operation==='recording'?'done':'paused'),minWidth:200},
          {id:'checked',header:t.t('widget.customer-analysis.cameras.checked'),kind:'text',value:c=>`${t.format.date(c.lastCheckedAt,'short')} ${t.format.time(c.lastCheckedAt.slice(11))}`,minWidth:260,sortable:true},
-        ], [t]);
+        ], [t, sources]);
   const footage = <section aria-label={t.t('widget.customer-analysis.cameras.images')}>
     {view.variant === 'camera-disconnected' ? <DisconnectedCameraView t={t} /> : <CctvPlayback />}
   </section>;
@@ -231,8 +268,10 @@ function MockCustomerAnalysisDetail({ condition, host, detailRef, ...links }: Wi
       <div className="mc-columns">
         <section aria-label={t.t('widget.customer-analysis.chartLabel')} className="mc-chart-card">
           <h3 className="mc-h3">{t.t('widget.customer-analysis.chartLabel')}</h3>
-          <Bars items={barItems(t, m)} max={max} label={t.t('widget.customer-analysis.chartLabel')} height="tall" onSelect={(key) => setPicked(Number(key.slice(1)))} selectedKey={selected ? `h${selected.hour}` : null} />
-          <p className="mc-caption">{t.t('widget.customer-analysis.pickHint')}</p>
+          {m.hours.length > 0 ? <>
+            <Bars items={barItems(t, m)} max={max} label={t.t('widget.customer-analysis.chartLabel')} height="tall" onSelect={(key) => setPicked(Number(key.slice(1)))} selectedKey={selected ? `h${selected.hour}` : null} />
+            <p className="mc-caption">{t.t('widget.customer-analysis.pickHint')}</p>
+          </> : <p className="mc-caption">{t.t('widget.customer-analysis.noVisits')}</p>}
           {gaps.length ? <p className="mc-caption mc-flag"><span aria-hidden="true">△ </span>{t.t('widget.customer-analysis.missingHours', { hours: gaps.map((g) => t.format.time(hh(g.hour))).join(', ') })}</p> : null}
         </section>
         <section className="mc-side" aria-label={t.t('widget.customer-analysis.selected')}>
@@ -247,19 +286,7 @@ function MockCustomerAnalysisDetail({ condition, host, detailRef, ...links }: Wi
               <ActionButton disabled={selected.reviewMarked || selected.visits === null || sending} onClick={mark}>{t.t('widget.customer-analysis.markReview')}</ActionButton>
             </div>
           ) : null}
-          <table className="mc-table" aria-label={t.t('widget.customer-analysis.chartLabel')}>
-            <thead><tr><th scope="col">{t.t('widget.customer-analysis.colHour')}</th><th scope="col">{t.t('widget.customer-analysis.colVisits')}</th><th scope="col">{t.t('widget.customer-analysis.colStaff')}</th><th scope="col">{t.t('widget.customer-analysis.colStatus')}</th></tr></thead>
-            <tbody>
-              {m.hours.map((h) => (
-                <tr key={h.hour} data-row-id={`h${h.hour}`} data-selected={selected?.hour === h.hour ? 'true' : undefined}>
-                  <th scope="row">{t.format.time(hh(h.hour))}</th>
-                  <td>{h.visits === null ? '—' : h.visits}</td>
-                  <td>{h.staff === null ? '—' : h.staff}</td>
-                  <td>{h.status === 'none' ? t.t('widget.customer-analysis.notCounted') : h.status === 'partial' ? t.t('widget.customer-analysis.partlyCounted') : h.reviewMarked ? t.t('widget.customer-analysis.reviewBadge') : m.peak?.hour === h.hour ? t.t('widget.customer-analysis.peakHour') : ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <IntervalTable model={m} selectedHour={selected?.hour} t={t} />
         </section>
       </div>
       </div>
@@ -334,8 +361,10 @@ function DayRecord({ condition, host, detailRef }: Pick<WidgetDetailProps, 'cond
       <div className="mc-columns">
         <section aria-label={t.t('widget.customer-analysis.chartLabel')} className="mc-chart-card">
           <h3 className="mc-h3">{t.t('widget.customer-analysis.chartLabel')}</h3>
-          <Bars items={barItems(t, m)} max={max} label={t.t('widget.customer-analysis.chartLabel')} height="tall" onSelect={(key) => setPicked(Number(key.slice(1)))} selectedKey={selected ? `h${selected.hour}` : null} />
-          <p className="mc-caption">{t.t('widget.customer-analysis.pickHint')}</p>
+          {m.hours.length > 0 ? <>
+            <Bars items={barItems(t, m)} max={max} label={t.t('widget.customer-analysis.chartLabel')} height="tall" onSelect={(key) => setPicked(Number(key.slice(1)))} selectedKey={selected ? `h${selected.hour}` : null} />
+            <p className="mc-caption">{t.t('widget.customer-analysis.pickHint')}</p>
+          </> : <p className="mc-caption">{t.t('widget.customer-analysis.noVisits')}</p>}
           {gaps.length ? <p className="mc-caption mc-flag"><span aria-hidden="true">△ </span>{t.t('widget.customer-analysis.missingHours', { hours: gaps.map((g) => t.format.time(hh(g.hour))).join(', ') })}</p> : null}
         </section>
         <section className="mc-side" aria-label={t.t('widget.customer-analysis.selected')}>
@@ -350,22 +379,9 @@ function DayRecord({ condition, host, detailRef }: Pick<WidgetDetailProps, 'cond
               <ActionButton disabled={selected.reviewMarked || selected.visits === null || sending} onClick={mark}>{t.t('widget.customer-analysis.markReview')}</ActionButton>
             </div>
           ) : null}
-          <table className="mc-table" aria-label={t.t('widget.customer-analysis.chartLabel')}>
-            <thead><tr><th scope="col">{t.t('widget.customer-analysis.colHour')}</th><th scope="col">{t.t('widget.customer-analysis.colVisits')}</th><th scope="col">{t.t('widget.customer-analysis.colStaff')}</th><th scope="col">{t.t('widget.customer-analysis.colStatus')}</th></tr></thead>
-            <tbody>
-              {m.hours.map((h) => (
-                <tr key={h.hour} data-row-id={`h${h.hour}`} data-selected={selected?.hour === h.hour ? 'true' : undefined}>
-                  <th scope="row">{t.format.time(hh(h.hour))}</th>
-                  <td>{h.visits === null ? '—' : h.visits}</td>
-                  <td>{h.staff === null ? '—' : h.staff}</td>
-                  <td>{h.status === 'none' ? t.t('widget.customer-analysis.notCounted') : h.status === 'partial' ? t.t('widget.customer-analysis.partlyCounted') : h.reviewMarked ? t.t('widget.customer-analysis.reviewBadge') : m.peak?.hour === h.hour ? t.t('widget.customer-analysis.peakHour') : ''}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <IntervalTable model={m} selectedHour={selected?.hour} t={t} />
         </section>
       </div>
-      <p className="mc-caption" data-slot={`${ID}.metric.secondary`}>{t.t('widget.customer-analysis.notHeadcount')}</p>
     </div>
   );
 }

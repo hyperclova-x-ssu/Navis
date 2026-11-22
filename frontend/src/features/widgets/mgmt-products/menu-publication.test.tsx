@@ -107,9 +107,9 @@ it('sends the reviewed supplier message and shows acceptance separately from del
     return receipt;
   });
   const mount = (sendable: boolean) => renderWithKit(<SupplierMessage transport={createPortTransport(backend.fetch)}
-    poId="order" sendable={sendable} channels={['sms']} copyText="발주 요청" />);
+    scope={backend} poId="order" supplierName="업체" phone="01000001234" sendable={sendable} copyText="발주 요청" />);
   const view = mount(true);
-  fireEvent.click(await screen.findByRole('button', { name: '거래처에 발주 보내기' }));
+  fireEvent.click(await screen.findByRole('button', { name: '발주사에 발주 보내기' }));
   fireEvent.click(screen.getByRole('button', { name: '보낼 내용 확인하기' }));
   const send = await screen.findByRole('button', { name: '발주 보내기' });
   expect(screen.getByText('업체 · ••••1234')).toBeInTheDocument();
@@ -121,7 +121,7 @@ it('sends the reviewed supplier message and shows acceptance separately from del
   items = [{ ...items[0], state: 'delivered' }];
   mount(false);
   expect(await screen.findByText('보냈어요')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: '거래처에 발주 보내기' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '발주사에 발주 보내기' })).not.toBeInTheDocument();
 });
 
 it('requires the extra removal confirmation before publishing a venue photo deletion', async () => {
@@ -150,8 +150,8 @@ it('requires a fresh preview and a second owner press after a stale supplier car
   }));
   backend.on('POST', path + '/confirm', () => reply(409, { code: 'STALE_REVISION' }));
   renderWithKit(<SupplierMessage transport={createPortTransport(backend.fetch)}
-    poId="order" sendable channels={['sms']} copyText="발주 요청" />);
-  fireEvent.click(await screen.findByRole('button', { name: '거래처에 발주 보내기' }));
+    scope={backend} poId="order" supplierName="업체" phone="01000001234" sendable copyText="발주 요청" />);
+  fireEvent.click(await screen.findByRole('button', { name: '발주사에 발주 보내기' }));
   fireEvent.click(screen.getByRole('button', { name: '보낼 내용 확인하기' }));
   fireEvent.click(await screen.findByRole('button', { name: '발주 보내기' }));
   expect(await screen.findByText(/다시 미리보기를 열어 주세요/)).toBeInTheDocument();
@@ -167,9 +167,35 @@ it('offers a fresh supplier preview after a failed receipt', async () => {
   const path = '/inventory/purchase-orders/order/supplier-message';
   backend.on('GET', path, () => ({ items: [{ receiptId: 'previous', channel: 'sms', scheduledAt: null, state: 'failed' }] }));
   renderWithKit(<SupplierMessage transport={createPortTransport(backend.fetch)}
-    poId="order" sendable channels={['sms']} copyText="발주 요청" />);
+    scope={backend} poId="order" supplierName="업체" phone="01000001234" sendable copyText="발주 요청" />);
   expect(await screen.findByText('보내지 못했어요')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '거래처에 발주 보내기' }));
+  fireEvent.click(screen.getByRole('button', { name: '발주사에 발주 보내기' }));
   expect(screen.getByRole('button', { name: '보낼 내용 확인하기' })).toBeInTheDocument();
   expect(backend.callsTo('POST', '/inventory/approvals')).toHaveLength(0);
+});
+
+it('shows the no-contact guidance by channel and keeps the fixture result unsent', async () => {
+  const props = { scope: {}, poId: 'order', supplierName: '테스트 발주사', sendable: true, copyText: '발주 요청' };
+  renderWithKit(<SupplierMessage {...props} phone="01000000001" />);
+  fireEvent.click(await screen.findByRole('button', { name: '발주사에 발주 보내기' }));
+  expect(screen.getByText('메일로 보내려면 발주사 탭에 메일 주소를 추가해 주세요')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: '보낼 내용 확인하기' }));
+  const send = await screen.findByRole('button', { name: '발주 보내기' });
+  expect(screen.queryByText('보낼 수 없어요')).not.toBeInTheDocument();
+  fireEvent.click(send);
+  expect(await screen.findByText('보낼 수 없어요')).toBeVisible();
+  expect(screen.queryByText('보냈어요')).not.toBeInTheDocument();
+});
+
+it('does not present a virtual delivery receipt as a live send', async () => {
+  const backend = approvalBackend();
+  backend.on('GET', '/inventory/purchase-orders/order/supplier-message', () => ({ items: [{
+    receiptId: 'virtual-result', channel: 'sms', scheduledAt: null, state: 'delivered', providerMode: 'virtual',
+  }] }));
+  renderWithKit(<SupplierMessage transport={createPortTransport(backend.fetch)} scope={backend} poId="order"
+    supplierName="테스트 발주사" phone="01000000001" sendable copyText="발주 요청" />);
+  expect(await screen.findByText('시험 발송으로 기록했어요')).toBeVisible();
+  expect(screen.getByText('실제로 발송하지 않았어요')).toBeVisible();
+  expect(screen.queryByText('보냈어요')).not.toBeInTheDocument();
+  expect(screen.queryByText('발주를 받았는지는 발주사에 확인해 주세요')).not.toBeInTheDocument();
 });

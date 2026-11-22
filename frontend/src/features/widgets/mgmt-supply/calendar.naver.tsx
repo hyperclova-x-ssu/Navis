@@ -2,24 +2,25 @@
  * SCR-224 `[네이버에 일정 추가하기]` (PN11 · AC-1590 · AC-1611, one way, GAPUI-CAL). One direct event at a time goes to the owner's NAVER
  * Calendar default calendar through a confirm step; only the card's primary button reaches the server (approval, then the export with the
  * approval as its key). Sending the same event again changes the one NAVER event (`네이버 일정을 고쳤어요`). Nothing comes back from NAVER:
- * the Navis calendar stays the source, and the ICS download beside it is unchanged. HTTP mode only, like the ICS download.
+ * the Navis calendar stays the source. Example mode uses local receipts and the same card.
  */
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { CalendarEvent } from '../../../data/db/types';
-import { useRealPort } from '../../../data/react';
+import { useRealPort, useWidgetDataStore } from '../../../data/react';
+import { fixtureExports } from '../../../data/reality/07/fixture-exports';
 import { staffLocalTimestamp } from '../../../data/iteration7/staff/clock';
 import { exportReasonBundle, exportReasonKey } from '../../../data/reality/07/export-copy';
 import { readCalendarExport, type CalendarPushReceipt } from '../../../data/reality/07/naver';
 import { useExportCard } from '../../../data/reality/07/use-export-card';
 import { useBundle } from '../../../i18n';
-import { ActionButton, Icon } from '../../../ui';
+import { ActionButton, DetailFooterContent, Icon } from '../../../ui';
 import { useSupplyText } from './shared';
 
 const bundle = {
   id: 'widget.calendar.naver',
   ko: {
     'naver.add': '네이버에 일정 추가하기',
-    'naver.pickOne': '직접 추가한 일정 하나를 골라 주세요',
+    'naver.pickOne': '직접 추가한 일정을 고르면 네이버에 추가할 수 있어요',
     'naver.destination': '네이버 캘린더 기본 캘린더에 넣어요',
     'naver.title': '일정 제목', 'naver.when': '날짜와 시간', 'naver.memo': '일정 내용', 'naver.noMemo': '없음',
     'naver.sending': '보내고 있어요',
@@ -85,9 +86,9 @@ const bundle = {
 
 type Summary = { readonly title: string; readonly when: string; readonly memo: string | null };
 
-/** The direct event a card may send: an event (not a to-do) the owner added, with its server revision. */
-export const naverEligible = (event: CalendarEvent | undefined): event is CalendarEvent & { readonly revision: number } =>
-  !!event && event.kind === 'event' && typeof event.revision === 'number';
+/** Only direct events can be sent. The server also requires a revision. */
+const naverEligible = (event: CalendarEvent | undefined, http: boolean): event is CalendarEvent =>
+  !!event && event.kind === 'event' && (!http || typeof event.revision === 'number');
 
 /**
  * State for the toolbar button, the confirm step and the `네이버에 보냄` row line. The receipt of the selected event is read when it is
@@ -95,7 +96,8 @@ export const naverEligible = (event: CalendarEvent | undefined): event is Calend
  */
 export function useCalendarNaver(selected: CalendarEvent | undefined) {
   const port = useRealPort();
-  const enabled = port?.state('staff').mode === 'http';
+  const store = useWidgetDataStore();
+  const http = port?.state('staff').mode === 'http';
   const x = useSupplyText();
   const [receipts, setReceipts] = useState<ReadonlyMap<string, CalendarPushReceipt | null>>(new Map());
   const [summary, setSummary] = useState<Summary>();
@@ -104,17 +106,18 @@ export function useCalendarNaver(selected: CalendarEvent | undefined) {
       if ('processType' in receipt) setReceipts(map => new Map(map).set(receipt.eventId, receipt));
     },
   });
-  const selectedId = enabled && naverEligible(selected) ? selected.eventId : undefined;
+  const eligible = naverEligible(selected, http);
+  const selectedId = eligible ? selected.eventId : undefined;
   const known = selectedId !== undefined && receipts.has(selectedId);
   useEffect(() => {
-    if (!port || !selectedId || known) return;
+    if (!http || !selectedId || known) return;
     const controller = new AbortController();
     readCalendarExport(port.transport, selectedId, controller.signal).then(
       result => { if (!controller.signal.aborted) setReceipts(map => new Map(map).set(selectedId, result.receipt ?? null)); },
       () => undefined,
     );
     return () => controller.abort();
-  }, [port, selectedId, known]);
+  }, [port, http, selectedId, known]);
   const phase = card.state?.phase;
   useEffect(() => {
     // The record changed under the card: read it again so the refreshed card carries the current revision.
@@ -127,11 +130,12 @@ export function useCalendarNaver(selected: CalendarEvent | undefined) {
     memo: event.memo ? x.text(event.memo) || null : null,
   });
   const open = (event: CalendarEvent | undefined) => {
-    if (!naverEligible(event)) return;
+    if (!naverEligible(event, http)) return;
     setSummary(describe(event));
-    card.open({ operation: 'calendar.add', resourceId: event.eventId, expectedRevision: event.revision });
+    card.open({ operation: 'calendar.add', resourceId: event.eventId, expectedRevision: event.revision ?? 0 });
   };
-  return { enabled, eligible: naverEligible(selected), receipts, summary, card, open: () => open(selected), reopen: open };
+  const receiptFor = (id: string) => http ? receipts.get(id) : fixtureExports(store).readCalendar(id);
+  return { eligible, receiptFor, summary, card, open: () => open(selected), reopen: open };
 }
 
 type Controller = ReturnType<typeof useCalendarNaver>;
@@ -139,7 +143,6 @@ type Controller = ReturnType<typeof useCalendarNaver>;
 export function CalendarNaverButton({ naver }: { readonly naver: Controller }) {
   const { t } = useBundle(bundle);
   const hint = useId();
-  if (!naver.enabled) return null;
   const busy = naver.card.state?.phase === 'sending';
   return <>
     <ActionButton variant="secondary" disabled={!naver.eligible || busy} aria-describedby={naver.eligible ? undefined : hint}
@@ -152,8 +155,8 @@ export function CalendarNaverButton({ naver }: { readonly naver: Controller }) {
 export function CalendarNaverSent({ naver, eventId }: { readonly naver: Controller; readonly eventId: string }) {
   const { t } = useBundle(bundle);
   const x = useSupplyText();
-  const receipt = naver.receipts.get(eventId);
-  if (!naver.enabled || !receipt) return null;
+  const receipt = naver.receiptFor(eventId);
+  if (!receipt) return null;
   const sent = staffLocalTimestamp(receipt.sentAt);
   return <p className="ms-caption" data-naver-sent="">{t('naver.sent', { date: x.format.date(sent.date, 'short'), time: x.format.time(sent.time) })}</p>;
 }
@@ -166,7 +169,7 @@ export function CalendarNaverReview({ naver, current }: { readonly naver: Contro
   const state = naver.card.state;
   const attempt = state?.card.attemptKey;
   useLayoutEffect(() => { if (attempt) heading.current?.focus(); }, [attempt]);
-  if (!naver.enabled || !state || !naver.summary) return null;
+  if (!state || !naver.summary) return null;
   const { phase } = state;
   const sending = phase === 'sending';
   let line: ReactNode = null;
@@ -188,9 +191,8 @@ export function CalendarNaverReview({ naver, current }: { readonly naver: Contro
       <div><dt>{t('naver.memo')}</dt><dd>{naver.summary.memo ?? t('naver.noMemo')}</dd></div>
     </dl>
     <p className="ms-caption">{t('naver.destination')}</p>
-    {line}
+    <DetailFooterContent><div className="detail-footer-actions">{primary}{line}</div></DetailFooterContent>
     <div className="ui-confirm-step__actions">
-      {primary}
       <ActionButton variant="secondary" data-esc-close="" disabled={sending} onClick={naver.card.close}>{t('naver.close')}</ActionButton>
     </div>
   </section>;

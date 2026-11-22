@@ -8,7 +8,7 @@ import { createWidgetDataStore } from '../../../data/db/store';
 import { createRealPort } from '../../../data/reality/00';
 import { autoloadedAdapters } from '../../../data/reality/00/autoload';
 import { inboxClock as noticeClock } from '../../../data/reality/15/hooks';
-import { ids, service } from '../../../data/reality/15/testing';
+import { ids, notice, service } from '../../../data/reality/15/testing';
 import { renderWithKit } from '../../../ui/test-utils';
 import { createNoticeWidget } from './module';
 
@@ -39,13 +39,40 @@ async function pickTime(time: string) {
   fireEvent.click(await screen.findByRole('option', { name: time }));
 }
 
+it('selects the HTTP recipient group without writing and persists that group only on saving the draft', async () => {
+  const { backend, state } = service();
+  const groupId = 'c1111111-1111-4111-8111-111111111111';
+  const name = '휴무 안내';
+  backend.on('GET', '/marketing/notice-recipient-groups', () => ({ items: [{ groupId: 'regular', recipientGroupId: null, memberCount: 4 }] }));
+  backend.on('POST', '/marketing/notice-recipient-groups', () => ({ groupId: 'regular', recipientGroupId: groupId }));
+  backend.on('POST', '/marketing/notices', call => {
+    expect(call.body).toMatchObject({ title: name, channel: 'sms', recipientGroupId: groupId });
+    state.notices.push(notice({ id: 'b3333333-3333-4333-8333-333333333333', title: name, text: '내일은 쉽니다', channel: 'sms', recipientGroupId: groupId,
+      startDate: '2026-11-21', endDate: '2026-11-21' }));
+    return { resourceId: state.notices.at(-1)!.id, revision: 1, receiptId: 'new-draft', affectedSources: ['notices'] };
+  });
+  open(backend);
+  fireEvent.change(await screen.findByRole('textbox', { name: '공지 제목' }), { target: { value: name } });
+  fireEvent.change(screen.getByRole('textbox', { name: '공지 내용' }), { target: { value: '내일은 쉽니다' } });
+  fireEvent.click(screen.getByRole('radio', { name: '문자' }));
+  fireEvent.click(await screen.findByRole('radio', { name: '단골' }));
+  expect(backend.calls.filter(call => call.method !== 'GET')).toEqual([]);
+  fireEvent.click(screen.getByRole('button', { name: '임시 저장하기' }));
+  expect(await screen.findByText('임시 저장했어요')).toBeVisible();
+  expect(backend.callsTo('POST', '/marketing/notice-recipient-groups')).toHaveLength(1);
+  expect(backend.callsTo('POST', '/marketing/notices')).toHaveLength(1);
+  expect(backend.callsTo('POST', /\/send$/)).toHaveLength(0);
+  cleanup();
+  open(backend, { itemId: state.notices.at(-1)!.id });
+  expect(await screen.findByRole('radio', { name: '문자' })).toBeChecked();
+});
+
 it('keeps sending blocked and omits the provider frame while sender setup is pending', async () => {
     sms.configured = false;
   const { backend } = service({ sms: true });
   open(backend, { itemId: ids.sms });
   await pickTime('15:00');
-  expect(await screen.findByText('문자를 보내려면 발신 번호를 먼저 등록해 주세요')).toBeVisible();
-  expect(screen.getByText('무료 수신 거부 번호도 등록해 주세요')).toBeVisible();
+  expect(await screen.findByText('설정에서 문자 발신 번호와 무료 수신 거부 번호를 등록해 주세요')).toBeVisible();
   expect(screen.queryByText(/공지 매장 · 발신자 안내/)).not.toBeInTheDocument();
   const send = screen.getByRole('button', { name: /11월 21일 15:00에 보내기/ });
   expect(send).toBeDisabled();
@@ -56,13 +83,13 @@ it('keeps sending blocked and omits the provider frame while sender setup is pen
 it('books an SMS notice for a chosen daytime minute with one card press and shows it as booked, not sent', async () => {
   const { backend, state } = service({ sms: true });
   const { notify } = open(backend, { itemId: ids.sms });
-  expect(await screen.findByText(/광고 문자라서 밤 9시부터 아침 8시 사이에는 보내지 않아요/)).toBeInTheDocument();
-  expect(screen.getByText(/초안의 손님 그룹에서 광고 문자에 동의한 손님/)).toBeInTheDocument();
+  expect(await screen.findByText('문자는 밤 9시부터 아침 8시까지 보내지 않아요')).toBeInTheDocument();
+  expect(screen.getByText(/고른 그룹에서 광고 문자에 동의한 손님/)).toBeInTheDocument();
   expect(await screen.findByText(/SMS .*71\/90바이트/)).toBeInTheDocument();
   const preview = screen.getByRole('region', { name: '문자 미리보기' });
   expect(preview.querySelector('.mkt-quote')?.textContent).toBe(state.smsPreview.content);
   expect(within(preview).getByText('광고 문자 수신에 동의한 손님 12명')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '보낼 시각을 골라 주세요' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '예약하기' })).toBeDisabled();
   await pickTime('12:10');
   expect(await screen.findByText('10분 뒤부터 고를 수 있어요')).toBeInTheDocument();
   await pickTime('15:00');
@@ -167,7 +194,7 @@ it('does not let a new SMS draft be saved without a customer group and says why'
   fireEvent.click(await screen.findByRole('radio', { name: '문자' }));
   fireEvent.change(screen.getByRole('textbox', { name: /제목/ }), { target: { value: '신메뉴' } });
   fireEvent.change(screen.getByRole('textbox', { name: '공지 내용' }), { target: { value: '딸기 라떼가 나왔어요' } });
-  expect(screen.getByText(/이 초안에는 받는 그룹이 없어요/)).toBeInTheDocument();
+  expect(screen.getByText(/문자를 받는 손님 그룹을 골라 주세요/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '임시 저장하기' })).toBeDisabled();
   expect(backend.calls.filter(call => call.method !== 'GET')).toHaveLength(0);
 });

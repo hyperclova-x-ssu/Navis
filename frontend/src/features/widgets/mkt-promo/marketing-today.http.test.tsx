@@ -28,15 +28,23 @@ it('shows the service cells in order and opens each one at its own record with t
   await waitFor(() => expect(slot('now')).not.toBeNull());
   expect(slot('now')).toHaveTextContent(/일요일 14~16시가 한산해요/u);
   expect(slot('now')).toHaveTextContent(/단골이 3명 있어요/u);
-  expect(slot('today')).toHaveTextContent(/메시지·리뷰가 2건 있어요/u);
+  expect(slot('today')).toHaveTextContent('기록한 문의 2건이 답변을 기다려요');
   expect(slot('today')).toHaveTextContent('답변 초안을 써 뒀어요');
-  expect(slot('week')).toHaveTextContent(/매장 사진 7장이 있어요/u);
+  expect(slot('week')).toHaveTextContent(/사진 7장이 있어요/u);
   fireEvent.click(slot('now').querySelector('button') as HTMLElement);
   expect(host.openDetail).toHaveBeenLastCalledWith({ featureId: 'slot-coupon', view: 'send', itemId: 'slot-2026-11-22-14', focus: 'action' });
   fireEvent.click(slot('today').querySelector('button') as HTMLElement);
   expect(host.openDetail).toHaveBeenLastCalledWith({ featureId: 'ai-response', itemId: 'inquiry-1', focus: 'action' });
   fireEvent.click(slot('week').querySelector('button') as HTMLElement);
   expect(host.openDetail).toHaveBeenLastCalledWith({ featureId: 'promo-video', view: 'create', focus: 'action' });
+});
+
+it('shows the next actionable suggestion when the quiet slot has nobody to send to', async () => {
+  const noAudience = { ...quiet, params: { regulars: 0 } };
+  panel(groupsSession(groupsService({ ...seed, today: { state: 'ready', cells: [noAudience, replies(0), video] as never } })), 1, 1);
+  await waitFor(() => expect(slot('today')).not.toBeNull());
+  expect(slot('now')).toBeNull();
+  expect(screen.queryByRole('button', { name: /쿠폰 보내기/ })).toBeNull();
 });
 
 it('does not say drafts are ready when none was written, and names the lot by its own item name', async () => {

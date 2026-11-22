@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ActionButton, Checkbox, ChipChoice, DataGrid, DateField, DetailFooterContent, DetailTabs, InlineEmpty, InlineForm, MetricFit, PanelAction, PanelState, RadioGroup, Textarea, TextField, useKitT, type DataGridHandle, type GridColumn, type GridFocus, type GridSort } from '../../../ui';
-import type { DetailRef } from '../../../contracts';
+import type { DetailRef, WidgetHost } from '../../../contracts';
 import { commandFailureText } from '../../../data/commands/failure-copy';
 import type { DataCommandResult } from '../../../data/commands/types';
 import { classifyNoticeContent } from '../../../data/iteration7/notices';
@@ -15,7 +15,7 @@ import { smsSenderConfigured } from '../../../data/reality/14/sms';
 import { useBundle } from '../../../i18n';
 import { FixedSmsPreview } from '../mkt-coupon/shared';
 import { NoticeScheduleCancel } from './schedule-cancel';
-import { isInboxMessageKey, NoticeChannels, noticeKey, noticeResult, SmsConfirm, SmsPreview, SmsSchedule, useNoticeDelivery } from './real';
+import { isInboxMessageKey, NoticeChannels, NoticeRecipients, noticeKey, noticeResult, SmsConfirm, SmsPreview, SmsSchedule, useNoticeDelivery } from './real';
 import './widget.css';
 import { dateRangeWithWeekdays } from '../date-range';
 
@@ -33,10 +33,10 @@ export type NoticeView = { status: 'empty' } | { status: 'loading' } | { status:
 export type NoticePort = {
   importClosure(eventId: string, noticeId?: string): Promise<Result<{ draft: NoticeDraftInput }>>;
   /** `unchanged`: the draft already holds exactly these values, so nothing was written. */
-  saveDraft(draft: NoticeDraftInput, forSend?: boolean): Promise<Result<{ noticeId: string; revision: number; unchanged?: boolean }>>;
+  saveDraft(draft: NoticeDraftInput, forSend?: boolean): Promise<Result<{ noticeId: string; revision: number; unchanged?: boolean; recipientGroupId?: string }>>;
   cancelSchedule(sentId: string): Promise<Result>;
   deleteDraft(noticeId: string): Promise<Result>;
-  preview(noticeId: string, revision: number): Promise<Result<{ preview: NoticePreview }>>;
+  preview(noticeId: string, revision: number, sendAt?: string): Promise<Result<{ preview: NoticePreview }>>;
   send(noticeId: string, revision: number, previewId: string, sendAt?: string): Promise<Result<{ deliveryState?: 'accepted' | 'recorded' | 'saved' | 'scheduled' }>>;
   retry(): void;
 };
@@ -47,11 +47,11 @@ const untouched = (draft: NoticeDraftInput) => !draft.noticeId && !draft.title &
 const kinds = [{ value: 'regular_closure', label: '정기 휴무' }, { value: 'temporary_closure', label: '임시 휴무' }, { value: 'hours_change', label: '영업시간 변경' }, { value: 'other', label: '기타' }] as const;
 const kindLabel = (kind: string) => kinds.find(item => item.value === kind)?.label ?? kind;
 const audiences = [{ value: 'all_contactable', label: '연락처가 있는 회원 전체' }, { value: 'group', label: '손님 그룹 선택' }] as const;
-const reason: Record<string, string> = { TITLE_REQUIRED: '공지 제목을 넣어 주세요', BODY_REQUIRED: '공지 내용을 넣어 주세요', NO_RECIPIENTS: '보낼 수 있는 손님이 없어요', AD_NIGHT_RESTRICTED: '밤 9시부터 아침 8시까지는 광고 문자를 보낼 수 없어요', PREVIEW_STALE: '내용이 바뀌었어요. 다시 미리보기해 주세요', INVALID_DATE_RANGE: '날짜와 기간을 확인해 주세요' };
+const reason: Record<string, string> = { TITLE_REQUIRED: '공지 제목을 넣어 주세요', BODY_REQUIRED: '공지 내용을 넣어 주세요', NO_RECIPIENTS: '보낼 수 있는 손님이 없어요', AD_NIGHT_RESTRICTED: '밤 9시부터 아침 8시까지는 광고 문자를 보낼 수 없어요', PREVIEW_STALE: '내용이 바뀌었어요. 미리보기를 다시 눌러 주세요', INVALID_DATE_RANGE: '날짜와 기간을 확인해 주세요' };
 const message = (code?: string) => reason[code ?? ''] ?? '처리하지 못했어요. 다시 시도해 주세요';
 reason.PAST_DATE = '지난 날짜에는 공지를 만들 수 없어요. 오늘 이후로 골라 주세요';
 /** The handler says why a linked draft is stale by messageKey; the calendar closure text is the same as in the banner. */
-const staleText: Readonly<Record<string, string>> = { changed: '휴무 일정이 바뀌었어요. 공지 초안에 다시 가져와 주세요', removed: '연결된 휴무 일정이 없어요. 캘린더에서 다른 휴무를 불러와 주세요', dates: '공지 기간이 캘린더 휴무와 달라요. 공지 초안에 다시 가져와 주세요' };
+const staleText: Readonly<Record<string, string>> = { changed: '휴무 일정이 바뀌었어요. 휴무를 다시 불러와 주세요', removed: '연결된 휴무 일정이 없어요. 캘린더에서 다른 휴무를 불러와 주세요', dates: '공지 기간이 캘린더 휴무와 달라요. 휴무를 다시 불러와 주세요' };
 const staleKey: Readonly<Record<string, string>> = { 'data.notices.error.CLOSURE_CHANGED': staleText.changed!, 'data.notices.error.CLOSURE_REMOVED': staleText.removed!, 'data.notices.error.CLOSURE_DATES_DIFFER': staleText.dates! };
 const messageOf = (result: { reason?: string; messageKey?: string }) => staleKey[result.messageKey ?? ''] ?? message(result.reason);
 const dateReason = (result: { reason?: string }) => result.reason === 'INVALID_DATE_RANGE' || result.reason === 'PAST_DATE';
@@ -69,11 +69,12 @@ function restored(draft: NoticeDraftInput | null | undefined, view: NoticeView):
   return draft;
 }
 
-export function NoticeEditor({ view, port, memory, detailRef, deliveryChannels = false, schedules, deleteNews }: {
+export function NoticeEditor({ view, port, memory, detailRef, deliveryChannels = false, schedules, deleteNews, openSettings }: {
   view: NoticeView; port: NoticePort | Omit<NoticePort, 'preview'>; memory?: NoticeDraftMemory; detailRef?: DetailRef;
-  deliveryChannels?: boolean; schedules?: ScheduledNoticesBinding; deleteNews?(id: string): Promise<boolean>;
+  deliveryChannels?: boolean; schedules?: ScheduledNoticesBinding; deleteNews?(id: string): Promise<boolean>; openSettings?: WidgetHost['openSettings'];
 }) {
   const { t } = useBundle(dataBundle);
+  const http = !('preview' in port);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [smsConfirm, setSmsConfirm] = useState(false);
   const deleteButton = useRef<HTMLButtonElement>(null);
@@ -128,14 +129,17 @@ export function NoticeEditor({ view, port, memory, detailRef, deliveryChannels =
   };
   const model = view.status === 'ready' ? view : { unsentCount: 0, nextClosure: null, closures: [], drafts: [], sent: [], scheduled: [], groups: [] };
   const savedDraft = model.drafts.find(item => item.noticeId === draft.noticeId);
-  const delivery = useNoticeDelivery(draft, savedDraft, deliveryChannels);
+  const delivery = useNoticeDelivery(draft, savedDraft, deliveryChannels, http, preview);
   /** The calendar closure behind this draft changed after the import: the old preview must not be sent. */
   const link = draft.noticeId ? savedDraft?.closureLink : undefined;
   const stale = link === 'changed' || link === 'removed' || link === 'dates' ? link : null;
-  const withReceipt = (saved: { noticeId: string; revision: number }) => setDraft(current => ({
-    ...current, ...(deliveryChannels ? { channel: delivery.channel, title: current.title.trim(), body: current.body.trim(),
-      startDate: current.startDate || delivery.today, endDate: current.endDate || current.startDate || delivery.today } : {}), ...saved,
-  }));
+  const withReceipt = (saved: { noticeId: string; revision: number; recipientGroupId?: string }) => {
+    if (delivery.sms) delivery.keepTiming(saved.noticeId);
+    setDraft(current => ({
+      ...current, ...(http ? { channel: delivery.channel, title: current.title.trim(), body: current.body.trim(),
+        startDate: current.startDate || delivery.today, endDate: current.endDate || current.startDate || delivery.today } : {}), ...saved,
+    }));
+  };
   /** T-11: a stale draft that was not edited is not written, so "saved" would be untrue: the re-import offer takes the press instead. */
   const onSave = () => void run(async () => {
     const v = version.current; const result = await save();
@@ -160,7 +164,7 @@ export function NoticeEditor({ view, port, memory, detailRef, deliveryChannels =
       const saved = await save();
       if (!saved || v !== version.current) return;
       withReceipt(saved);
-      const result = await port.preview(saved.noticeId, saved.revision);
+      const result = await port.preview(saved.noticeId, saved.revision, delivery.sendAt);
       if (v !== version.current) return;
       if (!result.ok) { setPreview(null); refuse(result); return; }
       setPreview(result.preview);
@@ -177,25 +181,25 @@ export function NoticeEditor({ view, port, memory, detailRef, deliveryChannels =
     const frame = requestAnimationFrame(() => focusTarget()?.focus());
     return () => cancelAnimationFrame(frame);
   }, [focusOnEntry, detailRef?.prefill]);
-  const fresh = stale || (deliveryChannels && draft.noticeId && savedDraft?.revision !== draft.revision) ? null : preview;
+  const fresh = stale || (http && draft.noticeId && savedDraft?.revision !== draft.revision) ? null : preview;
   const alreadyScheduled = model.scheduled.some(row => row.noticeId === draft.noticeId);
-  const senderMissing = !deliveryChannels && fresh?.contentClass === 'promotional' && !smsSenderConfigured;
+  const senderMissing = !http && (!deliveryChannels || delivery.sms) && fresh?.contentClass === 'promotional' && !smsSenderConfigured;
   const canSend = !alreadyScheduled && !senderMissing && !stale && (delivery.sms ? delivery.canSend
-    : !!fresh?.sendAllowed && (deliveryChannels ? delivery.canSend : !!fresh.recipientCount));
+    : !!fresh?.sendAllowed && delivery.canSend && (http || !!fresh.recipientCount));
   const onSend = (confirmed = false) => {
     if (!canSend || locked.current) return;
     if (delivery.sms && !confirmed) { setSmsConfirm(true); return; }
     void run(async () => {
       const v = version.current;
       let target = draft.noticeId && draft.revision ? { noticeId: draft.noticeId, revision: draft.revision } : null;
-      if (deliveryChannels && !delivery.sms) {
+      if (http && !delivery.sms) {
         target = await save(true);
         if (!target || !mounted.current || v !== version.current) return;
         withReceipt(target);
       }
-      if (!deliveryChannels) await new Promise<void>(resolve => setTimeout(resolve, 1000));
+      if (!http) await new Promise<void>(resolve => setTimeout(resolve, 1000));
       if (!target || !mounted.current || v !== version.current) return;
-      const revision = deliveryChannels ? target.revision : fresh?.draftRevision ?? target.revision;
+      const revision = http ? target.revision : fresh?.draftRevision ?? target.revision;
       const result = await port.send(target.noticeId, revision, fresh?.previewId ?? 'service', delivery.sendAt);
       if (v !== version.current) return;
       setSmsConfirm(false);
@@ -215,22 +219,25 @@ export function NoticeEditor({ view, port, memory, detailRef, deliveryChannels =
   useEffect(() => { if (promotional) ruleBand.current?.scrollIntoView?.({ block: 'nearest' }); }, [promotional]);
   if (view.status === 'error') return <PanelState tone="error" message="공지 내역을 불러오지 못했어요" action={{ label: '다시 시도하기', widgetName: '공지 발송', onPress: port.retry }} />;
   const shown = alreadyScheduled ? t('data.notices.error.ALREADY_SCHEDULED') : feedback && !(stale && feedback === staleText[stale]) ? feedback : '';
-  const statusText = shown || (senderMissing || delivery.sms ? '' : !canSend && !pending ? PREVIEW_FIRST : '');
+  const statusText = shown || (delivery.sms && !delivery.sendAt && !pending ? '보낼 시각을 골라 주세요'
+    : senderMissing || delivery.sms ? '' : !canSend && !pending ? PREVIEW_FIRST : '');
   const good = shown === SAVED || !!sentFeedback;
   return <div className="i7-notice-detail" data-tab={tab} lang="ko">
     <DetailTabs value={tab} onValueChange={value => { setDeleteConfirm(false); setSmsConfirm(false); setTab(value); }} label="공지 발송 보기" tabs={[{ value: 'compose', label: '공지 작성' }, { value: 'scheduled', label: t('data.notices.schedule.list') }, { value: 'history', label: '보낸 기록' }]} />
-    {tab === 'history' ? <SentHistory rows={model.sent} initialItemId={detailRef?.view === 'history' ? detailRef.itemId : undefined} onCompose={() => setTab('compose')} deleteNews={deleteNews} /> : tab === 'scheduled' ? <ScheduledNotices rows={model.scheduled} port={port} binding={schedules} /> : <div className="i7-notice-form">
+    {tab === 'history' ? <SentHistory rows={model.sent} initialItemId={detailRef?.view === 'history' ? detailRef.itemId : undefined} onCompose={() => setTab('compose')} deleteNews={deleteNews} /> : tab === 'scheduled' ? <ScheduledNotices rows={model.scheduled} port={port} binding={schedules} onCompose={() => setTab('compose')} /> : <div className="i7-notice-form">
+      <p className="i7-notice-field-label">공지 종류</p>
       <ChipChoice label="공지 종류" value={draft.kind} onChange={kind => change({ kind })} options={kinds} />
       <div className="i7-notice-toolbar">
       {model.drafts.length > 0 && <select className="ui-text-input i7-notice-draft-pick" aria-label="임시 저장한 공지" value={draft.noticeId ?? ''} onChange={event => { const selected = model.drafts.find(item => item.noticeId === event.currentTarget.value); if (selected) { version.current++; setDraft(selected); setPreview(null); clearMessages(); } }}><option value="">임시 저장한 공지 고르기</option>{model.drafts.map(item => <option key={item.noticeId} value={item.noticeId}>{item.title}</option>)}</select>}
-        <ActionButton ref={deleteButton} variant="secondary" disabled={pending || !draft.noticeId || deleteConfirm} onClick={() => setDeleteConfirm(true)}>임시 저장 지우기</ActionButton>
         <ActionButton variant="secondary" className="i7-notice-calendar-load" onClick={() => setPicker(!picker)}>
           캘린더에서 불러오기
         </ActionButton>
       </div>
-      {deleteId && <InlineForm title="공지 초안을 지울까요?" saveLabel="초안 지우기" closeLabel="돌아가기" returnFocusRef={deleteButton}
-        onSave={onDelete} onClose={() => setDeleteConfirm(false)}>{null}</InlineForm>}
-      {picker && <div className="i7-notice-picker">{model.closures.map(closure => <ActionButton key={closure.eventId} variant="secondary" disabled={pending} onClick={() => importFrom(closure.eventId)}>{closure.title}</ActionButton>)}</div>}
+      {picker && <><p className="i7-notice-field-label">{model.closures.length ? '불러올 휴무를 골라 주세요' : '불러올 휴무가 없어요'}</p><div className="i7-notice-picker">{model.closures.map(closure => <ActionButton key={closure.eventId} variant="secondary" disabled={pending} onClick={() => importFrom(closure.eventId)}>{closure.title}</ActionButton>)}</div></>}
+      {deliveryChannels && <>
+        <NoticeChannels delivery={delivery} busy={pending} change={change} />
+        <NoticeRecipients delivery={delivery} draft={draft} groups={model.groups} busy={pending} change={change} promotional={promotional} openSettings={openSettings} />
+      </>}
       <TextField label="공지 제목" value={draft.title} onValueChange={title => change({ title })} error={errors.title} inputRef={titleInput} />
       <div className="i7-notice-dates">
         <DateField label="시작 날짜" value={draft.startDate || null} onValueChange={startDate => change({ startDate: startDate ?? '' })} error={dateError?.field === 'startDate' ? dateError.text : undefined} />
@@ -238,7 +245,7 @@ export function NoticeEditor({ view, port, memory, detailRef, deliveryChannels =
       </div>
       {stale && <div role="alert" className="i7-notice-stale"><p>{staleText[stale]}</p>{stale !== 'removed' && draft.closureEventId && <ActionButton ref={reimportAction} variant="secondary" disabled={pending} onClick={() => importFrom(draft.closureEventId!)}>캘린더에서 다시 가져오기</ActionButton>}</div>}
       <Textarea label="공지 내용" value={draft.body} onValueChange={body => change({ body })} error={errors.body} inputRef={bodyInput} />
-      {deliveryChannels ? <NoticeChannels delivery={delivery} draft={draft} busy={pending} change={change} /> : <>
+      {!deliveryChannels && <>
       <RadioGroup label="받는 사람" orientation="horizontal" value={draft.audience} onValueChange={audience => change(audience === 'all_contactable' ? { audience, groupIds: [] } : { audience })} options={audiences} />
       {draft.audience === 'group' && <div className="i7-notice-groups">{model.groups.map(group => <Checkbox key={group.groupId} label={group.name} checked={draft.groupIds.includes(group.groupId)} onCheckedChange={checked => change({ groupIds: checked ? [...draft.groupIds, group.groupId] : draft.groupIds.filter(id => id !== group.groupId) })} />)}</div>}
       <div ref={ruleBand} role="status" className="i7-notice-rule" data-tone={promotional ? 'warning' : 'info'}>
@@ -246,19 +253,26 @@ export function NoticeEditor({ view, port, memory, detailRef, deliveryChannels =
         {promotional
           ? <div><p>홍보 문구가 들어가면 문자 동의한 손님에게만 보낼 수 있어요</p><p>(광고) 표시와 수신 거부 안내가 자동으로 들어가요</p><p>밤 9시부터 아침 8시까지는 광고 문자를 보낼 수 없어요</p></div>
           : <p>정보성 공지는 연락처가 있는 회원 모두에게 보낼 수 있어요</p>}
-      </div></>}
-      {delivery.sms && <SmsSchedule delivery={delivery} busy={pending} onChange={() => setSmsConfirm(false)} />}
+      </div>
+      </>}
+      {delivery.sms && <SmsSchedule delivery={delivery} busy={pending} onChange={() => {
+        setSmsConfirm(false);
+        if (!http) { version.current++; setPreview(null); }
+      }} />}
       {(fresh || delivery.sms && delivery.unchanged) && <section ref={previewBox} className="i7-notice-preview" aria-label={delivery.sms ? t(noticeKey('notice.smsPreview')) : '미리보기'}>
         <h3>{delivery.sms ? t(noticeKey('notice.smsPreview')) : '미리보기'}</h3>
-        {delivery.sms && delivery.unchanged ? <SmsPreview delivery={delivery} body={draft.body} /> : fresh && <>
-          {senderMissing ? <FixedSmsPreview body={draft.body} recipientCount={fresh.recipientCount} /> : <p className="i7-notice-preview-body">{fresh.renderedBody}</p>}
-          {!deliveryChannels && <p>받는 사람 {fresh.recipientCount}명</p>}
+        {delivery.sms && (delivery.unchanged || !http) ? <SmsPreview delivery={delivery} body={draft.body} /> : fresh && <>
+          {senderMissing ? <FixedSmsPreview body={draft.body} recipientCount={fresh.recipientCount} customerOnly /> : <p className="i7-notice-preview-body">{fresh.renderedBody}</p>}
+          {!http && <p>받는 사람 {fresh.recipientCount}명</p>}
         </>}
       </section>}
       {smsConfirm && <SmsConfirm delivery={delivery} busy={pending} onConfirm={() => onSend(true)} onClose={() => setSmsConfirm(false)} />}
     </div>}
     {tab === 'compose' && <DetailFooterContent>
+      {deleteId && <InlineForm title="공지 초안을 지울까요?" saveLabel="초안 지우기" closeLabel="그대로 두기" returnFocusRef={deleteButton}
+        onSave={onDelete} onClose={() => setDeleteConfirm(false)}>{null}</InlineForm>}
       <div className="i7-notice-footbar">
+        {draft.noticeId && <ActionButton ref={deleteButton} variant="secondary" disabled={pending || deleteConfirm || smsConfirm} onClick={() => setDeleteConfirm(true)}>임시 저장 지우기</ActionButton>}
         <p role="status" id={statusId} className="i7-notice-status" data-tone={good ? 'ok' : shown ? 'error' : 'hint'}>
           {statusText && <Icon name={good ? 'status-ok' : shown ? 'warning' : 'info'} aria-hidden />}
           <span>{statusText}</span>
@@ -267,18 +281,19 @@ export function NoticeEditor({ view, port, memory, detailRef, deliveryChannels =
         </p>
         <div className="i7-notice-actions">
           <ActionButton variant="secondary" disabled={pending || !delivery.canSave} onClick={onSave}>임시 저장하기</ActionButton>
-          <ActionButton ref={previewAction} variant={canSend ? 'secondary' : 'default'} disabled={pending || !delivery.canSave} onClick={onPreview}>미리보기</ActionButton>
-          <ActionButton variant={canSend ? 'default' : 'secondary'} loading={pending && !!fresh} disabled={!canSend || pending || smsConfirm} aria-describedby={statusText ? statusId : undefined} onClick={() => onSend()}>{pending && fresh ? '공지를 보내고 있어요' : delivery.sendLabel}</ActionButton>
+          <ActionButton ref={previewAction} variant="secondary" disabled={pending || !delivery.canSave} onClick={onPreview}>미리보기</ActionButton>
+          {!smsConfirm && <ActionButton loading={pending && !!fresh} disabled={!canSend || pending} aria-describedby={statusText ? statusId : undefined} onClick={() => onSend()}>{pending && fresh ? '공지를 보내고 있어요' : delivery.sendLabel}</ActionButton>}
         </div>
       </div>
     </DetailFooterContent>}
   </div>;
 }
 
-function ScheduledNotices({ rows, port, binding }: { rows: readonly ScheduledRow[]; port: Pick<NoticePort, 'cancelSchedule'>; binding?: ScheduledNoticesBinding }) {
+function ScheduledNotices({ rows, port, binding, onCompose }: { rows: readonly ScheduledRow[]; port: Pick<NoticePort, 'cancelSchedule'>; binding?: ScheduledNoticesBinding; onCompose(): void }) {
   const { t, format } = useBundle(dataBundle);
   const items = binding?.rows ?? rows;
-  if (!items.length) return <InlineEmpty title={t('data.notices.schedule.empty')} />;
+  if (!items.length) return <div className="i7-notice-history-state"><InlineEmpty title={t('data.notices.schedule.empty')} />
+    <ActionButton variant="secondary" onClick={onCompose}>공지 작성하기</ActionButton></div>;
   return <ul className="i7-notice-schedules" role="list" aria-label={binding?.label ?? t('data.notices.schedule.list')}>
     {items.map(row => <li key={row.sentId}>
       <div>
@@ -346,19 +361,22 @@ export function NoticePanel({ view, width, height, onOpen, onRetry, onScheduled 
   const draftSub = (draft: NoticeDraftInput) => [kindLabel(draft.kind), draft.kind !== 'other' && draft.startDate ? (draft.endDate && draft.endDate !== draft.startDate ? dateRangeWithWeekdays(kit, draft.startDate, draft.endDate) : format.date(draft.startDate, 'short')) : null].filter(Boolean).join('\u00A0·\u00A0');
   const scheduledRows = large && view.status === 'ready' ? view.scheduled : [];
   const scheduled = view.status === 'ready' && view.scheduled.length > 0 && onScheduled;
-  const action = <PanelAction label={scheduled ? '예약한 공지' : '공지 쓰기'} widgetName="공지 발송" onPress={scheduled || onOpen} />;
-  const metric = <div className="i7-notice-metric"><div className="i7-notice-metric-line"><div className="i7-notice-number"><MetricFit value={String(count)} unit="건" stacked={false} /></div>{(compact || (width >= 2 && height >= 2)) && action}</div><p className="i7-notice-subtitle">공지 미발송</p></div>;
+  const action = <PanelAction label={scheduled ? '예약한 공지 보기' : '공지 보내기'} widgetName="공지 발송" onPress={scheduled || onOpen} />;
+  const metric = <div className="i7-notice-metric"><div className="i7-notice-metric-line"><div className="i7-notice-number"><MetricFit value={String(count)} unit="건" stacked={false} /></div>{(compact || (width >= 2 && height >= 2)) && action}</div><p className="i7-notice-subtitle">안 보낸 공지</p></div>;
   const closure = nextClosure && <p className="i7-notice-closure"><Icon name="calendar-check" />{nextClosure.title}</p>;
+  const drafts = view.status === 'ready' ? view.drafts : [];
   const history = sent.length ? <div className="i7-notice-history" aria-label="보낸 기록">{sent.slice(0, height >= 3 ? 4 : 2).map(row => <div className="i7-notice-value-row i7-notice-history-row" key={row.sentId}><span>{row.title}</span><strong>{when(row.sentAt)}</strong></div>)}</div> : <p className="i7-notice-history-empty">아직 보낸 공지가 없어요</p>;
   return <div className="i7-notice-panel" data-width={width} data-height={height} lang="ko">
     {metric}
     {!compact && (height === 1 ? <>
-      <div className="i7-notice-wide-rows"><div className="i7-notice-value-row"><span>다가오는 매장 휴무</span><strong>{nextClosure?.title.match(/\d{2}\/\d{2}(?:\([^)]+\))?/)?.[0] ?? '—'}</strong></div>{width >= 3 && <div className="i7-notice-value-row"><span>보낸 공지</span><strong>{sent.length}건</strong></div>}</div>
+      <div className="i7-notice-wide-rows"><div className="i7-notice-value-row"><span>다가오는 매장 휴무</span><strong>{nextClosure?.title.match(/\d{2}\/\d{2}(?:\([^)]+\))?/)?.[0] ?? nextClosure?.title ?? '없어요'}</strong></div>{width >= 3 && <div className="i7-notice-value-row"><span>보낸 공지</span><strong>{sent.length}건</strong></div>}</div>
       <div className="i7-notice-wide-action">{action}</div>
-    </> : wide ? <div className="i7-notice-workspace"><div>{closure}{view.status === 'ready' && view.drafts.length > 0 && <div className="i7-notice-drafts"><p>임시 저장한 공지</p>{view.drafts.map((draft, i) => <div className="i7-notice-value-row i7-notice-draft" key={draft.noticeId ?? i}><span>{draft.title}{large && <><span className="i7-notice-draft__sub">{draftSub(draft)}</span>{draft.body && <span className="i7-notice-draft__body">{draft.body}</span>}</>}</span></div>)}</div>}
+    </> : wide ? <div className="i7-notice-workspace"><div>
+      <h3>다가오는 매장 휴무</h3>{closure ?? <p className="i7-notice-history-empty">없어요</p>}
+      <div className="i7-notice-drafts"><h3>임시 저장한 공지</h3>{drafts.length === 0 && <p className="i7-notice-history-empty">없어요</p>}{drafts.slice(0, height + 1).map((draft, i) => <div className="i7-notice-value-row i7-notice-draft" key={draft.noticeId ?? i}><span>{draft.title}{large && <><span className="i7-notice-draft__sub">{draftSub(draft)}</span>{draft.body && <span className="i7-notice-draft__body">{draft.body}</span>}</>}</span></div>)}</div>
       {scheduledRows.length > 0 && <div className="i7-notice-scheduled"><p>예약한 공지</p>{scheduledRows.map(row => <div className="i7-notice-value-row" key={row.sentId}><span>{row.title}</span><strong>{when(row.sendAt)}{row.recipientCount !== undefined && <> · {row.recipientCount}명</>}</strong></div>)}</div>}</div>
-      <div className="i7-notice-history-table">{sent.length ? <table><thead><tr><th>공지 제목</th><th className="i7-notice-kind">공지 종류</th><th>받는 사람</th><th>보낸 일시</th></tr></thead><tbody>{sent.slice(0, height >= 4 ? 8 : height >= 3 ? 6 : 3).map(row => <tr key={row.sentId}><td>{row.title}</td><td className="i7-notice-kind">{kindLabel(row.kind)}</td><td>{row.channel ? '—' : `${row.recipientCount}명`}</td><td>{when(row.sentAt)}</td></tr>)}</tbody></table> : history}</div>
-    </div> : <div className="i7-notice-panel-list">{width === 1 && action}{closure}{width >= 2 && <div className="i7-notice-value-row i7-notice-sent-count"><span>보낸 공지</span><strong>{sent.length}건</strong></div>}{(width === 1 || height >= 3) && history}</div>)}
-    <FitProbe order={[{ selector: '.i7-notice-draft__body' }, { selector: '.i7-notice-draft__sub' }, { selector: '.i7-notice-scheduled' }, { selector: '.i7-notice-kind' }, { selector: '.i7-notice-history-row', last: true }, { selector: '.i7-notice-history-table tbody tr', last: true }, { selector: '.i7-notice-history-empty' }, { selector: '.i7-notice-sent-count' }, ...(width === 1 ? [{ selector: '.i7-notice-closure' }] : [])]} deps={[width, height, count, sent.length]} />
+      <div className="i7-notice-history-table"><h3>보낸 기록</h3>{sent.length ? <table aria-label="보낸 기록"><thead><tr><th>공지 제목</th><th className="i7-notice-kind">공지 종류</th><th>받는 사람</th><th>보낸 일시</th></tr></thead><tbody>{sent.slice(0, height >= 4 ? 8 : height >= 3 ? 6 : 3).map(row => <tr key={row.sentId}><td>{row.title}</td><td className="i7-notice-kind">{kindLabel(row.kind)}</td><td>{row.channel ? '—' : `${row.recipientCount}명`}</td><td>{when(row.sentAt)}</td></tr>)}</tbody></table> : history}</div>
+    </div> : <div className="i7-notice-panel-list">{width === 1 && action}{closure}{width >= 2 && height === 2 && <div className="i7-notice-value-row i7-notice-sent-count"><span>보낸 공지</span><strong>{sent.length}건</strong></div>}{(width === 1 || height >= 3) && history}</div>)}
+    <FitProbe order={[{ selector: '.i7-notice-draft__body' }, { selector: '.i7-notice-draft__sub' }, { selector: '.i7-notice-scheduled' }, { selector: '.i7-notice-kind' }, { selector: '.i7-notice-history-row', last: true }, { selector: '.i7-notice-history-table tbody tr', last: true }, { selector: '.i7-notice-draft', last: true }, { selector: '.i7-notice-sent-count' }, ...(width === 1 ? [{ selector: '.i7-notice-closure' }] : [])]} deps={[width, height, count, sent.length, drafts.length]} />
   </div>;
 }

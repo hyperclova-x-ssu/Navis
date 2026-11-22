@@ -7,7 +7,7 @@ import { createWidgetDataStore, selectStaffSchedule, TODAY } from '../../../data
 import { createTranslator } from '../../../i18n';
 import { renderWithKit } from '../../../ui/test-utils';
 import { addIsoDays } from '../../../ui';
-import { StaffDetail } from './widget';
+import { StaffDetail, StaffPanel } from './widget';
 import { periodFor } from './model';
 import type { WidgetDetailProps } from '../../../contracts';
 
@@ -27,6 +27,15 @@ const seed = (store = createWidgetDataStore()) => {
 };
 
 describe('staff detail layout', () => {
+  it('reserves the 3×2 preview for today’s staff and names the omitted rows', () => {
+    const { store, model, today } = seed();
+    const { container } = renderWithKit(<StaffPanel {...layoutProps} width={3} height={2} shape="L" presetId="A" editing={false} />, { store });
+    const grid = container.querySelector('.staff-mini')!;
+    expect(grid.querySelector('th[aria-current="date"]')).toHaveTextContent(format.date(TODAY, 'short'));
+    expect(grid.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(grid.querySelector('tbody tr')).toHaveTextContent(model.staff.find(person => person.staffId === today[0]!.staffId)!.name);
+    expect(within(grid as HTMLElement).getByText(`외 ${model.staff.length - 2}명`)).toBeVisible();
+  });
   it('scrolls the monthly grid to today on entry and when returning to the current month', () => {
     const { store, model } = seed();
     const nextMonth = addIsoDays(periodFor(TODAY, 'month').endDate, 1);
@@ -297,7 +306,11 @@ describe('staff source integration', () => {
     fireEvent.click(screen.getByRole('tab', { name: '직원 목록' }));
     fireEvent.click(screen.getAllByRole('button', { name: '직원 지우기' })[0]!);
     expect(screen.getByText(/근무 일정도 함께 지워요/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '지우기' }));
+    const confirmation = within(screen.getByRole('region', { name: '직원 지우기' }));
+    const confirm = confirmation.getByRole('button', { name: '직원 지우기' });
+    expect(confirm).toHaveClass('ui-button--destructive');
+    expect(confirmation.getByRole('button', { name: '취소' })).toBeInTheDocument();
+    fireEvent.click(confirm);
     expect(store.getSnapshot().tables.staff.some(s => s.name === first.name)).toBe(false);
     const token = notify.mock.calls.at(-1)?.[0]?.undoToken;
     expect(token).toEqual(expect.any(String));

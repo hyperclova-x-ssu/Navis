@@ -58,7 +58,7 @@ it('gives the send confirmation priority only while the approved message is bein
   render(true);
   const record = await screen.findByRole('button', { name: '입고 기록하기' });
   expect(record).not.toHaveClass('ui-button--secondary');
-  fireEvent.click(await screen.findByRole('button', { name: '거래처에 발주 보내기' }));
+  fireEvent.click(await screen.findByRole('button', { name: '발주사에 발주 보내기' }));
   fireEvent.click(screen.getByRole('button', { name: '보낼 내용 확인하기' }));
   const confirmation = await screen.findByRole('region', { name: '발주 보내기' });
   expect(record).toHaveClass('ui-button--secondary');

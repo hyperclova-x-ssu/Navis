@@ -45,6 +45,8 @@ describe('GD-2 staff editor overlap guard', () => {
     const { container } = renderWithKit(<StaffDetail {...props} />, { store, locale });
     const cell = (id: string) => container.querySelector(`.staff-grid [data-schedule-id="${id}"]`);
     expect(cell('past')).toHaveTextContent(warning);
+    expect(cell('past')).toHaveAttribute('data-ended', 'true');
+    expect(cell('past')?.querySelector('.ui-status-badge')).toBeNull();
     expect(cell('ended')).toHaveAccessibleDescription(warning);
     expect(cell('working')).not.toHaveTextContent(warning);
     expect(cell('off')).not.toHaveTextContent(warning);
@@ -95,7 +97,7 @@ describe('GD-2 staff editor overlap guard', () => {
     renderWithKit(<StaffDetail {...props} />, { store });
     fireEvent.click(screen.getByRole('button', { name: '휴무 등록하기' }));
     fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
-    expect(screen.getByRole('alert')).toHaveTextContent(OVERLAP);
+    expect(screen.getByRole('alert')).toHaveTextContent('이날 근무가 있어요');
     expect(screen.getByRole('button', { name: '겹치는 근무를 휴무로 바꾸기' })).toBeInTheDocument();
     expect(store.getSnapshot()).toBe(before);
   });

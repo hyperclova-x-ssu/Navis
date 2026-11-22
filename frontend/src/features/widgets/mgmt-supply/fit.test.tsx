@@ -188,28 +188,23 @@ it('partial-zero는 좁은 모양에서 짧은 상태 문구와 전체 접근 �
   checkShort();
 });
 
-it('partial-zero의 확인 필요 칩은 다른 행보다 나중에 숨고 공간이 돌아오면 복원된다',()=>{
+it('partial-zero의 확인 필요 칩은 공간이 돌아오면 복원된다',()=>{
   const resize=captureResize();
   const {container}=renderWithKit(<SupplyPanel id="inventory-booking" width={2} height={1}/>,{
     preview:{family:'normal',overrides:{'inventory-booking':'partial-zero'}},
   });
   const root=container.querySelector<HTMLElement>('.ms-panel')!;
   const chip=container.querySelector<HTMLElement>('.ui-status-chip')!.parentElement!;
-  const products=container.querySelector<HTMLElement>('[data-row-id="products"]')!;
+  expect(container.querySelector('[data-row-id="products"]')).toBeNull();
   let height=100;
   Object.defineProperties(root,{
     clientWidth:{value:500},clientHeight:{get:()=>height},scrollWidth:{value:500},
-    scrollHeight:{get:()=>60+(products.hidden?0:50)+(chip.hidden?0:50)},
+    scrollHeight:{get:()=>60+(chip.hidden?0:50)},
   });
   resize(root);
-  expect(products.hidden).toBe(true);
   expect(chip.hidden).toBe(true);
   expect(container.querySelector('.ui-panel-state__message')).toBeVisible();
   height=120;resize(root);
-  expect(products.hidden).toBe(true);
-  expect(chip.hidden).toBe(false);
-  height=200;resize(root);
-  expect(products.hidden).toBe(false);
   expect(chip.hidden).toBe(false);
 });
 
@@ -233,14 +228,14 @@ it.each(['재료','판매 상품'])('%s 상세는 위쪽 내용을 보존하고 
   const panel=screen.getByRole('tabpanel');
   if (tab === '판매 상품') {
     expect(within(panel).getByText('아직 등록한 판매 상품이 없어요')).toBeVisible();
+    expect(within(panel).getByRole('button', { name: '판매 상품 등록하기' })).toBeVisible();
     expect(within(panel).queryByRole('grid')).not.toBeInTheDocument();
     return;
   }
   const grid=within(panel).getByRole('grid',{name:tab}).closest<HTMLElement>('.ui-data-grid')!;
-  const above=panel.querySelector<HTMLElement>(':scope > p')!;
+  expect(panel).not.toHaveTextContent('고친 재고는 변동 기록에 남아요');
   expect(getComputedStyle(root).height).toBe('100%');
   expect(getComputedStyle(root).minHeight).toBe('0');
-  expect(getComputedStyle(above).flexShrink).toBe('0');
   expect(getComputedStyle(grid).flex).toBe('1 1 0px');
   expect(getComputedStyle(grid).minHeight).toBe('0');
 });

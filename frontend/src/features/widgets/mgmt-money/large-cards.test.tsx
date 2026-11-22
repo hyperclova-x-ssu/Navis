@@ -73,7 +73,7 @@ describe('마진 4×4 (D-333)', () => {
     expect(rows().length).toBeGreaterThan(short);
     expect(rows().length).toBeGreaterThan(7);
     expect(rows().length).toBeLessThanOrEqual(3 + menus.length);
-    expect(rows().length).toBe(3 + Math.min(12, menus.length));
+    expect(rows().length).toBe(3 + menus.length);
   });
   it('never lists a menu twice or one the data does not have', () => {
     panel('margin', 4, 4);

@@ -4,7 +4,7 @@
  * drag (draw around, or eraser). Undo, Done (PUT, closes only after success), Close (draft kept in page memory).
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { ActionButton, IconButton, useUi } from '../../../ui';
+import { ActionButton, DetailFooterContent, IconButton, useUi } from '../../../ui';
 import { useBundle } from '../../../i18n';
 import { dataBundle } from '../../../data/messages';
 import { cctvBundle } from '../messages';
@@ -391,16 +391,12 @@ export function ZoneEditor({ onSaved, onClose, background, frameAspect, initial,
         <ActionButton variant="outline" disabled={undoDisabled} aria-describedby={undoDisabled ? 'cz-undo-reason' : undefined} title={undoDisabled ? t('cctv.zones.nothingToUndo') : undefined} onClick={undo}><UndoIcon />{t('cctv.zones.toolUndo')}</ActionButton>
         <span id="cz-undo-reason" className="ui-sr-only">{t('cctv.zones.nothingToUndo')}</span>
         {!guideOpen && <ActionButton variant="ghost" onClick={() => setGuideOpen(true)}>{t('cctv.zones.howTo')}</ActionButton>}
-        <span className="cz-toolbar__spacer" />
+      </div>
+      <DetailFooterContent><div className="detail-footer-actions">
         <ActionButton variant="ghost" onClick={close}>{t('common.close')}</ActionButton>
         <ActionButton size="primary" loading={save.kind === 'saving'} disabled={cannotSaveEmpty || confirmRemoval || save.kind === 'saving' || (save.kind === 'failed' && save.reload) || phase.kind !== 'ready'} aria-describedby={cannotSaveEmpty ? 'cz-done-reason' : undefined} onClick={() => void done()}>
           {save.kind === 'saving' ? t('cctv.zoneEditor.saving') : t('cctv.zones.toolDone')}
         </ActionButton>
-      </div>
-
-      <p className="cz-summary" id="cz-done-reason">
-        {cannotSaveEmpty ? t('cctv.zones.atLeastOne') : suggestedCount > 0 ? t('cctv.zoneEditor.summary', { a: adoptedCount, b: suggestedCount }) : t('cctv.zoneEditor.summaryTables', { a: adoptedCount })}
-      </p>
       {confirmRemoval && <div className="cz-notice" role="group" aria-label="구역 삭제 확인">
         <span>구역을 지우면 연결된 POS 테이블도 해제돼요</span>
         <ActionButton variant="destructive" onClick={() => void done(true)}>구역 삭제하고 저장하기</ActionButton>
@@ -415,6 +411,11 @@ export function ZoneEditor({ onSaved, onClose, background, frameAspect, initial,
             : <ActionButton variant="secondary" onClick={() => void done()}>{t('cctv.conn.retry')}</ActionButton>}
         </div>
       )}
+      </div></DetailFooterContent>
+
+      <p className="cz-summary" id="cz-done-reason">
+        {cannotSaveEmpty ? t('cctv.zones.atLeastOne') : suggestedCount > 0 ? t('cctv.zoneEditor.summary', { a: adoptedCount, b: suggestedCount }) : t('cctv.zoneEditor.summaryTables', { a: adoptedCount })}
+      </p>
       {notice && (
         <div className="cz-notice" key={notice.key}>
           <span>{notice.text.split(' · ')[0]}</span>

@@ -8,7 +8,7 @@ import type { DetailRef, FeatureId, Locale, WidgetHost, WidgetModule } from '../
 import { baseBundles, findDuplicateKeys, findKoGaps, type MessageBundle } from '../../../i18n';
 import { benefitMax, createWidgetDataStore, dataBundles, expiryDiscount, selectMembers, selectWidget, TODAY, TOMORROW, type CouponStatusModel, type CustomerGroupsModel, type DataCommand, type ExpiryCouponModel, type SlotCouponModel, type WidgetDataStore } from '../../../data/widget-data';
 import { useWidgetView } from '../../../data/react';
-import { maskName, panelShape, uiBundle } from '../../../ui';
+import { panelShape, uiBundle } from '../../../ui';
 import { renderWithKit, type KitRenderOptions } from '../../../ui/test-utils';
 import { widgets, mktCouponBundle, r2Review } from './index';
 
@@ -25,7 +25,7 @@ afterEach(() => { sms.configured = true; cleanup(); vi.useRealTimers(); });
 const module = (id: FeatureId): WidgetModule => widgets.find((w) => w.id === id)!;
 type MockHost = { -readonly [K in keyof WidgetHost]: WidgetHost[K] } & { resetPreview: Mock; openLinked: Mock; openDetail: Mock; notify: Mock; acknowledgeBriefing: Mock };
 const host = (): MockHost => ({
-  layer: 'marketing', openClosing: vi.fn(() => true), resetPreview: vi.fn(), openLinked: vi.fn(), openDetail: vi.fn(), notify: vi.fn(), acknowledgeBriefing: vi.fn(),
+  layer: 'marketing', openClosing: vi.fn(() => true), openSettings: vi.fn(() => true), resetPreview: vi.fn(), openLinked: vi.fn(), openDetail: vi.fn(), notify: vi.fn(), acknowledgeBriefing: vi.fn(),
 });
 function panel(id: FeatureId, width: 1 | 2 | 3 | 4, height: 1 | 2 | 3 | 4, options: KitRenderOptions = {}, h = host(), editing = false) {
   const Panel = module(id).Panel;
@@ -117,8 +117,9 @@ describe('panels (AC-288 · 292 · 299 · 302)', () => {
     cleanup();
     const w = panel('slot-coupon', 2, 1);
     expect(w.container.querySelector('[data-slot="slot-coupon.metric.label"]')).toHaveTextContent('내일부터 7일 빈 시간');
-    expect(screen.getByText(`맞춤 단골 ${m.regularsCount}명`)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '단골에게 쿠폰 보내기, 빈 시간 단골 쿠폰' })).toBeInTheDocument();
+    const primary = w.container.querySelector('.ui-panel-primary')!;
+    expect(primary.lastElementChild).toHaveTextContent(`맞춤 단골 ${m.regularsCount}명`);
+    expect(screen.getByRole('button', { name: '쿠폰 보내기, 빈 시간 단골 쿠폰' })).toBeInTheDocument();
   });
   it('slot-coupon 1x2 lists the three slots', () => {
     const ui = panel('slot-coupon', 1, 2);
@@ -126,17 +127,22 @@ describe('panels (AC-288 · 292 · 299 · 302)', () => {
       slotModel().openSlots.slice(0, 3).map((slot) => expect.stringContaining(slotLabelKo(slot))),
     );
   });
-  it('expiry-coupon: the target item and its count, must sell today, the recommended rate in 2x1', () => {
-    const target = expiryModel().target!;
-    const name = itemNameKo(target.nameKey);
+  it.each([2, 3, 4] as const)('aligns the zero matching-regulars row below the slot count at %sx1', (width) => {
+    const w = panel('slot-coupon', width, 1, { preview: { family: 'normal', overrides: { 'slot-coupon': 'no-regulars' } } });
+    expect(w.container.querySelector('.ui-panel-primary')?.lastElementChild).toHaveTextContent('맞춤 단골 0명');
+    expect(screen.getByRole('button', { name: '쿠폰 보내기, 빈 시간 단골 쿠폰' })).toBeInTheDocument();
+  });
+  it('expiry-coupon: counts today’s expiring item types on 1x1 and 2x1 panels', () => {
+    const items = expiryModel().items;
     const q = panel('expiry-coupon', 1, 1);
-    expect(q.container.querySelector('[data-slot="expiry-coupon.metric.value"]')).toHaveTextContent(`${target.qty}개`);
-    expect(screen.getByText(name)).toBeInTheDocument();
+    const figure = q.container.querySelector('[data-slot="expiry-coupon.metric.value"]');
+    expect(figure).toHaveTextContent(`${items.length}개`);
+    expect(screen.getByText('오늘 팔 품목').compareDocumentPosition(figure!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole('button', { name: '쿠폰 만들기, 당일 소진 쿠폰' })).toBeInTheDocument();
     cleanup();
     panel('expiry-coupon', 2, 1);
-    expect(screen.getByText(name)).toBeInTheDocument();
-    expect(screen.getByText(`오늘 마감 전 · 추천 할인 ${target.recommendedRate}%`)).toBeInTheDocument();
+    expect(screen.getByText('오늘 팔 품목')).toBeInTheDocument();
+    expect(screen.getByText('오늘 안에 팔아야 해요')).toBeInTheDocument();
   });
   it('coupon-status: the running count and ending soon in 2x1; one row per coupon (up to three) in 1x2', () => {
     // the cafe seed has one running coupon with 13 days left; the ending-soon line and its button need a coupon that ends soon
@@ -144,11 +150,11 @@ describe('panels (AC-288 · 292 · 299 · 302)', () => {
     const m = statusModel(store);
     expect(m.endingSoonCount).toBeGreaterThan(0);
     panel('coupon-status', 2, 1, { store });
-    expect(screen.getByText(`곧 끝나는 쿠폰 ${m.endingSoonCount}장`)).toBeInTheDocument();
+    expect(screen.getByText(`곧 끝나는 쿠폰 ${m.endingSoonCount}개`)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '끝나기 전 알림 보내기, 진행 중인 쿠폰' })).toBeInTheDocument();
     cleanup();
     const t = panel('coupon-status', 1, 2, { store });
-    expect(t.container.querySelectorAll('[data-slot="coupon-status.rows"] li')).toHaveLength(Math.min(3, m.rows.length));
+    expect(t.container.querySelectorAll('[data-slot="coupon-status.rows"] li[data-row-id]')).toHaveLength(Math.min(3, m.rows.length));
     expect(screen.getByRole('button', { name: '알림 보내기, 진행 중인 쿠폰' })).toBeInTheDocument();
   });
   it('customer-groups: the leaving count and the first-visit and regular counts', () => {
@@ -168,17 +174,17 @@ describe('panels (AC-288 · 292 · 299 · 302)', () => {
     const status = statusModel(ending);
     const { counts } = groupsModel();
     panel('slot-coupon', 2, 1, { locale: 'en' });
-    expect(screen.getByText(`Quiet hours, next 7 days · ${regulars} matching regulars`)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Send coupons to regulars, Quiet-hour coupons' })).toBeInTheDocument();
+    expect(screen.getByText(`${regulars} matching regulars`)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send coupon, Quiet-hour coupons' })).toBeInTheDocument();
     cleanup();
     panel('coupon-status', 2, 1, { locale: 'zh-Hans', store: ending });
-    expect(screen.getByText(`${status.activeCount} 张 · 即将到期 ${status.endingSoonCount} 张`)).toBeInTheDocument();
+    expect(screen.getByText(`即将到期 ${status.endingSoonCount} 种`)).toBeInTheDocument();
     cleanup();
     panel('customer-groups', 2, 1, { locale: 'zh-Hant' });
-    expect(screen.getByText(`可能流失的顧客 · 首次到店 ${counts['first-visit']} · 熟客 ${counts.regular}`)).toBeInTheDocument();
+    expect(screen.getByText(`首次到店 ${counts['first-visit']} · 熟客 ${counts.regular}`)).toBeInTheDocument();
     cleanup();
     const q = panel('expiry-coupon', 1, 1, { locale: 'en' });
-    expect(q.container.querySelector('[data-slot="expiry-coupon.metric.value"]')).toHaveTextContent(`${expiryModel().target!.qty}pcs`);
+    expect(q.container.querySelector('[data-slot="expiry-coupon.metric.value"]')).toHaveTextContent(`${expiryModel().items.length}items`);
   });
   it('places the Q number/action line above the subtitle at 125%', () => {
     const q = panel('slot-coupon', 1, 1, { textScale: 125 });
@@ -242,7 +248,7 @@ describe('example states (AC-291 · 294 · 301 · 304 · 322)', () => {
   });
   it('no regulars and no stock disable the action; partial data shows the 확인 필요 note', () => {
     panel('slot-coupon', 1, 1, { preview: preview('slot-coupon', 'no-regulars') });
-    expect(screen.queryByRole('button', { name: /쿠폰 보내기/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /쿠폰 보내기/ })).toBeEnabled();
     expect(screen.getByText('보낼 단골이 없어요')).toBeInTheDocument();
     cleanup();
     panel('expiry-coupon', 2, 1, { preview: preview('expiry-coupon', 'partial') });
@@ -262,8 +268,10 @@ describe('marketing review regressions', () => {
     const store = createWidgetDataStore();
     const dispatch = vi.spyOn(store, 'dispatch');
     detail(id, { featureId: id }, { store });
-    expect(screen.getByText('문자를 보내려면 발신 번호를 먼저 등록해 주세요')).toBeVisible();
-    expect(screen.getByText('무료 수신 거부 번호도 등록해 주세요')).toBeVisible();
+    if (id === 'slot-coupon') expect(screen.getByText(/문자를 보내려면 발신 번호와 무료수신거부 번호/)).toBeVisible();
+    else {
+      expect(screen.getByText('설정에서 문자 발신 번호와 무료 수신 거부 번호를 등록해 주세요')).toBeVisible();
+    }
     const send = screen.getByRole('button', { name: /명에게 쿠폰 보내기/ });
     expect(send).toBeDisabled();
     fireEvent.click(send);
@@ -288,29 +296,23 @@ describe('marketing review regressions', () => {
 
 describe('빈 시간 단골 쿠폰 detail (AC-289 · 290)', () => {
   it.each([
-    { locale: 'ko', label: '문구 내용', prefix: '문자를 보내려면 발신 번호를 먼저 등록해 주세요', footer: '무료 수신 거부 번호도 등록해 주세요' },
-    { locale: 'en', label: 'Message text', prefix: 'Register a sender number before sending texts', footer: 'Register a free opt-out number too' },
-  ] as const)('links the two visible sender setup notes to the editor in $locale', ({ locale, label, prefix, footer }) => {
-    detail('slot-coupon', { featureId: 'slot-coupon', view: 'send' }, { locale });
+    { locale: 'ko', label: '문구 내용', help: /발신 번호와 무료수신거부 번호/, settings: '설정에서 등록하기' },
+    { locale: 'en', label: 'Message text', help: /Register a sender number and a free opt-out number/, settings: 'Register in settings' },
+  ] as const)('keeps sender setup by the send action in $locale', ({ locale, label, help, settings }) => {
+    sms.configured = false;
+    const rendered = detail('slot-coupon', { featureId: 'slot-coupon', view: 'send' }, { locale });
     const editor = screen.getByRole('textbox', { name: label });
     const preview = editor.closest('.ui-sms-preview') as HTMLElement;
-    const ad = within(preview).getByText(prefix);
-    const optOut = within(preview).getByText(footer);
-    expect(ad.closest('[data-fixed="ad"]')).toContainElement(ad);
-    expect(optOut.closest('[data-fixed="optout"]')).toContainElement(optOut);
     expect(preview.querySelector('[data-fixed="ad"]')).toHaveTextContent('(광고) 안숭잘부 카페');
     expect(preview.querySelector('[data-fixed="optout"]')).toHaveTextContent('무료수신거부');
     expect(preview).not.toHaveTextContent(/테스트|스토어사스/);
-    expect(ad).toBeVisible();
-    expect(optOut).toBeVisible();
-    expect(ad.id).not.toBe('');
-    expect(optOut.id).not.toBe('');
-    expect(editor).toHaveAttribute('aria-describedby', `${ad.id} ${optOut.id}`);
-    expect(editor).toHaveAccessibleDescription(`${prefix} ${footer}`);
-    expect(preview.querySelector('.ui-sr-only')).toBeNull();
+    expect(within(preview).queryByText(help)).toBeNull();
+    expect(screen.getByText(help).closest('.mkt-slot-footer')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: settings }));
+    expect(rendered.host.openSettings).toHaveBeenCalledOnce();
   });
 
-  it.each([[100, '56px'], [125, '64px']] as const)('uses the row minimum and separates send time from the summary at %i percent', (textScale, rowMin) => {
+  it.each([100, 125] as const)('keeps the send summary beside the action at %i percent', textScale => {
     const { container } = detail('slot-coupon', { featureId: 'slot-coupon' }, { textScale });
     const style = document.createElement('style');
     style.textContent = ['src/ui/mastermanage.css', 'src/features/widgets/mkt-coupon/widget.css']
@@ -318,19 +320,11 @@ describe('빈 시간 단골 쿠폰 detail (AC-289 · 290)', () => {
     container.prepend(style);
     const time = screen.getByRole('group', { name: '발송 시각' });
     const summary = screen.getByRole('region', { name: '보내기 전 요약' });
-    expect(time.nextElementSibling).toBe(summary);
-    expect(getComputedStyle(time.parentElement!).gap).toBe('var(--space-6)');
-    expect(getComputedStyle(time.closest('[data-text-scale]')!).getPropertyValue('--table-row-min').trim()).toBe(rowMin);
+    const send = screen.getByRole('button', { name: /쿠폰 보내기/ });
+    expect(summary.parentElement).toBe(send.closest('.mkt-slot-footer'));
+    expect(time.closest('.mkt-slot-footer')).toBeNull();
     const rows = Array.from(summary.querySelectorAll('dl > div'));
     expect(rows).toHaveLength(3);
-    for (const row of rows) {
-      const css = getComputedStyle(row);
-      expect(css.minHeight).toBe('var(--table-row-min)');
-      expect(css.alignItems).toBe('center');
-    }
-    for (const row of rows.slice(1)) {
-      expect(getComputedStyle(row).borderBlockStart).toBe('var(--stroke-hairline) solid var(--border)');
-    }
   });
 
   it('lists the slots, five masked recipients, the benefit amounts and a fixed preview', async () => {
@@ -345,12 +339,12 @@ describe('빈 시간 단골 쿠폰 detail (AC-289 · 290)', () => {
     for (const slot of m.openSlots) expect(screen.getByRole('radio', { name: slotLabelKo(slot) })).toBeInTheDocument();
     expect(screen.getAllByRole('checkbox')).toHaveLength(5);
     // the recipient shows the one customer name the 회원 views show (masked), not a separate sample alias
-    expect(screen.getByText(maskName(rawName(recipients[0]!.name)))).toBeInTheDocument();
+    expect(screen.getAllByRole('checkbox').every(box => box.getAttribute('aria-labelledby')?.startsWith('rcp-'))).toBe(true);
+    expect(screen.getAllByText(/^테○○$/)).toHaveLength(recipients.length);
     expect(screen.getAllByRole('checkbox').every((c) => c.getAttribute('aria-checked') === 'true' || (c as HTMLInputElement).checked || c.hasAttribute('data-checked'))).toBe(true);
     for (const option of m.benefits.options) expect(screen.getByText(`쿠폰 1장당 남는 돈 ${won(option.marginPerCoupon)}`)).toBeInTheDocument();
-    const recommended = m.benefits.options.find((o) => o.recommended)!;
     expect(screen.getByText(`${won(m.benefits.differenceVsNext)} 더 남아요`)).toBeInTheDocument();
-    expect(screen.getByText(`${benefitNameKo(recommended)} — 할인보다 남는 돈이 많아요`)).toBeInTheDocument();
+    expect(screen.queryByText(/할인보다 남는 돈이 많아요/)).toBeNull();
     expect(screen.getByText('(광고)')).toBeInTheDocument();
     expect(screen.getByText('무료수신거부')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '5명에게 쿠폰 보내기' })).toBeEnabled();
@@ -364,6 +358,17 @@ describe('빈 시간 단골 쿠폰 detail (AC-289 · 290)', () => {
     expect(screen.getAllByRole('checkbox')).toHaveLength(m.recipients.filter((r) => r.slotIds.includes(first.slotId)).length);
     expect(screen.getByRole('button', { name: '1명에게 쿠폰 보내기' })).toBeEnabled();
   });
+  it('refreshes the customer message when switching the selected slot', () => {
+    const model = slotModel();
+    const first = firstSlotWithRegulars(model);
+    const other = model.openSlots.find(slot => slot.slotId !== first.slotId)!;
+    detail('slot-coupon');
+    const input = screen.getByRole('textbox') as HTMLTextAreaElement;
+    expect(input.value).toContain(shortKo(first.date));
+    fireEvent.change(input, { target: { value: '기존 시간의 문구' } });
+    fireEvent.click(screen.getByRole('radio', { name: slotLabelKo(other) }));
+    expect(input.value).toContain(`${shortKo(other.date)} ${other.startHour}~${other.endHour}시`);
+  });
   it('deselecting and reselecting a recipient is immediate; zero recipients disables sending with the reason', async () => {
     detail('slot-coupon', { featureId: 'slot-coupon' }, { store: regulars5() });
     const boxes = () => screen.getAllByRole('checkbox');
@@ -372,9 +377,9 @@ describe('빈 시간 단골 쿠폰 detail (AC-289 · 290)', () => {
     await userEvent.click(boxes()[0]!);
     expect(screen.getByRole('button', { name: '5명에게 쿠폰 보내기' })).toBeEnabled();
     for (const box of boxes()) await userEvent.click(box);
-    const send = screen.getByRole('button', { name: '0명에게 쿠폰 보내기' });
+    const send = screen.getByRole('button', { name: '쿠폰 보내기' });
     expect(send).toBeDisabled();
-    expect(screen.getAllByText('받는 사람이 없어요').length).toBeGreaterThan(0);
+    expect(screen.getByText('문자 수신에 동의한 단골을 골라야 보낼 수 있어요')).toBeInTheDocument();
   });
   it.each(['22:00', '03:30'])('blocks %s delivery before the coupon confirmation', async (time) => {
     const store = regulars5(), dispatch = vi.spyOn(store, 'dispatch');
@@ -449,7 +454,7 @@ describe('빈 시간 단골 쿠폰 detail (AC-289 · 290)', () => {
     renderWithKit(<><Status featureId="coupon-status" condition={{ kind: 'default' }} width={1} height={1} shape="Q" presetId="A" editing={false} host={h} />
       <Detail featureId="slot-coupon" condition={{ kind: 'default' }} detailRef={{ featureId: 'slot-coupon' }} host={h} /><Perf /></>, { store });
     const statusValue = () => document.querySelector('[data-slot="coupon-status.metric.value"]')!;
-    expect(statusValue()).toHaveTextContent(`${before.activeCount}장`);
+    expect(statusValue()).toHaveTextContent(new RegExp(`^${before.activeCount}(?:개|장)$`));
     expect(screen.getByTestId('perf')).toHaveTextContent(perfBefore);
     await userEvent.click(screen.getByRole('button', { name: '5명에게 쿠폰 보내기' }));
     expect(screen.getByRole('heading', { name: '5명에게 쿠폰을 보낼까요?' })).toHaveFocus();
@@ -458,7 +463,7 @@ describe('빈 시간 단골 쿠폰 detail (AC-289 · 290)', () => {
     await userEvent.dblClick(confirm);
     expect(confirm).toBeDisabled();
     // same frame: the status panel, the results and the highlight changed at once
-    expect(statusValue()).toHaveTextContent(`${after.activeCount}장`);
+    expect(statusValue()).toHaveTextContent(new RegExp(`^${after.activeCount}(?:개|장)$`));
     expect(after.activeCount).toBe(before.activeCount + 1);
     expect(statusValue().closest('.mkt-live')).toHaveAttribute('data-changed', 'true');
     expect(screen.getByTestId('perf')).toHaveTextContent(perfText(twin));
@@ -526,25 +531,20 @@ describe('당일 소진 쿠폰 detail (AC-292 · 293 · 294)', () => {
     const field = screen.getByRole('spinbutton', { name: '할인율' });
     expect(field).toHaveValue(target.recommendedRate);
     expect(screen.getByText('%')).toBeInTheDocument();
-    expect(screen.getByText(`${target.maxRatePercent}%까지 깎아도 버리는 것보다 이득이에요`)).toBeInTheDocument();
+    expect(screen.getByText(`${target.maxSliderRate}%까지 할인하면 원가 이상으로 팔아요`)).toBeInTheDocument();
     expect(screen.queryByRole('slider')).toBeNull();
   });
 
-  it('uses separate labels and shared automatic insertion notes in the read-only SMS preview', () => {
+  it('keeps the expiry preview to the customer-facing message', () => {
+    sms.configured = false;
     detail('expiry-coupon');
     const preview = screen.getByRole('group', { name: '문구 미리보기' });
-    for (const [labelText, helpText] of [
-      ['(광고)', '문자를 보내려면 발신 번호를 먼저 등록해 주세요'],
-      ['무료수신거부', '무료 수신 거부 번호도 등록해 주세요'],
-    ] as const) {
+    for (const labelText of ['(광고)', '무료수신거부']) {
       const label = within(preview).getByText(labelText);
-      const explanation = within(preview).getByText(helpText);
       expect(label.tagName).toBe('STRONG');
-      expect(label.closest('[data-fixed]')).toContainElement(explanation);
-      expect(explanation).toHaveClass('mkt-sms-help');
-      expect(explanation).toBeVisible();
-      expect(explanation).not.toHaveAttribute('aria-hidden');
     }
+    expect(within(preview).queryByText(/발신 번호/)).toBeNull();
+    expect(screen.getByRole('button', { name: '설정에서 등록하기' }).closest('.mkt-expiry-action')).toBeInTheDocument();
     expect(within(preview).queryByRole('textbox')).toBeNull();
   });
 
@@ -558,15 +558,15 @@ describe('당일 소진 쿠폰 detail (AC-292 · 293 · 294)', () => {
     for (const item of m.items) expect(screen.getByText(`${itemNameKo(item.nameKey)} ${item.qty}개 · 오늘까지`)).toBeInTheDocument();
     expect(within(screen.getByRole('radiogroup', { name: '품목' })).getAllByRole('radio')).toHaveLength(m.items.length);
     expect(screen.getByRole('spinbutton', { name: '할인율' })).toHaveValue(t.recommendedRate);
-    expect(screen.getByRole('radio', { name: '정률 할인' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '% 할인' })).toBeChecked();
     expect(screen.getByText(new RegExp(`할인가 ${krw(at.discountedPrice)}원 · 개당 남는 돈 ${krw(at.marginEach)}원 · 모두 팔면 남는 돈 ${krw(at.ifAllSold)}원`))).toBeInTheDocument();
     expect(screen.getByText(`못 팔면 원가 ${krw(at.lossIfDiscarded)}원을 버려요`)).toBeInTheDocument();
-    expect(screen.getByText(`${t.maxRatePercent}%까지 깎아도 버리는 것보다 이득이에요`)).toBeInTheDocument();
+    expect(screen.getByText(`${t.maxSliderRate}%까지 할인하면 원가 이상으로 팔아요`)).toBeInTheDocument();
     expect(screen.queryByText(/최대 할인율/)).toBeNull();
     expect(screen.getByRole('button', { name: '계산 보기' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText(/아메리카노 세트/)).toBeNull();
     expect(screen.queryByRole('checkbox', { name: /세트/ })).toBeNull();
-    expect(screen.getByText('마감 3시간 전에도 남으면 2차 할인을 제안해요')).toBeInTheDocument();
+    expect(screen.queryByText(/2차 할인을 제안/)).toBeNull();
   });
   it('the percent field stops at the whole-percent limit and 1–100: wrong values say why and block creating', async () => {
     const t = expiryModel().target!;
@@ -581,7 +581,8 @@ describe('당일 소진 쿠폰 detail (AC-292 · 293 · 294)', () => {
     expect(atLimit.marginEach).toBeGreaterThan(0);
     expect(create).toBeEnabled();
     await userEvent.clear(field); await userEvent.type(field, String(limit + 1));
-    expect(field).toHaveAccessibleDescription(/여기부터는 손해예요$/);
+    expect(field).toHaveAccessibleDescription(/원가보다 싸게 팔아요$/);
+    expect(screen.queryByRole('group', { name: '문구 미리보기' })).toBeNull();
     expect(create).toBeDisabled();
     await userEvent.clear(field); await userEvent.type(field, '101');
     expect(field).toHaveAccessibleDescription(/할인율은 1%부터 100%까지 넣을 수 있어요$/);
@@ -604,7 +605,7 @@ describe('당일 소진 쿠폰 detail (AC-292 · 293 · 294)', () => {
     expect(amount).toHaveValue(startAmount);
     expect(screen.getByText('원')).toBeInTheDocument();
     expect(screen.getByText(new RegExp(`할인가 ${krw(t.price - startAmount)}원 · 개당 남는 돈 ${krw(t.price - startAmount - cost)}원`))).toBeInTheDocument();
-    expect(screen.getByText(`${krw(maxAmount)}원까지 깎아도 버리는 것보다 이득이에요`)).toBeInTheDocument();
+    expect(screen.getByText(`${krw(maxAmount)}원까지 할인하면 원가 이상으로 팔아요`)).toBeInTheDocument();
     await userEvent.clear(amount); await userEvent.type(amount, String(maxAmount + 100));
     expect(amount).toHaveAccessibleDescription(/여기부터는 손해예요$/);
     await userEvent.clear(amount); await userEvent.type(amount, String(t.price + 100));
@@ -616,21 +617,21 @@ describe('당일 소진 쿠폰 detail (AC-292 · 293 · 294)', () => {
     expect(screen.getByText(new RegExp(`할인가 ${krw(t.price - 500)}원 · 개당 남는 돈 ${krw(t.price - 500 - cost)}원`))).toBeInTheDocument();
     expect(screen.getByText(/500원 할인해요/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('radio', { name: '세트 가격' }));
-    const set = screen.getByRole('spinbutton', { name: '세트 가격' });
+    await userEvent.click(screen.getByRole('radio', { name: '가격 지정' }));
+    const set = screen.getByRole('spinbutton', { name: '지정 가격' });
     expect(set).toHaveValue(startSet);
-    expect(screen.getByText(`${krw(cost)}원 이상이면 버리는 것보다 이득이에요`)).toBeInTheDocument();
+    expect(screen.getByText(`${krw(cost)}원 이상이면 원가 이상으로 팔아요`)).toBeInTheDocument();
     await userEvent.clear(set); await userEvent.type(set, String(cost - 100));
     expect(set).toHaveAccessibleDescription(/여기부터는 손해예요$/);
     await userEvent.clear(set); await userEvent.type(set, '2800');
     expect(screen.getByText(new RegExp(`할인가 2,800원 · 개당 남는 돈 ${krw(2800 - cost)}원 · 모두 팔면 남는 돈 ${krw((2800 - cost) * t.qty)}원`))).toBeInTheDocument();
-    expect(screen.getByText(/세트 가격 2,800원에 드려요/)).toBeInTheDocument();
+    expect(screen.getByText(/오늘만 2,800원에 드려요/)).toBeInTheDocument();
     expect(screen.queryByText(/최대 할인율/)).toBeNull();
   });
   it.each([
-    ['정률 할인', '할인율', '40', '40% 할인', { benefitType: 'percent', benefitValue: 40 }, '오늘만 40%'],
+    ['% 할인', '할인율', '40', '40% 할인', { benefitType: 'percent', benefitValue: 40 }, '오늘만 40%'],
     ['금액 할인', '할인 금액', '700', '700원 할인', { benefitType: 'amount', benefitValue: 700 }, '오늘만 700원 할인'],
-    ['세트 가격', '세트 가격', '2800', '세트 가격 2,800원', { benefitType: 'set_price', benefitValue: 2_800 }, '오늘만 세트 가격 2,800원'],
+    ['가격 지정', '지정 가격', '2800', '지정 가격 2,800원', { benefitType: 'set_price', benefitValue: 2_800 }, '오늘만 지정 가격 2,800원'],
   ] as const)('%s: the confirmation, the stored coupon and the coupon list name the same benefit', async (kindLabel, fieldLabel, typed, shown, stored, listSuffix) => {
     const listName = `${itemNameKo(expiryModel().target!.nameKey)} ${listSuffix}`;
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -686,7 +687,7 @@ describe('당일 소진 쿠폰 detail (AC-292 · 293 · 294)', () => {
     await userEvent.click(screen.getByRole('radio', { name: '플레이스 소식(새 손님)' }));
     await userEvent.click(screen.getByRole('button', { name: '쿠폰 만들기' }));
     expect(screen.getByRole('heading', { name: '쿠폰을 만들까요?' })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: '만들기' }));
+    await userEvent.click(screen.getByRole('button', { name: '쿠폰 만들기' }));
     expect(screen.queryByRole('heading', { name: '쿠폰을 만들까요?' })).toBeNull();
     const code = store.getSnapshot().tables.marketing.couponCode.find((c) => c.route === 'place_news' && c.activatedAt === null && c.couponId.startsWith('c-') && c.couponId.length > 0 && !c.videoId);
     expect(code).toBeDefined();
@@ -711,7 +712,7 @@ describe('진행 중인 쿠폰 detail (AC-299 · 300)', () => {
     const store = storeWithEndingCoupon();
     const m = statusModel(store);
     detail('coupon-status', { featureId: 'coupon-status' }, { store });
-    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1);
+    const rows = within(screen.getByRole('table', { name: '진행 중인 쿠폰 목록' })).getAllByRole('row').slice(1);
     expect(rows).toHaveLength(m.rows.length);
     m.rows.forEach((row, i) => {
       expect(rows[i]).toHaveTextContent(rawName(row.name));
@@ -719,8 +720,8 @@ describe('진행 중인 쿠폰 detail (AC-299 · 300)', () => {
       expect(rows[i]).toHaveTextContent(`${row.daysLeft}일 남음`);
     });
     expect(m.endingSoonCount).toBe(1);
-    expect(screen.getByText(`진행 중 ${m.activeCount}장`)).toBeInTheDocument();
-    expect(screen.getByText(`곧 끝나는 쿠폰 ${m.endingSoonCount}장`)).toBeInTheDocument();
+    expect(screen.getByText(`진행 중 ${m.activeCount}개`)).toBeInTheDocument();
+    expect(screen.getByText(`곧 끝나는 쿠폰 ${m.endingSoonCount}개`)).toBeInTheDocument();
     expect(screen.getByText(monthLineKo(m, false))).toBeInTheDocument();
     expect(screen.queryByText(/리뷰 고마워요/)).toBeNull();
   });
@@ -731,7 +732,7 @@ describe('진행 중인 쿠폰 detail (AC-299 · 300)', () => {
     expect(m.monthUsed).toBe(m.runningUsed + (m.endedUsed ?? 0));
     detail('coupon-status');
     expect(document.querySelector('[data-slot="coupon-status.total"]')).toHaveTextContent('이번 달 사용 365장 = 진행 중 223장 + 끝난 쿠폰 142장');
-    expect(screen.getByText('이번 달 끝난 쿠폰 1장')).toBeInTheDocument();
+    expect(screen.getByText('이번 달 끝난 쿠폰 1개')).toBeInTheDocument();
   });
   it('pause moves a running coupon to paused with an undo token, undo brings it back; extend adds 7 days with an undo token; the month count never changes', async () => {
     const store = createWidgetDataStore();
@@ -743,7 +744,7 @@ describe('진행 중인 쿠폰 detail (AC-299 · 300)', () => {
     expect(total()).toContain(`${m0.monthUsed}장`);
     await userEvent.click(screen.getByRole('button', { name: `${name} 일시 중지하기` }));
     // GD-3 (U-03): the paused coupon stays listed but leaves the running count, and the header names it
-    expect(screen.getByText(`진행 중 ${m0.activeCount - 1}장 · 중지 1장`)).toBeInTheDocument();
+    expect(screen.getByText(`진행 중 ${m0.activeCount - 1}개 · 중지 1개`)).toBeInTheDocument();
     const pauseNotice = ui.host.notify.mock.calls[0]![0];
     // DATA-FIX item 10 (877f99a): the paused coupon's name travels in the notice params, so the toast can name it.
     expect(name).toBe('오후 한산시간 디저트 1,000원 할인');
@@ -751,12 +752,12 @@ describe('진행 중인 쿠폰 detail (AC-299 · 300)', () => {
     expect(pauseNotice.undoToken).toEqual(expect.any(String));
     expect(total()).toContain(`${m0.monthUsed}장`);
     act(() => { store.undo(pauseNotice.undoToken); });
-    expect(screen.getByText(`진행 중 ${m0.activeCount}장`)).toBeInTheDocument();
+    expect(screen.getByText(`진행 중 ${m0.activeCount}개`)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: `${name} 7일 늘리기` }));
     const extend = ui.host.notify.mock.calls[1]![0];
     expect(extend).toMatchObject({ messageKey: 'data.marketing.notice.extended', params: { days: 7 } });
     expect(extend.undoToken).toEqual(expect.any(String));
-    const row = within(screen.getByRole('table')).getAllByRole('row')[1]!;
+    const row = within(screen.getByRole('table', { name: '진행 중인 쿠폰 목록' })).getAllByRole('row')[1]!;
     expect(row).toHaveTextContent(`${row0.daysLeft + 7}일 남음`);
     expect(total()).toContain(`${m0.monthUsed}장`);
     expect(statusModel(store).monthUsed).toBe(m0.monthUsed);
@@ -808,7 +809,7 @@ describe('진행 중인 쿠폰 detail (AC-299 · 300)', () => {
   it('shows ended coupons on demand', async () => {
     const { ended } = statusModel();
     detail('coupon-status');
-    await userEvent.click(screen.getByText(`이번 달 끝난 쿠폰 ${ended.length}장`));
+    await userEvent.click(screen.getByText(`이번 달 끝난 쿠폰 ${ended.length}개`));
     expect(screen.getAllByText(/종료$/).length).toBe(ended.length);
     // short dates with the weekday, never `10월 18일`
     for (const row of ended) expect(screen.getByText(new RegExp(`${shortKo(row.endsOn).replace(/[()]/g, '\\$&')} 종료$`))).toBeInTheDocument();
@@ -822,7 +823,7 @@ describe('손님 그룹 detail (AC-302 · 303)', () => {
     expect(screen.getByRole('tab', { name: `떠날 수 있는 손님 ${counts['churn-risk']}` })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: `첫 방문 ${counts['first-visit']}` })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: `단골 ${counts.regular}` })).toBeInTheDocument();
-    expect(screen.getByText('카드 결제 기준이에요(CCTV 방문 집계와 달라요)')).toBeInTheDocument();
+    expect(screen.getByText('매장 결제 기준이에요')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('tab', { name: `첫 방문 ${counts['first-visit']}` }));
     expect(screen.getAllByText(/마지막 방문/).length).toBe(counts['first-visit']);
     await userEvent.click(screen.getByRole('tab', { name: `단골 ${counts.regular}` }));
@@ -881,40 +882,27 @@ describe('손님 그룹 detail (AC-302 · 303)', () => {
     detail('customer-groups');
     expect(screen.getAllByRole('checkbox')).toHaveLength(churnRisk.length);
     expect(screen.getAllByRole('checkbox').filter((c) => c.hasAttribute('disabled') || c.getAttribute('aria-disabled') === 'true')).toHaveLength(refusing);
-    expect(screen.getAllByText('문자를 보낼 수 없어요(문자 동의 안 함)')).toHaveLength(refusing);
+    expect(screen.getAllByText('동의 안 함')).toHaveLength(refusing);
     expect(screen.getByRole('button', { name: `${consenting}명에게 쿠폰 보내기` })).toBeEnabled();
     expect(screen.getByText('(광고)')).toBeInTheDocument();
     expect(screen.getByText('무료수신거부')).toBeInTheDocument();
   });
-  it('links the visible automatic insertion notes to the customer group message editor', () => {
-    detail('customer-groups');
-    const preview = within(screen.getByRole('group', { name: '문구 미리보기' }));
-    const editor = preview.getByRole('textbox', { name: '문구 내용' });
-    const ad = preview.getByText('문자를 보내려면 발신 번호를 먼저 등록해 주세요');
-    const optOut = preview.getByText('무료 수신 거부 번호도 등록해 주세요');
-    expect(ad).toBeVisible();
-    expect(optOut).toBeVisible();
-    expect(ad.id).not.toBe('');
-    expect(optOut.id).not.toBe('');
-    expect(editor).toHaveAttribute('aria-describedby', `${ad.id} ${optOut.id}`);
-    expect(editor).toHaveAccessibleDescription(`${ad.textContent} ${optOut.textContent}`);
-    expect(editor.closest('.ui-sms-preview')!.querySelector('.ui-sr-only')).toBeNull();
+  it('identifies the coupon above the editable customer message and keeps the sender setup outside it', () => {
+    sms.configured = false;
+    const ui = detail('customer-groups');
+    const preview = screen.getByRole('group', { name: '문구 미리보기' });
+    expect(preview).toHaveTextContent('무료수신거부');
+    expect(preview).not.toHaveTextContent('설정에서');
+    const coupon = screen.getByText(/다시 와 주셔서 고마워요/);
+    expect(coupon.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '설정 열기' }));
+    expect(ui.host.openSettings).toHaveBeenCalledOnce();
   });
-  it('separates the customer group preview, recipient count and send button', () => {
-    const { container } = detail('customer-groups');
-    const style = document.createElement('style');
-    style.textContent = readFileSync('src/features/widgets/mkt-coupon/widget.css', 'utf8');
-    container.prepend(style);
-    const message = screen.getByRole('group', { name: '문구 미리보기' }).closest('.mkt-sms-preview')!;
-    const consenting = groupsModel().churnRisk.filter((c) => c.selectable).length;
-    const send = screen.getByRole('button', { name: `${consenting}명에게 쿠폰 보내기` });
-    // the message preview's own count line says the same words (D-323 dropped its demo suffix): the one next to the send button is the actions' count
-    const count = screen.getAllByText(`받는 사람 ${consenting}명`).find((el) => el.nextElementSibling === send)!;
-    const actions = count.parentElement!;
-    expect(message.nextElementSibling).toBe(actions);
-    expect(count.nextElementSibling).toBe(send);
-    expect(message.closest('.mkt-col-side')).toBe(actions.closest('.mkt-col-side'));
-    expect(getComputedStyle(actions).gap).toBe('var(--space-4)');
+  it('shows the selected recipient count once in the send button', () => {
+    detail('customer-groups');
+    const consenting = groupsModel().churnRisk.filter(c => c.selectable).length;
+    expect(screen.queryByText(`받는 사람 ${consenting}명`)).toBeNull();
+    expect(screen.getByRole('button', { name: `${consenting}명에게 쿠폰 보내기` })).toBeEnabled();
   });
   it('sending reaches out to the consenting customers: coupons issued once, a new active line appears, no undo', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -932,7 +920,7 @@ describe('손님 그룹 detail (AC-302 · 303)', () => {
     const issued = store.getSnapshot().tables.marketing.coupon.filter((c) => c.origin === 'group');
     expect(issued).toHaveLength(1);
     expect(store.getSnapshot().tables.marketing.couponTarget.filter((t) => t.couponId === issued[0]!.couponId)).toHaveLength(consenting);
-    expect(document.querySelector('[data-slot="coupon-status.metric.value"]')).toHaveTextContent(`${running + 1}장`);
+    expect(document.querySelector('[data-slot="coupon-status.metric.value"]')).toHaveTextContent(`${running + 1}개`);
     expect(h.notify).toHaveBeenCalledTimes(1);
     expect(h.notify.mock.calls[0]![0].undoToken).toBeUndefined();
     act(() => { vi.advanceTimersByTime(700); });
@@ -948,10 +936,10 @@ describe('손님 그룹 detail (AC-302 · 303)', () => {
 describe('summaries and languages', () => {
   const Summary = ({ id }: { id: FeatureId }) => { const s = module(id).useSummary({ featureId: id, condition: { kind: 'default' } }); return <p data-testid="s">{s}</p>; };
   it('useSummary gives the key sentence in the current language and sample state', () => {
-    const slot = slotModel(); const status = statusModel(); const { counts } = groupsModel(); const target = expiryModel().target!;
+    const slot = slotModel(); const status = statusModel(); const { counts } = groupsModel();
     for (const [id, locale, text] of [
-      ['slot-coupon', 'ko', `내일부터 7일 빈 시간 ${slot.slotCount}개, 맞춤 단골 ${slot.regularsCount}명`], ['coupon-status', 'ko', `진행 중인 쿠폰 ${status.activeCount}장, 곧 끝나는 쿠폰 ${status.endingSoonCount}장`],
-      ['customer-groups', 'ko', `떠날 수 있는 손님 ${counts['churn-risk']}명, 첫 방문 ${counts['first-visit']}명, 최근 방문 기준 단골 ${counts.regular}명`], ['expiry-coupon', 'ko', `${itemNameKo(target.nameKey)} ${target.qty}개 · 오늘 안에 팔아야 해요`],
+      ['slot-coupon', 'ko', `내일부터 7일 빈 시간 ${slot.slotCount}개, 맞춤 단골 ${slot.regularsCount}명`], ['coupon-status', 'ko', `진행 중인 Navis 코드 쿠폰 ${status.activeCount}개, 곧 끝나는 쿠폰 ${status.endingSoonCount}개`],
+      ['customer-groups', 'ko', `떠날 수 있는 손님 ${counts['churn-risk']}명, 첫 방문 ${counts['first-visit']}명, 최근 방문 기준 단골 ${counts.regular}명`], ['expiry-coupon', 'ko', `오늘 팔 품목 ${expiryModel().items.length}개`],
       ['slot-coupon', 'en', `${slot.slotCount} quiet slots in the next 7 days, ${slot.regularsCount} matching regulars`],
     ] as [FeatureId, Locale, string][]) {
       renderWithKit(<Summary id={id} />, { locale });
@@ -968,7 +956,9 @@ describe('summaries and languages', () => {
     for (const locale of ['en', 'zh-Hans', 'zh-Hant'] as const) {
       for (const id of ['slot-coupon', 'expiry-coupon', 'coupon-status', 'customer-groups'] as const) {
         const ui = detail(id, { featureId: id }, { locale });
-        expect(strip(ui.container.textContent ?? ''), `${locale} ${id}`).not.toMatch(/[가-힣]/);
+        const localized = ui.container.cloneNode(true) as HTMLElement;
+        if (id === 'coupon-status') localized.querySelectorAll('details[lang="ko"], section[lang="ko"][aria-label="네이버 쿠폰"]').forEach(el => el.remove());
+        expect(strip(localized.textContent ?? ''), `${locale} ${id}`).not.toMatch(/[가-힣]/);
         cleanup();
         const p = panel(id, 2, 2, { locale });
         expect(strip(p.container.textContent ?? ''), `${locale} ${id} panel`).not.toMatch(/[가-힣]/);
@@ -998,7 +988,7 @@ it('reminder target uses a real no-break space', () => {
 it('D231 uses matching limits and shows a result title for a sent quiet slot', async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   detail('expiry-coupon');
-  expect(screen.getByText(`${expiryModel().target!.maxRatePercent}%까지 깎아도 버리는 것보다 이득이에요`)).toBeInTheDocument();
+  expect(screen.getByText(`${expiryModel().target!.maxSliderRate}%까지 할인하면 원가 이상으로 팔아요`)).toBeInTheDocument();
   cleanup();
   const m = slotModel();
   const first = firstSlotWithRegulars(m);
@@ -1028,20 +1018,30 @@ describe('GD-3 marketing consistency labels', () => {
     store.dispatch({ type: 'coupon.pause', couponId: before.rows[0]!.couponId });
     const q = panel('coupon-status', 2, 2, { store });
     expect(q.container.querySelector('[data-slot="coupon-status.metric.value"]')).toHaveTextContent(String(before.activeCount - 1));
-    expect(q.container.textContent).toContain('중지된 쿠폰 1장');
+    expect(q.container.textContent).toContain('중지된 쿠폰 1개');
   });
-  it('the regular tab says it counts by recent visits, and every customer carries the 회원 alias (U-05, U-07)', async () => {
+  it('the regular tab shows the visit basis and D-430 masked member numbers', async () => {
     const store = createWidgetDataStore();
     const regular = groupsModel(store).counts.regular;
     detail('customer-groups', { featureId: 'customer-groups' }, { store });
     await userEvent.click(screen.getByRole('tab', { name: `단골 ${regular}` }));
-    expect(document.querySelector('[data-slot="customer-groups.regular-answer"]')).toHaveTextContent(`최근 방문 기준 단골은 ${regular}명이에요`);
-    const listed = [...document.querySelectorAll('.mkt-customers__name')].map((el) => el.textContent);
-    const members = selectMembers(store.getSnapshot(), {}).rows;
-    const shown = new Set(members.filter((m) => typeof m.name === 'string').map((m) => m.name as string));
+    const regularPanel = screen.getByRole('tabpanel', { name: `단골 ${regular}` });
+    expect(regularPanel).toHaveTextContent(/최근 \d+일 안에 \d+번 이상 온 손님이에요/);
+    expect(regularPanel).not.toHaveTextContent(`단골은 ${regular}명`);
+    const listed = [...regularPanel.querySelectorAll('.ui-recipient-row__name')];
+    const members = new Map(selectMembers(store.getSnapshot(), {}).rows.map(member => [member.customerId, member]));
     expect(listed.length).toBe(regular);
-    // each listed alias is exactly what the member list shows for that customer (joined by customerId), not a separate sample alias
-    expect(listed.every((name) => name !== null && (shown.has(name) || members.some((m) => typeof m.name !== 'string')))).toBe(true);
-    expect(listed).not.toContain('김○○');
+    let knownMemberNumbers = 0;
+    for (const name of listed) {
+      const member = members.get(name.closest('li')?.dataset.rowId ?? '');
+      if (member?.memberCode) {
+        knownMemberNumbers++;
+        const surname = typeof member.name === 'string' ? Array.from(member.name)[0] : '손';
+        expect(name.textContent).toBe(`${surname}○○ · ${member.memberCode}`);
+      } else {
+        expect(name.textContent).toMatch(/^\p{L}○○$/u);
+      }
+    }
+    expect(knownMemberNumbers).toBeGreaterThan(0);
   });
 });

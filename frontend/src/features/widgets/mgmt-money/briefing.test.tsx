@@ -53,11 +53,13 @@ it.each([100, 125] as const)('keeps the briefing content and final actions in th
   expect(closing).toBe(body);
   expect(within(closing).getByRole('heading', { name: '오늘 결과 요약' })).toBeInTheDocument();
   expect(within(closing).getByRole('button', { name: '마감 정산하기' })).toBeInTheDocument();
+  expect(within(closing).queryByRole('heading', { name: '일정' })).toBeNull();
+  expect(within(closing).queryByRole('button', { name: '모두 읽음으로 표시하기' })).toBeNull();
 }, 30_000);
 
 it.each([[100, '56px'], [125, '64px']] as const)('aligns linked and plain briefing rows to the same height and divider at %i percent', (textScale, rowMin) => {
   renderBriefingAt(textScale);
-  const schedule = screen.getByRole('heading', { name: '일정 브리핑' }).closest('section')!;
+  const schedule = screen.getByRole('heading', { name: '일정' }).closest('section')!;
   // Today's group: the link row, the staff row, then one row per entry counted today.
   const model = briefingOf();
   const rows = within(within(schedule).getAllByRole('list')[0]!).getAllByRole('listitem');
@@ -71,7 +73,7 @@ it.each([[100, '56px'], [125, '64px']] as const)('aligns linked and plain briefi
     expect(style.alignItems).toBe('center');
   }
   expect(getComputedStyle(rows[1]!).borderBlockStart).toBe('var(--stroke-hairline) solid var(--border)');
-  const link = within(rows[0]!).getByRole('button', { name: `오늘 일정 ${model.schedules.todayCount}개` });
+  const link = within(rows[0]!).getByRole('button', { name: `오늘 일정 ${model.schedules.todayCount}건` });
   expect(link).toHaveClass('ui-button--ghost');
   // The chevron ends the row; a value or status chip, when there is one, sits just before it.
   expect(link.querySelector('.ui-press-surface > .mm-briefing-link__end > svg:last-child')).toBeInTheDocument();
@@ -129,7 +131,7 @@ it('summarizes schedules and reservations alongside alert groups in the square p
  renderWithKit(<BriefingPanel featureId="briefing" condition={condition} width={2} height={2} shape="S" presetId="A" editing={false} host={host} />);
  // PRD 12.3 F-277 keeps the summary schedules and appends the staff handoff.
  const model = briefingOf(), staff = model.staff.today;
- expect(screen.getByText(`오늘 일정 ${model.schedules.todayCount}개`, { exact: false })).toHaveTextContent(`오늘 일정 ${model.schedules.todayCount}개 · 오늘 근무 ${staff.workingCount}명 · ${staff.nextHandoffAt} 교대`);
+ expect(screen.getByText(`오늘 일정 ${model.schedules.todayCount}건`, { exact: false })).toHaveTextContent(`오늘 일정 ${model.schedules.todayCount}건 · 오늘 근무 ${staff.workingCount}명 · ${staff.nextHandoffAt} 교대`);
  expect(screen.getByText(`오늘 ${model.reservations.count}건 · ${model.reservations.partyTotal}명`)).toBeInTheDocument();
 });
 
@@ -140,7 +142,7 @@ it('counts alert items and lists only the schedules counted today', () => {
  expect(model.importantAlerts.count).toBe(model.importantAlerts.groups.flatMap(g=>g.items).length);
  renderWithKit(<BriefingDetail featureId="briefing" condition={condition} detailRef={{featureId:'briefing'}} host={host} />, {store});
  // Today's group holds the entries counted today; the next days are listed under their own headings.
- const today = within(screen.getByRole('heading', { name: '오늘의 주요 일정' }).closest('section')!.querySelector('ul')!);
+ const today = within(screen.getByRole('heading', { name: '오늘 주요 일정' }).closest('section')!.querySelector('ul')!);
  const [, month, day] = addIsoDays(TODAY, 1).split('-').map(Number);
  expect(today.queryByText(new RegExp(`${month}/${day}\\(`))).not.toBeInTheDocument();
  expect(today.queryByText(/^\d+\/\d+\(.\)/)).not.toBeInTheDocument();
@@ -178,24 +180,26 @@ it('ends every alert row with its value or status chip, then the chevron (SCR-22
   for (const chip of document.querySelectorAll('.mm-briefing-link__end .ui-status-badge')) expect(chip.querySelector('svg')).not.toBeNull();
 });
 
-it('splits the schedule card into today, scheduled and coming up', () => {
+it('uses a single upcoming schedule section and does not repeat important alerts', () => {
   const { store } = storeWithClosure();
   renderWithKit(<BriefingDetail featureId="briefing" condition={condition} detailRef={{ featureId: 'briefing' }} host={host} />, { store });
-  const card = screen.getByRole('heading', { name: '일정 브리핑' }).closest('section')!;
-  expect(within(card).getByRole('heading', { name: '오늘의 주요 일정' })).toBeInTheDocument();
+  const card = screen.getByRole('heading', { name: '일정' }).closest('section')!;
+  expect(within(card).getByRole('heading', { name: '오늘 주요 일정' })).toBeInTheDocument();
   // The unpaid tax is the first thing coming up, with its due date.
   const later = within(card).getByRole('heading', { name: '다가오는 일정' });
-  expect(within(later.parentElement!).getByRole('button', { name: /원천세/ })).toBeInTheDocument();
+  expect(within(later.parentElement!).queryByRole('button', { name: /원천세/ })).toBeNull();
 });
 
-it('opens tomorrow’s reservations from the closing tab, and keeps one primary button there', async () => {
-  const openLinked = vi.fn();
-  renderWithKit(<BriefingDetail featureId="briefing" condition={condition} detailRef={{ featureId: 'briefing' }} host={{ ...host, openLinked }} />);
+it('shows three closing amounts and opens closing from the tab’s primary button', async () => {
+  const openClosing = vi.fn(() => true);
+  renderWithKit(<BriefingDetail featureId="briefing" condition={condition} detailRef={{ featureId: 'briefing' }} host={{ ...host, openClosing }} />);
   await userEvent.click(screen.getByRole('tab', { name: /퇴근/ }));
-  await userEvent.click(screen.getByRole('button', { name: /^내일 예약/ }));
-  expect(openLinked).toHaveBeenCalledWith({ featureId: 'voice-booking', date: addIsoDays(TODAY, 1) });
-  expect(screen.getByRole('button', { name: '마감 정산하기' })).toHaveClass('ui-button--secondary');
-  expect(screen.getByRole('button', { name: '모두 읽음으로 표시하기' })).not.toHaveClass('ui-button--secondary');
+  expect(screen.getByText('실제 입금')).toBeVisible();
+  expect(screen.queryByRole('button', { name: /^내일 예약/ })).toBeNull();
+  const closingAction = screen.getByRole('button', { name: '마감 정산하기' });
+  expect(closingAction).toHaveClass('ui-button--default');
+  await userEvent.click(closingAction);
+  expect(openClosing).toHaveBeenCalledWith('briefing.closing');
 });
 
 it('follows the run: a chat acknowledgement turns the open detail button off (D-327)', () => {
@@ -231,7 +235,7 @@ it('shows today\'s tax due-date entry with a status chip and a link, not as a ba
     calendarSettings: { ...tables.calendarSettings, deadline: true },
   } as never);
   renderWithKit(<BriefingDetail featureId="briefing" condition={condition} detailRef={{ featureId: 'briefing' }} host={host} />, { store, reducedMotion: true });
-  const card = screen.getByRole('heading', { name: '일정 브리핑' }).closest('section')!;
+  const card = screen.getByRole('heading', { name: '일정' }).closest('section')!;
   const row = within(card).getByText(/세금 납부 기한/).closest('li')!;
   expect(within(row).getByText('오늘까지')).toBeInTheDocument();
   await act(async () => { fireEvent.click(within(row).getByRole('button')); });

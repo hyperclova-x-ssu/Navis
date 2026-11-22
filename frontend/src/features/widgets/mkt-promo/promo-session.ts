@@ -73,6 +73,7 @@ export interface PromoSession {
   /** [다시 만들기] (API-26 step 3): same input, a new server job. */
   retry(videoId: string, transport?: PromoRetryTransport): DataCommandResult;
   saveDraft(locale: PromoLocale): Promise<DataCommandResult>;
+  addExamplePhoto(file: File, menuId: string): Promise<DataCommandResult>;
   makeConfirmed(input: PromoVideoInput, estimateSeconds: number | null): Promise<DataCommandResult>;
   retryConfirmed(videoId: string): Promise<DataCommandResult>;
   /** [저장하기] (API-25 + `video.save`). */
@@ -327,14 +328,45 @@ function createSession(store: WidgetDataStore): PromoSession {
         const catalog = await getCatalog();
         const result = store.dispatch({ type: 'promo.syncCatalog', catalog });
         set({ catalog: result.ok ? 'ready' : 'error' });
-      } catch {
-        set({ catalog: 'error' });
+      } catch (error) {
+        const staticCatalog = error instanceof PromoHttpError && (error.code === 'BAD_RESPONSE' || error.status === 404);
+        set({ catalog: staticCatalog ? 'ready' : 'error' });
       }
     },
     loadEstimate: (force = false) => load('estimate', getEstimateModel, force),
     loadReferences: (force = false) => load('references', getReferences, force),
     saveDraft(locale) {
-      return write('draft', () => persistDraft(draftInput(state.draft, locale), draftBase));
+      return write('draft', async () => {
+        if (realPort(store)) return persistDraft(draftInput(state.draft, locale), draftBase);
+        // Example drafts are already kept for the lifetime of this run by setDraft.
+        return { ok: true, revision: store.getSnapshot().revision };
+      });
+    },
+    async addExamplePhoto(file, menuId) {
+      if (realPort(store)) return sessionEnded();
+      const image = await createImageBitmap(file);
+      const { width, height } = image;
+      image.close();
+      // Keep the file in the example run. The real upload and its receipts use the account port.
+      const url = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(reader.error);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const { promoStore, promoMenu, promoPhoto } = store.getSnapshot().tables.marketing;
+      const shop = promoStore[0];
+      if (!shop || !promoMenu.some(menu => menu.menuId === menuId)) return draftRequired();
+      const photoId = `own-${crypto.randomUUID().replaceAll('-', '').slice(0, 24)}`;
+      const photos = [...promoPhoto, { photoId, menuId, url, width, height }];
+      const result = store.dispatch({ type: 'promo.syncCatalog', catalog: {
+        sourceId: shop.sourceId,
+        store: { ...shop, exteriorPhotoId: shop.exteriorPhotoId ?? 'example', exteriorUrl: shop.exteriorUrl ?? '/api/promo/photos/example' },
+        menus: promoMenu.map(menu => ({ ...menu, photoIds: photos.filter(photo => photo.menuId === menu.menuId).map(photo => photo.photoId) })),
+        photos,
+      } });
+      if (result.ok) set({ catalog: 'ready' });
+      return result;
     },
     makeConfirmed(input, estimateSeconds) {
       return write('generate', async () => {

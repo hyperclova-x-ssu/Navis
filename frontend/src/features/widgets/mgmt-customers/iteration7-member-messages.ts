@@ -10,5 +10,5 @@ export const memberRecordsCopy = {
   accepted: '연락처 등록 동의를 받았어요', grantContact: '연락 동의 기록하기', revokeContact: '연락 동의 철회하기',
   grantMarketing: '광고 수신 동의 기록하기', revokeMarketing: '광고 수신 동의 철회하기',
   contact: '연락처 등록', confirmDelete: '지우기 확인', cancel: '취소',
-  paymentUnavailable: '결제 내역을 표시할 수 없어요',
+  paymentUnavailable: '최근 결제 내역을 표시할 수 없어요',
 } as const;

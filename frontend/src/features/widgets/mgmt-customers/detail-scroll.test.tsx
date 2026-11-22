@@ -104,7 +104,10 @@ it.each([100, 125] as const)('예약 상세는 %i 퍼센트에서 창 본문을 
  expect(content.parentElement).toBe(root);
  expect(getComputedStyle(content).overflowY).toBe('auto');
  expect(getComputedStyle(gridRoot).flexGrow).toBe('1');
- expect(getComputedStyle(gridRoot).minBlockSize).toBe('var(--booking-table-min)');
+ // D-384: booking search is present in both modes, so the grid reserves space for its toolbar as well as three rows.
+ const search = within(gridRoot as HTMLElement).getByRole('searchbox', { name: '예약 찾기' });
+ expect(search.closest('.ui-data-grid__toolbar')?.parentElement).toBe(gridRoot);
+ expect(getComputedStyle(gridRoot).minBlockSize).toBe('calc(var(--booking-table-min) + var(--table-toolbar-height) + var(--space-2))');
  const fixed = Array.from(content.children).filter(child => !child.matches('.ui-data-grid'));
  expect(fixed.length).toBeGreaterThanOrEqual(3);
  expect(fixed.map(section => getComputedStyle(section).flexShrink)).toEqual(fixed.map(() => '0'));

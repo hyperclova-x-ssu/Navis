@@ -21,11 +21,11 @@ function mount(width: CellSpan, height: CellSpan, state: 'ready' | 'empty' = 're
 const counts = () => [...document.querySelectorAll('.custom-stage-counts > div')].map((d) => [d.querySelector('p')!.textContent, d.querySelector('strong')!.textContent]);
 
 describe('주문제작 4×4 (D-333)', () => {
-  it('re-shows the four stage counts above the table, from the same orders', () => {
+  it('includes received and awaiting quote in the stage counts above the table', () => {
     const rows = selectCustomOrders(read()).orders;
     mount(4, 4);
     const by = (stage: string) => String(rows.filter((r) => r.stage === stage).length);
-    expect(counts()).toEqual([['승인 대기', String(selectCustomOrders(read()).summary.approvalPending)], ['결제 대기', by('payment_pending')], ['제작 중', by('in_production')], ['제작 완료', by('production_complete')]]);
+    expect(counts()).toEqual([['접수', String(Number(by('received')) + Number(by('quote_pending')))], ['승인 대기', String(selectCustomOrders(read()).summary.approvalPending)], ['결제 대기', by('payment_pending')], ['제작 중', by('in_production')], ['제작 완료', by('production_complete')]]);
   });
   it('adds an order-number column with each order\'s own number', () => {
     const rows = selectCustomOrders(read()).orders;

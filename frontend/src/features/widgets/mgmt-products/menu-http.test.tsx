@@ -16,7 +16,7 @@ const item: MenuDto = {
   name: 'HTTP 아메리카노', category: 'drink', price: 3100, saleStatus: 'selling',
   memo: null, prepMin: 3, photoKey: null, photoFileId: null, groups: [], recipeLines: [], recipeVersion: null, unitCost: null, revision: 1,
 };
-const loadingText = '화면을 준비하고 있어요';
+const loadingText = '메뉴를 불러오는 중이에요';
 const menuPath = `/api/v1/stores/${storeId}/inventory/menu`;
 const menuUrl = `${menuPath}?limit=50`;
 const salesUrl = `/api/v1/stores/${storeId}/pos/coupon-sales?businessDate=${TODAY}&view=today`;
@@ -93,7 +93,7 @@ it('creates a menu from the empty widget and waits for a committed read before s
   const form = screen.getByRole('form', { name: '새 메뉴' });
   fireEvent.change(within(form).getByLabelText('메뉴 이름'), { target: { value: item.name } });
   fireEvent.change(within(form).getByLabelText('판매가'), { target: { value: '3100' } });
-  fireEvent.click(within(form).getByRole('button', { name: '저장하기' }));
+  fireEvent.click(within(form).getByRole('button', { name: '메뉴 저장하기' }));
   await waitFor(() => expect(ui.writeMenu).toHaveBeenCalledOnce());
   expect(ui.writeMenu.mock.calls[0]?.[0]).toMatchObject({
     headers: { 'idempotency-key': expect.stringMatching(/^menu-create-/) },
@@ -101,7 +101,7 @@ it('creates a menu from the empty widget and waits for a committed read before s
   });
   fireEvent.submit(form);
   fireEvent.submit(form);
-  expect(within(form).getByRole('button', { name: '저장하기' })).toBeDisabled();
+  expect(within(form).getByRole('button', { name: '메뉴 저장하기' })).toBeDisabled();
   expect(screen.queryByRole('gridcell', { name: /HTTP 아메리카노/ })).not.toBeInTheDocument();
   write.resolve(Response.json({ resourceId: item.menuId, revision: 1, receiptId: item.menuId, affectedSources: ['menu', 'pos'], changed: true }));
   await waitFor(() => expect(ui.readMenu).toHaveBeenCalledTimes(2));
@@ -178,8 +178,9 @@ it('keeps the ready panel and the focused, scrolled detail grid during refresh',
 
   expect(within(detail.container).getByRole('grid')).toBe(grid);
   expect(within(panel.container).getByText(item.name)).toBe(panelRow);
-  expect(within(detail.container).getByText(loadingText)).toHaveAttribute('role', 'status');
-  expect(within(panel.container).getByText(loadingText)).toHaveAttribute('role', 'status');
+  const refreshingText = '화면을 준비하고 있어요';
+  expect(within(detail.container).getByText(refreshingText)).toHaveAttribute('role', 'status');
+  expect(within(panel.container).getByText(refreshingText)).toHaveAttribute('role', 'status');
   expect(cell).toHaveFocus();
   expect(scroller.scrollTop).toBe(48);
   expect(scroller.scrollLeft).toBe(32);
@@ -187,7 +188,7 @@ it('keeps the ready panel and the focused, scrolled detail grid during refresh',
   refresh.resolve(Response.json(list([{ ...item, name: '새 HTTP 아메리카노' }])));
   expect(await within(grid).findByText('새 HTTP 아메리카노')).toBeInTheDocument();
   expect(within(panel.container).getByText('새 HTTP 아메리카노')).toBe(panelRow);
-  expect(screen.queryByText(loadingText)).not.toBeInTheDocument();
+  expect(screen.queryByText(refreshingText)).not.toBeInTheDocument();
   expect(cell).toHaveFocus();
   expect(scroller.scrollTop).toBe(48);
   expect(scroller.scrollLeft).toBe(32);

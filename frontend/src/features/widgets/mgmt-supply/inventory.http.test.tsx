@@ -67,7 +67,7 @@ it('keeps an unchanged retry key and sends a fresh key after editing an unacknow
   const sku = within(form).getByLabelText('코드(SKU)');
   fireEvent.change(sku, { target: { value: item.sku } });
   fireEvent.change(within(form).getByLabelText('이름'), { target: { value: '새 품목' } });
-  const save = within(form).getByRole('button', { name: '저장하기' });
+  const save = within(form).getByRole('button', { name: '품목 저장하기' });
   fireEvent.click(save);
   await waitFor(() => expect(within(form).getByRole('alert')).toBeInTheDocument());
   fireEvent.click(save);
@@ -88,7 +88,7 @@ it('shows previous forecast quantities with the storage unit precision and calcu
     results: [{ scope: 'ingredient', targetId: id, expected: '2209.5' }] }));
   render();
   fireEvent.click(await screen.findByRole('button', { name: /HTTP 우유 재고 변동 기록/ }));
-  expect(screen.getByText('이전 예상 사용량 2.21 L')).toBeInTheDocument();
+  expect(screen.getByText('이전 예상 사용량 2.21L')).toBeInTheDocument();
   expect(screen.getByText('최근 4주 같은 요일의 평균 사용량이에요')).toBeInTheDocument();
 });
 
@@ -112,7 +112,7 @@ it('opens, switches and closes untouched stock editors without a PATCH', async (
 it('skips a formatting-only stock change on Enter', async () => {
   const { backend, render } = setup();
   render();
-  const stock = await screen.findByRole('gridcell', { name: /현재 재고, 1\.2 L$/ });
+  const stock = await screen.findByRole('gridcell', { name: /현재 재고, 1\.2L$/ });
   fireEvent.click(stock);
   const editor = within(stock).getByRole('textbox');
   fireEvent.change(editor, { target: { value: '1.20' } });
@@ -131,7 +131,7 @@ it('sends exactly one changed quantity on repeated Enter and waits for the HTTP 
     return receipt;
   });
   render();
-  const stock = await screen.findByRole('gridcell', { name: /현재 재고, 1\.2 L$/ });
+  const stock = await screen.findByRole('gridcell', { name: /현재 재고, 1\.2L$/ });
   fireEvent.click(stock);
   const editor = within(stock).getByRole('textbox');
   fireEvent.change(editor, { target: { value: '2.5' } });
@@ -141,23 +141,23 @@ it('sends exactly one changed quantity on repeated Enter and waits for the HTTP 
     fireEvent.keyDown(editor, { key: 'Enter', repeat: true });
   });
   await waitFor(() => expect(backend.callsTo('PATCH', `${itemsPath}/${id}`).map(call => call.body)).toEqual([{ stock: 2.5, expectedRevision: 1 }]));
-  expect(stock).toHaveTextContent('1.2 L');
+  expect(stock).toHaveTextContent('1.2L');
   await act(async () => resolveSave());
-  expect(await screen.findByRole('gridcell', { name: /현재 재고, 2\.5 L$/ })).toBeInTheDocument();
+  expect(await screen.findByRole('gridcell', { name: /현재 재고, 2\.5L$/ })).toBeInTheDocument();
   expect(backend.callsTo('PATCH', `${itemsPath}/${id}`)).toHaveLength(1);
 });
 
 it('does not write the old value back when an untouched editor survives a refresh', async () => {
   const { backend, port, render } = setup();
   render();
-  const stock = await screen.findByRole('gridcell', { name: /현재 재고, 1\.2 L$/ });
+  const stock = await screen.findByRole('gridcell', { name: /현재 재고, 1\.2L$/ });
   fireEvent.click(stock);
   backend.on('GET', itemsPath, () => list([{ ...item, revision: 2, stock: { ...balance, rawQuantityBase: '1800', availableQuantityBase: '1800' } }]));
   await act(async () => { await port.retry('stock'); });
   const editor = within(stock).getByRole('textbox');
   expect(editor).toHaveValue('1.2');
   fireEvent.keyDown(editor, { key: 'Enter' });
-  expect(await screen.findByRole('gridcell', { name: /현재 재고, 1\.8 L$/ })).toBeInTheDocument();
+  expect(await screen.findByRole('gridcell', { name: /현재 재고, 1\.8L$/ })).toBeInTheDocument();
   expect(backend.callsTo('PATCH', `${itemsPath}/${id}`)).toHaveLength(0);
 });
 
@@ -178,15 +178,15 @@ it('creates and adjusts an item from the HTTP widget and re-reads the server qua
   fireEvent.change(within(form).getByLabelText('코드(SKU)'), { target: { value: item.sku } });
   fireEvent.change(within(form).getByLabelText('이름'), { target: { value: name } });
   fireEvent.change(within(form).getByLabelText('단위'), { target: { value: 'L' } });
-  fireEvent.click(within(form).getByRole('button', { name: '저장하기' }));
+  fireEvent.click(within(form).getByRole('button', { name: '품목 저장하기' }));
   fireEvent.submit(form);
-  const stock = await screen.findByRole('gridcell', { name: /현재 재고, 1\.2 L$/ });
+  const stock = await screen.findByRole('gridcell', { name: /현재 재고, 1\.2L$/ });
   expect(backend.callsTo('POST', itemsPath)).toHaveLength(1);
   fireEvent.click(stock);
   const input = within(stock).getByRole('textbox');
   fireEvent.change(input, { target: { value: '2.5' } });
   fireEvent.keyDown(input, { key: 'Enter' });
-  expect(await screen.findByRole('gridcell', { name: /현재 재고, 2\.5 L$/ })).toBeInTheDocument();
+  expect(await screen.findByRole('gridcell', { name: /현재 재고, 2\.5L$/ })).toBeInTheDocument();
   expect(backend.callsTo('PATCH', `${itemsPath}/${id}`).map(call => call.body)).toEqual([{ stock: 2.5, expectedRevision: 1 }]);
 });
 
@@ -205,9 +205,9 @@ it('leaves a new draft open when an earlier save finishes after its form was clo
   const form = screen.getByRole('form', { name: '품목 추가하기' });
   fireEvent.change(within(form).getByLabelText('코드(SKU)'), { target: { value: item.sku } });
   fireEvent.change(within(form).getByLabelText('이름'), { target: { value: name } });
-  fireEvent.click(within(form).getByRole('button', { name: '저장하기' }));
+  fireEvent.click(within(form).getByRole('button', { name: '품목 저장하기' }));
   await waitFor(() => expect(backend.callsTo('POST', itemsPath)).toHaveLength(1));
-  fireEvent.click(within(form).getByRole('button', { name: '닫기' }));
+  fireEvent.click(within(form).getByRole('button', { name: '품목 추가 닫기' }));
   fireEvent.click(add);
   fireEvent.change(screen.getByLabelText('이름'), { target: { value: '두 번째 초안' } });
   await act(async () => finish());
@@ -234,7 +234,7 @@ it('creates a lot without changing the quantity and requires explicit discard co
   fireEvent.click(screen.getByRole('button', { name: '폐기 확인' }));
   await waitFor(() => expect(backend.callsTo('POST', `${batchesPath}/${batchId}/discard`).map(call => call.body)).toEqual([{ expectedRevision: 1, confirmed: true }]));
   expect(backend.callsTo('POST', batchesPath).map(call => call.body)).toEqual([{ itemId: id, quantity: 0.5, expiresOn: lot.expiresOn, expectedRevision: 1 }]);
-  expect(screen.getByRole('gridcell', { name: /현재 재고, 1\.2 L$/ })).toBeInTheDocument();
+  expect(screen.getByRole('gridcell', { name: /현재 재고, 1\.2L$/ })).toBeInTheDocument();
 });
 
 it('uses the server business date and signed sale corrections for Navis facts', async () => {

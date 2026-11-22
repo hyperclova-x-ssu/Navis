@@ -1,11 +1,13 @@
 /** 음성 예약확정 (F-34, AC-227·256·257): today's phone reservations, confirm / suggest / no-show. SmartCall is shown as daily aggregates only (AC-1600): no call content exists. */
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { QueryCondition, WidgetDetailProps, WidgetPanelProps } from '../../../contracts';
 import { useBundle, type MessageBundle, type Translator } from '../../../i18n';
 import { LEGACY_BOOKING_VIEW_TIME, TODAY, resolveDataText, dataBundles, selectMembers, selectShopSettings } from '../../../data/widget-data';
 import { useDomainState, useRealRetry, useWidgetDataStore, useWidgetView } from '../../../data/react';
 import { commandFailureText } from '../../../data/commands/failure-copy';
 import { allocateReservation, selectReservations } from '../../../data/derive/reservations';
+import { readAppClock } from '../../../data/db/app-clock';
+import { formatMaskedCustomer } from '../../../data/customer-display';
 import { isIsoDate, isTime } from '../../../data/db/time';
 import type { DataSnapshot, Reservation } from '../../../data/db/types';
 import { UUID, naverRules, type BookingMeta, type BookingProductDto, type CallDayDto } from '../../../data/reality/06/dto';
@@ -14,7 +16,7 @@ import { notifySuccess, useBookingCommand } from './voice-booking.commands';
 import './booking-cancel.css';
 import type { VoiceBookingModel } from '../../../data/models/types';
 import { bookingDetailSeed } from '../../assistant/domains/booking';
-import { ActionButton, Badge, DateField, RadioGroup, TimeChips, TimeField, TextField, NumberField, Textarea, DataGrid, DateStepper, DetailSidePanel, InlineForm, Table, addIsoDays, layoutTokens, renderStatusChip, type GridColumn, type GridFocus, type GridSort, type DataGridHandle } from '../../../ui';
+import { ActionButton, Badge, DateField, RadioGroup, TimeChips, TimeField, TextField, NumberField, StatusChip, Textarea, DataGrid, DateStepper, DetailFooterContent, DetailFooterContext, DetailSidePanel, InlineForm, Table, addIsoDays, layoutTokens, renderStatusChip, type GridColumn, type GridFocus, type GridSort, type DataGridHandle } from '../../../ui';
 import { customersBundle } from './messages';
 import { Bars, Body, DetailState, Kpi, ListBlock, PanelFrame, Row, StatePanel, reportResult, splitUnit, useT, type BarItem } from './shared';
 
@@ -24,29 +26,32 @@ import { usePickupCount } from '../i7-custom/use-custom';
 import { kstLocal } from '../../../data/reality/02/clock';
 
 const ID = 'voice-booking' as const;
-const bookingCopy: MessageBundle<string> = {id:'widget.booking.i5',en:{},'zh-Hans':{},'zh-Hant':{},ko:{'widget.voice-booking.i5.list':'예약 목록','widget.voice-booking.i5.previewPending':'이대로 저장하면 예약 대기로 들어가요','widget.voice-booking.i5.bookAnyway':'그래도 예약하기','widget.voice-booking.i5.dateTime':'예약 일시','widget.voice-booking.i5.guest':'예약자 정보','widget.voice-booking.i5.path':'경로','widget.voice-booking.i5.status':'상태','widget.voice-booking.i5.table':'테이블','widget.voice-booking.i5.auto':'자동 추천','widget.voice-booking.i5.member':'회원에서 찾기','widget.voice-booking.i5.direct':'이름으로 예약','widget.voice-booking.i5.editParty':'인원','widget.voice-booking.i5.editTime':'시각','widget.voice-booking.i5.editSave':'예약 고치기','widget.voice-booking.i5.noTable':'맞는 테이블이 없어요','widget.voice-booking.i5.over':'좌석 {n}석을 넘어요','widget.voice-booking.i5.confirmed':'예약 확정','widget.voice-booking.i5.pending':'예약 대기','widget.voice-booking.i5.completed':'방문 완료','widget.voice-booking.i5.canceled':'취소','widget.voice-booking.i5.noShow':'오지 않음','widget.voice-booking.i5.proposed':'제안함','widget.voice-booking.i5.seats':'좌석 여유 {n}석','widget.voice-booking.i5.tables':'빈 테이블 {n}개','widget.voice-booking.i5.waiting':'대기 {count}건','widget.voice-booking.i5.waitingLabel':'예약 대기','widget.voice-booking.i5.add':'예약 추가하기','widget.voice-booking.i5.name':'예약자 이름','widget.voice-booking.i5.phone':'연락처','widget.voice-booking.i5.date':'예약 날짜','widget.voice-booking.i5.time':'예약 시각','widget.voice-booking.i5.party':'예약 인원','widget.voice-booking.i5.request':'요청사항','widget.voice-booking.i5.save':'저장하기','widget.voice-booking.i5.close':'닫기','widget.voice-booking.i5.cancel':'예약 취소하기','widget.voice-booking.i5.complete':'방문 완료로 바꾸기','widget.voice-booking.i5.noShowAction':'오지 않음으로 바꾸기','widget.voice-booking.i5.editSaveAction':'예약 저장하기','widget.voice-booking.i5.editAnyway':'그래도 저장하기','widget.voice-booking.i5.kind':'종류','widget.voice-booking.i5.visitKind':'방문 예약','widget.voice-booking.i5.check':'확인할 점','widget.voice-booking.i5.dayTotalToday':'오늘 예약','widget.voice-booking.i5.dayTotal':'이 날 예약','widget.voice-booking.i5.emptyToday':'오늘 예약이 없어요','widget.voice-booking.i5.emptyDay':'이 날은 예약이 없어요','widget.voice-booking.i5.summary':'예약 현황','widget.voice-booking.i5.error.guestName':'예약자 이름을 넣어 주세요','widget.voice-booking.i5.error.guestPhone':'연락처를 숫자 10~11자리로 넣어 주세요','widget.voice-booking.i5.statusCount':'{label} {count}건','widget.voice-booking.i5.unitParty':'명'}};
+const bookingCopy: MessageBundle<string> = {id:'widget.booking.i5',en:{},'zh-Hans':{},'zh-Hant':{},ko:{'widget.voice-booking.i5.list':'예약 목록','widget.voice-booking.i5.previewPending':'이대로 저장하면 예약 대기로 들어가요','widget.voice-booking.i5.bookAnyway':'그래도 예약하기','widget.voice-booking.i5.dateTime':'예약 시각','widget.voice-booking.i5.guest':'예약자 정보','widget.voice-booking.i5.path':'경로','widget.voice-booking.i5.status':'상태','widget.voice-booking.i5.table':'테이블','widget.voice-booking.i5.auto':'자동 추천','widget.voice-booking.i5.member':'예약자 선택','widget.voice-booking.i5.direct':'직접 이름 입력','widget.voice-booking.i5.editParty':'예약 인원','widget.voice-booking.i5.editTime':'예약 시각','widget.voice-booking.i5.editSave':'예약 고치기','widget.voice-booking.i5.noTable':'맞는 테이블이 없어요','widget.voice-booking.i5.over':'좌석 {n}석을 넘어요','widget.voice-booking.i5.confirmed':'예약 확정','widget.voice-booking.i5.pending':'예약 대기','widget.voice-booking.i5.completed':'방문 완료','widget.voice-booking.i5.canceled':'취소','widget.voice-booking.i5.noShow':'오지 않음','widget.voice-booking.i5.proposed':'제안함','widget.voice-booking.i5.seats':'좌석 여유 {n}석','widget.voice-booking.i5.tables':'빈 테이블 {n}개','widget.voice-booking.i5.waiting':'대기 {count}건','widget.voice-booking.i5.waitingLabel':'예약 대기','widget.voice-booking.i5.add':'예약 추가하기','widget.voice-booking.i5.name':'예약자 이름','widget.voice-booking.i5.phone':'연락처','widget.voice-booking.i5.date':'예약 날짜','widget.voice-booking.i5.time':'예약 시각','widget.voice-booking.i5.party':'예약 인원','widget.voice-booking.i5.request':'요청사항','widget.voice-booking.i5.save':'저장하기','widget.voice-booking.i5.close':'닫기','widget.voice-booking.i5.cancel':'예약 취소하기','widget.voice-booking.i5.complete':'방문 완료로 바꾸기','widget.voice-booking.i5.noShowAction':'오지 않음으로 바꾸기','widget.voice-booking.i5.editSaveAction':'예약 저장하기','widget.voice-booking.i5.editAnyway':'그래도 저장하기','widget.voice-booking.i5.kind':'종류','widget.voice-booking.i5.visitKind':'방문 예약','widget.voice-booking.i5.check':'확인할 점','widget.voice-booking.i5.dayTotalToday':'오늘 예약','widget.voice-booking.i5.dayTotal':'이 날 예약','widget.voice-booking.i5.emptyToday':'오늘 예약이 없어요','widget.voice-booking.i5.emptyDay':'이 날은 예약이 없어요','widget.voice-booking.i5.summary':'예약 현황','widget.voice-booking.i5.error.guestName':'예약자 이름을 넣어 주세요','widget.voice-booking.i5.error.guestPhone':'연락처를 숫자 10~11자리로 넣어 주세요','widget.voice-booking.i5.statusCount':'{label} {count}건','widget.voice-booking.i5.unitParty':'명'}};
 
-/** REAL-PLAN F06 (D-347 PN02·PN08, AC-1596·1597·1600·1602·1608): the words of NAVER bookings, phone requests, the Npay lock, NAVER cancel terms and SmartCall aggregates. Used only over HTTP. */
+/** REAL-PLAN F06 (D-347 PN02·PN08): NAVER bookings, phone requests, the Npay lock, NAVER cancel terms and SmartCall aggregates. */
 const realCopy: MessageBundle<string> = { id: 'widget.booking.real', en: {}, 'zh-Hans': {}, 'zh-Hant': {}, ko: {
   'widget.voice-booking.real.search': '예약 찾기', 'widget.voice-booking.real.searchHint': '예약번호·이름·연락처·날짜·상태',
   'widget.voice-booking.real.number': '예약번호', 'widget.voice-booking.real.product': '상품', 'widget.voice-booking.real.npay': 'Npay', 'widget.voice-booking.real.npayLinked': 'Npay 결제',
   'widget.voice-booking.real.pathNaver': '네이버 예약', 'widget.voice-booking.real.pathCall': '전화 예약 요청', 'widget.voice-booking.real.partyUnknown': '인원 정보 없음',
-  'widget.voice-booking.real.export': '네이버 예약 엑셀 내보내기', 'widget.voice-booking.real.exportNote': '네이버 사장님 메뉴에서 내려받아요 · 연락처는 가려지고 최대 5,000행이에요 · 홍보나 회원과 합치지 않아요',
+  'widget.voice-booking.real.export': '네이버 예약 엑셀 내보내기', 'widget.voice-booking.real.exportNote': '네이버 사장님 메뉴에서 받아요 · 연락처는 가려지고 5,000행까지',
   'widget.voice-booking.real.npayLocked': 'Npay로 결제한 예약은 앱에서 바꿀 수 없어요',
   'widget.voice-booking.real.naverEdit': '이용 일시 바꾸기', 'widget.voice-booking.real.naverOnly': '네이버 예약은 이용 일시만 고칠 수 있어요',
   'widget.voice-booking.real.candidate': '전화로 받은 예약 요청', 'widget.voice-booking.real.candidateAt': '받은 시각', 'widget.voice-booking.real.candidateNote': '확정하기를 눌러야 예약이 돼요',
-  'widget.voice-booking.real.decline': '요청 거절하기', 'widget.voice-booking.real.declineAsk': '이 전화 예약 요청을 거절할까요?', 'widget.voice-booking.real.declineYes': '네, 거절할게요',
+  'widget.voice-booking.real.decline': '요청 거절하기', 'widget.voice-booking.real.declineAsk': '이 전화 예약 요청을 거절할까요?', 'widget.voice-booking.real.declineYes': '요청 거절 확정하기',
   'widget.voice-booking.real.declined': '전화 예약 요청을 거절했어요', 'widget.voice-booking.real.proposedRecorded': '다른 시간 제안을 기록했어요',
-  'widget.voice-booking.real.cancelAsk': '이 예약을 취소할까요?', 'widget.voice-booking.real.cancelYes': '네, 취소할게요', 'widget.voice-booking.real.keep': '그대로 두기',
+  'widget.voice-booking.real.cancelAsk': '이 예약을 취소할까요?', 'widget.voice-booking.real.cancelYes': '예약 취소 확정하기', 'widget.voice-booking.real.keep': '예약 유지하기',
+  'widget.voice-booking.real.keepRequest': '예약 요청 유지하기',
+  'widget.voice-booking.real.saveWaiting': '예약 대기로 등록하기',
   // The NAVER cancel flow (reason, refund terms, the second confirmation, its result and refusals) is in `data/reality/06/messages.ts` in four languages.
   'widget.voice-booking.real.providerPending': '이 예약의 이전 요청이 아직 처리 중이에요. 잠시 뒤 다시 눌러 주세요',
   'widget.voice-booking.real.providerUnavailable': '지금은 네이버 예약에 연결할 수 없어요. 잠시 뒤 다시 시도해 주세요',
+  'widget.voice-booking.real.saveUnconfirmed': '예약이 저장됐는지 아직 몰라요. 잠시 뒤 목록에서 예약 상태를 확인해 주세요',
   // SmartCall: daily aggregates of a period, nothing per call (no recording, summary or number exists).
-  'widget.voice-booking.real.calls': '스마트콜 통화', 'widget.voice-booking.real.callsSource': '스마트콜', 'widget.voice-booking.real.callsTotal': '통화 {total}건 · 부재중 {missed}건',
-  'widget.voice-booking.real.callsRange': '{start} ~ {end}', 'widget.voice-booking.real.callsNote': '하루 단위 집계만 보여요. 통화 내용은 없어요',
+  'widget.voice-booking.real.calls': '스마트콜', 'widget.voice-booking.real.callsSource': '스마트콜', 'widget.voice-booking.real.callsTotal': '통화 {total}건 · 부재중 {missed}건',
+  'widget.voice-booking.real.callsRange': '{start} ~ {end}', 'widget.voice-booking.real.callsNote': '하루 단위로 통화 건수를 보여 드려요',
   'widget.voice-booking.real.callDate': '날짜', 'widget.voice-booking.real.callTotal': '전체', 'widget.voice-booking.real.callConnected': '연결', 'widget.voice-booking.real.callArs': 'ARS',
-  'widget.voice-booking.real.callMissed': '부재중', 'widget.voice-booking.real.callBusy': '통화 중', 'widget.voice-booking.real.callAverage': '평균 통화', 'widget.voice-booking.real.callTen': '10초 이상', 'widget.voice-booking.real.seconds': '{n}초',
-  'widget.voice-booking.real.products': '예약 상품',
+  'widget.voice-booking.real.callMissed': '부재중', 'widget.voice-booking.real.callBusy': '통화 중', 'widget.voice-booking.real.callAverage': '평균 통화 시간', 'widget.voice-booking.real.callTen': '10초 이상', 'widget.voice-booking.real.seconds': '{n}초',
+  'widget.voice-booking.real.products': '예약 상품', 'widget.voice-booking.real.noNext': '오늘 남은 예약이 없어요',
   'widget.voice-booking.real.partial': '일부 정보를 불러오지 못했어요',
   'widget.voice-booking.real.naverPartial': '네이버 예약 일부를 불러오지 못했어요. 보이는 예약이 전부가 아닐 수 있어요', 'widget.voice-booking.real.naverUnavailable': '지금은 네이버 예약을 불러올 수 없어요. 보이는 예약에 네이버 예약은 없어요',
 } };
@@ -87,7 +92,23 @@ const clock = (total: number): string => `${String(Math.floor(total / 60)).padSt
 export const proposalTimes = (time: string): string[] => [30, 60, 90].map((add) => clock(Math.min(minutes(time) + add, 23 * 60 + 30)));
 
 type Slot = VoiceBookingModel['slots'][number];
-const slotValue = (t: Translator, s: Slot): string => t.t('widget.voice-booking.slotValue', { count: s.count, people: s.people });
+type PartyRow = { readonly time: string; readonly reservationId: string; readonly counts: boolean };
+export const unknownPartyRows = (rows: readonly PartyRow[], meta: Readonly<Record<string, BookingMeta>> | undefined) =>
+  rows.filter(row => row.counts && meta?.[row.reservationId]?.partyKnown === false);
+
+export function bookingPartyText(format: Translator['format'], count: number, people: number, unknown: number): string {
+  const known = format.count(people, 'person');
+  return unknown === 0 ? known : count === unknown ? '인원 정보 없음' : `확인된 인원 ${known}`;
+}
+
+function bookingNameOf(snapshot: DataSnapshot, t: Translator, row: Pick<ReturnType<typeof selectReservations>['rows'][number], 'memberId' | 'name' | 'reservationId'>) {
+  const name = typeof row.name === 'string' ? row.name : resolveDataText(t.t, row.name);
+  const member = row.memberId ? snapshot.tables.memberProfile.find(item => item.memberId === row.memberId) : undefined;
+  const meta = metaOf(snapshot, row.reservationId);
+  if (row.memberId) return formatMaskedCustomer(name, row.memberId, meta?.memberCode ?? member?.memberCode);
+  return meta && (meta.origin === 'naver' || meta.origin === 'call') && (!name || name === '예약자')
+    ? meta.bookingNumber || '이름 없음' : name;
+}
 const seatNote = (t: Translator, s: Slot): string => (s.seatsFree < 0 ? t.t('widget.voice-booking.seatsOver', { n: -s.seatsFree }) : t.t('widget.voice-booking.seatsFree', { n: s.seatsFree }));
 /** The slots from one hour before “now” on (the 14:30 table is still at the café at 15:00). */
 export const upcomingSlots = (slots: readonly Slot[]): Slot[] => slots.filter((s) => minutes(s.time) >= minutes(LEGACY_BOOKING_VIEW_TIME) - 60);
@@ -107,26 +128,36 @@ export function VoiceBookingPanel(props: WidgetPanelProps) {
   const store = useWidgetDataStore();
   const i5 = useBundle(bookingCopy);
   const real = useBundle(realCopy);
+  const pickupCount = usePickupCount(view.status === 'ready' ? view.model.date : TODAY);
   if (view.status !== 'ready') return <StatePanel id={ID} view={view} t={t} props={props} />;
   const m = view.model;
-  const availability = selectReservations(store.getSnapshot(), { date: m.date, variant: view.variant }).availability;
+  const snapshot = store.getSnapshot();
+  const { rows: todayRows, availability, tableLayoutEnabled } = selectReservations(snapshot, { date: m.date, variant: view.variant });
+  const unknown = unknownPartyRows(todayRows, snapshot.tables.realBooking?.meta);
+  const partyAt = (slot: Slot) => bookingPartyText(t.format, slot.count, slot.people, unknown.filter(row => row.time === slot.time).length);
+  const slotValue = (slot: Slot) => `${countText(t, slot.count)} · ${partyAt(slot)}`;
   const { value, unit } = splitUnit(countText(t, m.todayCount), t.format.number(m.todayCount));
-  const next = upcomingSlots(m.slots);
+  const time = readAppClock().time;
+  const next = m.slots.filter(slot => slot.time >= time);
   const needs = m.reservations.filter((r) => r.status === 'needs-check');
   const list = props.width >= 2 && props.height === 1
     ? (
       <ListBlock id={ID} title={t.t('widget.voice-booking.nextBookings')}>
-        {(props.width>=3?m.slots:next.slice(0,2)).map((s) => <Row key={s.time} id={ID} rowId={s.time} name={t.format.time(s.time)} value={slotValue(t, s)} />)}
+        {next.length === 0 && <Row id={ID} rowId="no-next" name={real.t('widget.voice-booking.real.noNext')} />}
+        {next.slice(0, props.width >= 3 ? 2 : 1).map((s) => <Row key={s.time} id={ID} rowId={s.time} name={t.format.time(s.time)} value={slotValue(s)} />)}
+        {pickupCount !== null && pickupCount > 0 && props.width >= 3 && <Row id={ID} rowId="pickups" name={`픽업 ${pickupCount}건`} />}
       </ListBlock>
     )
     : (
       <ListBlock id={ID} title={t.t('widget.voice-booking.byTime')}>
-        {m.slots.map((s) => <Row key={s.time} id={ID} rowId={s.time} name={t.format.time(s.time)} value={slotValue(t, s)} note={s.seatsFree < 0 ? seatNote(t, s) : undefined} />)}
-        <Row id={ID} rowId="availability" name={<span lang="ko">{i5.t(availability.kind === 'tables' ? 'widget.voice-booking.i5.tables' : 'widget.voice-booking.i5.seats', { n: availability.value })}</span>} drop={8} />
-        {needs.map((r) => <Row key={r.reservationId} id={ID} rowId={r.reservationId} name={`${t.format.time(r.time)} ${t.t(r.nameKey)}`} value={renderStatusChip(i5.t('widget.voice-booking.i5.pending'), 'waiting', 'warning')} />)}
+        {m.slots.map((s) => <Row key={s.time} id={ID} rowId={s.time} name={t.format.time(s.time)} value={slotValue(s)} note={s.seatsFree < 0 ? seatNote(t, s) : undefined} />)}
+        {!unknown.length && <Row id={ID} rowId="availability" name={<span lang="ko">{i5.t(availability.kind === 'tables' ? 'widget.voice-booking.i5.tables' : 'widget.voice-booking.i5.seats', { n: availability.value })}</span>} drop={8} />}
+        {needs.map((r) => {
+          const row = todayRows.find(booking => booking.reservationId === r.reservationId);
+          return <Row key={r.reservationId} id={ID} rowId={r.reservationId} name={`${t.format.time(r.time)} ${row ? bookingNameOf(snapshot, t, row) : t.t(r.nameKey)}`} value={renderStatusChip(i5.t('widget.voice-booking.i5.pending'), 'waiting', 'warning')} />;
+        })}
       </ListBlock>
     );
-  const todayRows = selectReservations(store.getSnapshot(), { date: m.date, variant: view.variant }).rows;
   type TodayRow = typeof todayRows[number];
   /** D-333: the 4-wide table of 3 rows and up also shows the request and the way each booking came in, the columns the detail grid has (the request column only when a booking has one). */
   const requestOf = (r: TodayRow): string => resolveDataText(t.t, r.request) || (r.requestKey ? t.t(r.requestKey) : '');
@@ -134,14 +165,18 @@ export function VoiceBookingPanel(props: WidgetPanelProps) {
     ...(todayRows.some((r) => requestOf(r)) ? [{ id: 'request', label: i5.t('widget.voice-booking.i5.request'), render: (r: TodayRow) => requestOf(r) || '—' }] : []),
     { id: 'path', label: i5.t('widget.voice-booking.i5.path'), render: (r: TodayRow) => metaOf(store.getSnapshot(), r.reservationId)?.origin === 'naver' ? real.t('widget.voice-booking.real.pathNaver') : t.t(r.source === 'phone_ai' ? 'widget.voice-booking.sourcePhone' : 'widget.voice-booking.sourceDirect') },
   ] : [];
-  const bars: BarItem[] = m.slots.map((s) => ({ key: s.time, value: s.people, label: t.format.time(s.time), display: String(s.people), sub: seatNote(t, s), marker: s.seatsFree < 0 ? 'below' : null, tone: s.seatsFree < 0 ? 'b' : 'a', name: `${t.format.time(s.time)} ${slotValue(t, s)}, ${seatNote(t, s)}` }));
+  const bars: BarItem[] = m.slots.map(s => {
+    const missing = unknown.some(row => row.time === s.time);
+    return { key: s.time, value: missing && s.people === 0 ? null : s.people, label: t.format.time(s.time), display: partyAt(s),
+      sub: missing ? undefined : seatNote(t, s), marker: !missing && s.seatsFree < 0 ? 'below' : null, tone: !missing && s.seatsFree < 0 ? 'b' : 'a' };
+  });
   return (
     <PanelFrame id={ID}>
       <Body
         props={props}
-        primary={<><Kpi id={ID} label={t.t('widget.voice-booking.today')} value={value} unit={unit} longest="888" sub={i5.t('widget.voice-booking.i5.waiting', { count: m.needsCheckCount })} subLang="ko" /><PickupSummary date={m.date} /></>}
-        chart={props.height === 1 ? undefined : <Bars items={bars} max={Math.max(...bars.map((b) => b.value ?? 0), 1)} label={t.t('widget.voice-booking.slotsHeading')} />}
-        list={props.width>=3&&props.height>=2?<FitMiniTable rows={todayRows} columns={[{id:'time',label:i5.t('widget.voice-booking.i5.dateTime'),render:r=>r.time},{id:'name',label:i5.t('widget.voice-booking.i5.guest'),render:r=>typeof r.name==='string'?r.name:resolveDataText(t.t,r.name)},{id:'party',label:i5.t('widget.voice-booking.i5.party'),numeric:true,render:r=>metaOf(store.getSnapshot(),r.reservationId)?.partyKnown===false?'—':r.partySize},{id:'table',label:i5.t('widget.voice-booking.i5.table'),render:r=>tableText(metaOf(store.getSnapshot(),r.reservationId),r.tableId)},...extraColumns,{id:'status',label:i5.t('widget.voice-booking.i5.status'),render:r=>i5.t(r.status==='needs-check'?'widget.voice-booking.i5.pending':r.status==='confirmed'?'widget.voice-booking.i5.confirmed':r.status==='completed'?'widget.voice-booking.i5.completed':r.status==='canceled'?'widget.voice-booking.i5.canceled':r.status==='proposed'?'widget.voice-booking.i5.proposed':'widget.voice-booking.i5.noShow')}]} getRowId={r=>r.reservationId} label={i5.t('widget.voice-booking.i5.list')} dropColumns={['name','table','request','path']}/>:list}
+        primary={<><Kpi id={ID} label={t.t('widget.voice-booking.today')} value={value} unit={unit} longest="888" sub={props.width === 1 && props.height === 1 ? undefined : i5.t('widget.voice-booking.i5.waiting', { count: m.needsCheckCount })} subLang="ko" />{props.height > 1 && <PickupSummary date={m.date} />}</>}
+        chart={props.height <= 2 && props.width >= 3 || props.height === 1 ? undefined : <Bars items={bars} max={Math.max(...bars.map((b) => b.value ?? 0), 1)} label={t.t('widget.voice-booking.slotsHeading')} />}
+        list={props.width>=3&&props.height>=3?<FitMiniTable rows={todayRows} columns={[{id:'time',label:i5.t('widget.voice-booking.i5.dateTime'),render:r=>r.time},{id:'name',label:i5.t('widget.voice-booking.i5.guest'),render:r=>bookingNameOf(snapshot,t,r)},{id:'party',label:i5.t('widget.voice-booking.i5.party'),numeric:true,render:r=>metaOf(store.getSnapshot(),r.reservationId)?.partyKnown===false?real.t('widget.voice-booking.real.partyUnknown'):t.format.count(r.partySize, 'person')},...(tableLayoutEnabled?[{id:'table',label:i5.t('widget.voice-booking.i5.table'),render:(r:TodayRow)=>tableText(metaOf(snapshot,r.reservationId),r.tableId)}]:[]),...extraColumns,{id:'status',label:i5.t('widget.voice-booking.i5.status'),render:r=>i5.t(r.status==='needs-check'?'widget.voice-booking.i5.pending':r.status==='confirmed'?'widget.voice-booking.i5.confirmed':r.status==='completed'?'widget.voice-booking.i5.completed':r.status==='canceled'?'widget.voice-booking.i5.canceled':r.status==='proposed'?'widget.voice-booking.i5.proposed':'widget.voice-booking.i5.noShow')}]} getRowId={r=>r.reservationId} label={i5.t('widget.voice-booking.i5.list')} dropColumns={['name','table','request','path']}/>:list}
       />
     </PanelFrame>
   );
@@ -153,7 +188,7 @@ function BookingPickups({ date, host }: { date: string; host: WidgetDetailProps[
 }
 
 /** DS 12.1 kit `Table` (header 48, sticky): reservations and people per time. Its own wrapper scrolls when the day has many slots. */
-function BookingTimeTable({ groups }: { groups: ReturnType<typeof selectReservations>['timeGroups'] }) {
+function BookingTimeTable({ groups, unknown }: { groups: ReturnType<typeof selectReservations>['timeGroups']; unknown: readonly PartyRow[] }) {
   const t = useBundle(customersBundle);
   return <div className="mc-booking-time-wrap">
     <Table className="mc-booking-time">
@@ -167,7 +202,7 @@ function BookingTimeTable({ groups }: { groups: ReturnType<typeof selectReservat
       <tbody>{groups.map(group => <tr key={group.time}>
         <th scope="row">{t.format.time(group.time)}</th>
         <td className="mc-booking-time__number">{countText(t, group.count)}</td>
-        <td className="mc-booking-time__number">{t.t('widget.voice-booking.party', { n: group.partyTotal })}</td>
+        <td className="mc-booking-time__number">{bookingPartyText(t.format, group.count, group.partyTotal, unknown.filter(row => row.time === group.time).length)}</td>
       </tr>)}</tbody>
     </Table>
   </div>;
@@ -176,9 +211,9 @@ function BookingTimeTable({ groups }: { groups: ReturnType<typeof selectReservat
 type BookingStatus = Reservation['status'];
 /** DS 6.1 icon meanings: 예약 대기 ◷ (warning tone) · 예약 확정 ✓ · 제안함 ◷ (waiting for the guest) · 방문 완료·취소·오지 않음 words only. */
 const statusChip = (status: BookingStatus, label: string) => status === 'needs-check' ? renderStatusChip(label, 'waiting', 'warning')
-  : status === 'confirmed' ? renderStatusChip(label, 'done')
+  : status === 'confirmed' || status === 'completed' ? renderStatusChip(label, 'done')
   : status === 'proposed' ? renderStatusChip(label, 'waiting')
-  : renderStatusChip(label, 'none', 'neutral');
+  : status === 'no-show' ? renderStatusChip(label, 'paused', 'neutral') : <StatusChip tone="danger">{label}</StatusChip>;
 
 /** The call's time in store-local `{M}/{D}({요일}) {HH:MM}` (DS G-25), not the browser's "11. 22. 10:00". */
 const stampOf = (t: Translator, iso: string) => t.format.dateTime(kstLocal(iso));
@@ -186,14 +221,17 @@ const stampOf = (t: Translator, iso: string) => t.format.dateTime(kstLocal(iso))
 /** PN08 SmartCall daily aggregates of the period the service answered for. No recording, summary, number or per-call row exists, and none is invented. */
 function CallAggregates({ calls, period, channels, copy, t }: { readonly calls: readonly CallDayDto[]; readonly period: { readonly startDate: string; readonly endDate: string } | null; readonly channels: readonly string[]; readonly copy: Translator; readonly t: Translator }) {
   const total = calls.reduce((sum, day) => sum + day.totalCalls, 0), missed = calls.reduce((sum, day) => sum + day.missedCalls, 0);
-  const range = period ?? { startDate: calls[0].date, endDate: calls[calls.length - 1].date };
+  const today = readAppClock().calendarDate;
+  const range = period
+    ? { ...period, endDate: period.startDate <= today && today < period.endDate ? today : period.endDate }
+    : calls.length ? { startDate: calls[0]!.date, endDate: calls.at(-1)!.date } : null;
   const seconds = (value: number | null) => value === null ? '—' : copy.t('widget.voice-booking.real.seconds', { n: Math.round(value) });
   return <section className="mc-booking-calls" aria-label={copy.t('widget.voice-booking.real.calls')} data-slot="voice-booking.calls">
     <details>
       <summary>
         <span className="mc-h3">{copy.t('widget.voice-booking.real.calls')}</span>
         <span className="mc-booking-calls__total">{copy.t('widget.voice-booking.real.callsTotal', { total, missed })}</span>
-        <span className="mc-caption">{[copy.t('widget.voice-booking.real.callsSource'), ...channels].join(' · ')} · {copy.t('widget.voice-booking.real.callsRange', { start: t.format.date(range.startDate, 'short'), end: t.format.date(range.endDate, 'short') })}</span>
+        <span className="mc-caption">{[...channels, ...(range ? [range.startDate === range.endDate ? t.format.date(range.startDate, 'short') : copy.t('widget.voice-booking.real.callsRange', { start: t.format.date(range.startDate, 'short'), end: t.format.date(range.endDate, 'short') })] : [])].join(' · ')}</span>
       </summary>
       <div className="mc-booking-calls__wrap">
         <Table className="mc-booking-calls__table">
@@ -206,7 +244,7 @@ function CallAggregates({ calls, period, channels, copy, t }: { readonly calls: 
             <td className="mc-booking-calls__number">{day.totalCalls}</td><td className="mc-booking-calls__number">{day.connectedCalls}</td><td className="mc-booking-calls__number">{day.arsCalls}</td>
             <td className="mc-booking-calls__number">{day.missedCalls}</td><td className="mc-booking-calls__number">{day.busyCalls}</td>
             <td className="mc-booking-calls__number">{seconds(day.averageDurationSeconds)}</td><td className="mc-booking-calls__number">{day.callsAtLeastTenSeconds}</td>
-          </tr>)}</tbody>
+          </tr>)}{!calls.length && <tr><td colSpan={8}>{t.t('common.linked.trade.noData')}</td></tr>}</tbody>
         </Table>
       </div>
       <p className="mc-caption">{copy.t('widget.voice-booking.real.callsNote')}</p>
@@ -215,14 +253,15 @@ function CallAggregates({ calls, period, channels, copy, t }: { readonly calls: 
 }
 
 /** PN02 booking products: the provider gives a name and nothing else, so a name is all that is shown. */
-function BookingProducts({ products, copy }: { readonly products: readonly BookingProductDto[]; readonly copy: Translator }) {
+function BookingProducts({ products, copy, t }: { readonly products: readonly BookingProductDto[]; readonly copy: Translator; readonly t: Translator }) {
   return <details className="mc-booking-products" data-slot="voice-booking.products">
-    <summary>{copy.t('widget.voice-booking.real.products')} · {products.length}</summary>
-    <ul>{products.map(product => <li key={product.name}>{product.name}</li>)}</ul>
+    <summary>{copy.t('widget.voice-booking.real.products')} {t.format.count(products.length, 'item')}</summary>
+    {products.length ? <ul>{products.map(product => <li key={product.name}>{product.name}</li>)}</ul> : <p className="mc-caption">{t.t('common.linked.trade.noData')}</p>}
   </details>;
 }
 
 export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailProps) {
+  const detailFooter = useContext(DetailFooterContext);
   const t = useT();
   const view = useWidgetView(ID, condition);
   const { http: real, pending: busy, run: runCommand } = useBookingCommand();
@@ -248,7 +287,7 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
   const [party, setParty] = useState<number|null>(typeof form?.partySize === 'number' ? form.partySize : 1);
   const [request, setRequest] = useState(typeof form?.request === 'string' ? form.request : '');
   const [formError, setFormError] = useState(''), [askDuplicate, setAskDuplicate] = useState(false), [editError, setEditError] = useState(''), [editDuplicate, setEditDuplicate] = useState(false);
-  /** The extra question before a cancel or a declined phone request (HTTP only: the fixture store keeps its one-press cancel). */
+  /** The extra question before a cancel or a declined phone request. */
   const [confirming, setConfirming] = useState<'cancel' | 'decline' | null>(null);
   /** NAVER cancel terms (D-347 PN02): the owner's own reason, and the refund terms of a confirmed or completed Npay booking (none is pre-selected: money is on the line). */
   const [cancelReason, setCancelReason] = useState(''), [refundType, setRefundType] = useState<RefundPick>(''), [refundValue, setRefundValue] = useState<number | null>(null), [cancelError, setCancelError] = useState('');
@@ -269,9 +308,8 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
   const hasWarning = reservations.rows.some(r => r.allocationWarning);
   const totalSeats = reservations.totalSeats;
   const realMeta = snapshot.tables.realBooking?.meta;
-  const hasNaver = real && reservations.rows.some(r => realMeta?.[r.reservationId]?.origin === 'naver');
   const { columns, bookingName, warning, statusText } = useMemo(() => {
-    const bookingName=(r:Booking)=>typeof r.name==='string'?r.name:resolveDataText(t.t,r.name);
+    const bookingName=(r:Booking)=>bookingNameOf(snapshot,t,r);
     const warning=(r:Booking)=>r.allocationWarning?i5.t(r.allocationWarning==='NO_MATCHING_TABLE'?'widget.voice-booking.i5.noTable':'widget.voice-booking.i5.over',{n:totalSeats}):'';
     const statusText=(r:Booking)=>i5.t(r.status==='confirmed'?'widget.voice-booking.i5.confirmed':r.status==='needs-check'?'widget.voice-booking.i5.pending':r.status==='completed'?'widget.voice-booking.i5.completed':r.status==='canceled'?'widget.voice-booking.i5.canceled':r.status==='proposed'?'widget.voice-booking.i5.proposed':'widget.voice-booking.i5.noShow');
     const unknownParty=(r:Booking)=>real&&realMeta?.[r.reservationId]?.partyKnown===false;
@@ -280,22 +318,17 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
     // Beside the side panel the columns drop in this order (the panel shows all of them): 경로 → 테이블 → 요청사항 → 확인할 점.
     const columns: GridColumn<Booking>[] = [
        {id:'kind',header:i5.t('widget.voice-booking.i5.kind'),kind:'text',minWidth:layoutTokens.targetDefault*3,fixedWidth:true,value:()=>i5.t('widget.voice-booking.i5.visitKind'),render:()=>renderStatusChip(i5.t('widget.voice-booking.i5.visitKind'),'none')},
-       ...(hasNaver?[
-         {id:'number',header:rl.t('widget.voice-booking.real.number'),kind:'text' as const,value:(r:Booking)=>realMeta?.[r.reservationId]?.bookingNumber??'—',minWidth:130,fixedWidth:true,dropOrder:5},
-         {id:'product',header:rl.t('widget.voice-booking.real.product'),kind:'text' as const,value:(r:Booking)=>realMeta?.[r.reservationId]?.product??'—',minWidth:150,dropOrder:6},
-       ]:[]),
        {id:'time',header:i5.t('widget.voice-booking.i5.dateTime'),kind:'text',value:r=>r.time,minWidth:170,sortable:true},
        {id:'guest',header:i5.t('widget.voice-booking.i5.guest'),kind:'text',value:bookingName,minWidth:170},
-       {id:'party',header:i5.t('widget.voice-booking.i5.party'),kind:'number',unit:i5.t('widget.voice-booking.i5.unitParty'),value:r=>r.partySize,render:r=>unknownParty(r)?<span aria-label={rl.t('widget.voice-booking.real.partyUnknown')}>—</span>:undefined,minWidth:140,fixedWidth:true,sortable:true},
+       {id:'party',header:i5.t('widget.voice-booking.i5.party'),kind:'number',unit:i5.t('widget.voice-booking.i5.unitParty'),value:r=>unknownParty(r)?null:r.partySize,accessibleValue:r=>unknownParty(r)?rl.t('widget.voice-booking.real.partyUnknown'):t.format.count(r.partySize,'person'),render:r=>unknownParty(r)?rl.t('widget.voice-booking.real.partyUnknown'):t.format.count(r.partySize,'person'),minWidth:140,fixedWidth:true,sortable:true},
        ...(tableLayoutEnabled?[{id:'table',header:i5.t('widget.voice-booking.i5.table'),kind:'text' as const,value:(r:Booking)=>tableText(realMeta?.[r.reservationId],r.tableId),minWidth:110,fixedWidth:true,dropOrder:2}]:[]),
        {id:'request',header:i5.t('widget.voice-booking.i5.request'),kind:'text',value:r=>resolveDataText(t.t,r.request)||(r.requestKey?t.t(r.requestKey):''),minWidth:220,dropOrder:3},
        {id:'path',header:i5.t('widget.voice-booking.i5.path'),kind:'text',value:pathText,minWidth:130,fixedWidth:true,dropOrder:1},
        {id:'status',header:i5.t('widget.voice-booking.i5.status'),kind:'status',value:statusText,render:r=>statusChip(r.status,statusText(r)),minWidth:170,fixedWidth:true},
-       ...(hasNaver?[{id:'npay',header:rl.t('widget.voice-booking.real.npay'),kind:'status' as const,value:(r:Booking)=>realMeta?.[r.reservationId]?.npayLinked?rl.t('widget.voice-booking.real.npayLinked'):'',render:(r:Booking)=>realMeta?.[r.reservationId]?.npayLinked?renderStatusChip(rl.t('widget.voice-booking.real.npayLinked'),'none','neutral'):null,minWidth:130,fixedWidth:true,dropOrder:7}]:[]),
        ...(hasWarning?[{id:'check',header:i5.t('widget.voice-booking.i5.check'),kind:'status' as const,value:(r:Booking)=>warning(r),render:(r:Booking)=>warning(r)?renderStatusChip(warning(r),'warning'):null,minWidth:230,fixedWidth:true,dropOrder:4}]:[]),
       ];
     return { columns, bookingName, warning, statusText };
-  }, [t, i5, rl, real, realMeta, hasNaver, tableLayoutEnabled, hasWarning, totalSeats]);
+  }, [t, i5, rl, real, realMeta, tableLayoutEnabled, hasWarning, totalSeats, snapshot]);
   if (view.status !== 'ready') return <div className="mc-detail" data-widget={ID}>{real && view.status === 'error'
     ? <div className="mc-detail-state" data-slot={`${ID}.state.message`} data-tone="error"><p role="alert">{t.t(view.messageKey)}</p><ActionButton variant="secondary" onClick={retry}>{t.t('data.action.retry')}</ActionButton></div>
     : <DetailState id={ID} view={view} t={t} host={host} />}</div>;
@@ -304,7 +337,7 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
   const isNaver = selectedMeta?.origin === 'naver', isNpay = isNaver && selectedMeta.npayLinked === true, isCandidate = !!selectedMeta?.candidate;
   /** What the service lets the owner do with this NAVER booking (its `actions`): the screen draws only that. */
   const rules = selected && isNaver ? naverRules(selectedMeta, selected.status) : null;
-  const needle = real ? query.trim().toLowerCase() : '';
+  const needle = query.trim().toLowerCase();
   const matches = (row: Booking) => !needle || [bookingName(row), realMeta?.[row.reservationId]?.bookingNumber, row.date,
     t.format.date(row.date, 'long'), t.format.date(row.date, 'short'), statusText(row)].some(value => value?.toLowerCase().includes(needle))
     || (/^[0-9\s()+-]+$/u.test(needle) && !isIsoDate(needle) && digits(needle).length >= 2 && digits(resolveDataText(t.t, row.phone)).includes(digits(needle)));
@@ -354,9 +387,10 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
   const providerKeys: Readonly<Record<string, string>> = { BOOKING_PROVIDER_REFUSED: 'widget.voice-booking.real.providerRefused', BOOKING_PROVIDER_OUTCOME_UNKNOWN: 'widget.voice-booking.real.providerUnknown',
     BOOKING_PROVIDER_PENDING: 'widget.voice-booking.real.providerPending', BOOKING_PROVIDER_UNAVAILABLE: 'widget.voice-booking.real.providerUnavailable', UNAVAILABLE: 'widget.voice-booking.real.providerUnavailable',
     CANCEL_REASON_REQUIRED: 'widget.voice-booking.real.cancelReasonNeeded', REFUND_TERMS_REQUIRED: 'widget.voice-booking.real.refundNeeded' };
-  const refusalText = (result: { reason?: string; messageKey: string }, guestName: string) =>
+  const refusalText = (result: { reason?: string; messageKey: string; outcomeUnknown?: true }, guestName: string) =>
     result.reason === 'NPAY_LINKED_BOOKING' ? rl.t('widget.voice-booking.real.npayLocked')
       : real && result.reason && providerKeys[result.reason] ? rl.t(providerKeys[result.reason])
+      : real && result.outcomeUnknown ? rl.t('widget.voice-booking.real.saveUnconfirmed')
       : i5.t(result.reason === 'GUEST_INVALID' ? (guestName.trim() === '' ? 'widget.voice-booking.i5.error.guestName' : 'widget.voice-booking.i5.error.guestPhone') : result.messageKey);
   /** A command result for the form that caused it: `ok` closes the form, a refusal stays in it. */
   type Settled = Parameters<Parameters<typeof runCommand>[1]>[0];
@@ -371,9 +405,9 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
       const noticeKey = t.locale === 'ko' ? noticeKeys[command.type] : undefined;
       if (result.ok && naverCancelCommand) { /* announced by the caller */ }
       else if (result.ok && real && recorded[command.type]) { notifySuccess(host, 'data.management.notice.saved', result); setDone(rl.t(recorded[command.type])); }
-      else if (result.ok && noticeKey) { notifySuccess(host, noticeKey, result); if (!real) setDone(i5.t(noticeKey)); }
+      else if (result.ok && noticeKey) { notifySuccess(host, noticeKey, result); if (!real && !detailFooter) setDone(i5.t(noticeKey)); }
       else if (inline && !result.ok) { /* the form shows it */ }
-      else if (reportResult(host, result) && !real && result.ok && result.noticeKey) setDone(t.t(result.noticeKey, result.params));
+      else if (reportResult(host, result) && !real && !detailFooter && result.ok && result.noticeKey) setDone(t.t(result.noticeKey, result.params));
       settled?.(result);
     });
   };
@@ -411,7 +445,7 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
         {statusChip(selected.status, statusText(selected))}
         <Badge>{isNaver ? rl.t('widget.voice-booking.real.pathNaver') : selectedMeta?.origin === 'call' ? rl.t('widget.voice-booking.real.pathCall') : t.t(selected.source === 'phone_ai' ? 'widget.voice-booking.sourcePhone' : 'widget.voice-booking.sourceDirect')}</Badge>
         {isNpay ? <Badge>{rl.t('widget.voice-booking.real.npayLinked')}</Badge> : null}
-        {selected.confirmedBy ? <Badge>{t.t(selected.confirmedBy === 'auto' ? 'widget.voice-booking.autoConfirmed' : 'widget.voice-booking.personConfirmed')}</Badge> : null}
+        {selected.confirmedBy && selected.status !== 'needs-check' && selected.status !== 'proposed' ? <Badge>{t.t(selected.confirmedBy === 'auto' ? 'widget.voice-booking.autoConfirmed' : 'widget.voice-booking.personConfirmed')}</Badge> : null}
         {selected.proposedTime ? <Badge>{t.t('widget.voice-booking.proposedAt', { time: t.format.time(selected.proposedTime) })}</Badge> : null}
       </div>
       {isNaver ? <dl className="mc-extracted" aria-label={rl.t('widget.voice-booking.real.pathNaver')}>
@@ -429,7 +463,7 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
           </div>
         ) : null
       ) : (
-      <form className="mc-booking-edit" aria-labelledby={editTitleId} onSubmit={event => { event.preventDefault(); submitEdit(false); }}>
+      <form id={`${editTitleId}-form`} className="mc-booking-edit" aria-labelledby={editTitleId} onSubmit={event => { event.preventDefault(); submitEdit(false); }}>
         <h4 className="mc-h3" id={editTitleId}>{isNaver ? rl.t('widget.voice-booking.real.naverEdit') : i5.t('widget.voice-booking.i5.editSave')}</h4>
         <div className="mc-booking-edit__fields">
           {isNaver ? null : <>
@@ -448,10 +482,10 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
           </label>}
         </div>
         {editError && <p role="alert">{editError}</p>}
-        <div className="mc-actions">
-          <ActionButton type="submit" loading={busy && real} disabled={busy || (isNaver && editDate === null && editTime === null)}>{i5.t('widget.voice-booking.i5.editSaveAction')}</ActionButton>
+        {!confirming && <div className="mc-actions">
+          <ActionButton type="submit" form={`${editTitleId}-form`} loading={busy && real} disabled={busy || (isNaver && editDate === null && editTime === null)}>{i5.t('widget.voice-booking.i5.editSaveAction')}</ActionButton>
           {editDuplicate ? <ActionButton variant="secondary" disabled={busy} onClick={() => submitEdit(true)}>{i5.t('widget.voice-booking.i5.editAnyway')}</ActionButton> : null}
-        </div>
+        </div>}
       </form>
       )}
       <div className="mc-actions">
@@ -472,7 +506,7 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
         </div>
       ) : null}
       {isNaver && selected.status === 'completed' && rules?.cancel ? <p className="mc-caption" role="note" data-slot="voice-booking.completedNote">{rl.t('widget.voice-booking.real.completedNote')}</p> : null}
-      {done || doneNote ? <p className="mc-done" role="status">{done}{doneNote ? <span className="mc-done__note" data-slot="voice-booking.noUndo">{doneNote}</span> : null}</p> : null}
+      {done || doneNote ? <DetailFooterContent><p className="mc-done" role="status">{done}{doneNote ? <span className="mc-done__note" data-slot="voice-booking.noUndo">{doneNote}</span> : null}</p></DetailFooterContent> : null}
       {real ? (isCandidate ? (
         <section className="mc-call" aria-label={rl.t('widget.voice-booking.real.candidate')} data-slot="voice-booking.candidate">
           <h4 className="mc-h3">{rl.t('widget.voice-booking.real.candidate')}</h4>
@@ -587,9 +621,9 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
       {busy ? <p className="mc-caption" role="status">{rl.t('widget.voice-booking.real.cancelling')}</p> : null}
     </div>
   ) : null;
-  const naverCancelLabel = selected?.status === 'completed' && refundDue ? 'widget.voice-booking.real.cancelCompletedNpay' : 'widget.voice-booking.real.cancelOpen';
+  const naverCancelLabel = 'widget.voice-booking.real.cancelCompletedNpay';
   const danger = cancellable && selected
-    ? (real ? <>
+    ? <>
       <ActionButton variant="ghost" aria-expanded={confirming === kind} disabled={busy} onClick={() => { setCancelError(''); setCancelStep('input'); setConfirming(kind); }}>{kind === 'decline' ? rl.t('widget.voice-booking.real.decline') : naverCancel ? rl.t(naverCancelLabel) : i5.t('widget.voice-booking.i5.cancel')}</ActionButton>
       {confirming === kind ? (naverCancel ? <>
           <EscapeStep onEscape={() => { if (busy) return; if (cancelStep === 'confirm') setCancelStep('input'); else closeCancel(); }} />
@@ -600,10 +634,10 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
           {cancelError ? <p role="alert">{cancelError}</p> : null}
           <div className="mc-actions">
             <ActionButton variant="destructive" loading={busy} onClick={confirmCancel}>{rl.t(kind === 'decline' ? 'widget.voice-booking.real.declineYes' : 'widget.voice-booking.real.cancelYes')}</ActionButton>
-            <ActionButton variant="ghost" disabled={busy} onClick={closeCancel}>{rl.t('widget.voice-booking.real.keep')}</ActionButton>
+            <ActionButton variant="ghost" disabled={busy} onClick={closeCancel}>{rl.t(kind === 'decline' ? 'widget.voice-booking.real.keepRequest' : 'widget.voice-booking.real.keep')}</ActionButton>
           </div>
         </div>) : null}
-    </> : <ActionButton variant="ghost" disabled={busy} onClick={() => run({ type:'booking.cancel', reservationId:selected.reservationId })}>{i5.t('widget.voice-booking.i5.cancel')}</ActionButton>)
+    </>
     : undefined;
   /** Count chips (read only), 예약 대기 first: the same words and icons as the status cells. */
   const statusCounts = (['needs-check', 'confirmed', 'completed', 'canceled', 'no-show', 'proposed'] as const)
@@ -611,6 +645,7 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
     .filter(({ status, count }) => count > 0 || ['needs-check', 'confirmed', 'completed', 'canceled'].includes(status));
   const labelOf = (status: BookingStatus) => i5.t(status === 'confirmed' ? 'widget.voice-booking.i5.confirmed' : status === 'needs-check' ? 'widget.voice-booking.i5.pending' : status === 'completed' ? 'widget.voice-booking.i5.completed' : status === 'canceled' ? 'widget.voice-booking.i5.canceled' : status === 'proposed' ? 'widget.voice-booking.i5.proposed' : 'widget.voice-booking.i5.noShow');
   const isToday = selectedDate === TODAY;
+  const total = splitUnit(countText(t, reservations.rows.length), t.format.number(reservations.rows.length));
   const openAdd = () => { selectBooking(null); setDate(selectedDate); setAdding(true); };
   const naverStatus = real ? snapshot.tables.realBooking?.sourceStatus.naver ?? 'ready' : 'ready';
   const calls = real ? snapshot.tables.realBooking?.calls ?? [] : [];
@@ -623,14 +658,16 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
       <div className="mc-tools mc-booking-toolbar">
         <DateStepper text={t.format.date(selectedDate,'long')} onPrevious={()=>changeDate(-1)} onNext={()=>changeDate(1)}/>
         <ActionButton variant="secondary" onClick={openAdd}>{i5.t('widget.voice-booking.i5.add')}</ActionButton>
-        {real ? <a className="ui-button ui-button--secondary ui-button--default" href={NAVER_BOOKING_EXPORT_URL} target="_blank" rel="noopener noreferrer" data-slot="voice-booking.export"><span className="ui-press-surface">{rl.t('widget.voice-booking.real.export')}</span></a> : null}
+        <div className="mc-booking-export-block">
+          <a className="ui-button ui-button--secondary ui-button--default mc-booking-export" href={NAVER_BOOKING_EXPORT_URL} target="_blank" rel="noopener noreferrer" data-slot="voice-booking.export"><span className="ui-press-surface">{rl.t('widget.voice-booking.real.export')}</span></a>
+          <p className="mc-caption" data-slot="voice-booking.exportNote">{rl.t('widget.voice-booking.real.exportNote')}</p>
+        </div>
       </div>
-      {real ? <p className="mc-caption" data-slot="voice-booking.exportNote">{rl.t('widget.voice-booking.real.exportNote')}</p> : null}
       {real && naverStatus !== 'ready' ? <p className="mc-flag" role="status" data-slot="voice-booking.naverStatus"><span aria-hidden="true">△ </span>{rl.t(naverStatus === 'unavailable' ? 'widget.voice-booking.real.naverUnavailable' : 'widget.voice-booking.real.naverPartial')}</p>
         : real && domain.complete === false ? <p className="mc-caption" role="status">{rl.t('widget.voice-booking.real.partial')}</p> : null}
-      {adding ? <InlineForm title={i5.t('widget.voice-booking.i5.add')} saveLabel={i5.t('widget.voice-booking.i5.save')} onClose={()=>setAdding(false)} onSave={()=>submitBooking(false)}>
+      {adding ? <InlineForm footerActions title={i5.t('widget.voice-booking.i5.add')} saveLabel={formAllocation ? rl.t('widget.voice-booking.real.saveWaiting') : i5.t('widget.voice-booking.i5.editSaveAction')} saving={real && busy} onClose={()=>setAdding(false)} onSave={()=>submitBooking(false)}>
         <div className="mc-booking-add">
-          <label className="ui-field">{i5.t('widget.voice-booking.i5.member')}<select className="ui-text-input" value={memberId} onChange={e=>setMemberId(e.target.value)}><option value="">{i5.t('widget.voice-booking.i5.direct')}</option>{selectMembers(store.getSnapshot(),{}).rows.map(r=><option key={r.memberId} value={r.memberId}>{typeof r.name==='string'?r.name:resolveDataText(t.t,r.name)} · {r.phone}</option>)}</select></label>
+          <label className="ui-field">{i5.t('widget.voice-booking.i5.member')}<select className="ui-text-input" value={memberId} onChange={e=>setMemberId(e.target.value)}><option value="">{i5.t('widget.voice-booking.i5.direct')}</option>{selectMembers(store.getSnapshot(),{}).rows.map(r=><option key={r.memberId} value={r.memberId}>{formatMaskedCustomer(typeof r.name === 'string' ? r.name : resolveDataText(t.t, r.name), r.memberId, snapshot.tables.memberProfile.find(profile => profile.memberId === r.memberId)?.memberCode)} · {r.phone}</option>)}</select></label>
           {!memberId ? <><TextField label={i5.t('widget.voice-booking.i5.name')} value={guest} onValueChange={setGuest}/><TextField label={i5.t('widget.voice-booking.i5.phone')} value={phone} onValueChange={setPhone}/></> : null}
           <DateField label={i5.t('widget.voice-booking.i5.date')} value={date} today={TODAY} onValueChange={value=>setDate(value ?? selectedDate)}/>
           <TimeField label={i5.t('widget.voice-booking.i5.time')} value={bookingTime} onValueChange={value=>setBookingTime(value ?? bookingTime)}/>
@@ -643,22 +680,22 @@ export function VoiceBookingDetail({ condition, host, detailRef }: WidgetDetailP
         {askDuplicate ? <div><ActionButton variant="secondary" disabled={busy} onClick={()=>submitBooking(true)}>{i5.t('widget.voice-booking.i5.bookAnyway')}</ActionButton></div> : null}
       </InlineForm> : <>
         <section className="mc-booking-summary" aria-label={i5.t('widget.voice-booking.i5.summary')}>
-          <p className="mc-booking-summary__total"><span>{i5.t(isToday ? 'widget.voice-booking.i5.dayTotalToday' : 'widget.voice-booking.i5.dayTotal')}</span> <strong data-slot={`${ID}.metric.value`}>{countText(t, reservations.count)}</strong></p>
+          <p className="mc-booking-summary__total"><span>{i5.t(isToday ? 'widget.voice-booking.i5.dayTotalToday' : 'widget.voice-booking.i5.dayTotal')}</span> <strong data-slot={`${ID}.metric.value`}>{total.value}<small>{total.unit}</small></strong></p>
           <ul className="mc-booking-summary__chips">{statusCounts.map(({ status, count }) => <li key={status}>{statusChip(status, i5.t('widget.voice-booking.i5.statusCount', { label: labelOf(status), count }))}</li>)}</ul>
-          <p className="mc-booking-summary__free">{i5.t(reservations.availability.kind === 'tables' ? 'widget.voice-booking.i5.tables' : 'widget.voice-booking.i5.seats', { n: reservations.availability.value })}</p>
+          {!unknownPartyRows(reservations.rows, realMeta).length && <p className="mc-booking-summary__free">{i5.t(reservations.availability.kind === 'tables' ? 'widget.voice-booking.i5.tables' : 'widget.voice-booking.i5.seats', { n: reservations.availability.value })}</p>}
         </section>
         <BookingPickups date={selectedDate} host={host} />
         {reservations.timeGroups.length > 0 && <details className="mc-booking-by-time">
           <summary>{t.t('widget.voice-booking.byTime')}</summary>
-          <BookingTimeTable groups={reservations.timeGroups} />
+          <BookingTimeTable groups={reservations.timeGroups} unknown={unknownPartyRows(reservations.rows, realMeta)} />
         </details>}
-        {calls.length ? <CallAggregates calls={calls} period={callPeriod} channels={callChannels} copy={rl} t={t} /> : null}
-        {products.length ? <BookingProducts products={products} copy={rl} /> : null}
+        <CallAggregates calls={calls} period={callPeriod} channels={callChannels} copy={rl} t={t} />
+        <BookingProducts products={products} copy={rl} t={t} />
       </>}
       <DataGrid
         id="booking-grid" label={i5.t('widget.voice-booking.i5.list')} rows={rows} columns={columns}
         getRowId={row => row.reservationId} getRowLabel={row => `${bookingName(row)}, ${row.time}`}
-        {...(real ? { query, onQueryChange: setQuery, searchLabel: rl.t('widget.voice-booking.real.search'), searchPlaceholder: rl.t('widget.voice-booking.real.searchHint') } : {})}
+        query={query} onQueryChange={setQuery} searchLabel={rl.t('widget.voice-booking.real.search')} searchPlaceholder={rl.t('widget.voice-booking.real.searchHint')}
         sort={gridSort} onSortChange={setGridSort} selectedRowId={selected?.reservationId ?? null} onSelectionChange={selectBooking}
         expandedRowIds={new Set()} focus={gridFocus} onFocusChange={setGridFocus} ref={grid}
         emptyContent={<div className="mc-booking-empty"><p>{i5.t(isToday ? 'widget.voice-booking.i5.emptyToday' : 'widget.voice-booking.i5.emptyDay')}</p><ActionButton variant="secondary" onClick={openAdd}>{i5.t('widget.voice-booking.i5.add')}</ActionButton></div>}

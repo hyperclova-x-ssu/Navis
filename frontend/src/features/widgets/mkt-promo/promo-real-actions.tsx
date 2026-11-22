@@ -13,7 +13,9 @@ export function PromoPhotoUpload({ menus, session }: { readonly menus: readonly 
   const t = usePromoRealText();
   const names = useT();
   const id = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [expanded, setExpanded] = useState(false);
   const [file, setFile] = useState<File>();
   const [menuId, setMenuId] = useState('');
   const [rights, setRights] = useState(false);
@@ -21,17 +23,23 @@ export function PromoPhotoUpload({ menus, session }: { readonly menus: readonly 
   const [pending, setPending] = useState(false);
   const pressing = useRef(false);
   const upload = async () => {
-    const port = session.store.real;
+    const real = session.store.real?.mode('promo') === 'http';
+    const port = real ? session.store.real : undefined;
     const storeId = session.store.getSnapshot().tables.realPromo?.storeId;
-    if (!file || !rights || !port || !storeId || pressing.current) return;
+    if (!file || !rights || (real && !storeId) || pressing.current) return;
     pressing.current = true;
     setPending(true);
     setResult(undefined);
     try {
-      const uploaded = await port.files.upload({ purpose: 'promo-photo', blob: file });
-      if (session.store.getSnapshot().tables.realPromo?.storeId !== storeId) return;
-      const saved = await executePromo(session.store, { type: 'promo.addPhoto', fileId: uploaded.fileId, menuId: menuId || null,
-        rightsConfirmed: true, idempotencyKey: `asset-${uploaded.fileId}` });
+      let saved;
+      if (port) {
+        const uploaded = await port.files.upload({ purpose: 'promo-photo', blob: file });
+        if (session.store.getSnapshot().tables.realPromo?.storeId !== storeId) return;
+        saved = await executePromo(session.store, { type: 'promo.addPhoto', fileId: uploaded.fileId, menuId: menuId || null,
+          rightsConfirmed: true, idempotencyKey: `asset-${uploaded.fileId}` });
+      } else {
+        saved = await session.addExamplePhoto(file, menuId);
+      }
       if (!saved.ok) { setResult(widgetFailureKey(saved.messageKey)); return; }
       setResult('promo.real.photoSaved');
       setFile(undefined);
@@ -40,21 +48,35 @@ export function PromoPhotoUpload({ menus, session }: { readonly menus: readonly 
     } catch (error) { setResult(widgetFailureKey(errorResult(toPortError(error, 'POST')).messageKey)); }
     finally { pressing.current = false; setPending(false); }
   };
-  return <section className="pv-real-fields" aria-label={t.t('promo.real.upload')}>
-    <label htmlFor={`${id}-file`}>{t.t('promo.real.photoFile')}</label>
-    <input id={`${id}-file`} ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={pending} onChange={event => {
-      setFile(event.currentTarget.files?.[0]); setRights(false); setResult(undefined);
-    }} />
-    {menus.length ? <label htmlFor={`${id}-menu`}>{t.t('promo.real.photoMenu')}
-      <select id={`${id}-menu`} className="ui-input" value={menuId} disabled={pending} onChange={event => setMenuId(event.currentTarget.value)}>
-        <option value="">{t.t('promo.real.pickMenu')}</option>
-        {menus.map(menu => <option key={menu.menuId} value={menu.menuId}>{text(names, menu.name)}</option>)}
-      </select>
-    </label> : null}
-    <Checkbox checked={rights} disabled={pending} onCheckedChange={setRights} label={t.t('promo.real.rights')} />
-    <ActionButton variant="secondary" aria-busy={pending || undefined} disabled={pending || !file || !rights || (menus.length > 0 && !menuId)} onClick={() => { void upload(); }}>{t.t('promo.real.upload')}</ActionButton>
-    {result ? <p role="status" className="pv-caption">{result === 'promo.real.photoSaved' ? t.t(result) : names.t(result)}</p> : null}
-  </section>;
+  return <div className="pv-photo-upload" onKeyDown={event => {
+    if (event.key !== 'Escape' || !expanded) return;
+    event.stopPropagation();
+    setExpanded(false);
+    trigger.current?.focus();
+  }}>
+    <ActionButton ref={trigger} variant="secondary" className="pv-photo-upload__trigger" aria-expanded={expanded}
+      aria-controls={expanded ? id : undefined} onClick={() => setExpanded(!expanded)}>
+      {t.t(expanded ? 'promo.real.closeUpload' : 'promo.real.upload')}
+    </ActionButton>
+    {expanded ? <section id={id} className="pv-real-fields pv-photo-upload__form" aria-label={t.t('promo.real.upload')}>
+      <input hidden aria-label={t.t('promo.real.photoFile')} ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={pending} onChange={event => {
+        const chosen = event.currentTarget.files?.[0];
+        if (!chosen) return;
+        setFile(chosen); setRights(false); setResult(undefined);
+      }} />
+      <ActionButton variant="secondary" className="pv-photo-upload__pick" disabled={pending} onClick={() => fileInput.current?.click()}>{t.t('promo.real.choosePhoto')}</ActionButton>
+      {file ? <p className="pv-caption pv-photo-upload__file" title={file.name}>{file.name}</p> : null}
+      {menus.length ? <label htmlFor={`${id}-menu`}>{t.t('promo.real.photoMenu')}
+        <select id={`${id}-menu`} className="ui-input" value={menuId} disabled={pending} onChange={event => setMenuId(event.currentTarget.value)}>
+          <option value="">{t.t('promo.real.pickMenu')}</option>
+          {menus.map(menu => <option key={menu.menuId} value={menu.menuId}>{text(names, menu.name)}</option>)}
+        </select>
+      </label> : null}
+      <Checkbox checked={rights} disabled={pending} onCheckedChange={setRights} label={t.t('promo.real.rights')} />
+      <ActionButton variant="secondary" aria-busy={pending || undefined} disabled={pending || !file || !rights || (menus.length > 0 && !menuId)} onClick={() => { void upload(); }}>{t.t('promo.real.upload')}</ActionButton>
+      {result ? <p role="status" className="pv-caption">{result === 'promo.real.photoSaved' ? t.t(result) : names.t(result)}</p> : null}
+    </section> : null}
+  </div>;
 }
 
 const officialUploader = {

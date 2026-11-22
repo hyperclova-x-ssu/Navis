@@ -1,7 +1,11 @@
 /* Detail window (공지 작성 / 보낸 기록). The footer is not here: it goes into the window's bottom row (DetailFooterContent), outside the scrolling body, so it never covers the band, an error or 보냈어요(예시). */
 .i7-notice-detail { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .i7-notice-detail[data-tab='history'] { flex: 1 1 auto; min-height: 0; }
-.i7-notice-form { display: grid; gap: var(--space-3); min-width: 0; }
+.i7-notice-form { display: grid; gap: var(--space-3); min-width: 0; padding-block-end: var(--space-6); }
+.i7-notice-choice { display: grid; gap: var(--space-2); }
+.i7-notice-field-label { margin-block: 0 var(--space-1); font-weight: var(--weight-bold); }
+.i7-notice-hint { margin: 0; color: var(--muted-foreground); }
+.i7-notice-sms-rule { display: grid; gap: var(--space-2); }
 .i7-notice-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
 .i7-notice-calendar-load.ui-button { flex: none; margin-inline-start: auto; min-width: min(100%, 120px); }
 .i7-notice-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -48,6 +52,7 @@
 .i7-notice-metric, .i7-notice-panel-list, .i7-notice-wide-rows, .i7-notice-workspace > div { min-width: 0; }
 .i7-notice-metric-line { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
 .i7-notice-metric-line > .i7-notice-number { flex: 1; min-width: 0; }
+.ui-root .i7-notice-number .ui-metric-fit[data-presentation] .ui-metric-fit__value { font-size: var(--type-metric); line-height: var(--leading-metric); }
 .i7-notice-metric-line > .ui-panel-action-slot { flex: none; }
 .i7-notice-subtitle { margin-top: var(--space-1) !important; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); }
 .i7-notice-panel[data-height='1']:not([data-width='1']) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto; column-gap: var(--space-6); row-gap: 0; }
@@ -60,12 +65,13 @@
 .i7-notice-value-row:last-child { border-bottom: 0; }
 .i7-notice-value-row > span { min-width: 0; }
 .i7-notice-value-row > strong { text-align: right; font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.i7-notice-panel[data-height='1'] .i7-notice-value-row { min-height: var(--leading-body); border: 0; }
+.i7-notice-panel[data-height='1'] .i7-notice-value-row { min-height: var(--leading-body); border: 0; font-size: var(--type-caption); line-height: var(--leading-caption); }
 .i7-notice-panel-list > .ui-panel-action-slot { margin-bottom: var(--space-6); }
 .i7-notice-closure { display: flex; gap: var(--space-2); align-items: center; min-width: 0; font-size: var(--type-caption); line-height: var(--leading-caption); word-break: keep-all; }
 .i7-notice-panel-list > :is(.i7-notice-closure, .i7-notice-history, .i7-notice-history-empty) { margin-top: var(--space-6); }
 .i7-notice-history-empty { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
 .i7-notice-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); min-width: 0; }
+.i7-notice-workspace h3 { margin: 0 0 var(--space-1); font-size: var(--type-body); line-height: var(--leading-body); }
 .i7-notice-drafts, .i7-notice-scheduled { margin-top: var(--space-6); }
 /* D-333: a draft row on the large card: title, then kind · dates, then the first words of the text (muted, wraps; the fit guard drops them before any row). */
 .i7-notice-draft { align-items: flex-start; padding-block: var(--space-1); }

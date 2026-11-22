@@ -5,20 +5,21 @@
 import { useRef, useState } from 'react';
 import { validateAgentPrefill } from '../../../../shared/navis-agent-schema.mjs';
 import type { DetailRef, WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../../contracts';
-import { useWidgetView } from '../../../data/react';
+import { useWidgetDataStore, useWidgetView } from '../../../data/react';
+import { formatMaskedCustomer } from '../../../data/customer-display';
 import { addDays } from '../../../data/db/time';
 import { isNightHour } from '../../../data/marketing/calc';
 import { smsSenderConfigured } from '../../../data/reality/14/sms';
 import { TOMORROW } from '../../../data/widget-data';
 import type { SlotCouponModel } from '../../../data/widget-data';
 import {
-  ActionButton, BenefitCards, ChipChoice, ConfirmStep, Icon, RecipientList, SendTimePicker, StatusBadge, useKitT,
+  ActionButton, BenefitCards, ChipChoice, ConfirmStep, DetailFooterContent, Icon, RecipientList, SendTimePicker, useKitT,
 } from '../../../ui';
 import { isLargeCard } from '../mkt-local/fit';
 import { CouponSourceNote, MktPanel } from './panel';
 import { useCouponAction, useRealCoupons } from './panel.actions';
 import {
-  DetailNotReady, EditableSmsPreview, extraRow, listRows, Live, LiveText, NoteLine, PanelNotReady, recipientMeta, SentStatus, slotLabel, useActionFocus, useFormKey, useKept, useMkt, useSendPhase,
+  DetailNotReady, EditableSmsPreview, extraRow, listRows, Live, LiveText, NoteLine, PanelNotReady, SentStatus, slotLabel, SmsSetupHelp, useActionFocus, useFormKey, useKept, useMkt, useSendPhase,
 } from './shared';
 
 const ID = 'slot-coupon' as const;
@@ -42,13 +43,15 @@ export function SlotCouponPanel({ width, height, shape, editing, host }: WidgetP
   if (view.status !== 'ready') return <PanelNotReady view={view} widgetName={name} host={host} shape={shape} width={width} />;
   const m = view.model;
   const note = view.notes?.[0];
-  const descs = m.slotCount === 0 ? [t('widget.slot-coupon.allSent')] : shape === 'Q' ? [note ? t(note.messageKey) : t('widget.slot-coupon.panelQ')]
-    : shape === 'T' ? [t('widget.slot-coupon.panelQ')] : [t('widget.slot-coupon.panelW', { n: m.regularsCount }), t('widget.slot-coupon.panelQ')];
+  const regularCount = t('widget.slot-coupon.regularCount', { n: m.regularsCount });
+  const descs = m.slotCount === 0 ? [t('widget.slot-coupon.allSent')] : shape === 'Q' ? (note ? [t(note.messageKey)] : [])
+    : shape === 'T' || shape === 'W' ? [] : [regularCount];
   const recommended = m.benefits.options.find((o) => o.recommended);
   // D-333: 3-high cards list 6 quiet slots and 4-high cards every open slot the data has; the 4-high card also says how many matching regulars a slot has (only where it has some).
-  const large = isLargeCard(shape, height);
+  const tall = width === 1 && height === 4;
+  const large = isLargeCard(shape, height) || tall;
   const rows = [
-    ...m.openSlots.slice(0, listRows(shape, height)).map((slot, index) => <li key={slot.slotId} data-row-id={slot.slotId} {...extraRow(index)}>
+    ...m.openSlots.slice(0, tall ? undefined : listRows(shape, height)).map((slot, index) => <li key={slot.slotId} data-row-id={slot.slotId} {...extraRow(index)}>
       {t('widget.slot-coupon.slotLine', { slot: slotLabel(f, slot), percent: slot.percent })}{large && slot.regularIds.length > 0 ? `\u00A0·\u00A0${t('widget.slot-coupon.slotRegulars', { n: slot.regularIds.length })}` : ''}
     </li>),
     ...((shape === 'S' || shape === 'L') && recommended ? [<li key="kept">{t('widget.slot-coupon.keptLine', { amount: money(recommended.marginPerCoupon) })}</li>] : []),
@@ -56,8 +59,9 @@ export function SlotCouponPanel({ width, height, shape, editing, host }: WidgetP
   ];
   return <MktPanel id={ID} shape={shape} width={width} height={height} editing={editing}
     label={t('widget.slot-coupon.panelQ')} kpi={{ value: String(m.slotCount), unit: t('widget.slot-coupon.unitName', { n: m.slotCount }) }}
+    primaryRow={shape === 'W' ? regularCount : undefined}
     descs={descs} aside={view.notes?.length ? <NoteLine notes={view.notes} compact={editing} /> : undefined} rows={rows}
-    action={m.canSend ? { label: shape === 'Q' || shape === 'T' ? t('marketing.sendCoupon') : t('marketing.sendCouponsToRegulars'), widgetName: name, onPress: () => host.openDetail({ featureId: ID, view: 'send', focus: 'action' }) } : null} />;
+    action={m.openSlots.length > 0 ? { label: t('marketing.sendCoupon'), widgetName: name, onPress: () => host.openDetail({ featureId: ID, view: 'send', focus: 'action' }) } : null} />;
 }
 
 export function useSlotCouponSummary(): string {
@@ -81,6 +85,8 @@ function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: Detai
   const { t, f, dt, money, locale } = useMkt();
   const kit = useKitT();
   const { http, pending, run } = useCouponAction(host);
+  const smsConfigured = smsSenderConfigured || (http && host.hasSmsSettings?.());
+  const profiles = useWidgetDataStore().getSnapshot().tables.memberProfile;
   const real = useRealCoupons();
   const { phase, setPhase, startSending } = useSendPhase();
   const [key, renewKey] = useFormKey('slot');
@@ -98,8 +104,8 @@ function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: Detai
     ? { slot: initialSlot.slotId, ids: fields.excludeRecipients.filter(id => typeof id === 'string') } : null);
   const off = draftOff ?? keptOff;
   const [benefit, setBenefit] = useState(initialBenefit);
-  const [edited, setEdited] = useState<{ readonly benefit: string; readonly text: string } | null>(
-    typeof fields?.messageText === 'string' ? { benefit: initialBenefit, text: fields.messageText } : null);
+  const [edited, setEdited] = useState<{ readonly slotId: string; readonly benefit: string; readonly text: string } | null>(
+    initialSlot && typeof fields?.messageText === 'string' ? { slotId: initialSlot.slotId, benefit: initialBenefit, text: fields.messageText } : null);
   const [mode, setMode] = useState<'now' | 'schedule'>(fields?.sendMode === 'schedule' ? 'schedule' : 'now');
   const [time, setTime] = useState(typeof fields?.sendTime === 'string' ? fields.sendTime : DEFAULT_TIME);
   const [error, setError] = useState<string | null>(null);
@@ -109,12 +115,15 @@ function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: Detai
   const selectableIds = recipients.filter((r) => r.selectable).map((r) => r.customerId);
   const offIds = slot && off.slot === slot.slotId ? off.ids : [];
   const selected = selectableIds.filter((id) => !offIds.includes(id));
-  const defaultBody = dt(model.message.bodies[benefit]);
-  const body = edited && edited.benefit === benefit ? edited.text : defaultBody;
+  const defaultBody = slot ? t(`widget.slot-coupon.sms.${benefit}`, {
+    date: f.date(slot.date, 'short'), hours: f.hourRange(slot.startHour, slot.endHour), end: f.date(model.endsOn, 'short'),
+  }) : '';
+  const body = edited && edited.slotId === slot?.slotId && edited.benefit === benefit ? edited.text : defaultBody;
   const nightSchedule = mode === 'schedule' && !!time && isNightHour(Number(time.slice(0, 2)));
-  const blocked = !smsSenderConfigured || pending || !slot || selected.length === 0 || !model.canSend || (mode === 'schedule' && (!time || nightSchedule));
-  // T-29: a slot nobody matches already says so inside the recipient list; the line under the button covers only "everyone was switched off".
-  const reason = nightSchedule ? t('widget.slot-coupon.nightBlocked') : slot && recipients.length > 0 && selected.length === 0 ? t('marketing.noRecipients') : null;
+  const blocked = !smsConfigured || pending || !slot || selected.length === 0 || !model.canSend || (mode === 'schedule' && (!time || nightSchedule));
+  const reason = nightSchedule ? t('widget.slot-coupon.nightBlocked')
+    : selectableIds.length === 0 ? t('widget.slot-coupon.noEligible')
+      : selected.length === 0 ? t('widget.slot-coupon.noSelection') : null;
   const benefitName = dt(model.benefits.options.find((o) => o.id === benefit)?.name);
   const hour = real ? Number(real.localAt.slice(11, 13)) : 12;
   const tomorrow = real ? addDays(real.localAt.slice(0, 10), 1) : TOMORROW;
@@ -124,8 +133,7 @@ function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: Detai
 
   const send = () => {
     if (!slot || blocked) return;
-    const messageEdits = http ? body.trim().replace(/^\(광고\)\s*/, '')
-      : edited && edited.benefit === benefit && edited.text.trim() !== defaultBody.trim() ? edited.text : undefined;
+    const messageEdits = (body.trim() || defaultBody).replace(/^\(광고\)\s*/, '');
     setSubmitted({ count: selected.length, benefit: benefitName, when: whenText, slot: slotLabel(f, slot) });
     if (http) setPhase('sending');
     run({
@@ -163,9 +171,10 @@ function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: Detai
             setOff({ slot: slot.slotId, ids: selectableIds.filter((id) => !ids.includes(id)) });
           }}
             recipients={recipients.map((r) => {
-              const display = dt(r.name);
+              const profile = http ? undefined : profiles.find(member => member.customerId === r.customerId);
+              const display = http ? dt(r.name) : formatMaskedCustomer(dt(r.name), profile?.memberId, profile?.memberCode);
               const meta = t('widget.slot-coupon.recipientMeta', { slot: r.slotIds.map((id) => { const s = model.slots.find((x) => x.slotId === id); return s ? slotLabel(f, s) : ''; }).join(', '), date: r.lastVisit ? f.date(r.lastVisit, 'short') : '-' });
-              return { id: r.customerId, name: display, meta: recipientMeta(display, meta), consent: r.selectable };
+              return { id: r.customerId, name: display, meta, consent: r.selectable };
             })} />
         </section>
         <section aria-labelledby="slot-step3">
@@ -175,8 +184,7 @@ function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: Detai
               value: o.id, name: dt(o.name), recommended: o.recommended, detail: t('widget.slot-coupon.keptLine', { amount: money(o.marginPerCoupon) }),
               diff: o.recommended ? t('widget.slot-coupon.moreKept', { amount: money(model.benefits.differenceVsNext) }) : undefined,
             }))} />
-          {model.benefits.options.length > 0 ? <p className="mkt-recommend"><StatusBadge kind="recommended" /> {t('widget.slot-coupon.recommendLine', { name: dt(model.benefits.options.find((o) => o.recommended)?.name) })}</p>
-            : <p role="status">{t('data.real.partial')}</p>}
+          {!model.benefits.options.length && <p role="status">{t('data.real.partial')}</p>}
         </section>
       </>}
     </div>
@@ -185,10 +193,12 @@ function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: Detai
         {slot ? <>
           <section aria-labelledby="slot-step4">
             <h2 id="slot-step4">{t('widget.slot-coupon.step4')}</h2>
-            <EditableSmsPreview body={body} onBodyChange={text => setEdited({ benefit, text })} recipientCount={selected.length} />
+            <EditableSmsPreview body={body} onBodyChange={text => setEdited({ slotId: slot.slotId, benefit, text })} />
           </section>
           <div className="mkt-slot-send-options">
             <SendTimePicker mode={mode} onModeChange={setMode} time={time} onTimeChange={setTime} />
+          </div>
+          <DetailFooterContent><div className="mkt-slot-footer">
             <section className="mkt-summary" aria-labelledby="slot-summary">
               <h2 id="slot-summary">{t('widget.slot-coupon.summaryTitle')}</h2>
               <dl>
@@ -197,16 +207,19 @@ function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: Detai
                 <div><dt>{kit.t('ui.send.time')}</dt><dd>{whenText}</dd></div>
               </dl>
             </section>
-          </div>
-          <ActionButton disabled={blocked} aria-describedby={reason ? 'slot-reason' : undefined} onClick={() => { setError(null); setPhase('confirm'); }} data-slot="slot-coupon.send">
-            {t('widget.slot-coupon.send', { n: selected.length })}
-          </ActionButton>
-          {reason ? <p id="slot-reason" className="mkt-reason" role="status">{reason}</p> : null}
-          {error ? <p className="mkt-reason" role="alert"><Icon name="error" aria-hidden />{error}</p> : null}
+            <div className="mkt-slot-footer__actions">
+              <ActionButton disabled={blocked} aria-describedby={reason ? 'slot-reason' : undefined} onClick={() => { setError(null); setPhase('confirm'); }} data-slot="slot-coupon.send">
+                {selected.length === 0 ? t('marketing.sendCoupon') : t('widget.slot-coupon.send', { n: selected.length })}
+              </ActionButton>
+              {reason ? <p id="slot-reason" className="mkt-reason" role="status">{reason}</p> : null}
+              {!smsConfigured && <SmsSetupHelp openSettings={host.openSettings} />}
+              {error ? <p className="mkt-reason" role="alert"><Icon name="error" aria-hidden />{error}</p> : null}
+            </div>
+          </div></DetailFooterContent>
         </> : null}
       </> : <>
-        {phase === 'sent' ? (http ? <p role="status">{t('data.notices.notice.scheduled')} · {submitted?.when}</p>
-          : locale === 'ko' ? <div role="status"><h3>{t('widget.slot-coupon.sentResult', { slot: submitted?.slot ?? '', n: submitted?.count ?? 0 })}</h3></div> : <SentStatus />) : <ConfirmStep count={submitted?.count ?? selected.length} phase={phase === 'confirm' ? 'ask' : phase} onCancel={() => { setSubmitted(null); setPhase('form'); }} onSend={send}
+        {phase === 'sent' ? <DetailFooterContent>{http ? <p role="status">{t('data.notices.notice.scheduled')} · {submitted?.when}</p>
+          : locale === 'ko' ? <div role="status"><h3>{t('widget.slot-coupon.sentResult', { slot: submitted?.slot ?? '', n: submitted?.count ?? 0 })}</h3></div> : <SentStatus />}</DetailFooterContent> : <ConfirmStep footerActions count={submitted?.count ?? selected.length} phase={phase === 'confirm' ? 'ask' : phase} onCancel={() => { setSubmitted(null); setPhase('form'); }} onSend={send}
           summary={[
             { label: t('marketing.recipients'), value: f.count(submitted?.count ?? selected.length, 'person') },
             { label: t('marketing.benefit'), value: submitted?.benefit ?? benefitName },
