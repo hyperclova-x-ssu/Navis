@@ -6,7 +6,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-DEFAULT_PUBLIC_URL = "https://gpu-server.example.ts.net:8443"
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8765
 DEFAULT_ORIGINS = "http://127.0.0.1:5173,http://localhost:5173"
 HOME = Path.home()
 
@@ -26,9 +27,9 @@ def _float(name: str, default: float) -> float:
 
 @dataclass
 class Config:
-    host: str = "127.0.0.1"
-    port: int = 8765
-    public_url: str = DEFAULT_PUBLIC_URL
+    host: str = DEFAULT_HOST
+    port: int = DEFAULT_PORT
+    public_url: str = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
     allowed_origins: tuple = tuple(DEFAULT_ORIGINS.split(","))
     data_dir: Path = HOME / "navis-cnn-live" / "data"
     model_dir: Path = HOME / "navis-cnn-live" / "models"
@@ -58,6 +59,9 @@ class Config:
 
 
 def load_config() -> Config:
+    port = _int("CNN_PORT", DEFAULT_PORT)
+    public_host = _env("NAVIS_CNN_PUBLIC_HOST", "")
+    public_url = f"https://{public_host}:8443" if public_host else f"http://{DEFAULT_HOST}:{port}"
     mode = _env("CNN_MODE", "weak")
     gpu = mode == "gpu"
     occ_raw = _env("CNN_OCC_PARAMS", "")
@@ -65,9 +69,9 @@ def load_config() -> Config:
     if not isinstance(occ, dict):
         raise ValueError("CNN_OCC_PARAMS must be a JSON object")
     return Config(
-        host=_env("CNN_HOST", "127.0.0.1"),
-        port=_int("CNN_PORT", 8765),
-        public_url=_env("CNN_PUBLIC_URL", DEFAULT_PUBLIC_URL).rstrip("/"),
+        host=_env("CNN_HOST", DEFAULT_HOST),
+        port=port,
+        public_url=_env("CNN_PUBLIC_URL", public_url).rstrip("/"),
         allowed_origins=tuple(o.strip().rstrip("/") for o in _env("CNN_ALLOWED_ORIGINS", DEFAULT_ORIGINS).split(",")
                               if o.strip()),
         data_dir=Path(os.path.expanduser(_env("CNN_DATA_DIR", str(HOME / "navis-cnn-live" / "data")))),

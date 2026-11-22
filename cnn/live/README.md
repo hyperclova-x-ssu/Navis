@@ -22,13 +22,15 @@ API-14~18, 구성은 ARCHITECTURE 14절, 자료 형식은 DATA_MODEL 12절이 �
 cnn/live/scripts/deploy.sh            # app/ 로 복사 + smooth.py·seat_state.py 를 app/vendor/ 로
 # gpu-server
 ~/navis-cnn-live/app/scripts/setup.sh        # 처음 한 번: venv 패키지, 모델, INT8 사람·컵 모델 확인
+export NAVIS_CNN_PUBLIC_HOST='<tailnet-host>'
 ~/navis-cnn-live/app/scripts/start.sh --mode weak   # 기본. 또는 --mode gpu
 ~/navis-cnn-live/app/scripts/status.sh
 ~/navis-cnn-live/app/scripts/stop.sh         # serve https:8443 끄기 → 우리 pid 만 종료
 # Mac 에서 확인
-curl -s https://gpu-server.example.ts.net:8443/api/health
+curl -s 'https://<tailnet-host>:8443/api/health'
 ```
 
+- `<tailnet-host>`는 gpu-server의 Tailscale DNS 이름으로 바꾼다. 환경변수에는 프로토콜과 포트를 빼고 호스트 이름만 넣는다.
 - `start.sh`는 `tailscale funnel status`에 Funnel이 켜져 있으면 시작하지 않는다. serve는 `https:8443 → http://127.0.0.1:8765` 하나만 더하고, `stop.sh`는 그 하나만 끈다(다른 serve 설정·프로세스는 건드리지 않음).
 - `--mode weak`(시연 기본, D-373·D-379): `CUDA_VISIBLE_DEVICES=""` + `systemd-run --user --scope -p MemoryMax=8G -p MemorySwapMax=0 taskset -c 0-3` + 스레드 4개(`CNN_CPU_THREADS`, `OMP/MKL/OPENBLAS_NUM_THREADS`). gpu-server(Ubuntu 20.04)에서 `systemd-run --user`가 된다고 확인했다(2026-11-10, scope `MemoryMax=8589934592`, 친화도 0-3). **안 되는 컴퓨터의 대안**: `start.sh`가 저절로 `ulimit -v 8G` + `taskset -c 0-3`로 바꾼다(가상 메모리 제한이라 실제 사용량 제한보다 거칠다. OpenVINO가 큰 가상 영역을 잡으면 시작이 실패할 수 있으니 그때는 `ulimit` 줄을 빼고 `taskset`만 쓴다).
 - 두 모드는 YOLO11s 960으로 사람을 5 Hz에 탐지한다. YOLO11m 384는 사람 탐지 사이에 한 테이블씩 돌아가며 컵을 탐지한다. 카메라당 초당 2.7회이며 확인된 컵은 짧은 탐지 누락 동안 유지한다.
@@ -47,29 +49,32 @@ cd cnn/live && python -m pytest -q tests -m "not gpu"           # Mac(fastapi·p
 
 ## Navis 쪽 설정
 
-`frontend/.env.local`(git 제외)에 한 줄:
+`frontend/.env.local`(git 제외)에 아래 값을 넣고 `<tailnet-host>`를 바꾼다.
 
 ```sh
-VITE_CNN_SERVER_URL=https://gpu-server.example.ts.net:8443
+VITE_CNN_SERVER_URL='https://<tailnet-host>:8443'
+VITE_NAVIS_PREVIEW_HOSTS='<tailnet-host>'
 ```
 
-그다음 `npm run dev`. CNN 서버의 `CNN_ALLOWED_ORIGINS`에 Navis 페이지 주소(출처)가 있어야 한다. 기본값은
-`http://127.0.0.1:5173,http://localhost:5173`. 다른 주소(예: gpu-server에서 띄운 Navis를 `http://gpu-server:5173`으로
-열 때)는 쉼표로 더해 서버를 다시 켠다:
+`VITE_NAVIS_PREVIEW_HOSTS`는 정적 빌드 시 `?briefing=always`를 허용할 호스트 이름을 쉼표로 받는다.
+`npm run dev` 또는 정적 빌드 전에 설정한다. CNN 서버의 `CNN_ALLOWED_ORIGINS`에 Navis 페이지 주소(출처)가 있어야 한다.
+기본값은 `http://127.0.0.1:5173,http://localhost:5173`이다. gpu-server에서 Navis를 HTTPS 5443으로 제공할 때는 해당 출처를 더해 서버를 시작한다.
 
 ```sh
-CNN_ALLOWED_ORIGINS="http://127.0.0.1:5173,http://localhost:5173,http://gpu-server:5173" ~/navis-cnn-live/app/scripts/start.sh
+CNN_ALLOWED_ORIGINS='http://127.0.0.1:5173,http://localhost:5173,https://<tailnet-host>:5443' \
+  ~/navis-cnn-live/app/scripts/start.sh
 ```
 
 허용 목록에 없는 `Origin`은 HTTP 403 `BAD_ORIGIN`, 보는 소켓은 닫힘 코드 4403. `Origin`이 없는 요청(`curl` 등
-브라우저가 아닌 tailnet 기기)은 막지 않는다(ARCHITECTURE 14.8). 카메라 페이지는 서버 자신의 주소(`CNN_PUBLIC_URL`)라 따로 넣지 않는다.
+브라우저가 아닌 tailnet 기기)은 막지 않는다(ARCHITECTURE 14.8). 카메라 페이지는 서버 자신의 주소라 따로 넣지 않는다.
 
-## 환경변수 (`config.py`, 모두 기본값 있음, 비밀값 없음)
+## 환경변수 (`config.py`)
 
 | 이름 | 기본 | 뜻 |
 | :-- | :-- | :-- |
 | `CNN_HOST` / `CNN_PORT` | `127.0.0.1` / `8765` | 바인드 주소(`start.sh`는 항상 127.0.0.1) |
-| `CNN_PUBLIC_URL` | `https://gpu-server.example.ts.net:8443` | QR·`cameraUrl`에 넣는 주소 |
+| `NAVIS_CNN_PUBLIC_HOST` | 비움 | 공개 호스트 이름. 설정 시 QR·`cameraUrl`에 `https://<tailnet-host>:8443`을 사용한다. |
+| `CNN_PUBLIC_URL` | `NAVIS_CNN_PUBLIC_HOST`가 없으면 로컬 `http://127.0.0.1:8765` (`CNN_PORT` 반영) | 설정하면 QR·`cameraUrl`의 전체 주소를 이 값으로 지정한다. |
 | `CNN_ALLOWED_ORIGINS` | `http://127.0.0.1:5173,http://localhost:5173` | Navis 출처 허용 목록 |
 | `CNN_DATA_DIR` / `CNN_MODEL_DIR` | `~/navis-cnn-live/data` / `models` | `zones.json` / 모델 파일 |
 | `CNN_MODE` | `weak` | `weak`·`gpu` (`start.sh --mode`가 정함) |
@@ -81,6 +86,9 @@ CNN_ALLOWED_ORIGINS="http://127.0.0.1:5173,http://localhost:5173,http://gpu-serv
 | `CNN_OCC_PARAMS` | 비움(= `seat_state.DEFAULTS`) | 점유 판정 값 JSON |
 | `CNN_CAMERA_FPS` | 15 | 카메라 페이지 캡처 횟수/초(`hello.fps`, ARCHITECTURE 14.4) |
 | `CNN_FAKE_DETECTOR` | 0 | 1이면 빈 탐지 |
+
+`tools/measure.py`도 `NAVIS_CNN_PUBLIC_HOST`를 읽는다. 전체 주소가 다르면 `--base`로 지정한다.
+측정 서버의 SSH 접속 주소가 다르면 `GPU_HOST`로 지정한다. 기본 SSH 사용자는 `user`다.
 
 ## 동작 요약 (R5 참고)
 

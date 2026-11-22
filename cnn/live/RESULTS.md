@@ -4,7 +4,7 @@
 
 ## 어떻게 쟀나
 
-- 서버: gpu-server `~/navis-cnn-live/`(이 폴더 그대로 deploy.sh로 배포), tailscale serve `https://gpu-server.example.ts.net:8443`.
+- 서버: gpu-server `~/navis-cnn-live/`(이 폴더 그대로 deploy.sh로 배포), tailscale serve `https://<tailnet-host>:8443`.
 - 가짜 휴대폰 카메라 + Navis 같은 보는 쪽을 Mac 한 프로세스에서 같이 돌림(`tools/measure.py`). 카메라는 카페 영상(`public/cnn/cafe17.mp4`)을 `hello.fps`(15)·`maxEdge`·`quality`대로 JPEG으로 보내고 `maxInflight 2` 규칙도 휴대폰 페이지(`cam.js`)와 같다. 보는 쪽은 `/ws/view`에 `subscribe video`로 붙어 결과를 전부 읽는다.
 - `e2eMs` = (보는 쪽이 결과를 받은 시각) − (카메라가 그 장을 보낸 시각), 같은 Mac 시계라 시계 맞춤 오차가 없다. `latencyMs`·`inferMs`·`dropped`·서버 fps는 서버가 결과에 넣는 `stats`/`/api/health` 값. 처음 15초는 뺐다.
 - 각 330초(5분 30초). 서버 재시작 후 바로 시작. GPU 메모리·부하는 30초마다 ssh로 `nvidia-smi`·`/proc/loadavg`. 네트워크 길은 `tailscale ping`(시작·끝).
@@ -46,8 +46,8 @@
 ## 다시 재는 법
 
 ```sh
-python tools/measure.py --base https://gpu-server.example.ts.net:8443 --seconds 330 \
-  --label weak --video ../../public/cnn/cafe17.mp4 --out /tmp/weak.json     # cnn/live 에서
+python tools/measure.py --base https://<tailnet-host>:8443 --seconds 330 \
+  --label weak --video ../../frontend/public/cnn/cafe17.mp4 --out /tmp/weak.json     # cnn/live 에서
 ```
 필요: `opencv-python`, `websockets`(Mac 파이썬에 있음). 서버 모드는 `ssh user@gpu-server '~/navis-cnn-live/app/scripts/start.sh --mode weak|gpu'`로 바꾼다.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """T-069 end-to-end measurement: fake phone camera + Navis-like viewer, both on this Mac, against the gpu-server server.
 
-  python measure.py --base https://gpu-server.example.ts.net:8443 --seconds 330 --label weak \
+  NAVIS_CNN_PUBLIC_HOST='<tailnet-host>' python measure.py --seconds 330 --label weak \
       --video ../../../frontend/public/cnn/cafe17.mp4 --out /tmp/weak.json
 
 * Camera: pairs (/api/pair), opens /ws/camera, sends JPEGs at hello.fps with at most maxInflight unacked frames
@@ -15,11 +15,10 @@
 """
 import argparse, asyncio, json, os, re, ssl, statistics, struct, subprocess, sys, time
 import urllib.request
+from urllib.parse import urlsplit
 
 import cv2
 import websockets
-
-GPU_HOST = os.environ.get("GPU_HOST", "user@gpu-server")
 
 
 def pct(v, q):
@@ -40,7 +39,7 @@ def http_json(url, method="GET", body=None):
         return json.loads(r.read())
 
 
-def ts_path(host="gpu-server"):
+def ts_path(host):
     try:
         out = subprocess.run(["tailscale", "ping", "-c", "3", "--timeout", "3s", host], capture_output=True,
                              text=True, timeout=20).stdout
@@ -49,9 +48,9 @@ def ts_path(host="gpu-server"):
         return "unknown", str(e)
 
 
-def ssh_sample():
+def ssh_sample(ssh_host):
     try:
-        out = subprocess.run(["ssh", "-o", "ConnectTimeout=6", GPU_HOST,
+        out = subprocess.run(["ssh", "-o", "ConnectTimeout=6", ssh_host,
                               "nvidia-smi --query-gpu=memory.used,utilization.gpu --format=csv,noheader,nounits; "
                               "cat /proc/loadavg"], capture_output=True, text=True, timeout=15).stdout.splitlines()
         mem, util = [float(x) for x in out[0].split(",")]
@@ -62,7 +61,9 @@ def ssh_sample():
 
 async def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--base", required=True)
+    public_host = os.environ.get("NAVIS_CNN_PUBLIC_HOST", "").strip()
+    ap.add_argument("--base", default=f"https://{public_host}:8443" if public_host else None,
+                    required=not public_host, help="CNN server URL (defaults to https://NAVIS_CNN_PUBLIC_HOST:8443)")
     ap.add_argument("--seconds", type=float, default=330)
     ap.add_argument("--label", default="run")
     ap.add_argument("--video", required=True)
@@ -72,9 +73,14 @@ async def main():
     a = ap.parse_args()
 
     base = a.base.rstrip("/")
+    base_url = urlsplit(base)
+    host = base_url.hostname
+    if base_url.scheme not in ("https", "http") or not host:
+        ap.error("--base must be an HTTP or HTTPS URL with a hostname")
+    ssh_host = os.environ.get("GPU_HOST") or f"user@{host}"
     wsb = base.replace("https://", "wss://").replace("http://", "ws://")
     ctx = ssl.create_default_context() if wsb.startswith("wss") else None
-    path0 = ts_path()
+    path0 = ts_path(host)
     pair = http_json(base + "/api/pair", "POST", {"lang": "ko", "replace": True})
     cap = cv2.VideoCapture(a.video)
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -173,7 +179,7 @@ async def main():
             except Exception:  # noqa: BLE001
                 pass
             if int(time.monotonic() - t0) % 30 < 5:
-                s = await asyncio.to_thread(ssh_sample)
+                s = await asyncio.to_thread(ssh_sample, ssh_host)
                 if s:
                     hw.append(s)
             await asyncio.sleep(5)
@@ -187,7 +193,7 @@ async def main():
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-    path1 = ts_path()
+    path1 = ts_path(host)
     meas = max(1, len(per_sec))
     full = [v for k, v in per_sec.items() if k < max(per_sec, default=0)]  # drop the partial last second
     last = health[-1] if health else {}
