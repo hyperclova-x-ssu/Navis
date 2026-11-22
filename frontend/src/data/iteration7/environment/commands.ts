@@ -1,6 +1,6 @@
 import type { DataCommandResult } from '../../commands/types';
 import { selectStoreEnvironment } from './selectors';
-import type { EnvironmentCommand, EnvironmentTables, StoreEnvironment, StoreEnvironmentModel } from './types';
+import type { EnvironmentPlayerCommand, EnvironmentTables, StoreEnvironment, StoreEnvironmentModel } from './types';
 
 type Failure = Extract<DataCommandResult, { ok: false }>;
 type Context<T extends EnvironmentTables> = { readonly tables: T; readonly snapshot: { readonly revision: number; readonly tables?: T } };
@@ -10,11 +10,11 @@ const receiptKeys = {
   'environment.selectPlaylist': 'data.environment.playlistSelected',
   'environment.selectTrack': 'data.environment.trackSelected',
   'environment.setVolume': 'data.environment.volumeSet',
-} as const satisfies Record<EnvironmentCommand['type'], string>;
+} as const satisfies Record<EnvironmentPlayerCommand['type'], string>;
 
 type Result<T> = Failure | { readonly ok: true; readonly tables: T; readonly undoable: false;
-  readonly noticeKey?: typeof receiptKeys[EnvironmentCommand['type']]; readonly value: StoreEnvironmentModel['music'] };
-function handle<T extends EnvironmentTables>(ctx: Context<T>, c: EnvironmentCommand): Result<T> {
+  readonly noticeKey?: typeof receiptKeys[EnvironmentPlayerCommand['type']]; readonly value: StoreEnvironmentModel['music'] };
+function handle<T extends EnvironmentTables>(ctx: Context<T>, c: EnvironmentPlayerCommand): Result<T> {
   const e = ctx.tables.storeEnvironment;
   const fail = (reason: string, code: Failure['code'] = 'VALIDATION', field?: string): Failure => ({ ok: false, code, reason, field, messageKey: `data.environment.error.${reason}` });
   if (c.baseRevision !== undefined && c.baseRevision !== ctx.snapshot.revision) return fail('STALE_REVISION', 'CONFLICT');
@@ -50,7 +50,10 @@ function handle<T extends EnvironmentTables>(ctx: Context<T>, c: EnvironmentComm
   const tables = changed ? { ...ctx.tables, storeEnvironment: { ...e, ...patch } } : ctx.tables;
   return { ok: true, tables, undoable: false, ...(changed ? { noticeKey: receiptKeys[c.type] } : {}), value: selectStoreEnvironment({ tables }).music };
 }
+const realOnly = (): Failure => ({ ok: false, code: 'CONFLICT', reason: 'REAL_ONLY', messageKey: 'data.real.error.SOURCE_UNAVAILABLE' });
 export const environmentHandlers = {
   'environment.setPlaying': handle, 'environment.skipTrack': handle,
   'environment.selectPlaylist': handle, 'environment.selectTrack': handle, 'environment.setVolume': handle,
+  'environment.recordReading': realOnly, 'environment.updateLimits': realOnly,
+  'cctv.saveZones': realOnly, 'cctv.setTableLink': realOnly,
 };

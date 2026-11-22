@@ -6,6 +6,7 @@
  */
 
 import type { UnitCode } from '../../i18n';
+import type { MenuCategoryInput } from '../../contracts';
 import type { ManagementTables, CalendarCategory } from './management-types';
 import type { MarketingTables } from '../marketing/types';
 import type { PosMenuPhotoDataUrl, PosMenuPhotoKey, PosOptionGroup, PosState } from '../../contracts/pos';
@@ -13,6 +14,7 @@ import type { NoticeTables } from '../iteration7/notices/types';
 import type { EnvironmentTables } from '../iteration7/environment/types';
 import type { CustomTemplate, CustomOrder, PickupReservation } from '../iteration7/custom-orders/types';
 import type { StaffTables } from '../iteration7/staff/types';
+import type { RealStockSnapshot } from '../reality/03/stock-dto';
 
 /** DATA_MODEL 10.13 unit codes (single definition in src/i18n/types.ts; type-only import). */
 export type { UnitCode };
@@ -38,7 +40,8 @@ export type Material = 'wood' | 'gray' | 'tile' | 'plant';
 export type LocalChangeKind = 'opening' | 'closing' | 'event' | 'construction' | 'traffic';
 
 export interface DailySales { readonly recognizedNet?: number; readonly businessDate: string; readonly gross: number; readonly discount: number; readonly refund: number; readonly card: number; readonly cash: number; readonly easyPay: number }
-export interface MenuItem { readonly prepMin?: number; readonly saleStatus?: 'selling' | 'sold_out'; readonly photoKey?: PosMenuPhotoKey | null; readonly customPhotoUrl?: PosMenuPhotoDataUrl | null; readonly optionGroups?: readonly PosOptionGroup[]; readonly kind?: 'menu' | 'retail'; readonly sku?: string; readonly itemId?: string; readonly name?: DataText; readonly category?: 'drink' | 'dessert' | 'retail'; readonly memo?: DataText | null; readonly deletedAt?: string; readonly menuId: string; readonly nameKey: string; readonly price: number; readonly categoryKey: string; readonly recipe: readonly RecipePart[]; readonly costEffectiveFrom: string }
+/** `sourceCost` (REAL-PLAN F01): the server-computed unit cost of the menu (null = no costable recipe). When present it overrides the local recipe computation. */
+export interface MenuItem { readonly sourceCost?: { readonly unitCost: number | null }; readonly prepMin?: number; readonly saleStatus?: 'selling' | 'sold_out'; readonly photoKey?: PosMenuPhotoKey | null; readonly customPhotoUrl?: PosMenuPhotoDataUrl | null; readonly optionGroups?: readonly PosOptionGroup[]; readonly kind?: 'menu' | 'retail'; readonly sku?: string; readonly itemId?: string; readonly name?: DataText; readonly category?: MenuCategoryInput | 'retail'; readonly seasonal?: string | null; readonly memo?: DataText | null; readonly deletedAt?: string; readonly menuId: string; readonly nameKey: string; readonly price: number; readonly categoryKey: string; readonly recipe: readonly RecipePart[]; readonly costEffectiveFrom: string }
 export interface RecipePart { readonly nameKey: string; readonly qty: number; readonly unit: UnitCode; readonly cost: number }
 /** plan-2 (T-058): menu options with a cost only (샷 추가 원가 300, Q-41). */
 export interface MenuOption { readonly optionId: string; readonly nameKey: string; readonly cost: number }
@@ -92,7 +95,10 @@ export interface ReplyDraft {
   readonly origin: 'generated' | 'edited';
 }
 // End N17 draft evidence.
-export interface InquiryThread { readonly threadId: string; readonly type: 'message' | 'review' | 'call'; readonly channelKey: string; readonly isPublic: boolean; readonly receivedAt: string; readonly status: ThreadStatus; readonly needsPersonReason: 'refund' | 'complaint' | 'privacy' | 'no-ground' | null; readonly bodyKey: string; readonly draftKey: string | null; readonly groundKeys: readonly string[]; readonly rating: number | null; /** plan-2 (T-058, D-64): review classification; null for messages and calls. */ readonly sentiment: 'positive' | 'negative' | 'neutral' | null ; /** plan-2 AC-318 follow-up: full fake reviewer name (reviews only); screens show only the masked form from the model. */ readonly author?: string | null; readonly replyDraft?: ReplyDraft; readonly sentReplyBody?: string }
+export interface InquiryThread { readonly threadId: string; readonly type: 'message' | 'review' | 'call'; readonly channelKey: string; readonly isPublic: boolean; readonly receivedAt: string; readonly status: ThreadStatus; readonly needsPersonReason: 'refund' | 'complaint' | 'privacy' | 'no-ground' | null; readonly bodyKey: string; readonly draftKey: string | null; readonly groundKeys: readonly string[]; readonly rating: number | null; /** plan-2 (T-058, D-64): review classification; null for messages and calls. */ readonly sentiment: 'positive' | 'negative' | 'neutral' | null ; /** plan-2 AC-318 follow-up: full fake reviewer name (reviews only); screens show only the masked form from the model. */ readonly author?: string | null; readonly replyDraft?: ReplyDraft; readonly sentReplyBody?: string;
+  /** F15 (HTTP inbox only): the received text itself (the fixture holds only a message key) and the service record's own fields. */
+  readonly bodyRaw?: string;
+  readonly real?: { readonly source: 'manual' | 'review' | 'talktalk'; readonly providerRef: string | null; readonly title: string | null; readonly sourceUrl: string | null; readonly draftSource: 'owner' | 'naver-ai' | 'navis' | null; readonly replyState: 'recorded' | 'saved' | 'accepted' | null; readonly revision: number } }
 export interface AutoReplyRule { readonly channelKey: string; readonly topic: 'hours' | 'location' | 'parking'; readonly enabled: boolean }
 export type OfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'withdrawn';
 export interface PartnershipOffer { readonly offerId: string; readonly fromStoreKey: string; readonly visibility: 'direct' | 'public'; readonly titleKey: string; readonly categoryKey: string; readonly termsKey: string; readonly periodStart: string; readonly periodEnd: string; readonly respondBy: string; readonly status: OfferStatus; readonly sharedContactKey: string | null }
@@ -101,6 +107,19 @@ export interface Integration { readonly calendar: boolean; readonly phone: boole
 export interface AppliedKey { readonly command: string; readonly result: unknown }
 
 export interface DataTables extends ManagementTables, StaffTables, NoticeTables, EnvironmentTables {
+  readonly realMembers?: import('../reality/05/dto').RealMembersSnapshot;
+  /** REAL-PLAN F09: the POS finance API's ledger days, deposits, margin rows and closings (HTTP money domain only). */
+  readonly realFinance?: import('../reality/09/dto').RealFinanceSnapshot;
+  readonly realTax?: import('../reality/18/dto').RealTaxSnapshot;
+  /** REAL-PLAN F08: HTTP pickups and the POS service's payment views for custom orders (absent in fixture mode). */
+  readonly realCustom?: import('../reality/08/dto').RealCustomSnapshot;
+  /** REAL-PLAN F06: NAVER booking metadata, call records and the restaurant product view of the booking API (HTTP booking domain only). */
+  readonly realBooking?: import('../reality/06/dto').RealBookingSnapshot;
+  /** REAL-PLAN F12: the insight service's briefing projection (business day, arrival day, acknowledgement, sources with state and period; HTTP briefing domain only). */
+  readonly realBriefing?: import('../reality/12/dto').RealBriefingSnapshot;
+  /** REAL-PLAN F19: B19's customer groups, coupon performance, channel cards and today's cells (HTTP groups domain only). */
+  readonly realGroups?: import('../reality/19/dto').RealGroupsSnapshot;
+  readonly realCoupons?: import('../reality/14/project').RealCouponData;
   readonly customTemplate: readonly CustomTemplate[];
   readonly customOrder: readonly CustomOrder[];
   readonly dailySales: readonly DailySales[];
@@ -128,6 +147,7 @@ export interface DataTables extends ManagementTables, StaffTables, NoticeTables,
   readonly calendarSettings: CalendarVisibility;
   readonly inventoryItem: readonly InventoryItem[];
   readonly inventoryStock: readonly InventoryStock[];
+  readonly realStock?: readonly RealStockSnapshot[];
   readonly inventoryTxn: readonly InventoryTxn[];
   readonly supplier: readonly Supplier[];
   readonly purchaseOrder: readonly PurchaseOrder[];

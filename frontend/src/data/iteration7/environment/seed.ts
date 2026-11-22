@@ -1,4 +1,5 @@
-import { seedSupplement } from '../../db/generated/supplement';
+import { seedSupplement } from '../../db/cafe-fixtures';
+import { fixtureOccurred } from '../../db/fixture-dates';
 import { timeOf } from '../../db/time';
 import type { EnvironmentTables } from './types';
 
@@ -41,8 +42,9 @@ export function createEnvironmentSeed(): EnvironmentTables {
       humidityPct: Math.round(current.humidityPct - 3 * (1 - progress) + 5 * lunch),
     };
   });
+  const elapsed = [...readings, current].filter(reading => fixtureOccurred(reading.measuredAt));
   return { storeEnvironment: {
-    ...earlier, current, readings: [...readings, current], volumePct: sample.volume,
+    ...earlier, current: elapsed.at(-1) ?? null, readings: elapsed, volumePct: sample.volume,
     playlists: earlier.playlists.map(row => row.id === earlier.playlistId ? { ...row, name: sample.playlist } : row),
   } };
 }

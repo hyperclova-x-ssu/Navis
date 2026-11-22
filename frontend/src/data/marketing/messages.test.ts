@@ -167,7 +167,8 @@ describe('bundle', () => {
     expect(ko.t('data.state.marketing-today.error')).toBe('오늘 할 홍보를 불러오지 못했어요');
     expect(ko.t('data.state.slot-coupon.error')).toBe('빈 시간 단골 쿠폰을 불러오지 못했어요');
     expect(ko.t('data.state.promo-video.error')).toBe('AI 홍보 영상을 불러오지 못했어요');
-    expect(en.t('data.state.marketing-performance.error')).toBe("Couldn't load Marketing results");
+    expect(en.t('data.state.coupon-status.error')).toBe("Couldn't load Active coupons");
+    expect(en.t('data.state.marketing-performance.error')).toBe(en.t('data.real.error'));
     expect(hans.t('data.state.customer-groups.error')).toBe('无法加载顾客分组');
   });
   it('coupon names and texts resolve with their item / percent (sell-today 40%, slot benefits)', () => {
@@ -179,7 +180,7 @@ describe('bundle', () => {
     expect(resolveDataText(ko.t, { key: 'data.marketing.benefit.amount', params: { amount: 500 } })).toBe('500원 할인');
   });
   it('reports the R2 review count (en + zh-Hans + zh-Hant strings written by T-058)', () => {
-    expect(marketingR2Review.generatedErrorRows).toBe(7);
+    expect(marketingR2Review.generatedErrorRows).toBe(6);
     expect(marketingR2Review.strings).toBe((marketingR2Review.writtenRows + marketingR2Review.variantLabelRows + marketingR2Review.generatedErrorRows) * 3);
   });
 });
@@ -237,9 +238,10 @@ describe.skipIf(!hasLocalesDoc)('LOCALES 10 terms and current coupon copy (D-64)
 describe.skipIf(!hasLocalesDoc)('LOCALES 4.1 widget names (used in the error sentences)', () => {
   it('match the document row by row', () => {
     const doc = readFileSync(join(here, '../../../../01_product/LOCALES.md'), 'utf8');
-    const start = doc.indexOf('### 4.1 마케팅 위젯 7개');
-    const rows = doc.slice(start, doc.indexOf('\n## ', start)).split('\n').filter((l) => /^\| .* \| `[a-z-]+` \|/.test(l)).map((l) => l.split('|').slice(2, 7).map((c) => c.trim()));
-    expect(rows).toHaveLength(7);
-    for (const [id, ...names] of rows) expect(marketingWidgetNames[id.replace(/`/g, '') as keyof typeof marketingWidgetNames], id).toEqual(names);
+    const [, section] = doc.split(/^### 4\.[12] /mu);
+    const rows = section.split('\n').filter((line) => /^\| .* \| `[a-z-]+` \|/.test(line))
+      .map((line) => line.split('|').slice(2, 7).map((cell) => cell.trim()));
+    expect(rows).toHaveLength(6);
+    expect(Object.fromEntries(rows.map(([id, ...names]) => [id.slice(1, -1), names]))).toEqual(marketingWidgetNames);
   });
 });

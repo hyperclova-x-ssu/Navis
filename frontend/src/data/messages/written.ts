@@ -50,8 +50,8 @@ export const writtenRows = {
   'data.tax.connection.missing': ['자료 없음', 'No data', '无资料', '無資料'],
   'data.tax.reason.missingEvidence': ['증빙이 빠진 지출', 'Expense without a receipt', '缺少凭证的支出', '缺少憑證的支出'],
   'data.tax.assumption': ['부가세 10% 기준으로 단순하게 계산한 예시예요', 'A simple sample estimate based on 10% VAT', '按 10% 增值税简单估算的示例', '依 10% 營業稅簡單估算的範例'],
-  'data.agency.smallBusiness': ['소상공인 지원 기관', 'Small business support agency (sample)', '小微商户扶持机构（示例）', '小微商家扶持機構（範例）'],
-  'data.agency.city': ['시 경제정책과', 'City economic policy office (sample)', '市经济政策科（示例）', '市經濟政策科（範例）'],
+  'data.agency.smallBusiness': ['소상공인 지원 기관', 'Small business support agency', '小微商户扶持机构', '小微商家扶持機構'],
+  'data.agency.city': ['시 경제정책과', 'City economic policy office', '市经济政策科', '市經濟政策科'],
   'data.region.nationwide': ['전국', 'Nationwide', '全国', '全國'],
   'data.region.city': ['서울 전 지역', 'All of Seoul', '首尔全市', '首爾全市'],
   'data.region.storeArea': ['매장 주변 500m', 'Within 500 m of the shop', '店铺周边 500 米', '店鋪周邊 500 公尺'],
@@ -59,8 +59,8 @@ export const writtenRows = {
   'data.grant.condition.businessYears': ['개업 1년 이상', 'Open for at least 1 year', '开业满 1 年', '開業滿 1 年'],
   'data.grant.condition.employees': ['직원 5명 미만', 'Fewer than 5 employees', '员工少于 5 人', '員工少於 5 人'],
   'data.grant.condition.pos': ['키오스크·POS 도입 계획', 'Plans to adopt a kiosk or POS', '计划引入自助点餐机或 POS', '計畫導入自助點餐機或 POS'],
-  'data.grant.summary.stability': ['운영 자금과 경영 상담을 지원해요', 'Supports operating funds and business consulting (sample)', '扶持运营资金和经营咨询（示例）', '扶持營運資金和經營諮詢（範例）'],
-  'data.grant.summary.smartStore': ['스마트 기기 도입 비용 일부를 지원해요', 'Covers part of the cost of smart devices (sample)', '补贴部分智能设备导入费用（示例）', '補助部分智慧設備導入費用（範例）'],
+  'data.grant.summary.stability': ['운영 자금과 경영 상담을 지원해요', 'Supports operating funds and business consulting', '扶持运营资金和经营咨询', '扶持營運資金和經營諮詢'],
+  'data.grant.summary.smartStore': ['스마트 기기 도입 비용 일부를 지원해요', 'Covers part of the cost of smart devices', '补贴部分智能设备导入费用', '補助部分智慧設備導入費用'],
   'data.source.sample': ['예시 자료', 'Sample data', '示例资料', '範例資料'],
   'data.source.roster': ['근무표', 'Shift roster', '排班表', '班表'],
 
@@ -127,7 +127,6 @@ export const writtenRows = {
   // N17 fixed sentences for fake local draft generation.
   'data.inquiry.fake.parking': ['건물 뒤에 2대까지 주차할 수 있어요.', 'There is space for two cars behind the building.', '楼后可停两辆车。', '大樓後方可停兩輛車。'],
   'data.inquiry.fake.review': ['오래 기다리시게 해서 죄송해요.', 'Thank you for waiting. We apologize for the delay.', '抱歉让您久等了。', '抱歉讓您久等了。'],
-  'data.inquiry.fake.refund': ['불편을 드려 죄송합니다.', 'We apologize for the inconvenience.', '给您带来不便，敬请谅解。', '造成您的不便，敬請見諒。'],
   'data.inquiry.fake.acknowledge': ['말씀해 주신 내용을 확인하겠습니다.', 'We will look into what you shared.', '我们会核实您反馈的情况。', '我們會確認您反映的情況。'],
   // End N17 draft copy.
   'data.storeInfo.hours': [storeHoursGrounding('ko'), storeHoursGrounding('en'), storeHoursGrounding('zh-Hans'), storeHoursGrounding('zh-Hant')],
@@ -139,7 +138,7 @@ export const writtenRows = {
   'data.needsPerson.refund': ['환불', 'Refund', '退款', '退款'],
   'data.needsPerson.complaint': ['불만', 'Complaint', '投诉', '客訴'],
   'data.needsPerson.privacy': ['개인정보', 'Personal info', '个人信息', '個人資料'],
-  'data.needsPerson.no-ground': ['근거 없음', 'No matching info', '无依据', '無依據'],
+  'data.needsPerson.no-ground': ['매장 안내에 없는 내용', 'Missing from shop guidance', '店铺说明中没有此内容', '店家說明中沒有此內容'],
 
   /* 커뮤니티 */
   'data.store.bakery': ['옆 골목 빵집', 'Bakery in the next alley', '隔壁巷子的面包店', '隔壁巷子的麵包店'],
@@ -154,7 +153,7 @@ export const writtenRows = {
   'data.offer.terms.stampExchange': ['두 가게 스탬프를 서로 적립해 줘요', "Each shop accepts the other's stamps", '两家店的集章可以互相累积', '兩家店的集章可以互相累積'],
   'data.offer.terms.alleySale': ['일주일 동안 골목 가게가 함께 10% 할인해요', 'Alley shops offer 10% off together for a week', '巷内店铺一起打 9 折，为期一周', '巷內店家一起打 9 折，為期一週'],
   'data.offer.terms.cupGroupBuy': ['포장 용기를 함께 주문해 배송비를 나눠요', 'Order containers together and split shipping', '一起订购外带容器，分摊运费', '一起訂購外帶容器，分攤運費'],
-  'data.offer.contact.phone': ['가게 전화로 연락해요(예시)', 'Contact by shop phone (sample)', '通过店铺电话联系（示例）', '透過店家電話聯絡（範例）'],
+  'data.offer.contact.phone': ['가게 전화로 연락해요', 'Contact by shop phone', '通过店铺电话联系', '透過店家電話聯絡'],
 
   /* 매뉴얼 */
   'data.manual.latteRecipe': ['카페라테 레시피', 'Café latte recipe', '拿铁配方', '拿鐵配方'],
@@ -255,10 +254,10 @@ export const writtenRows = {
   // End N19 run-command receipts.
   'data.notice.membershipUsed': ['1회 사용을 기록했어요', 'Recorded 1 use', '已记录使用 1 次', '已記錄使用 1 次'],
   'data.notice.membershipUseCanceled': ['사용을 취소했어요', 'Use canceled', '已取消使用', '已取消使用'],
-  'data.notice.bookingConfirmed': ['확인 문자를 보냈어요(예시)', 'Confirmation text sent (sample)', '已发送确认短信（示例）', '已傳送確認簡訊（範例）'],
-  'data.notice.bookingProposed': ['다른 시간을 제안했어요(예시)', 'Suggested another time (sample)', '已建议其他时间（示例）', '已建議其他時間（範例）'],
+  'data.notice.bookingConfirmed': ['확인 문자를 보냈어요', 'Confirmation text sent', '已发送确认短信', '已傳送確認簡訊'],
+  'data.notice.bookingProposed': ['다른 시간을 제안했어요', 'Suggested another time', '已建议其他时间', '已建議其他時間'],
   'data.notice.bookingNoShow': ['오지 않음으로 바꿨어요', 'Marked as no-show', '已标记为未到店', '已標記為未到店'],
-  'data.notice.calendarAdded': ['네이버 캘린더에 반영했어요(예시)', 'Added to Naver Calendar (sample)', '已同步到 Naver 日历（示例）', '已同步到 Naver 行事曆（範例）'],
+  'data.notice.calendarAdded': ['일정에 추가했어요', 'Added to your calendar', '已添加到日程', '已加入行程'],
   'data.notice.calendarUpdated': ['일정을 고쳤어요', 'Event updated', '已修改日程', '已修改行程'],
   'data.notice.calendarDeleted': ['일정을 지웠어요', 'Event deleted', '已删除日程', '已刪除行程'],
   'data.notices.notice.deleted': ['초안을 지웠어요', 'Draft deleted', '已删除草稿', '已刪除草稿'],
@@ -275,16 +274,16 @@ export const writtenRows = {
   'data.notice.memoSaved': ['메모를 저장했어요', 'Note saved', '已保存备忘', '已儲存備忘'],
   'data.notice.layoutSaved': ['배치안을 저장했어요', 'Layout draft saved', '已保存布局方案', '已儲存配置方案'],
   'data.notice.layoutApplied': ['좌석을 {seats}석으로 바꿨어요', 'Seats changed to {seats}', '座位已改为 {seats} 个', '座位已改為 {seats} 個'],
-  'data.notice.planGenerated': ['자리도를 만들었어요(예시)', 'Seating plan created (sample)', '已生成座位图（示例）', '已產生座位圖（範例）'],
+  'data.notice.planGenerated': ['자리도를 만들었어요', 'Seating plan created', '已生成座位图', '已產生座位圖'],
   'data.notice.changeAcked': ['확인한 변화로 접었어요', 'Folded away as seen', '已收起已确认的动态', '已收合已確認的動態'],
   // N20 reopen receipt.
   'data.notice.changeReopened': ['새 소식으로 돌렸어요', 'Moved back to new updates', '已移回新动态', '已移回新動態'],
   // End N20 reopen receipt.
-  'data.notice.posted': ['게시했어요(예시)', 'Posted (sample)', '已发布（示例）', '已發布（範例）'],
+  'data.notice.posted': ['게시했어요', 'Posted', '已发布', '已發布'],
   'data.notice.replyDraftSaved': ['답변 초안을 저장했어요', 'Reply draft saved', '回复草稿已保存', '已儲存回覆草稿'], // N17
   'data.notice.offerAccepted': ['제안을 수락했어요', 'Offer accepted', '已接受提议', '已接受提案'],
   'data.notice.offerDeclined': ['제안을 거절했어요', 'Offer declined', '已拒绝提议', '已拒絕提案'],
-  'data.notice.interestSent': ['관심을 보냈어요(예시)', 'Interest sent (sample)', '已表示感兴趣（示例）', '已表示有興趣（範例）'],
+  'data.notice.interestSent': ['관심을 보냈어요', 'Interest sent', '已表示感兴趣', '已表示有興趣'],
 
   /* 검증·실패 */
   'data.error.notFound': ['항목을 찾지 못했어요', "Couldn't find that item", '找不到该项目', '找不到該項目'],
@@ -326,10 +325,11 @@ export const writtenRows = {
   'data.error.materialsInvalid': ['재료를 하나 이상 골라 주세요', 'Choose at least one material', '请至少选择一种材料', '請至少選擇一種材料'],
   'data.error.layoutInvalid': ['테이블과 좌석 수를 확인해 주세요', 'Check the tables and seats', '请检查桌子和座位数', '請確認桌子和座位數'],
   'data.error.wrongInquiryType': ['이 항목에는 쓸 수 없어요', 'Not available for this item', '此项目无法使用', '此項目無法使用'],
-  'data.error.sendFailed': ['보내지 못했어요. 채널이 응답하지 않아요(예시)', "Couldn't send. The channel didn't respond (sample)", '发送失败，渠道没有响应（示例）', '發送失敗，通路沒有回應（範例）'],
+  'data.error.sendFailed': ['보내지 못했어요. 채널이 응답하지 않아요', "Couldn't send. The channel didn't respond", '发送失败，渠道没有响应', '發送失敗，通路沒有回應'],
   'data.error.publicOnly': ['공개 제안에만 관심을 보낼 수 있어요', 'You can only show interest in public offers', '只能对公开提议表示感兴趣', '只能對公開提案表示有興趣'],
   // N17 reply and community guards.
   'data.error.replyDisconnected': ['응답 채널이 연결되어 있지 않아요', 'The reply channel is disconnected', '回复渠道未连接', '回覆管道未連線'],
+  'data.error.replyNeedsPerson': ['사장님이 직접 답변할 문의예요', 'This inquiry needs your reply', '此咨询需由您亲自回复', '這則詢問需要您親自回覆'],
   'data.error.replySourceMissing': ['문의 원문을 확인할 수 없어요', 'The original inquiry is unavailable', '无法查看咨询原文', '無法查看詢問原文'],
   'data.error.replyInvalidBody': ['답변 문구를 다시 확인해 주세요', 'Please check the reply text', '请重新确认回复内容', '請重新確認回覆內容'],
   'data.error.offerExpired': ['제안에 답할 기한이 지났어요', 'The reply deadline has passed', '提议回复期限已过', '提案回覆期限已過'],
@@ -337,7 +337,7 @@ export const writtenRows = {
   // End N17 guard copy.
   'data.error.unsupportedCondition': ['이 기간은 볼 수 없어요', "This period isn't available", '无法查看该期间', '無法查看該期間'],
   'data.error.invalidCondition': ['기간을 확인해 주세요', 'Check the period', '请检查期间', '請確認期間'],
-  'data.error.unknownWidget': ['없는 위젯이에요', "This widget isn't available", '没有此小组件', '沒有此小工具'],
+  'data.error.unknownWidget': ['없는 패널이에요', "This widget isn't available", '没有此小组件', '沒有此小工具'],
 
   /* 상태 문구(plan-1 한국어 + 작성한 번역) */
   'data.state.briefing.partial': ['일부 소식을 불러오지 못했어요', "Couldn't load some updates", '部分消息加载失败', '部分消息載入失敗'],

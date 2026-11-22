@@ -6,8 +6,8 @@ import {TABLE_COUNT} from './snapshot';
 /** `end` is null for the last, still running bucket ("until now"); the screen words it. */
 export interface Bucket { readonly start: string; readonly end: string | null; readonly value: number }
 
-export const OPEN_MINUTE = HOURLY_DWELL[0].hour * 60;
 export const NOW_MINUTE = Number(NOW_TIME.slice(0, 2)) * 60 + Number(NOW_TIME.slice(3, 5));
+export const OPEN_MINUTE = HOURLY_DWELL[0] ? HOURLY_DWELL[0].hour * 60 : NOW_MINUTE;
 
 const fmt = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
@@ -33,6 +33,7 @@ const CENTERS_15M = BUCKET_VALUES_15M.map((_, i) => {
 
 /** Linear interpolation between 15-minute centres, held flat before the first / after the last centre. */
 export function interpolateAt(minute: number): number {
+  if (!CENTERS_15M.length) return 0;
   if (minute <= CENTERS_15M[0]) return BUCKET_VALUES_15M[0];
   const last = CENTERS_15M.length - 1;
   if (minute >= CENTERS_15M[last]) return BUCKET_VALUES_15M[last];

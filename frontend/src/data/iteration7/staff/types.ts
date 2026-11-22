@@ -1,16 +1,37 @@
-export interface Staff { readonly staffId: string; readonly name: string; readonly archivedAt: string | null }
+import type { FeatureId } from '../../../contracts';
+import type { CalendarCategory } from '../../db/management-types';
+import type { CalendarSource } from '../../db/types';
+
+export interface Staff { readonly staffId: string; readonly name: string; readonly archivedAt: string | null; readonly revision?: number }
 export interface StaffSchedule {
   readonly scheduleId: string; readonly staffId: string; readonly date: string;
   readonly kind: 'work' | 'off'; readonly start: string | null; readonly end: string | null; readonly breakMinutes: number;
+  readonly revision?: number;
 }
 export interface StaffScheduleChange {
   readonly changeId: string; readonly at: string; readonly operation: 'create' | 'update' | 'delete';
   readonly entityId: string; readonly before: Staff | StaffSchedule | null; readonly after: Staff | StaffSchedule | null;
 }
+export interface CalendarProjection {
+  readonly source: 'purchase-order' | 'reservation' | 'custom-pickup' | 'community-offer' | 'notice' | 'tax-due' | 'grant-deadline';
+  readonly sourceId: string;
+  readonly sourceRevision: number;
+  readonly featureId: FeatureId;
+  readonly categoryId: CalendarCategory;
+  readonly visibility: CalendarSource;
+  readonly date: string;
+  readonly endDate: string | null;
+  readonly time: string | null;
+  readonly title: string;
+}
 export interface StaffTables {
   readonly staff: readonly Staff[];
   readonly staffSchedule: readonly StaffSchedule[];
   readonly staffScheduleChange: readonly StaffScheduleChange[];
+  /** Presence, including an empty list, identifies the authoritative calendar projection. */
+  readonly calendarProjection?: readonly CalendarProjection[];
+  readonly staffCalendarAsOf?: string;
+  readonly staffShiftRevision?: number;
 }
 export interface StaffScheduleQuery { readonly startDate: string; readonly endDate: string; readonly staffId?: string }
 export interface StaffScheduleModel {

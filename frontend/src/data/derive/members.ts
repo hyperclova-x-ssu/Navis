@@ -2,6 +2,7 @@ import type { DataSnapshot, DataText } from '../db/types';
 import type { MemberGrade } from '../db/management-types';
 import { addDays, dateOf, TODAY, WEEK_END, WEEK_START } from '../db/time';
 import { memoSelector } from './common';
+import { memberDate, memberWeek } from '../reality/05/dto';
 
 export function maskCustomer(customer: { readonly name?: string; readonly phone?: string; readonly maskedName?: string; readonly phoneLast4?: string; readonly maskKey: string }): { name: string | DataText; phone: string } {
   const letters = [...(customer.name ?? '')];
@@ -14,7 +15,7 @@ export function membershipActive(s: DataSnapshot, membershipId: string): boolean
   if (!m) return false;
   const customer = s.tables.marketing.mktCustomer.find((c) => c.customerId === m.customerId);
   const product = s.tables.membershipProduct.find((p) => p.productId === m.productId);
-  return (!m.customerId || !!customer && !customer.deletedAt && s.tables.memberProfile.some((p) => p.customerId === m.customerId)) && m.status === 'active' && m.endsOn >= TODAY && (product?.kind === 'period' || (m.usesLeft ?? 0) > 0);
+  return (!m.customerId || !!customer && !customer.deletedAt && s.tables.memberProfile.some((p) => p.customerId === m.customerId)) && m.status === 'active' && (!!s.tables.realMembers || m.endsOn >= TODAY) && (product?.kind === 'period' || (m.usesLeft ?? 0) > 0);
 }
 function groupBy<T>(rows: readonly T[], keyOf: (row: T) => string | undefined): Map<string | undefined, T[]> {
   const groups = new Map<string | undefined, T[]>();
@@ -35,21 +36,25 @@ const memberBase = memoSelector(() => 'members', (s) => {
   const uses = groupBy(t.membershipUse, (u) => u.membershipId);
   const sends = groupBy(t.marketing.messageSend, (send) => send.sendId);
   const from = addDays(TODAY, -27);
+  const today = t.realMembers?.businessDate ?? TODAY;
+  const week = t.realMembers ? memberWeek(today) : { start: WEEK_START, end: WEEK_END };
   const rows = t.memberProfile.flatMap((p) => {
     const c = customers.get(p.customerId);
     if (!c || c.deletedAt || c.variant !== null) return [];
+    const real = t.realMembers?.profiles[p.memberId];
     const visits = [...new Set((visitsByCustomer.get(c.customerId) ?? []).filter((v) => v.businessDate <= TODAY).map((v) => v.businessDate))].sort();
-    const recentVisits = visits.filter((d) => d >= from).length;
-    const automaticGrade: MemberGrade = recentVisits >= 4 ? 'regular' : recentVisits >= 2 ? 'frequent' : recentVisits || !visits.length ? 'occasional' : 'inactive';
-    const grade = p.gradeOverride ?? automaticGrade;
+    const recentVisits = real?.recentVisitCount ?? visits.filter((d) => d >= from).length;
+    const visitCount = real?.visitCount ?? visits.length;
+    const automaticGrade: MemberGrade = recentVisits >= 4 ? 'regular' : recentVisits >= 2 ? 'frequent' : recentVisits || !visitCount ? 'occasional' : 'inactive';
+    const grade = real?.grade ?? p.gradeOverride ?? automaticGrade;
     const paidBills = new Set(s.pos?.bills.filter(b => b.status === 'paid' && (b.memberId === p.memberId || b.discounts.some(d => d.contributionMemberId === p.memberId))).map(b => b.billId) ?? []);
-    const lastPayment = s.pos?.payments.filter(payment => payment.status === 'paid' && payment.recognizedAt && paidBills.has(payment.billId)).sort((a, b) => b.seq - a.seq)[0] ?? null;
+    const lastPayment = real ? real.lastPayment ?? null : s.pos?.payments.filter(payment => payment.status === 'paid' && payment.recognizedAt && paidBills.has(payment.billId)).sort((a, b) => b.seq - a.seq)[0] ?? null;
     gradeCounts[grade]++;
     const memberships = (membershipsByCustomer.get(c.customerId) ?? []).map((m) => {
       const product = products.get(m.productId);
-      return { ...m, active: m.status === 'active' && m.endsOn >= TODAY && (product?.kind === 'period' || (m.usesLeft ?? 0) > 0), product, uses: uses.get(m.membershipId) ?? [], endingThisWeek: m.endsOn >= WEEK_START && m.endsOn <= WEEK_END };
+      return { ...m, active: m.status === 'active' && (!!real || m.endsOn >= today) && (product?.kind === 'period' || (m.usesLeft ?? 0) > 0), product, uses: uses.get(m.membershipId) ?? [], endingThisWeek: m.endsOn >= week.start && m.endsOn <= week.end };
     });
-    return [{ ...p, ...maskCustomer(c), consentSms: c.consentSms, automaticGrade, grade, manuallyGraded: p.gradeOverride !== null, recentVisits, visitCount: visits.length, lastVisit: visits.at(-1) ?? null, lastPayment, visits, memberships,
+    return [{ ...p, ...maskCustomer(c), ...(real ? { phone: real.phoneMasked } : {}), consentSms: c.consentSms, automaticGrade, grade, manuallyGraded: p.gradeOverride !== null, recentVisits, visitCount, lastVisit: real?.lastVisitAt ? memberDate(real.lastVisitAt) : visits.at(-1) ?? null, lastPayment, visits, memberships,
       reservations: reservationsByMember.get(p.memberId) ?? [], coupons: (targetsByCustomer.get(c.customerId) ?? []).map((target) => ({ ...target, coupon: coupons.get(target.couponId), sends: sends.get(target.sendId) ?? [] })), notes: notesByMember.get(p.memberId) ?? [], couponRef: { featureId: 'customer-groups' as const, itemId: c.customerId, focus: 'action' as const } }];
   }).sort((a, b) => (a.memberCode ?? a.memberId).localeCompare(b.memberCode ?? b.memberId));
   return { rows, total: rows.length, gradeCounts, membershipCount: rows.reduce((n, r) => n + r.memberships.filter((m) => m.active).length, 0), endingThisWeekCount: rows.reduce((n, r) => n + r.memberships.filter((m) => m.active && m.endingThisWeek).length, 0) };

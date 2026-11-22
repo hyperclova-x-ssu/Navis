@@ -1,5 +1,6 @@
 import { cafeMenuPhoto } from './cafe-menu-photos';
 import { cafeMemberId } from './cafe-identity';
+import { cafeMenuCategory } from '../reality/01/menu-category';
 import type { PosDrawerSnapshot } from '../../contracts/pos';
 import { createCustomOrderSeed } from '../iteration7/custom-orders/seed';
 import { createEnvironmentSeed } from '../iteration7/environment/seed';
@@ -7,20 +8,15 @@ import { createNoticeSeed } from '../iteration7/notices/seed';
 import { createStaffSeed } from '../iteration7/staff/seed';
 import { createMarketingSeed } from '../marketing/seed';
 import { STORE_HOURS, STORE_WEEKDAYS, storeHoursGrounding } from '../store-hours';
-import { seedCatalog } from './generated/catalog';
-import { seedClosingHistory } from './generated/closing-history';
-import { seedHistory } from './generated/history';
+import { seedCatalog, seedCctvHistoryScale, seedClosingHistory, seedHistory, seedMembers, seedOperations, seedSupplement, seedToday } from './cafe-fixtures';
+import { fixtureOccurred, rebaseFixtureDates } from './fixture-dates';
 import manifest from './generated/manifest.json';
-import { seedMembers } from './generated/members';
-import { seedOperations } from './generated/operations';
-import { seedSupplement } from './generated/supplement';
-import { seedToday } from './generated/today';
 import { deepFreeze } from './freeze';
 import { addDays, dateRange, NOW, TODAY, TOMORROW, weekdayOf } from './time';
 import type { CalendarEvent, DataTables, DemandBand, Reservation, SeedOverrides, ThreadStatus } from './types';
 
 export { deepFreeze } from './freeze';
-export const SALES_START = manifest.generator.start;
+export const SALES_START = rebaseFixtureDates(manifest.generator.start);
 export const DEFAULT_STORE_NAME = manifest.store.name;
 
 const key = (key: string) => ({ key });
@@ -183,10 +179,10 @@ function buildSeed(): DataTables {
     ...row, categoryId: categoryOf(row.category), kind: row.kind === 'todo' ? 'todo' : 'event', title: raw(row.title), memo: null,
     storeClosure: row.closureKind && row.closureEndDate ? { kind: row.closureKind === 'regular' ? 'regular' : 'temporary', endDate: row.closureEndDate } : null,
   }));
-  const cctvScale = seedSupplement.cctv.reduce((n, row) => n + row.entries, 0) / seedToday.rollup.orders;
   const cctvHistory = seedHistory.days.slice(-7).flatMap(day => day.hourly.flatMap((orders, hour) => orders ? [{
-    businessDate: day.date, hour, entries: Math.round(orders * cctvScale), status: 'ok' as const, reviewMarked: false, provenance: 'sample' as const,
+    businessDate: day.date, hour, entries: Math.round(orders * seedCctvHistoryScale), status: 'ok' as const, reviewMarked: false, provenance: 'sample' as const,
   }] : []));
+  const groupCallOccurred = fixtureOccurred(groupCall.time);
   const guideId = 'cafe-store-guide';
   return {
     dailySales: days.map(day => ({
@@ -196,11 +192,15 @@ function buildSeed(): DataTables {
     menuDaily: days.flatMap(day => day.menu.map(([menuId, qty, gross, discount, refund, cost]) => ({
       businessDate: day.date, menuId, qty, netSales: gross - discount - refund, unitCost: qty ? cost / qty : 0, totalCost: cost,
     }))),
-    menuItem: seedCatalog.menu.map(row => ({
-      ...row, nameKey: seedText(row.name), name: raw(row.name), categoryKey: seedText(row.sourceCategory), // AC-1055 demo memo. The DB has no note for the cafe latte.
-      memo: row.memo ? raw(row.memo) : row.menuId === 'm-cafe-latte' ? raw('우유는 매일 아침 한강목장 유업유통') : null,
-      costEffectiveFrom: row.activeFrom ?? SALES_START, recipe: [], prepMin: row.prepMin, photoKey: null, customPhotoUrl: cafeMenuPhoto(row.menuId), optionGroups: row.groups,
-    })),
+    menuItem: seedCatalog.menu.map(row => {
+      const category = cafeMenuCategory(row);
+      return {
+        ...row, nameKey: seedText(row.name), name: raw(row.name), category, categoryKey: `data.management.category.${category}`, seasonal: row.season,
+        // AC-1055 demo memo. The DB has no note for the cafe latte.
+        memo: row.memo ? raw(row.memo) : row.menuId === 'm-cafe-latte' ? raw('우유는 매일 아침 한강목장 유업유통') : null,
+        costEffectiveFrom: row.activeFrom ?? SALES_START, recipe: [], prepMin: row.prepMin, photoKey: null, customPhotoUrl: cafeMenuPhoto(row.menuId), optionGroups: row.groups,
+      };
+    }),
     menuOption: [],
     expense: seedOperations.expenses.map(row => ({
       ...row, category: row.category as DataTables['expense'][number]['category'], evidence: 'none', status: 'confirmed', memo: row.memo ? raw(row.memo) : null,
@@ -225,8 +225,8 @@ function buildSeed(): DataTables {
     })),
     membershipUse: seedOperations.membershipUses,
     ...createNoticeSeed(), ...createEnvironmentSeed(),
-    customTemplate: custom.customTemplate, customOrder: custom.customOrder, reservation: [...reservations, groupReservation, ...custom.reservation.filter(row => row.kind === 'pickup')],
-    callLog: [groupCall], reservationChange: seedToday.bookings.filter(row => row.status !== 'confirmed').map(row => ({
+    customTemplate: custom.customTemplate, customOrder: custom.customOrder, reservation: [...reservations, ...(groupCallOccurred ? [groupReservation] : []), ...custom.reservation.filter(row => row.kind === 'pickup')],
+    callLog: groupCallOccurred ? [groupCall] : [], reservationChange: seedToday.bookings.filter(row => row.status !== 'confirmed').map(row => ({
       changeId: `reservation-status:${row.reservationId}`, reservationId: row.reservationId, at: row.at, kind: 'status', before: { status: 'confirmed' }, after: { status: row.status },
     })),
     calendarEvent: [...calendar, ...seedSupplement.calendar.map(row => ({ ...row, categoryId: categoryOf(row.category), title: raw(row.title), memo: null }))],

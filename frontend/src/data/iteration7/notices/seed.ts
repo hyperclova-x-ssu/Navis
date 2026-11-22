@@ -1,4 +1,4 @@
-import { seedSupplement } from '../../db/generated/supplement';
+import { seedSupplement } from '../../db/cafe-fixtures';
 import type { ClosureCalendarEvent, NoticeTables } from './types';
 
 /** Append this direct closure in shared composition; it is outside today's/week's summary. */

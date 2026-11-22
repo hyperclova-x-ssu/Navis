@@ -1,7 +1,8 @@
 import type { DataSnapshot, DataTables } from '../../db/types';
-import { dateRange, isIsoDate, NOW_TIME, TODAY } from '../../db/time';
+import { dateRange, isIsoDate } from '../../db/time';
 import { deepFreeze } from '../../db/freeze';
 import type { StaffSchedule, StaffScheduleModel, StaffScheduleQuery } from './types';
+import { staffCalendarClock, staffLocalTimestamp } from './clock';
 
 const activeRows = (t: DataTables) => {
   const active = new Set(t.staff.filter(s => s.archivedAt === null).map(s => s.staffId));
@@ -36,13 +37,17 @@ export function selectStaffSchedule(snapshot: DataSnapshot, query: StaffSchedule
   let models = cache.get(snapshot);
   if (!models) cache.set(snapshot, models = new Map());
   const hit = models.get(key); if (hit) return hit;
-  const t = snapshot.tables, all = activeRows(t), today = all.filter(r => r.date === TODAY);
+  const t = snapshot.tables, all = activeRows(t), clock = staffCalendarClock(t), today = all.filter(r => r.date === clock.date);
   const rows = all.filter(r => r.date >= query.startDate && r.date <= query.endDate && (!query.staffId || r.staffId === query.staffId));
   const staff = t.staff.filter(s => s.archivedAt === null && (!query.staffId || s.staffId === query.staffId));
   const entityIds = new Set([...staff.map(s => s.staffId), ...rows.map(r => r.scheduleId)]);
   const result: StaffScheduleModel = deepFreeze({
-    staff, rows, changes: t.staffScheduleChange.filter(c => (!query.staffId || entityIds.has(c.entityId) || c.before?.staffId === query.staffId || c.after?.staffId === query.staffId) && c.at.slice(0, 10) >= query.startDate && c.at.slice(0, 10) <= query.endDate),
-    today: { workingCount: new Set(today.filter(r => r.kind === 'work').map(r => r.staffId)).size, offCount: new Set(today.filter(r => r.kind === 'off').map(r => r.staffId)).size, nextHandoffAt: handoffTimes(today).find(time => time >= NOW_TIME) ?? null },
+    staff, rows, changes: t.staffScheduleChange.filter(c => {
+      const date = t.staffCalendarAsOf ? staffLocalTimestamp(c.at).date : c.at.slice(0, 10);
+      return (!query.staffId || entityIds.has(c.entityId) || c.before?.staffId === query.staffId || c.after?.staffId === query.staffId)
+        && date >= query.startDate && date <= query.endDate;
+    }),
+    today: { workingCount: new Set(today.filter(r => r.kind === 'work').map(r => r.staffId)).size, offCount: new Set(today.filter(r => r.kind === 'off').map(r => r.staffId)).size, nextHandoffAt: handoffTimes(today).find(time => time >= clock.time) ?? null },
     hourly: dateRange(query.startDate, query.endDate).flatMap(date => Array.from({ length: 24 }, (_, hour) => ({ date, hour, staffCount: query.staffId ? new Set(rows.filter(r => r.date === date && r.kind === 'work' && r.start! <= `${String(hour).padStart(2, '0')}:00` && `${String(hour).padStart(2, '0')}:00` < r.end!).map(r => r.staffId)).size : staffCountAt(t, date, hour) }))),
     period: { start: query.startDate, end: query.endDate },
   });

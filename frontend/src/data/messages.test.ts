@@ -14,14 +14,16 @@ import { managementBundle, managementKoreanOverrides, managementVariantLabels } 
 import { posDataBundle } from './messages/pos';
 import { iteration7DataKorean, iteration7VariantKorean } from './messages/iteration7';
 import { sourcedRows } from './messages/sourced';
+import { exportReasonBundle } from './reality/07/export-copy';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const keysOf = (b: { ko: Readonly<Record<string, string>> }) => Object.keys(b.ko);
 const allKo = Object.assign({}, ...dataBundles.map((b) => b.ko)) as Record<string, string>;
 const allKeys = new Set(Object.keys(allKo));
+const cameraAlertKey = 'data.management.alert.camera';
 // D-209 / PRD 12.6: iteration7DataKorean includes all M3 money facts and errors in koOnly.
 // D-209: iteration 6 data copy uses the same Korean fallback as iteration 5.
-const koOnly = new Set([...Object.keys(iteration7DataKorean),...Object.keys(iteration7VariantKorean),...Object.keys(managementBundle.ko), ...Object.keys(managementKoreanOverrides), ...Object.keys(managementVariantLabels), ...Object.keys(posDataBundle.ko), ...Object.keys(allKo).filter(key => /^(?:data\.(?:staff\.|state\.staff-schedule\.|fact\.staff\.)|preview\.variant\.staff-schedule\.)/.test(key))]);
+const koOnly = new Set([...Object.keys(iteration7DataKorean),...Object.keys(iteration7VariantKorean),...Object.keys(managementBundle.ko).filter(key => key !== cameraAlertKey), ...Object.keys(managementKoreanOverrides), ...Object.keys(managementVariantLabels), ...Object.keys(posDataBundle.ko), ...Object.keys(allKo).filter(key => /^(?:data\.(?:staff\.|state\.staff-schedule\.|fact\.staff\.)|preview\.variant\.staff-schedule\.)/.test(key))]);
 
 /** Walks a model/view and collects message keys (`…Key`, `…Keys`, DataText `key`/`keyParams`, `messageKey`). */
 function collect(value: unknown, out: Set<string>): void {
@@ -38,11 +40,15 @@ function collect(value: unknown, out: Set<string>): void {
 describe('bundle shape', () => {
   it('한국어가 완전하고 기존 번역과 반복5 한국어 fallback을 보존한다', () => {
     expect(findKoGaps(...dataBundles)).toEqual([]);
-    for (const b of dataBundles) for (const key of keysOf(b)) {
-      for (const lang of ['en', 'zh-Hans', 'zh-Hant'] as const) {
-        if (koOnly.has(key)) expect(createTranslator(lang, ...dataBundles).t(key, { menu: '메뉴', count: 2, total: 5, done: 3 })).toBe(createTranslator('ko', ...dataBundles).t(key, { menu: '메뉴', count: 2, total: 5, done: 3 }));
-        else expect((b[lang] as Record<string, string>)[key], `${lang} ${key}`).toBeTruthy();
+    const ko = createTranslator('ko', ...dataBundles);
+    const params = { menu: '메뉴', count: 2, total: 5, done: 3 };
+    for (const lang of ['en', 'zh-Hans', 'zh-Hant'] as const) {
+      const t = createTranslator(lang, ...dataBundles);
+      for (const b of dataBundles) for (const key of keysOf(b)) {
+        if (koOnly.has(key)) expect(t.t(key, params), `${lang} ${key}`).toBe(ko.t(key, params));
+        else expect(b[lang][key]?.trim(), `${lang} ${key}`).toBeTruthy();
       }
+      expect(t.t(cameraAlertKey), `${lang} ${cameraAlertKey}`).not.toBe(ko.t(cameraAlertKey));
     }
     for (const key of keysOf(dataBundle)) expect(key.startsWith('data.')).toBe(true);
     for (const key of keysOf(previewVariantBundle)) expect(key.startsWith('preview.variant.')).toBe(true);
@@ -197,7 +203,15 @@ describe('coverage: every key the data module can emit exists', () => {
     const walk = (dir: string) => { for (const f of readdirSync(dir)) { const p = join(dir, f); if (statSync(p).isDirectory()) { if (f !== 'messages' && f !== 'dev') walk(p); } else if (/\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f) && f !== 'index.ts') files.push(p); } };
     walk(here);
     const literals = new Set<string>();
-    for (const f of files) for (const [, k] of readFileSync(f, 'utf8').matchAll(/'((?:data|preview\.variant)\.[A-Za-z0-9.-]+)'/g)) if (!k.endsWith('.')) literals.add(k);
+    const exportCopyFile = join(here, 'reality', '07', 'export-copy.ts');
+    for (const f of files) {
+      const source = readFileSync(f, 'utf8');
+      // The export-reason bundle's ID is metadata. Its message keys use export.reason.*.
+      const messageSource = f === exportCopyFile ? source.replace(`id: '${exportReasonBundle.id}'`, '') : source;
+      for (const [, key] of messageSource.matchAll(/'((?:data|preview\.variant)\.[A-Za-z0-9.-]+)'/g)) {
+        if (!key.endsWith('.')) literals.add(key);
+      }
+    }
     expect([...literals].filter((k) => !allKeys.has(k))).toEqual([]);
   });
 });
@@ -223,9 +237,12 @@ describe.skipIf(!existsSync(join(here, '../../../01_product/LOCALES.md')))('LOCA
       ...seedCatalog.items.map(row => row.name), ...seedCatalog.menu.map(row => row.name),
       ...seedCatalog.suppliers.map(row => row.name), `우유 입고 · ${dairy.name}`,
     ]);
+    // LOCALES 20 (D-323 ⑦) retired the “(예시)” tails from screen text; the section 8 rows keep them until their owner rewrites the doc, so a row is compared without its tail.
+    const noTail = (s: string) => s.replace(/\s?(?:\(예시\)|\(sample\)|（示例）|（範例）)/gu, '');
     for (const row of rows) {
       const cafeName = row.every(name => name === row[0]) && importedNames.has(row[0]);
-      expect(values.includes(row.join('|')) || delivery === row.join('|') || cafeName, row.join(' / ')).toBe(true);
+      const docRow = noTail(row.join('|'));
+      expect(values.includes(docRow) || delivery === docRow || cafeName, row.join(' / ')).toBe(true);
       if (cafeName) for (const locale of ['ko', 'en', 'zh-Hans', 'zh-Hant'] as const) expect(t(locale).t(`seed:${row[0]}`)).toBe(row[0]);
     }
   });

@@ -3,12 +3,16 @@ export interface EnvironmentReading {
   readonly temperatureC: number;
   readonly humidityPct: number;
 }
+export type EnvironmentRange = readonly [number, number];
 export interface EnvironmentPlaylist {
   readonly id: string;
   readonly name: string;
   readonly tracks: readonly { readonly id: string; readonly title: string; readonly artist: string }[];
 }
 export interface StoreEnvironment {
+  readonly source?: 'manual';
+  readonly manualAlert?: boolean;
+  readonly limitsRevision?: number;
   readonly sensor: 'connected' | 'disconnected' | 'none';
   readonly current: EnvironmentReading | null;
   readonly readings: readonly EnvironmentReading[];
@@ -21,7 +25,10 @@ export interface StoreEnvironment {
   readonly volumePct: number;
   readonly playlists: readonly EnvironmentPlaylist[];
 }
-export interface EnvironmentTables { readonly storeEnvironment: StoreEnvironment }
+export interface EnvironmentTables {
+  readonly storeEnvironment: StoreEnvironment;
+  readonly realInsight?: import('../../reality/10/dto').RealInsight;
+}
 export type EnvironmentVariant = 'normal' | 'empty' | 'error' | 'out_of_range' | 'sensor_disconnected';
 export interface EnvironmentAlert {
   readonly reason: 'OUT_OF_RANGE' | 'SENSOR_DISCONNECTED';
@@ -30,6 +37,7 @@ export interface EnvironmentAlert {
   readonly sourceFeatureId: 'store-environment';
 }
 export interface StoreEnvironmentModel {
+  readonly source?: 'manual';
   readonly status: 'ready' | 'empty' | 'error';
   readonly retryable: boolean;
   readonly messageKey?: string;
@@ -49,10 +57,19 @@ export interface StoreEnvironmentModel {
   };
   readonly alerts: readonly EnvironmentAlert[];
 }
-export type EnvironmentCommand = (
+export type EnvironmentPlayerCommand = (
   | { readonly type: 'environment.setPlaying'; readonly playing: boolean }
   | { readonly type: 'environment.skipTrack'; readonly direction: 'previous' | 'next' }
   | { readonly type: 'environment.selectPlaylist'; readonly playlistId: string }
   | { readonly type: 'environment.selectTrack'; readonly trackId: string; readonly playlistId?: string }
   | { readonly type: 'environment.setVolume'; readonly volumePct: number }
 ) & { readonly baseRevision?: number };
+
+export type ObservationCommand = (
+  | ({ readonly type: 'environment.recordReading' } & EnvironmentReading)
+  | { readonly type: 'environment.updateLimits'; readonly expectedRevision: number; readonly temperatureRange: EnvironmentRange; readonly humidityRange: EnvironmentRange }
+  | { readonly type: 'cctv.saveZones'; readonly cameraId: string; readonly expectedRevision: number; readonly zones: readonly import('../../reality/10/dto').ZoneInput[]; readonly confirmed?: boolean }
+  | { readonly type: 'cctv.setTableLink'; readonly zoneId: string; readonly tableId: string | null; readonly expectedRevision: number; readonly confirmed?: boolean }
+) & { readonly baseRevision?: number };
+
+export type EnvironmentCommand = EnvironmentPlayerCommand | ObservationCommand;

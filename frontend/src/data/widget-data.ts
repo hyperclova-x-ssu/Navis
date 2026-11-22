@@ -55,3 +55,29 @@ export * from './iteration7/notices';
 export * from './iteration7/environment';
 export * from './iteration7/custom-orders';
 export { initializeCustomPos, selectCustomOrderRead, selectM2DayTotals, selectM2Drawer } from './pos/projection';
+
+/** REAL-PLAN F00: the data port's public vocabulary for widgets and Navis (hooks live in `./react`; adapters import from `./reality/00`). */
+export { REAL_DOMAINS, REAL_DOMAIN_PAIR, WIDGET_DOMAIN, WIDGET_DEPENDENCIES, widgetDomains, REAL_UNDO_PREFIX, PortError, defineBinding } from './reality/00/port';
+export type { RealDomain, RealSource, RealPort, DomainState, DomainAdapter, CommandBinding, CommandReceipt } from './reality/00/port';
+/**
+ * Load the HTTP domains that serve these widgets before reading their facts or sources (Navis reads an unopened widget through the same tables).
+ * A no-op on fixture builds. Failures stay in the domain state (`store.real.state(domain)`), they do not reject.
+ */
+export async function ensureWidgetData(store: import('./db/store').WidgetDataStore, widgetIds: readonly import('./conditions').DataWidgetId[]): Promise<void> {
+  const port = store.real;
+  if (!port) return;
+  const { widgetDomains } = await import('./reality/00/port');
+  await Promise.all([...new Set(widgetIds.flatMap(id => widgetDomains(id)))].map(domain => port.load(domain)));
+}
+
+/**
+ * Undo from a notice toast, always a Promise: a real receipt (`real-undo:*`) waits for the server's answer (`store.real.undo`), a fixture token is the
+ * sync local undo. Show the toast's success only after this resolves ok; failures carry their `messageKey` (e.g. `data.real.error.UNDO_EXPIRED`).
+ */
+export function undoDataNotice(store: import('./db/store').WidgetDataStore, token: string): Promise<import('./commands/types').DataCommandResult> {
+  return Promise.resolve(undoDataNoticeResult(store, token));
+}
+/** Same, but a fixture token answers synchronously (the toast shows its result in the same tick, exactly as before the data port); only a real receipt is a Promise. */
+export function undoDataNoticeResult(store: import('./db/store').WidgetDataStore, token: string): import('./commands/types').DataCommandResult | Promise<import('./commands/types').DataCommandResult> {
+  return store.real && token.startsWith('real-undo:') ? store.real.undo(token) : store.undo(token);
+}

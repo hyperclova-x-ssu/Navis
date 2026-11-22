@@ -3,6 +3,8 @@ import { businessDate } from './shared';
 import type { CustomAccountingModel, CustomCalendarEvent, CustomOrder, CustomOrderPaymentView, CustomOrderQuery, CustomOrderRead, CustomOrdersModel, PickupReservation } from './types';
 
 export function customPaymentView(read: CustomOrderRead, order: CustomOrder): CustomOrderPaymentView {
+  const real = read.payments?.[order.customOrderId];
+  if (real) return real;
   const settlements = read.money.settlements.filter(s => s.purpose === 'custom_order' && s.sourceRef.id === order.customOrderId);
   const ids = new Set(settlements.map(s => s.settlementId));
   const corrections = read.money.corrections.filter(c => ids.has(c.settlementId));

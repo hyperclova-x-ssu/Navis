@@ -1,12 +1,12 @@
 {
   "formatVersion": 1,
-  "snapshotSha256": "9cdf01ef0c7a7eb2c01d87b2061e6abb9bb97743dceb62d6887468692b68b987",
+  "snapshotSha256": "86960c74e5d3448b3244d42fbd8210b5f0a4d8fcf916b7aa0e2ed6077c032e74",
   "sha256": {
     "content": "986a24e7672cc2d276add5a442576111bada26d29925a315c1c4f9566ef55a2b",
-    "supplement": "5a63b8966d2124a134eff7803b4189a37794952084d686f83550b4d401ca808b",
+    "supplement": "9f2a9beaf88166f5dcd303161aa9ac055b5f23d6dab4e5e4e7552b80ce99039e",
     "config": "028fe0edc4509eff87c51bc7b708f475855d4f88e1797ec51977db1a7ea764c3",
     "dbGenerator": "e438a4180bf84d13d3f157e20477f02ce9f2d115b341e9bb43a5ce5f24ab84cd",
-    "appGenerator": "133d0885aa72a7902e82925c940cbf50065e1a475d4628f8acb0cf172d879835"
+    "appGenerator": "7c5fd4827be942d47e14bea82060d62e5f7e2396bf816fde25dafd538e75ba03"
   },
   "generator": {
     "name": "ansungjalbu-erd-v1.1",
@@ -116,8 +116,12 @@
       "bytes": 240664
     },
     "supplement.ts": {
-      "sha256": "8d45746240a61fd53c8a466c784e2f4fb80f1a5e32f4694d39f3e5ee47e4d730",
-      "bytes": 15459
+      "sha256": "dfbcb7f0821faa92b1041cbe3da6b5313f52baea89001688aa7874b39390ffb5",
+      "bytes": 15295
+    },
+    "timeline.ts": {
+      "sha256": "73f8c85e860a655c952a6add6f751f374cee5027a44c5c76487ec5af9497ba2a",
+      "bytes": 373
     },
     "widget-drafts.json": {
       "sha256": "f32a52f19e6978dec0fd074b821828c9e462feaddf0065a663ffaa667b2c7ef5",

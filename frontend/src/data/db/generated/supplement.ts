@@ -117,7 +117,6 @@ export const seedSupplement = {
     {"zone":"bar","seats":6,"occupied":2,"at":"2026-11-17T15:45:00","provenance":"sample"}
   ],
   "cameras": [
-    {"cameraId":"sample-entrance","name":"출입구","operation":"recording","lastCheckedAt":"2026-11-17T15:45:00","connection":"connected","provenance":"sample"},
     {"cameraId":"sample-window","name":"창가 좌석","operation":"recording","lastCheckedAt":"2026-11-17T15:45:00","connection":"connected","provenance":"sample"}
   ],
   "onDuty": [

@@ -7,21 +7,33 @@ import type { NoticeCommand, NoticeDraft, NoticeHistory, NoticePreview, NoticePr
 
 type Failure = Extract<DataCommandResult, { ok: false }>;
 export interface NoticeHandlerContext<T extends NoticeSourceTables> {
-  readonly tables: T; readonly snapshot: { readonly revision: number; readonly tables?: T }; readonly now?: string;
+  readonly tables: T; readonly snapshot: { readonly revision: number; readonly tables?: T; readonly pos?: { readonly businessDate: string } }; readonly now?: string;
   nextId(prefix: string): string;
 }
 type Result<T> = Failure | { readonly ok: true; readonly tables: T; readonly undoable: boolean; readonly noticeKey?: string; readonly value: unknown };
 export { classifyNoticeContent };
-export const NOTICE_ONCE_COMMANDS = ['notice.importClosure', 'notice.deleteDraft', 'notice.send'] as const;
-export const noticeRequiresKey = (c: NoticeCommand) => c.type === 'notice.importClosure' || c.type === 'notice.deleteDraft' || c.type === 'notice.send' || c.type === 'notice.saveDraft' && !c.noticeId;
+export const NOTICE_ONCE_COMMANDS = ['notice.importClosure', 'notice.deleteDraft', 'notice.send', 'notice.cancelSchedule'] as const;
+export const noticeRequiresKey = (c: NoticeCommand) => c.type === 'notice.importClosure' || c.type === 'notice.deleteDraft' || c.type === 'notice.send' || c.type === 'notice.cancelSchedule' || c.type === 'notice.saveDraft' && !c.noticeId;
 const clean = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
 const viewOf = (p: NoticePreview): NoticePreviewView => ({ previewId: p.previewId, draftRevision: p.draftRevision, contentClass: p.contentClass, recipientCount: p.recipientCount, excludedCount: p.excludedCount, renderedBody: p.renderedBody, adMarker: p.adMarker, optOutText: p.optOutText, sendAllowed: p.sendAllowed, reasons: p.reasons });
+export function noticeBusinessNow(snapshot: { readonly pos?: { readonly businessDate: string } }): string {
+  return snapshot.pos ? `${snapshot.pos.businessDate}${NOW.slice(10)}` : NOW;
+}
+export function cancellableNoticeSchedule(tables: NoticeSourceTables, sentId: string, now: string) {
+  return tables.noticeSent.find(row => row.sentId === sentId && row.status === 'scheduled' && now < row.sendAt);
+}
+
 function handle<T extends NoticeSourceTables>(ctx: NoticeHandlerContext<T>, c: NoticeCommand): Result<T> {
-  const t = ctx.tables, now = ctx.now ?? NOW;
+  const t = ctx.tables, now = ctx.now ?? noticeBusinessNow(ctx.snapshot);
   if (c.baseRevision !== undefined && c.baseRevision !== ctx.snapshot.revision) return fail('STALE_REVISION', undefined, 'CONFLICT');
   if (!isIsoDate(now.slice(0, 10)) || !isTime(now.slice(11, 16))) return fail('INVALID_DATE_RANGE', 'now');
   if (noticeRequiresKey(c) && (!('idempotencyKey' in c) || !clean(c.idempotencyKey))) return fail('KEY_REQUIRED', 'idempotencyKey');
   const success = (tables: T, value: unknown, undoable = false, noticeKey?: string): Result<T> => ({ ok: true, tables, value, undoable, ...(noticeKey ? { noticeKey } : {}) });
+  if (c.type === 'notice.cancelSchedule') {
+    const row = cancellableNoticeSchedule(t, c.sentId, now);
+    if (!row) return fail('SCHEDULE_NOT_CANCELLABLE', 'sentId', 'CONFLICT');
+    return success({ ...t, noticeSent: t.noticeSent.filter(item => item !== row) }, { sentId: row.sentId }, false, 'data.notices.notice.scheduleCancelled');
+  }
   if (c.type === 'notice.importClosure') {
     const closure = selectStoreClosures({ tables: t }).find(e => e.eventId === c.eventId);
     if (!closure) return fail('UNKNOWN_CLOSURE', 'eventId', 'NOT_FOUND');
@@ -60,6 +72,9 @@ function handle<T extends NoticeSourceTables>(ctx: NoticeHandlerContext<T>, c: N
       optOutText: prepared.optOutText, sendAllowed: prepared.sendAllowed, reasons: prepared.reasons, signature: prepared.signature, eligibleMemberIds: prepared.eligibleMemberIds };
     return success({ ...t, noticePreview: [...t.noticePreview.filter(p => p.draftId !== draft.noticeId), preview] }, deepFreeze(viewOf(preview)));
   }
+  if (t.noticeSent.some(row => row.status === 'scheduled' && row.noticeId === c.noticeId)) {
+    return fail('ALREADY_SCHEDULED', 'noticeId', 'CONFLICT');
+  }
   const p = t.noticePreview.find(p => p.previewId === c.previewId && p.draftId === draft.noticeId);
   if (!p || p.draftRevision !== draft.revision || p.signature !== prepared.signature) return fail('PREVIEW_STALE', 'previewId', 'CONFLICT');
   if (!prepared.sendAllowed) return fail(prepared.reasons[0]);
@@ -72,7 +87,7 @@ function handle<T extends NoticeSourceTables>(ctx: NoticeHandlerContext<T>, c: N
   const sent: NoticeHistory = deepFreeze({ ...draft, groupIds: [...draft.groupIds], contentClass: prepared.contentClass,
     sentId: ctx.nextId('notice-sent'), draftRevision: draft.revision, recipientCount: prepared.recipientCount, renderedBody: prepared.renderedBody, ...timing,
     closureTitle: prepared.closure?.title ?? null, closureBody: prepared.closure?.body ?? null });
-  return success({ ...t, noticeSent: [...t.noticeSent, sent] }, receipt(sent), sent.status === 'scheduled',
+  return success({ ...t, noticeSent: [...t.noticeSent, sent] }, receipt(sent), false,
     sent.status === 'scheduled' ? 'data.notices.notice.scheduled' : 'data.notices.notice.sent');
 }
-export const noticeHandlers = { 'notice.saveDraft': handle, 'notice.importClosure': handle, 'notice.deleteDraft': handle, 'notice.preview': handle, 'notice.send': handle };
+export const noticeHandlers = { 'notice.saveDraft': handle, 'notice.importClosure': handle, 'notice.deleteDraft': handle, 'notice.preview': handle, 'notice.send': handle, 'notice.cancelSchedule': handle };

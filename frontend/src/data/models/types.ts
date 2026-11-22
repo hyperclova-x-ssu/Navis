@@ -30,7 +30,9 @@ export interface LedgerExpenseRow { readonly expenseId: string; readonly date: s
 export interface LedgerTrendPoint { readonly date: string; readonly net: number; readonly expenses: number; readonly netProfit: number }
 export interface LedgerModel { readonly netProfit?: number; readonly profitRate?: number | null;
   readonly period: Period;
-  readonly sales: { readonly net: number; readonly gross: number; readonly discount: number; readonly refund: number; readonly byMethod: { readonly card: number; readonly cash: number; readonly easyPay: number } };
+  readonly sales: { readonly net: number; readonly gross: number; readonly discount: number; readonly refund: number; readonly byMethod: { readonly card: number; readonly cash: number; readonly easyPay: number };
+    /** REAL-PLAN F09-2: over HTTP, `false` when the finance service sent no `sales.byMethod` (the rows are then hidden, never shown as zeros). Absent in fixture data. */
+    readonly byMethodKnown?: boolean };
   /** Today: same weekday last week. Ranges: the previous period of the same length (null when data is missing). */
   readonly comparison: { readonly base: Period; readonly baseNet: number; readonly delta: Delta } | null;
   readonly expenses: { readonly total: number; readonly byCategory: readonly { readonly category: ExpenseCategory; readonly categoryKey: string; readonly amount: number }[]; readonly items: readonly LedgerExpenseRow[] };
@@ -44,7 +46,7 @@ export interface LedgerModel { readonly netProfit?: number; readonly profitRate?
   readonly periodTrend: readonly LedgerTrendPoint[];
   readonly missingEvidenceCount: number;
 }
-export interface MarginMenuRow { readonly name: DataText; readonly unitMargin: number | null; readonly contribution: number | null; readonly menuId: string; readonly nameKey: string; readonly categoryKey: string; readonly price: number; readonly unitCost: number | null; readonly qty: number; readonly netSales: number; readonly cost: number | null; readonly grossProfit: number | null; readonly rate: number | null; readonly costMissing: boolean; readonly recipe: readonly { readonly nameKey: string; readonly qty: Quantity; readonly cost: number }[]; readonly costEffectiveFrom: string }
+export interface MarginMenuRow { readonly name: DataText; readonly unitMargin: number | null; readonly contribution: number | null; readonly menuId: string; readonly nameKey: string; readonly categoryKey: string; readonly price: number; readonly unitCost: number | null; readonly qty: number; readonly netSales: number; readonly cost: number | null; readonly grossProfit: number | null; readonly rate: number | null; readonly costMissing: boolean; readonly recipe: readonly { readonly nameKey: string; /** The ingredient's own name: over HTTP it is raw text and `nameKey` only a placeholder. */ readonly name?: DataText; readonly qty: Quantity; readonly cost: number }[]; readonly costEffectiveFrom: string }
 export interface MarginModel {
   readonly period: Period;
   readonly netSales: number;
@@ -60,6 +62,8 @@ export interface MarginModel {
 }
 export interface TaxItemRow { readonly refType: 'expense'; readonly refId: string; readonly date: string; readonly category: ExpenseCategory; readonly categoryKey: string; readonly amount: number; readonly memo: DataText | null; readonly status: 'needs-check' | 'checked'; readonly reasonKey: string }
 export interface TaxModel { readonly payments: ReturnType<typeof import('../derive/operations').selectTaxPayments>;
+  readonly real?: import('../reality/18/dto').TaxExportPreviewDto;
+  readonly today?: string;
   /** null = no period selected (`missing-data` sample state). */
   readonly period: Period | null;
   readonly connections: readonly { readonly source: 'sales' | 'expenses' | 'evidence'; readonly sourceKey: string; readonly status: 'connected' | 'partial' | 'missing'; readonly statusKey: string }[];
@@ -67,7 +71,7 @@ export interface TaxModel { readonly payments: ReturnType<typeof import('../deri
   readonly reviewCount: number;
   /** Shown only when every item is checked. */
   readonly estimate: { readonly amount: number; readonly basisDate: string; readonly assumptionKey: string } | null;
-  readonly exportPreview: { readonly salesTotal: number; readonly expenseTotal: number; readonly withEvidence: number; readonly missingEvidence: number; readonly cashReceipts: { readonly count: number; readonly amount: number } };
+  readonly exportPreview: { readonly salesTotal: number; readonly expenseTotal: number; readonly withEvidence: number; readonly missingEvidence: number; readonly cashReceipts: { readonly count: number; readonly amount: number } | null };
 }
 export interface GrantRow { readonly noticeId: string; readonly titleKey: string; readonly agencyKey: string; readonly regionKey: string; readonly applyStart: string; readonly applyEnd: string; readonly applyEndDate: string; readonly applyEndTime: string; readonly daysLeft: number; readonly conditionKeys: readonly string[]; readonly summaryKey: string; readonly matchStatus: 'matched' | 'needs-check'; readonly reviewStatus: 'before' | 'reviewed'; readonly isCandidate: boolean }
 export interface GrantsModel { readonly applications: readonly (import('../db/management-types').GrantApplication & { readonly title: DataText })[]; readonly inProgressCount: number; readonly candidateCount: number; readonly notices: readonly GrantRow[]; readonly sourceKey: string }
@@ -235,6 +239,21 @@ export interface AiResponseModel {
   readonly connected: boolean;
   /** plan-2 (T-058): reviews classified positive (칭찬 리뷰), answered or not — replying never changes it. */
   readonly praiseCount: number;
+  /**
+   * HTTP only: visible NAVER reviews and TalkTalk consultations that wait for a reply and are not in the queue yet. They are counted in `waitingCount`,
+   * `byType` and `byChannel` (one rule for the panel, the window header and the list) but are not threads: `threads` and `priority` stay the service's records.
+   */
+  readonly imports?: readonly ImportRow[];
+}
+/** A visible NAVER item waiting for a reply that the owner can take into the queue (one press, `inquiry.import`). */
+export interface ImportRow {
+  readonly importId: string;
+  readonly source: 'review' | 'talktalk';
+  readonly providerRef: string;
+  readonly type: 'message' | 'review';
+  readonly channelKey: string;
+  readonly text: string | null;
+  readonly stars: number | null;
 }
 export interface OfferRow { readonly offerId: string; readonly fromStoreKey: string; readonly visibility: 'direct' | 'public'; readonly titleKey: string; readonly categoryKey: string; readonly termsKey: string; readonly period: Period; readonly respondBy: string; readonly status: OfferStatus; readonly sharedContactKey: string | null; readonly interestSent: boolean }
 export interface CommunityModel { readonly pendingCount: number; readonly received: readonly OfferRow[]; readonly pending: readonly OfferRow[]; readonly publicOffers: readonly OfferRow[]; readonly inProgress: readonly OfferRow[] }
@@ -246,6 +265,8 @@ export interface BriefingModel extends ReturnType<typeof import('../derive/opera
   readonly arrival: readonly BriefingItem[];
   readonly closing: { readonly netSales: number; readonly remaining: number | null; };
   readonly yesterday: { readonly date: string; readonly netSales: number; readonly delta: Delta | null };
+  /** REAL-PLAN F12: present only over HTTP: the service's business day, acknowledgement and per-source state/period (alerts of a withheld source are already dropped). */
+  readonly real?: import('../reality/12/overlay').BriefingRealView;
 }
 
 export interface ModelMap extends MarketingModelMap {

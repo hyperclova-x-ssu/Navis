@@ -137,9 +137,18 @@ const builders: { readonly [F in DataWidgetId]: (m: ModelMap[F]) => ModelFact[] 
     fact('manuals.published.count', m.publishedCount, 'count'),
     ...m.manuals.flatMap((x) => x.steps.map((s) => fact('manuals.step', `${x.manualId}#${s.stepNo}`, '', { text: s.body, source: x.title }))),
   ],
-  'local-changes': (m) => [fact('localChanges.week.count', m.count, 'count', { start: m.week.start, end: m.week.end }), ...m.changes.map((c) => fact('localChanges.change', c.kind, '', { date: c.startDate, text: { key: c.titleKey } }))],
-  'trade-area': (m) => [fact('tradeArea.peak.people', m.peak.people, 'person', { labelText: { key: 'data.fact.tradeArea.peakAt', params: { hour: m.peak.hour } } }), fact('tradeArea.peak.hour', m.peak.hour, 'hour'), ...m.top.slice(1).map((h) => fact('tradeArea.hour.people', h.people, 'person', { labelText: { key: 'data.fact.tradeArea.peakAt', params: { hour: h.hour } } }))],
-  'local-trends': (m) => [fact('localTrends.notable.count', m.notableCount, 'count', { start: m.period.start, end: m.period.end }), ...m.keywords.map((k) => fact('localTrends.keyword', k.mentions, 'count', { start: m.period.start, end: m.period.end, text: { key: k.keywordKey } }))],
+  'local-changes': (m) => m.real ? [
+    fact('localChanges.open.count', m.real.unreadCount, 'count', when(m.week), 'widget.local-changes.openList'),
+    ...m.real.changes.map(row => fact('localChanges.change', row.kind, '', { date: row.referenceDate, text: { raw: row.title }, source: { raw: row.authority } }, `data.real.local.${row.dateKind}`)),
+  ] : [fact('localChanges.week.count', m.count, 'count', { start: m.week.start, end: m.week.end }), ...m.changes.map((c) => fact('localChanges.change', c.kind, '', { date: c.startDate, text: { key: c.titleKey } }))],
+  'trade-area': (m) => m.real ? [
+    ...m.real.population.items.map(row => fact(`tradeArea.band.${row.startHour}`, row.estimate, '', { date: row.referenceDate, source: { key: 'data.real.local.seoul' } }, 'data.real.local.movement')),
+    ...m.real.sales.items.map(row => fact(`tradeArea.sales.${row.hour}`, row.quantity, 'count', { start: m.real?.period.from, end: m.real?.period.to, source: { raw: 'POS' } }, 'data.real.local.hourlySales')),
+  ] : m.peak ? [fact('tradeArea.peak.people', m.peak.people, 'person', { labelText: { key: 'data.fact.tradeArea.peakAt', params: { hour: m.peak.hour } } }), fact('tradeArea.peak.hour', m.peak.hour, 'hour'), ...m.top.slice(1).map((h) => fact('tradeArea.hour.people', h.people, 'person', { labelText: { key: 'data.fact.tradeArea.peakAt', params: { hour: h.hour } } }))] : [],
+  'local-trends': (m) => m.real ? [
+    ...(m.real.search?.items ?? []).map(row => fact('localTrends.searchInterest', row.ratio, '', { date: row.period, source: { raw: 'NAVER' } }, 'data.real.local.searchInterest')),
+    ...m.real.sales.items.map(row => fact('localTrends.menuSales', row.quantity, 'count', { date: row.businessDate, source: { raw: 'POS' } }, 'data.real.local.menuSales')),
+  ] : [fact('localTrends.notable.count', m.notableCount, 'count', { start: m.period.start, end: m.period.end }), ...m.keywords.map((k) => fact('localTrends.keyword', k.mentions, 'count', { start: m.period.start, end: m.period.end, text: { key: k.keywordKey } }))],
   'ai-response': (m) => [fact('inquiry.waiting.count', m.waitingCount, 'count', today), fact('inquiry.waiting.message', m.byType.message, 'count', today), fact('inquiry.waiting.review', m.byType.review, 'count', today), fact('inquiry.waiting.call', m.byType.call, 'count', today)],
   community: (m) => [fact('community.pending.count', m.pendingCount, 'count', today), ...m.pending.map((o) => fact('community.offer', o.respondBy, '', { date: o.respondBy.slice(0, 10), text: { key: o.titleKey } }))],
   // plan-2 (DATA_MODEL 10.15.6, T-058)

@@ -21,6 +21,7 @@ import { noticeHandlers } from '../iteration7/notices';
 import { environmentHandlers } from '../iteration7/environment';
 import type { CustomOrderCommand } from '../iteration7/custom-orders';
 import { staffHandlers } from '../iteration7/staff/commands';
+import { staffCalendarClock } from '../iteration7/staff/clock';
 import { guardCalendarWrite } from './calendar-guard';
 import { checkCommunityResponse, checkInquiryReply, planInquiryDraft, type CommunityResponseCommand, type InquiryDraftCommand, type InquiryReplyCommand } from './reply-guard'; // N17
 
@@ -53,7 +54,7 @@ const memoDraftTitle = (memo: string) => Array.from(text(memo).split('\n')[0]).s
 // End N14 draft limits.
 
 type Handler<T extends DataCommandType> = (ctx: HandlerContext, command: Extract<DataCommand, { type: T }>) => HandlerResult;
-type Handlers = { readonly [T in Exclude<DataCommandType, CustomOrderCommand['type'] | 'closing.closeDay' | 'closing.undoDay' | 'onboarding.setAnswers' | 'shop.updateSettings'>]: Handler<T> };
+type Handlers = { readonly [T in Exclude<DataCommandType, CustomOrderCommand['type'] | import('../reality/05/commands').MemberRealCommand['type'] | import('../reality/09/commands').MoneyRealCommand['type'] | import('../reality/08/commands').CustomRealCommand['type'] | import('../reality/06/commands').BookingRealCommand['type'] | 'grants.syncNotices' | 'closing.closeDay' | 'closing.undoDay' | 'onboarding.setAnswers' | 'shop.updateSettings'>]: Handler<T> };
 
 const membershipActive = (t: DataTables, membershipId: string) => {
   const m = t.membership.find((x) => x.membershipId === membershipId);
@@ -69,7 +70,19 @@ const poOpen = (t: DataTables, poId: string): boolean => {
   return !!po && po.status !== 'complete' && po.status !== 'canceled';
 };
 
+/** Commands that exist only over HTTP (REAL-PLAN): the fixture store has no such record to change. */
+const realOnly = (): HandlerResult => ({ ok: false, code: 'CONFLICT', reason: 'REAL_ONLY', messageKey: 'data.real.error.SOURCE_UNAVAILABLE' });
+
 export const handlers: Handlers = {
+  'tax.attachEvidence': realOnly,
+  'tax.detachEvidence': realOnly,
+  'promo.addPhoto': realOnly,
+  'promo.saveDraft': realOnly,
+  'promo.publishPlaceNews': realOnly,
+  'promo.publishClip': realOnly,
+  'promo.attestLink': realOnly,
+  'inventory.registerBatch': realOnly,
+  'inventory.discardBatch': realOnly,
   ...staffHandlers,
   ...noticeHandlers,
   ...environmentHandlers,
@@ -205,7 +218,7 @@ export const handlers: Handlers = {
   'calendar.addTodo': ({ tables: t, nextId }, c) => {
     const title = text(c.title);
     if (!title) return fail('VALIDATION', 'data.error.titleRequired', 'title');
-    const date = c.date ?? TODAY;
+    const date = c.date ?? staffCalendarClock(t).date;
     if (!isIsoDate(date)) return fail('VALIDATION', 'data.error.dateInvalid', 'date');
     const blocked = guardCalendarWrite(t, c); if (blocked) return blocked;
     const eventId = nextId('todo');
@@ -399,6 +412,14 @@ export const handlers: Handlers = {
     return ok({ ...t, floorLayout: t.floorLayout.map((l) => ({ ...l, isCurrent: l.layoutId === c.layoutId })) }, true, 'data.notice.layoutApplied', { seats });
   },
   'floorPlan.generateFromPhotos': ({ tables: t }) => ok({ ...t, floorSpace: { ...t.floorSpace, planGenerated: true } }, true, 'data.notice.planGenerated'),
+  'inquiry.create': realOnly,
+  'inquiry.import': realOnly,
+  'inquiry.editReply': realOnly,
+  'inquiry.deleteReply': realOnly,
+  'notice.deleteNews': realOnly,
+  'localChanges.create': realOnly,
+  'community.create': realOnly,
+  'briefing.acknowledge': realOnly,
   'localChanges.acknowledge': ({ tables: t }, c) => {
     const change = t.localChange.find((x) => x.changeId === c.changeId);
     if (!change) return notFound('changeId');

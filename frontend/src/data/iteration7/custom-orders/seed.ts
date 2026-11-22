@@ -1,6 +1,5 @@
 import { cafeMemberId } from '../../db/cafe-identity';
-import { seedCatalog } from '../../db/generated/catalog';
-import { seedSupplement } from '../../db/generated/supplement';
+import { seedCatalog, seedSupplement } from '../../db/cafe-fixtures';
 import type { CustomMoneyState, CustomOrder, CustomOrderTables, CustomTemplate, CustomTemplateField, PickupReservation } from './types';
 
 export function exampleTemplate(templateId: string, name: string, keywords = ''): CustomTemplate {

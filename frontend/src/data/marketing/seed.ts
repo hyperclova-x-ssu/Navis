@@ -1,9 +1,4 @@
-import { seedCatalog } from '../db/generated/catalog';
-import { seedHistory } from '../db/generated/history';
-import { seedMembers } from '../db/generated/members';
-import { seedOperations } from '../db/generated/operations';
-import { seedSupplement } from '../db/generated/supplement';
-import { seedToday } from '../db/generated/today';
+import { seedCatalog, seedHistory, seedMembers, seedOperations, seedSupplement, seedToday } from '../db/cafe-fixtures';
 import { inRange, LAST_MONTH_START, LAST_MONTH_END, MONTH_START, NOW, TODAY } from '../db/time';
 import type { CouponRoute, PromoLocale } from './types';
 /**

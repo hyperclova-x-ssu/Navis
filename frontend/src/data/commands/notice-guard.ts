@@ -34,15 +34,17 @@ export function validateNoticeDraft(d: NoticeDraft, today: string): Failure | nu
 }
 function prepareNotice(t: NoticeSourceTables, draft: NoticeDraft, now: string) {
   const classified = { ...draft, contentClass: classifyNoticeContent(draft.title, draft.body) };
-  const recipients = resolveNoticeRecipients(t, classified);
+  // F15 (HTTP, `channel` set): the service record has no member list to count. Manual, TalkTalk and Place posts have no recipient list here and SMS waits for A6.
+  const real = draft.channel !== undefined;
+  const recipients = real ? { eligibleMemberIds: [] as string[], recipientCount: 0, excludedCount: 0, source: [] as never[] } : resolveNoticeRecipients(t, classified);
   const closure = draft.closureEventId ? selectStoreClosures({ tables: t }).find(c => c.eventId === draft.closureEventId) ?? null : null;
   const adMarker = classified.contentClass === 'promotional';
   const time = now.slice(11, 16);
   const reasons: string[] = [];
-  if (!recipients.recipientCount) reasons.push('NO_RECIPIENTS');
-  // F-278 keeps the night restriction for promotional notices.
-  if (adMarker && (time >= '21:00' || time < '08:00')) reasons.push('AD_NIGHT_RESTRICTED');
-  const optOutText = adMarker ? '수신 거부 방법이 함께 들어가요(예시)' : '';
+  if (!real && !recipients.recipientCount) reasons.push('NO_RECIPIENTS');
+  if (draft.channel === 'sms') reasons.push('A6_DISABLED');
+  if (atNight(time) && (!real || draft.channel === 'sms' || draft.channel === 'talktalk')) reasons.push(adMarker ? 'AD_NIGHT_RESTRICTED' : 'NIGHT_RESTRICTED');
+  const optOutText = adMarker ? '수신 거부 방법이 함께 들어가요' : '';
   const renderedBody = `${adMarker ? '(광고)\n' : ''}${draft.title}\n${draft.body}${adMarker ? `\n${optOutText}` : ''}`;
   const signature = JSON.stringify({ draft: classified, recipients: recipients.source, closure, date: now.slice(0, 10) });
   return { draftId: draft.noticeId, draftRevision: draft.revision, contentClass: classified.contentClass, eligibleMemberIds: recipients.eligibleMemberIds,
@@ -96,7 +98,9 @@ const localTimestamp = (stamp: unknown): stamp is string => typeof stamp === 'st
   && stamp.length === 16 && stamp[10] === 'T' && isIsoDate(stamp.slice(0, 10)) && isTime(stamp.slice(11));
 
 export function nextNoticeMorning(now = NOW): string | undefined {
-  return localTimestamp(now) && atNight(now.slice(11)) ? `${addDays(now.slice(0, 10), 1)}T08:00` : undefined;
+  if (!localTimestamp(now) || !atNight(now.slice(11))) return undefined;
+  const date = now.slice(0, 10);
+  return `${now.slice(11) < '08:00' ? date : addDays(date, 1)}T08:00`;
 }
 
 export function prepareScheduledNoticePreview(snapshot: Snapshot, input: NoticePreviewInput, sendAt: string, now = NOW) {

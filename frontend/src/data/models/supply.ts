@@ -4,6 +4,9 @@ import type { IncomingDelivery, IngredientRow, InventoryModel, OrderRow, Product
 import { emptyView, note, ready, sum, type Projector } from './util';
 import { deriveOpenOrders, deriveStock, deriveSuggestions } from '../derive/stock';
 import { selectCalendar } from '../derive/operations';
+import { staffCalendarClock } from '../iteration7/staff/clock';
+import { realStock, stockDate } from '../reality/03/stock-projection';
+import { displayQuantity } from '../reality/03/stock-dto';
 
 /** Compatibility reader; joins use IDs and share the pure order derivation. */
 export function orderRows(t: DataTables): OrderRow[] {
@@ -44,7 +47,9 @@ export const projectSuppliers: Projector<'suppliers'> = (ctx, condition, variant
 const stockOf = (t: DataTables, itemId: string, channel: 'store' | 'online') => t.inventoryStock.find((s) => s.itemId === itemId && s.channel === channel)?.qty ?? 0;
 export const projectInventory: Projector<'inventory-booking'> = (ctx, condition, variant) => {
   const t = ctx.snapshot.tables, derived = deriveStock(ctx.snapshot, { date: TODAY });
-  const openOrders = deriveOpenOrders(ctx.snapshot, { date: TODAY }).open;
+  const date = stockDate(ctx.snapshot);
+  const realItems = new Map(realStock(ctx.snapshot)?.items.map(item => [item.itemId, item]));
+  const openOrders = deriveOpenOrders(ctx.snapshot, { date }).open;
   const nextDelivery = (itemId: string): IncomingDelivery | null => {
     for (const o of openOrders) {
       const line = o.lines.find((l) => l.itemId === itemId && l.remaining > 0);
@@ -53,21 +58,26 @@ export const projectInventory: Projector<'inventory-booking'> = (ctx, condition,
     return null;
   };
   const rows: IngredientRow[] = derived.rows.filter((r) => variant !== 'partial-data' || ['i-milk', 'i-bean-house', 'i-cup-takeout'].includes(r.itemId)).map((r) => {
-    const stock = variant === 'no-restock' && r.needsRestock ? (r.restockThreshold ?? 0) * 2 + 1 : r.display;
+    const real = realItems.get(r.itemId);
+    const stock = t.realStock !== undefined ? displayQuantity(real?.stock?.availableQuantityBase, real?.unit ?? null)
+      : variant === 'no-restock' && r.needsRestock ? (r.restockThreshold ?? 0) * 2 + 1 : r.display;
     const threshold = variant === 'partial-zero' && ['i-milk', 'i-bean-house', 'i-cup-takeout'].includes(r.itemId) ? null : r.restockThreshold;
     const trackRestock = r.tracksReplenishment;
-    return { ...r, stock, threshold, trackRestock, needsReview: trackRestock && threshold === null, needsRestock: trackRestock && threshold !== null && stock <= threshold, outOfStock: trackRestock && stock === 0, nextDelivery: nextDelivery(r.itemId) };
+    return { ...r, stock, threshold, trackRestock, needsReview: stock === null || trackRestock && threshold === null, needsRestock: trackRestock && stock !== null && threshold !== null && stock <= threshold, outOfStock: trackRestock && stock === 0, nextDelivery: nextDelivery(r.itemId) };
   });
   const ingredients = [...rows].sort((a, b) => Number(b.needsRestock) - Number(a.needsRestock) || Number(b.outOfStock) - Number(a.outOfStock) || (a.stock ?? 0) / (a.threshold || Infinity) - (b.stock ?? 0) / (b.threshold || Infinity) || a.itemId.localeCompare(b.itemId));
   const restockItems = ingredients.filter((r) => r.needsRestock);
   const items: ProductRow[] = variant === 'no-products' ? [] : t.inventoryItem.filter((i) => i.kind === 'retail' && !i.deletedAt).map((i) => {
     const store = stockOf(t, i.itemId, 'store'), online = stockOf(t, i.itemId, 'online'), low = i.lowStockPerChannel ?? 0, sales = i.sales7d ?? { store: 0, online: 0 };
-    return { itemId: i.itemId, nameKey: i.nameKey, unit: i.unit, store, online, total: store + online, lowThreshold: low, lowChannels: (['store', 'online'] as const).filter((c) => (c === 'store' ? store : online) <= low), sales7d: { store: sales.store, online: sales.online, total: sales.store + sales.online } };
+    const lowChannels = (['store', 'online'] as const).filter(c => t.realStock === undefined
+      ? (c === 'store' ? store : online) <= low
+      : i.lowStockPerChannel !== null && t.inventoryStock.some(row => row.itemId === i.itemId && row.channel === c && row.qty !== null && row.qty <= low));
+    return { itemId: i.itemId, nameKey: i.nameKey, unit: i.unit, store, online, total: store + online, lowThreshold: low, lowChannels, sales7d: { store: sales.store, online: sales.online, total: sales.store + sales.online } };
   });
-  const model: InventoryModel = { asOf: TODAY, restockCount: restockItems.length, outOfStockCount: rows.filter((r) => r.outOfStock).length, ingredients, restockItems, reviewCount: rows.filter((r) => r.needsReview).length, products: { total: sum(items.map((p) => p.total)), byChannel: { store: sum(items.map((p) => p.store)), online: sum(items.map((p) => p.online)) }, items, lowCount: items.filter((p) => p.lowChannels.length > 0).length } };
+  const model: InventoryModel = { asOf: date, restockCount: restockItems.length, outOfStockCount: rows.filter((r) => r.outOfStock).length, ingredients, restockItems, reviewCount: rows.filter((r) => r.needsReview).length, products: { total: sum(items.map((p) => p.total)), byChannel: { store: sum(items.map((p) => p.store)), online: sum(items.map((p) => p.online)) }, items, lowCount: items.filter((p) => p.lowChannels.length > 0).length } };
   return ready('inventory-booking', condition, variant, model, variant !== 'normal' ? [note('inventory-booking', variant)] : undefined);
 };
 export const projectCalendar: Projector<'calendar'> = (ctx, condition, variant) => {
-  const date = condition.kind === 'dateRange' ? condition.start : condition.kind === 'snapshot' ? condition.asOf : TODAY;
+  const date = condition.kind === 'dateRange' ? condition.start : condition.kind === 'snapshot' ? condition.asOf : staffCalendarClock(ctx.snapshot.tables).date;
   return ready('calendar', condition, variant, selectCalendar(ctx.snapshot, { date, ...(condition.kind === 'dateRange' ? { start: condition.start, end: condition.end } : {}), sourceFailed: variant === 'source-failed' }), variant === 'source-failed' ? [note('calendar', 'source-failed')] : undefined);
 };

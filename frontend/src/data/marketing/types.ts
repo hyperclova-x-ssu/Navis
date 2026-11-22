@@ -112,6 +112,10 @@ export interface PromoVideoResult {
   readonly madeAt: string;
 }
 export type PromoVideoStatus = 'making' | 'done' | 'failed' | 'posted';
+export interface PromoPublicationProjection {
+  readonly channel: 'place-news' | VideoPostRoute;
+  readonly link: string | null;
+}
 export interface PromoVideo {
   readonly videoId: string;
   readonly jobId: string | null;
@@ -123,6 +127,7 @@ export interface PromoVideo {
   readonly failReason: PromoFailReason | null;
   readonly result: PromoVideoResult | null;
   readonly postedRoute: VideoPostRoute | null;
+  readonly publication?: PromoPublicationProjection;
   readonly postedAt: string | null;
   readonly createdAt: string;
   readonly retryCount: number;
@@ -150,7 +155,7 @@ export interface MarketingTables {
   readonly mktVisit: readonly MktVisit[];
   readonly slotConsentSampleVisits?: readonly MktVisit[];
   readonly segmentRule: readonly SegmentRule[];
-  readonly promoDrafts?: typeof import('../db/generated/supplement').seedSupplement.promos;
+  readonly promoDrafts?: readonly (typeof import('../db/generated/supplement').seedSupplement.promos)[number][];
   readonly promoStore: readonly PromoStoreRow[];
   readonly promoMenu: readonly PromoMenuRow[];
   readonly promoPhoto: readonly PromoPhotoRow[];
@@ -243,7 +248,7 @@ export interface SlotCouponModel {
   /** Selectable recipients over the open slots (panel “맞춤 단골 5명”). */
   readonly regularsCount: number;
   readonly recipients: readonly SlotRecipient[];
-  readonly menu: { readonly menuId: string; readonly nameKey: string; readonly price: number; readonly unitCost: number; readonly shotCost: number };
+  readonly menu: { readonly menuId: string; readonly nameKey: string; readonly name?: DataText; readonly price: number; readonly unitCost: number; readonly shotCost: number };
   readonly benefits: BenefitComparison;
   readonly message: { readonly body: DataText; readonly bodies: Readonly<Record<SlotBenefitId, DataText>> };
   readonly endsOn: string;
@@ -266,6 +271,10 @@ export interface ExpiryDiscount {
 }
 export interface ExpiryItem {
   readonly itemId: string;
+  readonly lotId?: string;
+  readonly name?: DataText;
+  readonly menuName?: string;
+  readonly issueLimit?: number;
   readonly nameKey: string;
   readonly unit: UnitCode;
   readonly stock: number;
@@ -323,6 +332,7 @@ export interface PromoVideoModel {
   readonly current: PromoCurrent | null;
   readonly postedCount: number;
   readonly lastPostedRoute: VideoPostRoute | null;
+  readonly lastPublication?: PromoPublicationProjection;
   /** The clip route adds “· 쿠폰 코드 세는 중” after the place. */
   readonly lastPostedCounting: boolean;
   readonly moods: readonly VideoMood[];
@@ -330,7 +340,7 @@ export interface PromoVideoModel {
   readonly postRoutes: readonly VideoPostRoute[];
   readonly videos: readonly PromoVideoRowModel[];
 }
-export interface PromoVideoRowModel extends PromoCurrent { readonly input: PromoVideoInput; readonly postedRoute: VideoPostRoute | null; readonly postedAt: string | null; readonly createdAt: string }
+export interface PromoVideoRowModel extends PromoCurrent { readonly input: PromoVideoInput; readonly postedRoute: VideoPostRoute | null; readonly postedAt: string | null; readonly createdAt: string; readonly publication?: PromoPublicationProjection }
 export interface CouponStatusModel {
   /** Coupons that are running right now (status ‘active’). Paused coupons are in `rows` but are counted in `pausedCount`. */
   readonly activeCount: number;
@@ -373,6 +383,8 @@ export interface CustomerGroupsModel {
   readonly basisKey: string;
   readonly sent: readonly CouponRow[];
   readonly canReachOut: boolean;
+  /** REAL-PLAN F19: present only when the model came from B19's HTTP reads. */
+  readonly real?: import('../reality/19/model').RealGroupsInfo;
 }
 /** One coupon code behind a route row: the same records (activated in the period, ended coupons included) that add up to the route's issued and used. */
 export interface PerfRouteLine { readonly codeId: string; readonly couponId: string; readonly name: DataText; readonly status: CouponStatus; readonly issued: number; readonly used: number }
@@ -390,6 +402,8 @@ export interface MarketingPerformanceModel {
   readonly rateDelta: Delta | null;
   readonly revenue: { readonly total: number; readonly coupon: number; readonly attributed: number };
   readonly revenueDelta: Delta | null;
+  /** The widget's comparison uses only coupon-code payments. */
+  readonly couponRevenueDelta?: Delta | null;
   readonly cost: number;
   readonly discount: number;
   /** revenue − cost − discount */
@@ -400,17 +414,19 @@ export interface MarketingPerformanceModel {
   readonly missingRoutes: readonly CouponRoute[];
   readonly best: PerfRouteRow | null;
   readonly byCoupon: readonly { readonly couponId: string; readonly name: DataText; readonly status: CouponStatus; readonly issued: number; readonly used: number; readonly rate: number | null }[];
-  readonly byVideo: readonly { readonly videoId: string; readonly couponId: string | null; readonly postedRoute: VideoPostRoute | null; readonly issued: number; readonly used: number; readonly rate: number | null }[];
+  readonly byVideo: readonly { readonly videoId: string; readonly couponId: string | null; readonly postedRoute: VideoPostRoute | null; readonly issued: number; readonly used: number; readonly rate: number | null; readonly publication?: PromoPublicationProjection }[];
   /** Fixed insight (Q-36): best route vs regular texts. */
   readonly insight: { readonly bestRoute: CouponRoute; readonly compareRoute: CouponRoute } | null;
   /** Coupons issued today (for “방금 보낸 쿠폰 {n}장이 발행에 더해졌어요”). */
   readonly recentIssued: number;
   readonly basisKey: string;
+  /** REAL-PLAN F19: present only when the model came from B19's HTTP reads (coupon figures may be "not available yet", channel cards carry source and period). */
+  readonly real?: import('../reality/19/model').RealPerformanceInfo;
 }
 export type TodayCell =
   | { readonly slot: 'now'; readonly kind: 'quiet-hours'; readonly sourceFeatureId: 'slot-coupon'; readonly params: { readonly regulars: number }; readonly quietSlot: { readonly slotId: string; readonly date: string; readonly weekday: number; readonly startHour: number; readonly endHour: number }; readonly ref: DetailRef }
-  | { readonly slot: 'now'; readonly kind: 'expiry'; readonly sourceFeatureId: 'expiry-coupon'; readonly params: { readonly count: number }; readonly itemNameKey: string; readonly ref: DetailRef }
-  | { readonly slot: 'today'; readonly kind: 'replies'; readonly sourceFeatureId: 'ai-response'; readonly params: { readonly count: number }; readonly ref: DetailRef }
+  | { readonly slot: 'now'; readonly kind: 'expiry'; readonly sourceFeatureId: 'expiry-coupon'; readonly params: { readonly count: number }; readonly itemNameKey: string; /** HTTP: the lot's own item name (`itemNameKey` is then empty). */ readonly itemName?: string; readonly ref: DetailRef }
+  | { readonly slot: 'today'; readonly kind: 'replies'; readonly sourceFeatureId: 'ai-response'; readonly params: { readonly count: number; readonly drafted?: number }; readonly ref: DetailRef }
   | { readonly slot: 'week'; readonly kind: 'video'; readonly sourceFeatureId: 'promo-video'; readonly params: { readonly photos: number }; readonly ref: DetailRef };
 export interface MarketingTodayModel {
   /** Remaining cells in order (지금 · 오늘 · 이번 주); handled cells are folded away. */
@@ -418,6 +434,8 @@ export interface MarketingTodayModel {
   readonly folded: readonly ('now' | 'today' | 'week')[];
   /** Panel tap target: the first visible cell's detail (DetailRef without focus). */
   readonly tapTarget: DetailRef;
+  /** REAL-PLAN F19 (HTTP): sources the service could not read yet. A missing source never reads as "nothing to do". */
+  readonly missing?: readonly ('coupons' | 'replies' | 'assets')[];
 }
 
 export interface MarketingModelMap {

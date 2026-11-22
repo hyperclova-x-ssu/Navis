@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { seedSupplement } from '../../db/generated/supplement';
 import { deepFreeze } from '../../db/freeze';
-import { createEnvironmentSeed, environmentHandlers, selectStoreEnvironment, type EnvironmentCommand } from './index';
+import { createEnvironmentSeed, environmentHandlers, selectStoreEnvironment, type EnvironmentPlayerCommand } from './index';
 
 const sample = seedSupplement.environment[0];
 const measuredAt = sample.measuredAt.slice(0, 16);
 const fixture = () => createEnvironmentSeed();
-function run(tables: ReturnType<typeof fixture>, command: EnvironmentCommand) {
+function run(tables: ReturnType<typeof fixture>, command: EnvironmentPlayerCommand) {
   return environmentHandlers[command.type]({ tables, snapshot: { revision: 0, tables } }, command);
 }
 

@@ -18,7 +18,7 @@ export const marketingFactBuilders: { readonly [F in MarketingWidgetId]: (m: Mar
   'marketing-today': (m) => [
     fact('todayPromo.cells.count', m.cells.length, 'count', today),
     ...m.cells.map((c) => c.kind === 'quiet-hours' ? fact('todayPromo.quietHours.regulars', c.params.regulars, 'person', { date: c.quietSlot.date, labelText: { key: 'data.fact.slot.quietHours.at', params: { start: c.quietSlot.startHour, end: c.quietSlot.endHour } } })
-      : c.kind === 'expiry' ? fact('todayPromo.expiry.qty', c.params.count, 'pcs', { ...today, labelText: { key: c.itemNameKey } })
+      : c.kind === 'expiry' ? fact('todayPromo.expiry.qty', c.params.count, 'pcs', { ...today, labelText: c.itemName ? { raw: c.itemName } : { key: c.itemNameKey } })
         : c.kind === 'replies' ? fact('todayPromo.replies.waiting', c.params.count, 'count', today)
           : fact('todayPromo.video.materials', c.params.photos, 'count', today)),
   ],
@@ -49,13 +49,14 @@ export const marketingFactBuilders: { readonly [F in MarketingWidgetId]: (m: Mar
     fact('groups.churnRisk', m.counts['churn-risk'], 'person', today), fact('groups.firstVisit', m.counts['first-visit'], 'person', today),
     fact('groups.regular', m.counts.regular, 'person', today), fact('groups.reachOut', m.reachOut.count, 'person', today),
   ],
-  'marketing-performance': (m) => [
+  // REAL-PLAN F19: with the coupon ledger unreadable (`real.couponsMissing`) no coupon figure exists, and an unknown cost leaves profit out; nothing becomes 0.
+  'marketing-performance': (m) => m.real?.couponsMissing ? [] : [
     ...(m.rate !== null ? [fact('perf.rate', m.rate, 'percent', { start: m.period.start, end: m.period.end })] : []),
     ...(m.rateDelta ? [fact('perf.rate.delta', m.rateDelta.value, 'pp', { start: m.period.start, end: m.period.end })] : []),
     fact('perf.issued', m.issued, 'count', { start: m.period.start, end: m.period.end }), fact('perf.used', m.used, 'count', { start: m.period.start, end: m.period.end }),
     fact('perf.revenue', m.revenue.total, 'KRW', { start: m.period.start, end: m.period.end }),
     ...(m.revenueDelta ? [fact('perf.revenue.delta', m.revenueDelta.value, 'KRW', { start: m.period.start, end: m.period.end })] : []),
-    fact('perf.profit', m.profit, 'KRW', { start: m.period.start, end: m.period.end }),
+    ...(m.real && m.real.payment?.profit == null ? [] : [fact('perf.profit', m.profit, 'KRW', { start: m.period.start, end: m.period.end })]),
     ...(m.returnRate === null ? [] : [fact('perf.returnRate', m.returnRate, 'percent', { start: m.period.start, end: m.period.end })]),
     ...m.routes.filter((r) => r.rate !== null).map((r) => fact('perf.route.rate', r.rate as number, 'percent', { start: m.period.start, end: m.period.end, labelText: { key: routeNameKey(r.route) } })),
     ...(m.best?.rate != null ? [fact('perf.bestRoute', m.best.rate, 'percent', { start: m.period.start, end: m.period.end, labelText: { key: m.best.nameKey } })] : []),

@@ -3,14 +3,16 @@
  * ARCHITECTURE 11.6). Plain objects — the data module never runs i18n code (type-only import).
  */
 import type { MessageBundle } from '../../i18n';
+import { noticeScheduleRows } from '../iteration7/notices/messages';
 import { posDataBundle } from './pos';
 import { customOrderGuardRows, iteration7DataKorean, iteration7VariantKorean } from './iteration7';
 import { managementBundle, managementVariantLabels, managementKoreanOverrides } from './management';
 import { DATA_WIDGET_IDS, type DataWidgetId } from '../conditions';
 import { ALL_VARIANTS, variantLabelKey } from '../preview/variants';
+import { realRows } from './real';
 import { sourcedRows, VARIANT_ERROR_LABEL, VARIANT_NEEDS_REVIEW_LABEL, VARIANT_PARTIAL_LABEL, widgetNames, type Row } from './sourced';
 import { errorTemplates, variantLabelRows, writtenRows } from './written';
-import { MARKETING_WIDGET_IDS, isMarketingWidgetId, type MarketingWidgetId } from '../marketing/ids';
+import { isMarketingWidgetId, type MarketingWidgetId } from '../marketing/ids';
 import { marketingSourcedRows, marketingVariantLabelRows, marketingWidgetNames, marketingWrittenRows } from '../marketing/messages';
 
 type Lang = 'ko' | 'en' | 'zh-Hans' | 'zh-Hant';
@@ -29,9 +31,8 @@ const generatedErrorRows: Readonly<Record<string, Row>> = Object.fromEntries(
   }),
 );
 
-/** plan-2 (T-058): the same generated error sentence for the 7 marketing widgets (LOCALES 4.1 names). */
-const marketingErrorRows: Readonly<Record<string, Row>> = Object.fromEntries(MARKETING_WIDGET_IDS.map((id) => {
-  const [ko, en, hans, hant] = marketingWidgetNames[id];
+/** plan-2 (T-058): error sentences generated from the active names in LOCALES 4.1. */
+const marketingErrorRows: Readonly<Record<string, Row>> = Object.fromEntries(Object.entries(marketingWidgetNames).map(([id, [ko, en, hans, hant]]) => {
   return [`data.state.${id}.error`, [errorTemplates.ko(ko, objectParticle(ko)), errorTemplates.en(en), errorTemplates['zh-Hans'](hans), errorTemplates['zh-Hant'](hant)] as Row];
 }));
 
@@ -45,7 +46,7 @@ const variantRows: Readonly<Record<string, Row>> = Object.fromEntries(ALL_VARIAN
   return [variantLabelKey(id, v.id), row];
 }));
 
-export type DataMessageKey = keyof typeof sourcedRows | keyof typeof writtenRows | keyof typeof marketingSourcedRows | keyof typeof marketingWrittenRows | keyof typeof customOrderGuardRows | `data.state.${DataWidgetId | MarketingWidgetId}.error`;
+export type DataMessageKey = keyof typeof realRows | keyof typeof sourcedRows | keyof typeof writtenRows | keyof typeof marketingSourcedRows | keyof typeof marketingWrittenRows | keyof typeof customOrderGuardRows | keyof typeof noticeScheduleRows | `data.state.${DataWidgetId | MarketingWidgetId}.error`;
 export type PreviewVariantMessageKey = `preview.variant.${string}`;
 
 function toBundle<K extends string>(id: string, rows: Readonly<Record<string, Row>>): MessageBundle<K> {
@@ -55,7 +56,12 @@ function toBundle<K extends string>(id: string, rows: Readonly<Record<string, Ro
 }
 
 /** `data.*`: fake-data names, bodies, states, notices, errors, fact labels. */
-export const dataBundle: MessageBundle<DataMessageKey> = withKorean(toBundle('data', { ...sourcedRows, ...writtenRows, ...generatedErrorRows, ...marketingSourcedRows, ...marketingWrittenRows, ...marketingErrorRows, ...customOrderGuardRows }), { ...managementKoreanOverrides, ...iteration7DataKorean });
+export const dataBundle: MessageBundle<DataMessageKey> = withKorean(toBundle('data', {
+  ...realRows, ...sourcedRows, ...writtenRows, ...generatedErrorRows, ...marketingSourcedRows, ...marketingWrittenRows, ...marketingErrorRows,
+  // The retained data projection keeps its error key after the D-365 widget removal.
+  'data.state.marketing-performance.error': realRows['data.real.error'],
+  ...customOrderGuardRows, ...noticeScheduleRows,
+}), { ...managementKoreanOverrides, ...iteration7DataKorean });
 /** `preview.variant.*`: sample-state variant names for SCR-29. */
 export const previewVariantBundle: MessageBundle<PreviewVariantMessageKey> = withKorean(toBundle('preview.variant', variantRows), { ...managementVariantLabels, ...iteration7VariantKorean });
 /** Both T-043 bundles (for translators that load every data string, e.g. Navis request assembly). */

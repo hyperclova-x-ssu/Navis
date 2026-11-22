@@ -20,7 +20,7 @@ const text = (key: string) => copy.has(key) ? copy.t(key) : '';
 const validBody = (body: unknown): body is string => typeof body === 'string' && body.length <= 1000 && Boolean(body.trim());
 const unsafePromise = /(?:환불|보상|결제\s*취소).{0,12}(?:해\s*드|가능|약속|처리하겠|진행하겠|해\s*주)/u;
 
-export const inquirySourceText = (thread: InquiryThread): string => text(thread.bodyKey);
+export const inquirySourceText = (thread: InquiryThread): string => thread.bodyRaw ?? text(thread.bodyKey);
 export const inquiryDraftRevision = (thread: InquiryThread): number => thread.replyDraft?.revision ?? 1;
 export function storedInquiryReply(thread: InquiryThread): string | undefined {
   return thread.replyDraft?.body ?? (thread.draftKey ? text(thread.draftKey) || undefined : undefined);
@@ -33,9 +33,6 @@ function draftText(thread: InquiryThread, sourceText: string) {
   }
   if (thread.bodyKey === 'data.inquiry.body.review') {
     return { body: text('data.inquiry.fake.review'), grounding: [] };
-  }
-  if (thread.bodyKey === 'data.inquiry.body.refund') {
-    return { body: text('data.inquiry.fake.refund'), grounding: [] };
   }
   if (/일요일/u.test(sourceText) && /영업|열|문/u.test(sourceText) && !/임시|시험기간|더 일찍|더 늦게/u.test(sourceText)) {
     return { body: text('data.inquiry.draft.hours'), grounding: [text('data.storeInfo.hours')] };
@@ -61,6 +58,7 @@ export function planInquiryDraft(tables: DataTables, command: InquiryDraftComman
   const sourceText = inquirySourceText(thread);
   if (!sourceText) return reject('VALIDATION', 'data.error.replySourceMissing', 'threadId');
   if (command.type === 'reply.draft') {
+    if (thread.needsPersonReason) return reject('VALIDATION', 'data.error.replyNeedsPerson', 'threadId');
     return { ok: true, thread, draft: { ...draftText(thread, sourceText), sourceText, revision: revision + 1, origin: 'generated' } };
   }
   if (command.revision !== revision) return reject('CONFLICT', 'data.management.error.STALE_REVISION', 'revision');
@@ -95,6 +93,12 @@ export function checkCommunityResponse(snapshot: DataSnapshot, command: Communit
   const offer = snapshot.tables.partnershipOffer.find(row => row.offerId === command.offerId);
   if (!offer) return notFound('offerId');
   const interest = command.type === 'community.sendInterest';
+  if (snapshot.tables.realLocal) {
+    const row = snapshot.tables.realLocal.offers.find(item => item.id === command.offerId);
+    if (!row?.canRespond) return reject('CONFLICT', 'data.real.local.closed', 'offerId');
+    if (interest && row.interested) return alreadyDone();
+    return { ok: true, offer };
+  }
   if (offer.visibility !== (interest ? 'public' : 'direct')) {
     return reject('VALIDATION', interest ? 'data.error.publicOnly' : 'data.error.directOnly', 'offerId');
   }

@@ -1,5 +1,5 @@
 import type { ExpenseCategory, Expense, DataTables, DataSnapshot } from '../db/types';
-import { seedHistory } from '../db/generated/history';
+import { isArchivedCafeDay, seedHistory } from '../db/cafe-fixtures';
 import { addDays, daysBetween, dateOf, dateRange, inRange, LEGACY_GRANT_EVALUATION_NOW, MONTH_START, timeOf, TODAY } from '../db/time';
 import { fromBase, toBase } from '../derive/common';
 import { deriveRecipeCost } from '../derive/stock';
@@ -10,6 +10,8 @@ import { periodOf } from '../conditions';
 import type { GrantRow, LedgerExpenseRow, LedgerModel, MarginMenuRow, MarginModel, Period, TaxItemRow, TaxModel } from './types';
 import { selectAccountingPresentation, selectMoneyRead } from '../pos/projection';
 import { selectAccountingDay } from '../iteration7/accounting';
+import { realLedger, realMargin } from '../reality/09/views';
+import { realTaxModel } from '../reality/18/views';
 import { categoryKey, evidenceKey, note, percentChange, rateOf, ready, round1, sum, type Projector } from './util';
 
 const CATEGORY_ORDER: readonly ExpenseCategory[] = ['ingredients', 'operations', 'supplies', 'labor', 'rent', 'other'];
@@ -35,6 +37,7 @@ function expenseRow(t: DataTables, e: Expense): LedgerExpenseRow {
 export const confirmedIn = (t: DataTables, p: Period): Expense[] => t.expense.filter((e) => e.status === 'confirmed' && inRange(e.businessDate, p.start, p.end));
 
 export const projectLedger: Projector<'ledger'> = (ctx, condition, variant) => {
+  if (ctx.snapshot.tables.realFinance) return realLedger(ctx, condition, variant);
   const t = ctx.snapshot.tables;
   const period = periodOf('ledger', condition) ?? { start: TODAY, end: TODAY };
   const sales = salesIn(t, period);
@@ -92,14 +95,16 @@ function marginRows(snapshot: DataSnapshot, p: Period, missingCostMenu: string |
     return {
       menuId: menu.menuId, name: menu.name ?? { key: menu.nameKey }, unitMargin: unitCost === null ? null : menu.price - unitCost, contribution: cost === null ? null : (p.start === TODAY && p.end === TODAY ? recognizedGross : netSales) - cost, nameKey: menu.nameKey, categoryKey: menu.categoryKey, price: menu.price, unitCost, qty, netSales, cost, grossProfit,
       rate: costMissing ? null : current.rate, costMissing: costMissing || unitCost === null,
-      recipe: current.recipeLines.map((part) => ({ nameKey: part.nameKey, qty: { value: fromBase(toBase(part.quantity, part.unit) ?? 0, part.inventoryUnit), unit: part.inventoryUnit }, cost: part.cost ?? 0 })), costEffectiveFrom: menu.costEffectiveFrom,
+      recipe: current.recipeLines.map((part) => ({ nameKey: part.nameKey, name: part.name, qty: { value: fromBase(toBase(part.quantity, part.unit) ?? 0, part.inventoryUnit), unit: part.inventoryUnit }, cost: part.cost ?? 0 })), costEffectiveFrom: menu.costEffectiveFrom,
     };
   });
 }
 function marginTotals(snapshot: DataSnapshot, p: Period, missingCostMenu: string | null) {
   const menus = marginRows(snapshot, p, missingCostMenu);
   const custom = (snapshot.pos?.customRecognitions ?? []).filter(r=>inRange(r.businessDate,p.start,p.end));
-  const canonical=snapshot.pos?.money && p.start<=snapshot.pos.businessDate && p.end>=snapshot.pos.businessDate ? selectAccountingDay(selectMoneyRead(snapshot),{date:snapshot.pos.businessDate}) : null;
+  const canonical=snapshot.pos?.money && p.start<=snapshot.pos.businessDate && p.end>=snapshot.pos.businessDate &&
+    (snapshot.pos.orders.length || !isArchivedCafeDay(snapshot.pos.businessDate))
+    ? selectAccountingDay(selectMoneyRead(snapshot),{date:snapshot.pos.businessDate}) : null;
   const netSales = sum(menus.map((m) => m.netSales)) + (canonical?canonical.sales.total-snapshot.tables.menuDaily.filter(r=>r.businessDate===snapshot.pos!.businessDate).reduce((n,r)=>n+r.netSales,0):sum(custom.map(r=>r.amount)));
 
   const costMissing = menus.some((m) => m.qty > 0 && m.cost === null) || (canonical?canonical.unknownCostSales.reduce((n,r)=>n+r.amount,0):custom.reduce((n,r)=>n+r.amount,0)) > 0;
@@ -109,6 +114,7 @@ function marginTotals(snapshot: DataSnapshot, p: Period, missingCostMenu: string
 }
 
 export const projectMargin: Projector<'margin'> = (ctx, condition, variant) => {
+  if (ctx.snapshot.tables.realFinance) return realMargin(ctx, condition, variant);
   const t = ctx.snapshot.tables;
   const period = periodOf('margin', condition) ?? { start: TODAY, end: TODAY };
   const missing = variant === 'missing-cost' ? 'm-saltbread' : null;
@@ -144,6 +150,8 @@ export function simulateMenuPrice(next: { readonly price: number; readonly unitC
 
 /* 세금 */
 export const projectTax: Projector<'tax'> = (ctx, condition, variant) => {
+  const real = realTaxModel(ctx.snapshot, condition.kind === 'dateRange');
+  if (real) return ready('tax', condition, variant, real);
   const t = ctx.snapshot.tables;
   const period = periodOf('tax', condition) ?? { start: MONTH_START, end: TODAY };
   const confirmed = confirmedIn(t, period);

@@ -4,6 +4,7 @@ import { createTranslator } from '../i18n';
 import { getPaymentBillId, quotePaymentBill } from '../pos/loyalty';
 import { setup } from '../pos/loyalty/test-setup';
 import { selectReceipt } from '../pos/reversals';
+import { seedCatalog } from './db/generated/catalog';
 import { MONTH_START, TODAY } from './db/time';
 import { dataBundles } from './messages';
 import { createWidgetDataStore, deriveStock, readModel, resolveDataText, selectWidget, widgetFacts } from './widget-data';
@@ -36,12 +37,15 @@ describe('cafe data fixes', () => {
     expect(selectReceipt(h.pos.read(), { paymentId })).toMatchObject({ amount: 3500, lines: [{ amount: 3500, options: expect.arrayContaining([expect.objectContaining({ name: '에스프레소 1샷', extraPrice: 500 })]) }] });
   });
 
-  it('supplies six generated menu photos and the acceptance memo', () => {
+  it('supplies a JPEG for each of the 24 café menu entries and the acceptance memo', () => {
     const menu = readModel(snapshot, 'menu');
-    const photos = menu.rows.filter(row => row.customPhotoUrl);
-    expect(photos.map(row => row.menuId).sort()).toEqual(['m-americano', 'm-cafe-latte', 'm-deep-choco', 'm-dolce-latte', 'm-saltbread', 'm-vanilla-latte']);
-    expect(menu.rows.filter(row => !row.customPhotoUrl && !row.photoKey)).toHaveLength(18);
-    for (const row of photos) expect(readFileSync('public' + row.customPhotoUrl).subarray(0, 2).toString('hex')).toBe('ffd8');
+    expect(menu.rows).toHaveLength(24);
+    expect(menu.rows.map(row => row.menuId).sort()).toEqual(seedCatalog.menu.map(row => row.menuId).sort());
+    for (const { menuId, customPhotoUrl } of menu.rows) {
+      const photoUrl = `/menu-photos/cafe-${menuId.slice(2)}-01.jpeg`;
+      expect(customPhotoUrl, menuId).toBe(photoUrl);
+      expect(readFileSync(`public${photoUrl}`).subarray(0, 2).toString('hex'), photoUrl).toBe('ffd8');
+    }
     expect(getText(menu.rows.find(row => row.menuId === 'm-cafe-latte')?.memo)).toBe('우유는 매일 아침 한강목장 유업유통');
   });
 

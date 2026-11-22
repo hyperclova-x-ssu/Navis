@@ -145,6 +145,11 @@ export interface SalesSummary {
   readonly receivableCreated: number; readonly membershipCount: number; readonly subscriptionDaily: number; readonly membershipExpiry: number;
   readonly customPickup: number; readonly refund: number; readonly gross: number; readonly discount: number;
   readonly discountBySource: Readonly<Record<'direct' | 'coupon' | 'membership', number>>;
+  /**
+   * Finance service only (REAL-PLAN F09-2, B09-2 `sales.byMethod`): net recognized sales by recorded tender. `mixed` OVERLAPS the other five (sales paid with
+   * two or more methods) and is never added to them or to `total`. Absent in a snapshot archived before the field existed: "not available", never zeros.
+   */
+  readonly byMethod?: Readonly<Record<'cash' | 'card' | 'easy_pay' | 'charge' | 'receivable' | 'mixed', number>>;
 }
 export interface DepositSummary {
   readonly total: number; readonly byMethod: Readonly<Record<RealMethod, number>>; readonly byPurpose: Readonly<Record<SettlementPurpose, number>>;

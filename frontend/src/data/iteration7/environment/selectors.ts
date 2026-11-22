@@ -4,6 +4,13 @@ import type { EnvironmentAlert, EnvironmentTables, EnvironmentVariant, StoreEnvi
 /** Preview variants are presentation only; callers use normal for facts. */
 export function selectStoreEnvironment(snapshot: { readonly tables: EnvironmentTables }, variant: EnvironmentVariant = 'normal'): StoreEnvironmentModel {
   const e = snapshot.tables.storeEnvironment;
+  if (e.source === 'manual') return deepFreeze({
+    source: 'manual', status: e.current ? 'ready' : 'empty', retryable: false,
+    sensorStatus: 'none', current: e.current, lastMeasuredAt: e.current?.measuredAt ?? null,
+    ranges: { temperature: e.temperatureRange, humidity: e.humidityRange }, trend: e.readings,
+    music: { deviceStatus: 'none', playlists: [], playlistId: null, track: null, playing: false, volumePct: 0, unavailableReason: 'DEVICE_UNAVAILABLE' },
+    alerts: e.manualAlert ? [{ reason: 'OUT_OF_RANGE', group: 'tasks', messageKey: 'data.environment.alert.OUT_OF_RANGE', sourceFeatureId: 'store-environment' }] : [],
+  });
   const unavailable = variant === 'empty' || variant === 'error';
   const sensorStatus = unavailable ? 'none' : variant === 'sensor_disconnected' ? 'disconnected' : e.sensor;
   const current = unavailable || sensorStatus === 'none' ? null : variant === 'out_of_range' && e.current ? { ...e.current, temperatureC: 28.5 } : e.current;

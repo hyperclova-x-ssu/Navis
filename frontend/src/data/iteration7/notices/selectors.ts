@@ -1,7 +1,7 @@
 import { addDays, isIsoDate, TODAY } from '../../db/time';
 import { deepFreeze } from '../../db/freeze';
 import type { DataText } from '../../db/types';
-import type { ClosureCalendarEvent, ClosureLinkStatus, NoticeDraft, NoticeSent, NoticesModel, NoticesQuery, NoticeSourceTables, StoreClosure } from './types';
+import type { ClosureCalendarEvent, ClosureLinkStatus, NoticeDraft, NoticeScheduled, NoticeSent, NoticesModel, NoticesQuery, NoticeSourceTables, StoreClosure } from './types';
 
 const raw = (text: DataText | null): string => text && 'raw' in text ? text.raw : '';
 export function selectStoreClosures(snapshot: { readonly tables: { readonly calendarEvent: readonly ClosureCalendarEvent[] } }, query?: { readonly start: string; readonly end: string }): readonly StoreClosure[] {
@@ -31,11 +31,13 @@ export function selectNotices(snapshot: { readonly tables: NoticeSourceTables },
     (!query.groupIds?.length || row.audience === 'all_contactable' || query.groupIds.some(id => row.groupIds.includes(id)));
   const closures = selectStoreClosures(snapshot, { start: today, end: addDays(today, 7) });
   // D-326: pending schedules do not count as sent until delivery.
-  const sentHistory = t.noticeSent.filter((row): row is NoticeSent => row.status === 'sent_example');
-  const upcomingUnsentClosures = closures.filter(c => !sentHistory.some(s => s.closureEventId === c.eventId && s.closureRevision === c.revision && s.startDate === c.startDate && s.endDate === c.endDate && s.closureTitle === c.title && s.closureBody === c.body));
+  const sentHistory = t.noticeSent.filter((row): row is NoticeSent => row.status === 'sent_example' || row.status === 'sent');
+  const scheduled = t.noticeSent.filter((row): row is NoticeScheduled => row.status === 'scheduled' && matches(row))
+    .sort((a, b) => a.sendAt.localeCompare(b.sendAt) || a.sentId.localeCompare(b.sentId));
+  const upcomingUnsentClosures = closures.filter(c => !t.noticeSent.some(s => s.closureEventId === c.eventId && s.closureRevision === c.revision && s.startDate === c.startDate && s.endDate === c.endDate && s.closureTitle === c.title && s.closureBody === c.body));
   const drafts = t.noticeDraft.filter(matches), sent = sentHistory.filter(matches).sort((a, b) => b.sentAt.localeCompare(a.sentAt) || b.sentId.localeCompare(a.sentId));
   const closureLinks = Object.fromEntries(t.noticeDraft.map(draft => [draft.noticeId, selectDraftClosureLink(snapshot, draft)]));
-  return deepFreeze({ drafts, sent, upcomingUnsentClosures, unsentCount: upcomingUnsentClosures.length + drafts.filter(row => !row.closureEventId && !sent.some(message => message.noticeId === row.noticeId && message.draftRevision === row.revision)).length, sentCount: sent.length, nextClosure: closures[0] ?? null, closureLinks });
+  return deepFreeze({ drafts, sent, scheduled, upcomingUnsentClosures, unsentCount: upcomingUnsentClosures.length + drafts.filter(row => !row.closureEventId && !t.noticeSent.some(message => message.noticeId === row.noticeId && (message.status === 'scheduled' || message.draftRevision === row.revision))).length, sentCount: sent.length, nextClosure: closures[0] ?? null, closureLinks });
 }
 export function selectShopGuidance<T extends object>(snapshot: { readonly tables: { readonly calendarEvent: readonly ClosureCalendarEvent[] } }, manual: T = {} as T): T & { readonly closures: readonly StoreClosure[] } {
   return deepFreeze({ ...manual, closures: selectStoreClosures(snapshot) });

@@ -22,7 +22,7 @@ const ko = {
   'order.reversal.USE_REFUND': '만든 뒤라 취소 대신 환불할 수 있어요',
   'order.reversal.REVERSAL_FAILED': '취소 승인이 안 됐어요. 다시 시도해 주세요',
   'order.reversal.EMPTY_SELECTION': '취소할 품목을 골라 주세요',
-  'order.receipt.showAgainDone': '영수증을 다시 보여 드렸어요(예시)',
+  'order.receipt.showAgainDone': '영수증을 다시 보여 드렸어요',
   'order.receipt.incomeInvalid': '휴대폰 번호를 숫자 10~11자리로 넣어 주세요',
   'order.receipt.businessInvalid': '사업자 번호를 숫자 10자리로 넣어 주세요',
   'data.management.cancelSummary': '취소',

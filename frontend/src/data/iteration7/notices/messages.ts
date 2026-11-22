@@ -1,11 +1,6 @@
 export const NOTICE_MESSAGES: Readonly<Record<string, string>> = {
-  // D-326 scheduled notice copy.
-  'data.notices.notice.scheduled': '발송을 예약했어요',
-  'data.notices.error.SCHEDULE_IN_FUTURE': '지금보다 늦은 시간을 골라 주세요',
-  'data.notices.error.SCHEDULE_NIGHT_RESTRICTED': '오전 8시부터 밤 9시 전까지 골라 주세요',
-  // End D-326.
   'data.notices.notice.saved': '임시 저장했어요',
-  'data.notices.notice.sent': '보냈어요(예시)',
+  'data.notices.notice.sent': '보냈어요',
   'data.notices.error.TITLE_REQUIRED': '공지 제목을 넣어 주세요',
   'data.notices.error.BODY_REQUIRED': '공지 내용을 넣어 주세요',
   'data.notices.error.NO_RECIPIENTS': '보낼 수 있는 손님이 없어요',
@@ -24,3 +19,18 @@ export const NOTICE_MESSAGES: Readonly<Record<string, string>> = {
   'data.notices.error.KEY_REQUIRED': '공지 내역을 불러오지 못했어요',
   'data.notices.error.STALE_REVISION': '공지 내역을 불러오지 못했어요',
 };
+
+export const noticeScheduleRows = {
+  'data.notices.notice.scheduled': ['발송을 예약했어요', 'Send scheduled', '已安排发送', '已安排傳送'],
+  'data.notices.error.SCHEDULE_IN_FUTURE': ['지금보다 늦은 시간을 골라 주세요', 'Choose a time in the future', '请选择未来的时间', '請選擇未來的時間'],
+  'data.notices.error.SCHEDULE_NIGHT_RESTRICTED': ['오전 8시부터 밤 9시 전까지 골라 주세요', 'Choose a time from 8 AM to before 9 PM', '请选择早上8点至晚上9点前的时间', '請選擇早上8點至晚上9點前的時間'],
+  'data.notices.error.NIGHT_RESTRICTED': ['밤 9시부터 아침 8시까지는 공지를 보낼 수 없어요', 'Notices cannot be sent from 9 PM to 8 AM', '晚上9点至早上8点不能发送通知', '晚上9點至早上8點無法傳送通知'],
+  'data.notices.error.A6_DISABLED': ['문자 발송은 아직 열려 있지 않아요. 초안은 저장되어 있어요', 'Text messages cannot be sent yet. Your draft is saved', '短信暂时无法发送，草稿已保存', '簡訊暫時無法傳送，草稿已儲存'],
+  'data.notices.error.ALREADY_SCHEDULED': ['이미 발송을 예약한 공지예요', 'This notice is already scheduled', '此通知已安排发送', '這則通知已安排傳送'],
+  'data.notices.error.SCHEDULE_NOT_CANCELLABLE': ['예약을 취소할 수 없어요', 'This schedule can no longer be cancelled', '此定时发送已无法取消', '此排程已無法取消'],
+  'data.notices.notice.scheduleCancelled': ['발송 예약을 취소했어요', 'Scheduled send cancelled', '已取消定时发送', '已取消排程傳送'],
+  'data.notices.schedule.list': ['예약한 공지', 'Scheduled notices', '定时通知', '排程通知'],
+  'data.notices.schedule.empty': ['예약한 공지가 없어요', 'No scheduled notices', '没有定时通知', '沒有排程通知'],
+  'data.notices.schedule.cancel': ['예약 취소', 'Cancel schedule', '取消定时发送', '取消排程傳送'],
+  'data.notices.schedule.confirm': ['발송 예약을 취소할까요?', 'Cancel this scheduled send?', '取消此次定时发送？', '取消這次排程傳送？'],
+} as const;

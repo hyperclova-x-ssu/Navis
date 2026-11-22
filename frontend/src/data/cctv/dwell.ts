@@ -1,4 +1,4 @@
-import { seedSupplement } from '../db/generated/supplement';
+import { seedSupplement } from '../db/cafe-fixtures';
 import { NOW_TIME } from '../db/time';
 
 /** D-313 takes dwell and visit counts from the cafe sample, with separate source order counts. */

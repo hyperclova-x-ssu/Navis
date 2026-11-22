@@ -1,6 +1,7 @@
 import { selectBriefing } from '../derive/operations';
 import { YESTERDAY, addDays, TODAY } from '../db/time';
 import type { BriefingItem, BriefingModel } from './types';
+import { applyRealBriefing } from '../reality/12/overlay';
 import { note, percentChange, ready, type Projector } from './util';
 
 /**
@@ -33,5 +34,5 @@ export const projectBriefing: Projector<'briefing'> = (ctx, condition, variant) 
     closing: { netSales: ledger.sales.net, remaining: ledger.remaining },
     yesterday: { date: YESTERDAY, netSales: net(yesterdayRow), delta: baseRow ? { value: percentChange(net(yesterdayRow), net(baseRow)), kind: 'percent' } : null },
   };
-  return ready('briefing', condition, variant, model, variant === 'partial' ? [note('briefing', 'partial')] : undefined);
+  return ready('briefing', condition, variant, applyRealBriefing(model, t.realBriefing), variant === 'partial' ? [note('briefing', 'partial')] : undefined);
 };

@@ -1,9 +1,10 @@
 import type { DataSnapshot, DataText } from '../db/types';
-import { seedCatalog } from '../db/generated/catalog';
-import { seedHistory } from '../db/generated/history';
+import { seedCatalog, seedHistory } from '../db/cafe-fixtures';
 import { projectPosRemainingUsage, projectPosUsage } from '../pos/projection';
 import { addDays, dateOf, dateRange, TODAY } from '../db/time';
 import { DataQueryError, fromBase, memoSelector, requireDate, roundRate, toBase, unitDimension } from './common';
+import { projectRealStockHistory, projectRealUsage, realStock, stockMetrics } from '../reality/03/stock-projection';
+import { baseQuantity } from '../reality/03/stock-dto';
 
 export function purchaseQuantityBase(quantity: number, unit: string, basePerUnit?: number): number | null {
   if (basePerUnit === undefined) return toBase(quantity, unit);
@@ -14,6 +15,7 @@ export function purchaseQuantityBase(quantity: number, unit: string, basePerUnit
 
 export const deriveUsage = memoSelector((q: { readonly date: string }) => q.date, (s, q) => {
   requireDate(q.date);
+  if (s.tables.realStock !== undefined) return projectRealUsage(realStock(s), q.date === TODAY ? realStock(s)?.businessDate ?? q.date : q.date);
   if (s.pos && q.date === s.pos.businessDate) return projectPosUsage(s.pos, s.tables, q.date);
   const soldQty: Record<string, number> = {};
   const paymentIds = new Set(s.tables.payment.filter((p) => p.businessDate === q.date && p.kind === 'payment').map((p) => p.paymentId));
@@ -37,13 +39,15 @@ export const deriveRecipeCost = memoSelector((menuId: string) => menuId, (s, men
   if (!menu) throw new DataQueryError('NOT_FOUND', 'menuId');
   const usage = deriveUsage(s, { date: TODAY });
   const recipeLines = s.tables.recipeLine.filter((r) => r.menuId === menuId).map((r) => {
-    const item = s.tables.inventoryItem.find((i) => i.itemId === r.itemId)!;
+    const item = s.tables.inventoryItem.find((i) => i.itemId === r.itemId);
+    // A real recipe line can arrive before its ingredient table (REAL-PLAN F01 → F03): keep the line, in the recipe's own unit, without a cost.
+    if (!item) return { ...r, name: { key: 'data.state.inventory-booking.partial-data' }, nameKey: 'data.state.inventory-booking.partial-data', inventoryUnit: r.unit, cost: null, usedToday: fromBase(usage.byMenu[menuId]?.[r.itemId] ?? 0, r.unit) };
     const purchase = s.tables.purchaseItem.find((p) => p.itemId === r.itemId);
     const cost = purchase && unitDimension(r.unit) === unitDimension(item.unit) ? (purchase.basePerUnit ? (toBase(r.quantity, r.unit) ?? 0) / purchase.basePerUnit : fromBase(toBase(r.quantity, r.unit) ?? 0, item.unit)) * purchase.unitPrice : null;
     return { ...r, name: item.name ?? { key: item.nameKey }, nameKey: item.nameKey, inventoryUnit: item.unit, cost, usedToday: fromBase(usage.byMenu[menuId]?.[r.itemId] ?? 0, item.unit) };
   });
   const retailCost = s.tables.paymentLine.find((l) => l.menuId === menuId)?.unitCostAtSale ?? null;
-  const cost = menu.kind === 'retail' ? retailCost : menu.deletedAt && !recipeLines.length && menu.recipe.length ? Math.round(menu.recipe.reduce((n, p) => n + p.cost, 0)) : recipeLines.length && recipeLines.every((r) => r.cost !== null) ? Math.round(recipeLines.reduce((n, r) => n + (r.cost ?? 0), 0)) : null;
+  const cost = menu.sourceCost ? menu.sourceCost.unitCost === null ? null : Math.round(menu.sourceCost.unitCost) : menu.kind === 'retail' ? retailCost : menu.deletedAt && !recipeLines.length && menu.recipe.length ? Math.round(menu.recipe.reduce((n, p) => n + p.cost, 0)) : recipeLines.length && recipeLines.every((r) => r.cost !== null) ? Math.round(recipeLines.reduce((n, r) => n + (r.cost ?? 0), 0)) : null;
   return { menuId, cost, margin: cost === null ? null : menu.price - cost, rate: cost === null ? null : roundRate(menu.price - cost, menu.price), soldQty: usage.soldQty[menuId] ?? 0, recipeLines };
 });
 function receivedBase(s: DataSnapshot, itemId: string, date: string): number {
@@ -63,6 +67,25 @@ function openingBase(s: DataSnapshot, itemId: string, date: string): number {
 }
 export const deriveStock = memoSelector((q: { readonly date: string }) => q.date, (s, q) => {
   requireDate(q.date);
+  if (s.tables.realStock !== undefined) {
+    const source = realStock(s);
+    const date = q.date === TODAY ? source?.businessDate : q.date;
+    const rows = s.tables.inventoryItem.filter(item => item.kind === 'ingredient' && !item.deletedAt).map(item => {
+      const record = source?.items.find(row => row.itemId === item.itemId && row.businessDate === date);
+      const metrics = stockMetrics(source, record);
+      const receivedBase = source?.movementsComplete ? source.movements.filter(row => row.itemId === item.itemId && row.businessDate === date && row.channel === 'store' && row.kind === 'receive')
+        .reduce((sum, row) => sum + (baseQuantity(row.deltaBase) ?? 0), 0) : 0;
+      const tracksReplenishment = item.trackRestock && !(item.trackExpiry && item.expiresOn && date && item.expiresOn <= date);
+      const projectedRaw = metrics.raw - metrics.expectedUsageRemaining;
+      const projectedDeficit = tracksReplenishment && metrics.stock !== null ? Math.max(0, -projectedRaw) : 0;
+      const needsRestock = tracksReplenishment && metrics.stock !== null && item.restockThreshold !== null && metrics.stock <= item.restockThreshold;
+      const outOfStock = tracksReplenishment && metrics.stock === 0;
+      const status = item.trackExpiry ? 'same-day' : outOfStock ? 'out-of-stock' : needsRestock ? 'restock' : 'sufficient';
+      return { ...item, ...metrics, stock: metrics.display, tracksReplenishment, receivedToday: fromBase(receivedBase, item.unit), projectedRaw, projectedDeficit, needsRestock, outOfStock, status,
+        usingMenus: s.tables.recipeLine.filter(r => r.itemId === item.itemId).map(r => ({ menuId: r.menuId, name: s.tables.menuItem.find(m => m.menuId === r.menuId)?.name, quantity: r.quantity, unit: r.unit })) };
+    });
+    return { rows, restockCount: rows.filter(r => r.needsRestock).length, outOfStockCount: rows.filter(r => r.outOfStock).length, usingMenus: rows.map(r => ({ itemId: r.itemId, menus: r.usingMenus })) };
+  }
   const usage = deriveUsage(s, q);
   const remainingUsage = s.pos ? projectPosRemainingUsage(s.pos, s.tables, q.date) : {};
   const rows = s.tables.inventoryItem.filter((i) => i.kind === 'ingredient' && !i.deletedAt).map((item) => {
@@ -86,6 +109,7 @@ export const deriveStock = memoSelector((q: { readonly date: string }) => q.date
 });
 export interface StockHistoryRow { readonly rowId: string; readonly itemId: string; readonly at: string; readonly asOf?: string; readonly kind: 'opening' | 'receive' | 'usage' | 'adjust'; readonly delta: number; readonly balanceRaw: number; readonly balanceDisplay: number; readonly sourceRef: string; readonly description: DataText }
 export const selectStockHistory = memoSelector((q: { readonly itemId: string; readonly period: 'today' | 'last7days' }) => `${q.itemId}:${q.period}`, (s, q) => {
+  if (s.tables.realStock !== undefined) return projectRealStockHistory(realStock(s), q.itemId, q.period);
   const item = s.tables.inventoryItem.find((i) => i.itemId === q.itemId);
   if (!item) throw new DataQueryError('NOT_FOUND', 'itemId');
   const dates = q.period === 'today' ? [TODAY] : dateRange(addDays(TODAY, -6), TODAY).reverse();

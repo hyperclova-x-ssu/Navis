@@ -86,7 +86,7 @@ describe('one photo number everywhere (AC-324): widget · window · today’s pr
     expect(model.menus.find(m => m.menuId === 'm-coldbrew')?.photos).toEqual([]);
   });
 
-  it('seed 10: materials = photos = financier photos = today’s “리뷰 사진 10장”', () => {
+  it('seed 10: materials = photos = financier photos = today’s “영상에 쓸 매장 사진 10장”', () => {
     const store = createLegacyPromoStore();
     const v = modelOf(store, 'promo-video');
     expect([v.materialsCount, v.photoCount, v.menus[0].photos.length, weekCell(store)?.params]).toEqual([10, 10, 10, { photos: 10 }]);

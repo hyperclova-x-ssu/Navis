@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_DATA_WIDGET_IDS, DATA_WIDGET_IDS, MARKETING_WIDGET_IDS, defaultCondition, normalizeCondition, supportedConditions, isDataWidgetId } from './conditions';
 import { addDays, LAST_MONTH_END, LAST_MONTH_START, MONTH_START, TODAY, YESTERDAY } from './db/time';
-import { getRegistry } from '../catalog';
+import { getRegistry, REMOVED_WIDGET_IDS } from '../catalog';
 
 describe('widget condition source (DATA_MODEL 10.7)', () => {
-  it('lists exactly 30 active widgets (23 + 7) without stock-sync, the same ids as the registry', () => {
+  it('covers the 29 active widget registrations and the retained data ID for the retired widget', () => {
+    const activeIds = getRegistry('A').map(f => f.id);
+    expect(activeIds).toHaveLength(29);
+    expect(REMOVED_WIDGET_IDS).toEqual(['marketing-performance']);
     expect(ALL_DATA_WIDGET_IDS).toHaveLength(30);
     expect(new Set(ALL_DATA_WIDGET_IDS).size).toBe(30);
-    expect([...ALL_DATA_WIDGET_IDS].sort()).toEqual(getRegistry('A').map((f) => f.id).sort());
+    expect([...ALL_DATA_WIDGET_IDS].sort()).toEqual([...activeIds, ...REMOVED_WIDGET_IDS].sort());
     expect(ALL_DATA_WIDGET_IDS).toEqual([...DATA_WIDGET_IDS, ...MARKETING_WIDGET_IDS]);
     for (const id of ['stock-sync','demand','hiring','interior','floor-plan','memberships']) {
       expect(ALL_DATA_WIDGET_IDS).not.toContain(id);

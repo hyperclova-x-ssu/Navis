@@ -37,21 +37,21 @@ export const sourcedRows = {
   'data.zone.center': ['중앙', 'Center', '中央', '中央'],
   'data.zone.bar': ['바', 'Bar', '吧台', '吧檯'],
   'data.person.kim': ['김○○', 'Kim ○○', '金○○', '金○○'],
-  'data.grant.stability': ['소상공인 경영안정 지원', 'Small business stability support (sample)', '小微商户经营稳定扶持（示例）', '小微商家經營穩定扶持（範例）'],
-  'data.grant.smartStore': ['스마트 상점 도입 지원', 'Smart store adoption support (sample)', '智慧商店导入扶持（示例）', '智慧商店導入扶持（範例）'],
+  'data.grant.stability': ['소상공인 경영안정 지원', 'Small business stability support', '小微商户经营稳定扶持', '小微商家經營穩定扶持'],
+  'data.grant.smartStore': ['스마트 상점 도입 지원', 'Smart store adoption support', '智慧商店导入扶持', '智慧商店導入扶持'],
   // L3 시간대
   'data.band.morning': ['오전', 'Morning', '上午', '上午'],
   'data.band.afternoon': ['오후', 'Afternoon', '下午', '下午'],
   'data.band.evening': ['저녁', 'Evening', '晚上', '晚上'],
   // L5 공통 동작·상태
-  'data.notice.exported': ['내보냈어요(예시)', 'Exported (sample)', '已导出（示例）', '已匯出（範例）'],
-  'data.notice.sent': ['보냈어요(예시)', 'Sent (sample)', '已发送（示例）', '已發送（範例）'],
+  'data.notice.exported': ['내보냈어요', 'Exported', '已导出', '已匯出'],
+  'data.notice.sent': ['보냈어요', 'Sent', '已发送', '已發送'],
   'data.notice.undone': ['되돌렸어요', 'Undone', '已撤销', '已復原'],
   'data.notice.copied': ['복사했어요', 'Copied', '已复制', '已複製'],
   'data.action.retry': ['다시 시도하기', 'Try again', '重试', '重試'],
   'data.action.addEvent': ['일정 추가하기', 'Add event', '添加日程', '新增行程'],
   'data.action.createManual': ['매뉴얼 만들기', 'Create a manual', '创建手册', '建立手冊'],
-  'data.tax.connection.connected': ['연결됨(예시)', 'Connected (sample)', '已连接（示例）', '已連線（範例）'],
+  'data.tax.connection.connected': ['연결됨', 'Connected', '已连接', '已連線'],
   'data.state.briefing.none': ['오늘은 특별한 소식이 없어요', 'No special updates today', '今天没有特别的消息', '今天沒有特別的消息'],
   // P1 위젯 문구 키 표
   'data.action.registerItem': ['품목 추가하기', 'Add item', '添加商品', '新增商品'],
@@ -89,7 +89,7 @@ export const sourcedRows = {
   'data.fact.inquiry.waiting.count': ['답변 대기', 'Awaiting reply', '待回复', '待回覆'],
   'data.fact.community.pending.count': ['응답 대기 제안', 'Partnership offers awaiting a reply', '待回复的合作提议', '待回覆的合作提案'],
   // DS 11.7
-  'data.action.connect': ['연결하기(예시)', 'Connect (sample)', '连接（示例）', '連線（範例）'],
+  'data.action.connect': ['연결하기', 'Connect', '连接', '連線'],
   'data.error.moveOverStock.store': ['매장 재고보다 많이 옮길 수 없어요', "You can't move more than the store stock", '移动数量不能超过门店库存', '移動數量不能超過門市庫存'],
 } as const satisfies Readonly<Record<string, Row>>;
 

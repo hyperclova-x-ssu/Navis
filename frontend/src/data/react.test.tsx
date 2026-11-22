@@ -57,5 +57,5 @@ it('카메라 끊김은 provider의 브리핑 주요 업무에만 연결하고 �
   expect(result.current.status).toBe('ready');
   if (result.current.status !== 'ready') throw new Error('브리핑 없음');
   expect(result.current.model.importantAlerts.groups.find((g) => g.id === 'tasks')?.items.some((i) => i.id === 'camera:sample-window')).toBe(true);
-  expect(selectCameras(store.getSnapshot(), {}).map(camera => camera.connection)).toEqual(['connected', 'connected']);
+  expect(selectCameras(store.getSnapshot(), {}).map(camera => camera.connection)).toEqual(['connected']);
 });

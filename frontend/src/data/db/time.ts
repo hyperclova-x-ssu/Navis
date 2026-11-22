@@ -1,8 +1,6 @@
 /**
- * Fixed store-local clock for the mockup (DATA_MODEL 10.9, ADR-0003).
- * Pure ISO-date arithmetic: no Date.now(), no device timezone, no Date parsing.
+ * Shared store-local clock inputs and civil-date arithmetic (D-346).
  */
-import manifest from './generated/manifest.json';
 import { POS_BUSINESS_DATE as TODAY, POS_NOW_TIME as NOW_TIME, POS_NOW as NOW } from '../../pos/clock';
 
 export { TODAY, NOW_TIME, NOW };
@@ -77,4 +75,4 @@ export const WEEK_END = addDays(WEEK_START, 6);
 export const MONTH_START = `${TODAY.slice(0, 7)}-01`;
 export const LAST_MONTH_END = addDays(MONTH_START, -1);
 export const LAST_MONTH_START = `${LAST_MONTH_END.slice(0, 7)}-01`;
-export const LAST_WEEK_SAME_DAY = manifest.comparison.businessDate;
+export const LAST_WEEK_SAME_DAY = addDays(TODAY, -7);

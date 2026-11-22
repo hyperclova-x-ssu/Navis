@@ -6,6 +6,7 @@ import { createSeedTables } from './seed';
 import { deepFreeze } from './freeze';
 import type { DataSnapshot, DataTables, SeedOverrides } from './types';
 import { equalData, inverseChange } from './inverse';
+import { REAL_UNDO_PREFIX, type RealPort } from '../reality/00/port';
 import { posSettingsChange } from './settings';
 import { isIsoDate } from './time';
 import { selectClosing, paymentTotals } from '../derive/payments';
@@ -31,8 +32,18 @@ export type DataSessionInput = (SettingsCommand & { readonly posPreferences?: Po
 export interface WidgetDataStore {
   getSnapshot(): DataSnapshot;
   subscribe(listener: () => void): () => void;
+  /** Sync command. In a real (HTTP) domain: optimistic commands preview locally and settle in the background (`pending: true`); the rest return `ASYNC_REQUIRED` — use `execute`. */
   dispatch(command: DataCommand): DataCommandResult;
+  /** The fixture handlers only (no real routing). The real port uses it for optimistic previews. */
+  dispatchLocal(command: DataCommand): DataCommandResult;
+  /** Authoritative command, always a Promise: resolves after the server receipt and the dependent re-read; fixture commands resolve with the local result. */
+  execute(command: DataCommand): Promise<DataCommandResult>;
   undo(token: string): DataCommandResult;
+  /** Replace whole tables from an HTTP load (REAL-PLAN F00). Skipped when nothing changed, so a background refresh does not stale a card's `baseRevision`. */
+  hydrate(tables: Partial<DataTables>): void;
+  /** The data port of this run, if the app composed one (REAL-PLAN F00). */
+  readonly real: RealPort | undefined;
+  bindReal(port: RealPort | undefined): void;
   readonly session: SessionTransactionPort<DataSessionInput>;
   bindCustomDispatch(dispatch: (command: import('../iteration7/custom-orders').CustomOrderCommand | ReversiblePickupCommand) => DataCommandResult,
     busy:()=>boolean, undoPickup?: (token: string, nextPos: PosState) => DataCommandResult): void;
@@ -105,7 +116,7 @@ export function createWidgetDataStore(seed?: SeedOverrides, options: DataStoreOp
     try { for (const listener of [...listeners]) { try { listener(); } catch { /* A committed publication still reaches every subscriber. */ } } }
     finally { notifying = false; }
   };
-  function dispatch(command: DataCommand): DataCommandResult {
+  function dispatchLocal(command: DataCommand): DataCommandResult {
     if (busy()) return customBusy()&&command?.type==='closing.closeDay'&&(!options.sessionGate||options.sessionGate.phase==='idle')?error('UNPAID_BILLS'):error('TRANSACTION_BUSY');
     if (!command || typeof command !== 'object' || typeof command.type !== 'string') return { ok: false, code: 'VALIDATION', field: 'type', messageKey: 'data.error.unknownCommand' };
     if(snapshot.pos?.money && (command.type==='memberships.useOnce'||command.type==='memberships.cancelUse'))return membershipDispatch?membershipDispatch(command):{ok:false,code:'CONFLICT',reason:'POS_CONTEXT_REQUIRED',messageKey:'data.money.error.POS_CONTEXT_REQUIRED',details:{route:'orders-payment'}};
@@ -169,6 +180,26 @@ export function createWidgetDataStore(seed?: SeedOverrides, options: DataStoreOp
     if (!undoToken && !['video.attachJob', 'video.progress', 'video.settle', 'promo.syncCatalog'].includes(command.type)) pendingUndo = null;
     snapshot = deepFreeze({ ...snapshot, revision, seq, tables, pos:nextPos }); emit(); return result;
   }
+  let real: RealPort | undefined;
+  function dispatch(command: DataCommand): DataCommandResult {
+    const route = command && typeof command === 'object' ? real?.route(command) : null;
+    if (route === 'async') return { ok: false, code: 'CONFLICT', reason: 'ASYNC_REQUIRED', messageKey: 'data.real.error.ASYNC_REQUIRED' };
+    if (route === 'optimistic') {
+      const { preview } = real!.begin(command);
+      return preview && preview.ok ? { ...preview, pending: true } : preview!;
+    }
+    return dispatchLocal(command);
+  }
+  function hydrate(patch: Partial<DataTables>) {
+    const keys = Object.keys(patch) as (keyof DataTables)[];
+    if (keys.every(key => equalData(patch[key], snapshot.tables[key]))) return;
+    pendingUndo = null;
+    snapshot = deepFreeze({ ...snapshot, revision: snapshot.revision + 1, tables: project({ ...snapshot.tables, ...patch }) });
+    emit();
+  }
+  function execute(command: DataCommand): Promise<DataCommandResult> {
+    return real ? real.execute(command) : Promise.resolve(dispatchLocal(command));
+  }
   function close(command: Extract<DataCommand, { type: 'closing.closeDay' | 'closing.undoDay' }>, ledgerKey: string): DataCommandResult {
     if (command.type === 'closing.closeDay') { const blocked = unpaid(); if (blocked) return blocked; }
     const current = selectClosing(snapshot, command);
@@ -209,9 +240,10 @@ export function createWidgetDataStore(seed?: SeedOverrides, options: DataStoreOp
       : { ...pos, revision: pos.revision + 1, customRecognitions: (pos.customRecognitions ?? []).filter(row => row !== recognition) };
   }
   function undo(token: string): DataCommandResult {
+    if (real && token.startsWith(REAL_UNDO_PREFIX)) { void real.undo(token); return { ok: true, revision: snapshot.revision, pending: true }; }
     if (busy()) return error('TRANSACTION_BUSY');
     const closing = closingTokens.get(token);
-    if (closing) return dispatch({ type: 'closing.undoDay', ...closing, idempotencyKey: token });
+    if (closing) return dispatchLocal({ type: 'closing.undoDay', ...closing, idempotencyKey: token });
     if (!pendingUndo || pendingUndo.token !== token) return { ok: false, code: 'CONFLICT', reason: 'UNDO_UNAVAILABLE', messageKey: 'data.error.undoUnavailable' };
     if (pendingUndo.expenseDates?.some(date => isExpenseDayClosed(snapshot.tables, date))) return error('UNDO_UNAVAILABLE');
     const nextPos = pendingUndo.pickupRecognitionId ? undoPickupRecognition(pendingUndo) : snapshot.pos!;
@@ -293,7 +325,8 @@ export function createWidgetDataStore(seed?: SeedOverrides, options: DataStoreOp
     flush(transactionId) { if (pendingFlush !== transactionId) return; pendingFlush = null; emit(); },
     abort(change) { prepared.delete(change.ticket); },
   };
-  return { getSnapshot: () => snapshot, subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; }, dispatch, undo, session, bindCustomDispatch(dispatch,busy,undoPickup) { customDispatch=dispatch;customBusy=busy;undoPickupWithCoordinator=undoPickup; },
+  return { getSnapshot: () => snapshot, subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; }, dispatch, dispatchLocal, execute, hydrate, undo, session,
+    get real() { return real; }, bindReal(port) { real = port; }, bindCustomDispatch(dispatch,busy,undoPickup) { customDispatch=dispatch;customBusy=busy;undoPickupWithCoordinator=undoPickup; },
     bindMoneyBusy(read){moneyBusy=read;},
     bindMembershipDispatch(dispatch){membershipDispatch=dispatch;},
     replay(command) { const key=command.idempotencyKey ? `${runId}:${command.type}:${command.idempotencyKey}` : ''; const record=snapshot.tables.commandLedger[key] ?? noOpLedger.get(key); if(!record)return; if(record.fingerprint!==fingerprint(command))return error('IDEMPOTENCY_MISMATCH'); if(record.status==='undone')return error('COMMAND_UNDONE'); return {...record.result as Extract<DataCommandResult,{ok:true}>,duplicate:true}; },

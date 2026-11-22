@@ -1,4 +1,4 @@
-import { seedSupplement } from '../../db/generated/supplement';
+import { seedSupplement } from '../../db/cafe-fixtures';
 const TODAY = '2026-10-26';
 import type { StaffTables } from './types';
 

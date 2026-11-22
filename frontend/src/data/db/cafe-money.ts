@@ -4,10 +4,7 @@ import { canonicalPosMoney } from '../../pos/domain/money';
 import { emptyMoneyState } from '../iteration7/accounting';
 import type { MemberAccountTxn, MembershipTerms, MoneyState, SalesRecognition } from '../iteration7/accounting/types';
 import { membershipProducts } from '../iteration7/memberships';
-import { seedCatalog } from './generated/catalog';
-import { seedOperations } from './generated/operations';
-import { seedSupplement } from './generated/supplement';
-import { seedToday } from './generated/today';
+import { seedCatalog, seedOperations, seedSupplement, seedToday } from './cafe-fixtures';
 import { YESTERDAY } from './time';
 
 const products = new Map(membershipProducts.map(product => [product.productId, product]));

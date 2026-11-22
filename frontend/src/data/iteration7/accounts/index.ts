@@ -1,10 +1,13 @@
 import type { MemberAccountTxn, MoneyRead, SourceAmount } from '../accounting/types';
+import { memberDate, readRealMemberMoney } from '../../reality/05/dto';
 export type { MemberAccountTxn } from '../accounting/types';
 
 export interface MemberAccountQuery { readonly memberId?: string; readonly start?: string; readonly end?: string; readonly kind?: MemberAccountTxn['kind']; readonly query?: string }
 export interface MemberAccountView { readonly memberId: string; readonly name: string; readonly phone: string; readonly chargeBalance: number; readonly receivableBalance: number; readonly transactions: readonly MemberAccountTxn[] }
 export interface MemberAccountsModel { readonly members: readonly MemberAccountView[]; readonly chargeBalance: number; readonly receivableBalance: number; readonly chargeHolders: number; readonly receivableHolders: number; readonly transactions: readonly MemberAccountTxn[] }
 export function accountBalance(read: MoneyRead, memberId: string, account: MemberAccountTxn['account']) {
+  const real = readRealMemberMoney(read);
+  if (real) return real.accounts[memberId]?.[account === 'charge' ? 'chargeBalance' : 'receivableBalance'] ?? 0;
   return read.state.accountTxns.filter(t => t.memberId === memberId && t.account === account).reduce((n, t) => n + t.amount, 0);
 }
 /** A return restores its original lot; unrelated newer topups never conceal consumption. */
@@ -27,8 +30,12 @@ export function allocateAccountSources(read: MoneyRead, memberId: string, accoun
 }
 export function selectMemberAccounts(read: MoneyRead, query: MemberAccountQuery = {}): MemberAccountsModel {
   const search = query.query?.trim().toLocaleLowerCase() ?? '';
-  const filter = (t: MemberAccountTxn) => (!query.start || t.at.slice(0, 10) >= query.start) && (!query.end || t.at.slice(0, 10) <= query.end) && (!query.kind || t.kind === query.kind);
-  const members = read.members.filter(m => (!query.memberId || m.memberId === query.memberId) && (!search || m.name.toLocaleLowerCase().includes(search) || m.phone.slice(-4).includes(search))).map(m => ({ ...m,
+  const real = readRealMemberMoney(read);
+  const filter = (t: MemberAccountTxn) => {
+    const date = real ? real.businessDates[t.txnId] ?? memberDate(t.at) : t.at.slice(0, 10);
+    return (!query.start || date >= query.start) && (!query.end || date <= query.end) && (!query.kind || t.kind === query.kind);
+  };
+  const members = read.members.filter(m => (!query.memberId || m.memberId === query.memberId) && (!search || (real?.profiles[m.memberId]?.name ?? m.name).toLocaleLowerCase().includes(search) || m.phone.slice(-4).includes(search))).map(m => ({ ...m,
     chargeBalance: accountBalance(read, m.memberId, 'charge'), receivableBalance: accountBalance(read, m.memberId, 'receivable'),
     transactions: read.state.accountTxns.filter(t => t.memberId === m.memberId && filter(t)).sort((a, b) => b.at.localeCompare(a.at) || b.txnId.localeCompare(a.txnId)) }));
   return { members, chargeBalance: members.reduce((n, m) => n + m.chargeBalance, 0), receivableBalance: members.reduce((n, m) => n + m.receivableBalance, 0),

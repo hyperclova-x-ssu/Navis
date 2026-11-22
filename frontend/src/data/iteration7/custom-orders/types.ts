@@ -20,6 +20,8 @@ export interface CustomHistory {
   readonly stage: CustomStage; readonly quoteRevision: number; readonly detail: string; readonly referenceId: string | null;
 }
 export interface CustomOrder extends CustomReceipt {
+  /** Store-local order number the service assigns on HTTP builds (shown `CO-001`). Fixture rows derive it from the id. */
+  readonly orderNo?: number;
   readonly customOrderId: string; readonly templateId: string; readonly templateRevision: number; readonly templateSnapshot: CustomTemplate;
   readonly proposedPickupAt: string | null; readonly productionAt: string | null; readonly quoteAmount: number | null; readonly quoteRevision: number;
   readonly customerDecision: CustomerDecision; readonly approvedQuoteRevision: number | null; readonly stage: CustomStage;
@@ -71,6 +73,8 @@ export interface CustomOrderRead {
   /** Canonical M3 state is supplied by the shared read adapter, never copied into this domain. */
   readonly accounting?: import('../accounting/types').MoneyState;
   readonly businessDate?: string; readonly now?: string;
+  /** HTTP builds: the service's own payment view per order (it is the ledger of record; `money` stays empty there). */
+  readonly payments?: Readonly<Record<string, CustomOrderPaymentView>>;
 }
 export interface CustomFailure {
   readonly ok: false; readonly code: 'VALIDATION' | 'NOT_FOUND' | 'CONFLICT' | 'PREVIEW_FAILURE'; readonly reason: string;

@@ -8,7 +8,7 @@ export const managementKoreanOverrides: Readonly<Record<string, string>> = {
   'data.state.inventory-booking.needs-review': '현재 재고와 안전 재고를 확인해 주세요', 'data.state.briefing.none': '오늘은 확인할 알림이 없어요',
   'data.state.menu.no-menus': '아직 등록한 메뉴가 없어요', 'data.state.menu.error': '메뉴를 불러오지 못했어요',
   'data.state.members.no-members': '아직 등록한 회원이 없어요', 'data.state.members.error': '회원 목록을 불러오지 못했어요',
-  'data.state.customer-analysis.camera-disconnected': '홀 카메라 확인 필요',
+  'data.state.customer-analysis.camera-disconnected': '카메라 연결 확인 필요',
   'data.state.inventory-booking.partial-data': '일부 자료를 불러오지 못했어요',
   'data.state.ledger.error': '손익을 불러오지 못했어요', 'data.state.margin.error': '마진을 불러오지 못했어요', 'data.state.tax.error': '세무 자료를 불러오지 못했어요', 'data.state.grants.error': '지원사업을 불러오지 못했어요', 'data.state.manuals.error': '매뉴얼을 불러오지 못했어요', 'data.state.customer-analysis.error': 'CCTV 현황을 불러오지 못했어요', 'data.state.voice-booking.error': '예약을 불러오지 못했어요',
 };
@@ -29,14 +29,19 @@ const errors: Record<string, string> = {
   MEMBER_PHONE_EXISTS: '같은 연락처로 등록된 회원이 있어요. 회원 목록에서 확인해 주세요', NAME_EXISTS: '이미 같은 이름이 있어요', TAX_PAYMENT_EXISTS: '같은 세금 납부 일정이 있어요. 기존 일정을 확인해 주세요', CCTV_TODAY_ONLY: '오늘 시간대만 검토 표시할 수 있어요',
   BOOKING_PAST: '지난 시간에는 새 예약을 넣을 수 없어요', BOOKING_DUPLICATE: '같은 시간에 비슷한 예약이 있어요', DUE_DATE_PAST: '예정일을 영업일 이후로 골라 주세요', EXPENSE_DATE_FUTURE: '앞으로 쓸 돈은 기록하지 않아요',
   LIKELY_DUPLICATE_EXPENSE: '비슷한 지출이 이미 있어요. 같은 지출이 아니라면 그래도 기록해 주세요', LIKELY_DUPLICATE_ORDER: '비슷한 발주가 이미 있어요. 그래도 새로 넣을까요?', ORDER_QTY_MIN: '최소 주문 수량보다 적어요', ORDER_QTY_STEP: '주문 단위에 맞는 수량을 넣어 주세요',
+  CLOSING_BLOCKED: '계산이 끝나지 않은 주문이 있어서 마감할 수 없어요. 먼저 계산을 끝내 주세요', RECEIPT_PENDING: '입고를 방금 기록했어요. 되돌릴 수 있는 시간이 지난 뒤에 지출로 확인해 주세요', RECEIPT_VOIDED: '취소한 입고라서 지출로 확인할 수 없어요', RECEIPT_STATUS_UNAVAILABLE: '입고 기록의 상태를 확인하지 못했어요. 잠시 뒤 다시 해 주세요',
   MANUAL_TITLE_EXISTS: '같은 제목의 매뉴얼이 있어요. 그래도 새로 만들까요?', NOT_CHECKLIST: '이 문서는 체크리스트가 아니에요',
   TRANSACTION_BUSY: '변경을 반영하고 있어요. 잠시 뒤 다시 해 주세요', COORDINATOR_REQUIRED: '가게 설정에서 저장해 주세요', KEY_REQUIRED: '다시 시도할 작업 정보를 확인해 주세요', IDEMPOTENCY_MISMATCH: '같은 작업의 내용이 달라졌어요. 다시 확인해 주세요', COMMAND_UNDONE: '되돌린 작업이에요. 새로 기록해 주세요', STALE_REVISION: '자료가 바뀌었어요. 다시 확인해 주세요', STALE_CLOSING: '새로 마감했어요. 현재 마감을 확인해 주세요', UNDO_UNAVAILABLE: '이 작업은 지금 되돌릴 수 없어요', PAYMENTS_UNAVAILABLE: '결제 내역을 불러오지 못했어요', GENERATION_INVALID: '현재 마감 정보를 확인해 주세요', BUSINESS_INVALID: '업종을 골라 주세요', PAYMENT_STYLE_INVALID: '결제 방식을 골라 주세요', TABLE_LAYOUT_INVALID: '테이블 배치를 확인해 주세요', SETTINGS_REQUIRED: '가게 설정을 확인해 주세요',
 };
 export const managementBundle: MessageBundle<string> = {
-  id: 'data.management', en: {}, 'zh-Hans': {}, 'zh-Hant': {}, ko: {
+  id: 'data.management',
+  en: { 'data.management.alert.camera': 'Check the camera connection' },
+  'zh-Hans': { 'data.management.alert.camera': '请检查摄像头连接' },
+  'zh-Hant': { 'data.management.alert.camera': '請檢查攝影機連線' },
+  ko: {
     ...Object.fromEntries(Object.entries(errors).map(([key, value]) => [`data.management.error.${key}`, value])),
     'data.management.error.EXPENSE_DAY_CLOSED': '마감한 날의 지출은 가계부에서 확인해 주세요', // D-326.
-    'data.management.notice.saved': '저장했어요', 'data.management.notice.deleted': '지웠어요', 'data.management.notice.orderCreated': '발주를 기록했어요(예시)', 'data.management.notice.closed': '오늘 매출을 마감했어요', 'data.management.notice.reopened': '마감을 되돌렸어요',
+    'data.management.notice.saved': '저장했어요', 'data.management.notice.deleted': '지웠어요', 'data.management.notice.orderCreated': '발주를 기록했어요', 'data.management.notice.closed': '오늘 매출을 마감했어요', 'data.management.notice.reopened': '마감을 되돌렸어요',
     'data.management.notice.menuDeleted': '{name, particle, 을/를} 지웠어요',
     'data.management.notice.visitCompleted': '방문 완료로 바꿨어요',
     'data.management.notice.bookingCanceled': '예약을 취소했어요', 'data.management.notice.bookingNoShow': '오지 않음으로 바꿨어요', 'data.management.notice.bookingAdded': '예약을 추가했어요', 'data.management.notice.bookingEdited': '예약을 고쳤어요', 'data.management.notice.bookingConfirmed': '예약을 확정했어요',
@@ -57,7 +62,7 @@ export const managementBundle: MessageBundle<string> = {
     'data.management.info.hours.body': storeHoursSummary('ko'),'data.management.info.rules.body': '매장 안에서는 다회용 컵을 써요 · 마감 30분 전 주문을 마감해요', 'data.management.info.equipment.body': '에스프레소 머신은 마감 때 청소해요 · 와이파이 비밀번호는 가려서 보여요',
     'data.management.camera.entrance': '입구', 'data.management.camera.counter': '계산대', 'data.management.camera.hall': '홀',
     'data.management.grantTemplate': '신청서 예시예요. 사업자 정보와 신청 내용을 확인해 주세요', 'data.management.grantGuide': '준비 서류와 신청 기간을 확인해 주세요',
-    'data.management.alert.overdue': '입고가 늦어지고 있어요', 'data.management.alert.delivery': '오늘 입고 예정이 있어요', 'data.management.alert.tax': '납부할 세금이 있어요', 'data.management.alert.checklist': '오픈 체크리스트 {done}/{total}', 'data.management.alert.grant': '지원 마감을 확인해 주세요', 'data.management.alert.camera': '홀 카메라 확인 필요',
+    'data.management.alert.overdue': '입고가 늦어지고 있어요', 'data.management.alert.delivery': '오늘 입고 예정이 있어요', 'data.management.alert.tax': '납부할 세금이 있어요', 'data.management.alert.checklist': '오픈 체크리스트 {done}/{total}', 'data.management.alert.grant': '지원 마감을 확인해 주세요', 'data.management.alert.camera': '카메라 연결 확인 필요',
     'data.manualCategory.hygiene': '위생', 'data.manualCategory.store-info': '매장 정보',
     'data.fact.menu.count': '메뉴 수', 'data.fact.members.count': '회원 수', 'data.fact.stock.usedToday': '오늘 사용량', 'data.fact.inventory.usedToday': '오늘 사용량', 'data.fact.briefing.importantAlerts.count': '중요 알림',
   },

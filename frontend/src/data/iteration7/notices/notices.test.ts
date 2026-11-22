@@ -118,10 +118,27 @@ describe('closure and notice domain', () => {
     expect(result).toMatchObject(allowed ? { ok: true } : { ok: false, reason: 'AD_NIGHT_RESTRICTED' });
   });
 
-  it('keeps informational notices available during the night window', () => {
+  it('refuses informational notices during the night window', () => {
     const p = preview(fixture());
     const result = run(p.tables, { type: 'notice.send', noticeId: 'notice-closure-1', draftRevision: 1, previewId: p.value.previewId, idempotencyKey: 'information' }, `${TODAY}T21:00`);
-    expect(result).toMatchObject({ ok: true });
+    expect(result).toMatchObject({ ok: false, reason: 'NIGHT_RESTRICTED' });
+  });
+
+  it('lists scheduled notices separately and rejects an immediate duplicate until cancellation', () => {
+    const args = { noticeId: 'notice-closure-1', draftRevision: 1 };
+    const sendAt = `${TOMORROW}T08:00`;
+    const p = run(fixture(), { type: 'notice.preview', ...args, sendAt });
+    if (!p.ok) throw Error(p.reason);
+    const queued = run(p.tables, { type: 'notice.send', ...args, sendAt, previewId: (p.value as NoticePreviewView).previewId, idempotencyKey: 'scheduled' });
+    if (!queued.ok) throw Error(queued.reason);
+    const [row] = queued.tables.noticeSent;
+    expect(selectNotices({ tables: queued.tables })).toMatchObject({ scheduled: [row], sent: [], unsentCount: 0 });
+    const immediate = preview(queued.tables);
+    expect(send(immediate.tables, immediate.value.previewId)).toMatchObject({ ok: false, reason: 'ALREADY_SCHEDULED' });
+    expect(run(queued.tables, { type: 'notice.cancelSchedule', sentId: row.sentId, idempotencyKey: 'cancel' }, sendAt))
+      .toMatchObject({ ok: false, reason: 'SCHEDULE_NOT_CANCELLABLE' });
+    const cancelled = run(queued.tables, { type: 'notice.cancelSchedule', sentId: row.sentId, idempotencyKey: 'cancel' });
+    expect(cancelled).toMatchObject({ ok: true, tables: { noticeSent: [], noticeDraft: queued.tables.noticeDraft } });
   });
 
   it('requires a fresh preview when recipients, contact, consent, group, closure or draft changes', () => {

@@ -2,6 +2,7 @@ import { seedOperations } from '../../db/generated/operations';
 import type { PosCommandMeta, PosFailure, PosMethodSplit } from '../../../contracts/pos';
 import { allocatePosAmount } from '../../../pos/domain/money';
 import type { MembershipTerms, MembershipUse, MoneyPlan, MoneyRead, MoneySource } from '../accounting/types';
+import { memberDateTime, memberSource, readRealMemberMoney } from '../../reality/05/dto';
 import { addDate, available, canonical, emptyEffects, failure, guard, positive, publish, validDate } from '../accounting/shared';
 export type { MembershipProduct, MembershipTerms, MembershipUse } from '../accounting/types';
 export const legacyMembershipProducts = [
@@ -22,8 +23,37 @@ export function membershipValues(read: MoneyRead, terms: MembershipTerms) {
     status: terms.refundedAt ? 'refunded' as const : terms.endsOn < read.businessDate ? 'expired' as const : 'active' as const };
 }
 export function selectMemberships(read: MoneyRead, query: { readonly memberId?: string } = {}) {
-  const memberships = read.state.memberships.filter(m => !query.memberId || m.memberId === query.memberId).map(m => ({ ...m, ...membershipValues(read, m), uses: read.state.uses.filter(u => u.membershipId === m.membershipId) }));
+  const real = readRealMemberMoney(read);
+  const recorded = real && new Map(real.passes.map(pass => [pass.membershipId, pass]));
+  const memberships = read.state.memberships.filter(m => !query.memberId || m.memberId === query.memberId).map(m => {
+    const pass = recorded?.get(m.membershipId);
+    const current = pass && { usesRemaining: pass.usesLeft, status: pass.status === 'ended' ? 'expired' as const : pass.status };
+    return { ...m, ...membershipValues(read, m), ...current, uses: read.state.uses.filter(u => u.membershipId === m.membershipId) };
+  });
   return { products: read.products, memberships, activeCount: memberships.filter(m => m.status === 'active' && (m.usesRemaining === null || m.usesRemaining > 0)).length };
+}
+
+/** Real pass values are shown only when the backend has a verified recognition projection. */
+export function selectRecordedPasses(read: MoneyRead) {
+  const real = readRealMemberMoney(read);
+  if (!real) return undefined;
+  const uses = new Map<string, typeof real.uses[number][]>();
+  for (const use of real.uses) {
+    const rows = uses.get(use.membershipId) ?? [];
+    rows.push(use);
+    uses.set(use.membershipId, rows);
+  }
+  return real.passes.map(pass => ({
+    membershipId: pass.membershipId, memberId: pass.memberId, productLabel: pass.terms.name,
+    kind: pass.terms.kind, soldPrice: pass.terms.soldPrice, totalUses: pass.terms.totalUses ?? undefined, validDays: pass.terms.validDays,
+    startsOn: pass.startsOn, endsOn: pass.endsOn, usesRemaining: pass.usesLeft,
+    recognizedValue: pass.recognizedAmount ?? null, unrecognizedValue: pass.unrecognizedAmount ?? null, refundedValue: pass.refundedAmount ?? null,
+    status: pass.status === 'refunded' ? 'refunded' as const : pass.status === 'ended' ? 'expired' as const
+      : pass.usesLeft === 0 ? 'exhausted' as const : 'active' as const,
+    saleSettlementId: pass.saleSettlementId,
+    uses: (uses.get(pass.membershipId) ?? []).map(use => ({ useId: use.useId, usedAt: memberDateTime(use.usedAt), canceledAt: use.canceledAt,
+      settlementId: use.settlementId, sourceRef: memberSource(use) })),
+  }));
 }
 export interface MembershipUseQuote {
   readonly useId: string; readonly coveredAllocationIds: readonly string[]; readonly coveredQuantities: MembershipUse['coveredQuantities'];

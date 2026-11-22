@@ -10,6 +10,7 @@ import { dateOf, inRange, MONTH_START, TODAY, weekdayOf } from '../db/time';
 import type { DemandHourRow, StateNote, WidgetView } from '../models/types';
 import { note, ready, type ModelContext, type Projector } from '../models/util';
 import { variantMessageKey } from '../preview/variants';
+import { projectRealGroups, projectRealPerformance, projectRealToday, realView } from '../reality/19/project';
 import { couponBenefit, expiryPostText } from './benefit';
 import { benefitComparison, expiryDiscount, MIN_PROMO_PHOTOS, PUBLIC_ISSUE_LIMIT, QUIET_THRESHOLD_PERCENT, ratePercent, RECOMMENDED_EXPIRY_RATE, roundPercent, SECOND_DISCOUNT_HOURS } from './calc';
 import {
@@ -63,6 +64,7 @@ function quietSlots(ctx: ModelContext, variant: string): QuietSlot[] {
   return slots;
 }
 export function buildSlotCoupon(ctx: ModelContext, variant = 'normal'): SlotCouponModel | null {
+  if (ctx.snapshot.tables.realCoupons) return ctx.snapshot.tables.realCoupons.slots;
   const m = tables(ctx);
   const found = quietSlots(ctx, variant);
   if (found.length === 0) return null;
@@ -103,6 +105,7 @@ const projectSlotCoupon: Projector<'slot-coupon'> = (ctx, condition, variant) =>
 
 /* 당일 소진 쿠폰 */
 export function buildExpiryCoupon(ctx: ModelContext, variant = 'normal'): ExpiryCouponModel {
+  if (ctx.snapshot.tables.realCoupons) return ctx.snapshot.tables.realCoupons.expiry;
   const m = tables(ctx);
   const inventory = ctx.read('inventory-booking');
   const menus = ctx.read('margin').menus;
@@ -140,6 +143,7 @@ export function buildExpiryCoupon(ctx: ModelContext, variant = 'normal'): Expiry
 }
 const projectExpiryCoupon: Projector<'expiry-coupon'> = (ctx, condition, variant) => {
   const model = buildExpiryCoupon(ctx, variant);
+  if (ctx.snapshot.tables.realCoupons && model.created.length > 0) return ready('expiry-coupon', condition, variant, model);
   if (!model.target) return emptyAs('expiry-coupon', variant, 'none');
   return ready('expiry-coupon', condition, variant, model, variant === 'partial' ? [note('expiry-coupon', 'partial')] : undefined);
 };
@@ -168,9 +172,11 @@ export function buildPromoVideo(ctx: ModelContext, variant = 'normal'): PromoVid
   return {
     materialsCount: photos.length, praiseCount: ctx.read('ai-response').praiseCount, photoCount: photos.length, canMake, minPhotos: MIN_PROMO_PHOTOS, menus, firstMenu: menus.find((x) => x.hasPhotos) ?? null,
     store: m.promoStore[0] ?? null, state, current: latest ? currentOf(latest) : null, postedCount: posted.length,
-    lastPostedRoute: posted[0]?.postedRoute ?? null, lastPostedCounting: posted[0]?.postedRoute === 'clip',
+    lastPostedRoute: posted[0]?.postedRoute ?? null, lastPostedCounting: !posted[0]?.publication && posted[0]?.postedRoute === 'clip',
+    ...(posted[0]?.publication && { lastPublication: posted[0].publication }),
     moods: MOODS, concepts: CONCEPTS, postRoutes: ['clip', 'reels', 'shorts'],
-    videos: rows.map((v) => ({ ...currentOf(v), input: v.input, postedRoute: v.postedRoute, postedAt: v.postedAt, createdAt: v.createdAt })),
+    videos: rows.map((v) => ({ ...currentOf(v), input: v.input, postedRoute: v.postedRoute, postedAt: v.postedAt, createdAt: v.createdAt,
+      ...(v.publication && { publication: v.publication }) })),
   };
 }
 const projectPromoVideo: Projector<'promo-video'> = (ctx, condition, variant) => {
@@ -181,6 +187,7 @@ const projectPromoVideo: Projector<'promo-video'> = (ctx, condition, variant) =>
 
 /* 진행 중인 쿠폰 */
 export function buildCouponStatus(ctx: ModelContext, variant = 'normal'): CouponStatusModel {
+  if (ctx.snapshot.tables.realCoupons) return ctx.snapshot.tables.realCoupons.status;
   const m = tables(ctx);
   const partial = variant === 'partial';
   const usedInMonth: typeof codeUsed = (marketing, codeId) =>
@@ -202,6 +209,7 @@ export function buildCouponStatus(ctx: ModelContext, variant = 'normal'): Coupon
 }
 const projectCouponStatus: Projector<'coupon-status'> = (ctx, condition, variant) => {
   const model = buildCouponStatus(ctx, variant);
+  if (ctx.snapshot.tables.realCoupons && model.ended.length > 0) return ready('coupon-status', condition, variant, model);
   if (model.rows.length === 0) return emptyAs('coupon-status', variant, 'none');
   return ready('coupon-status', condition, variant, model, variant === 'partial' ? [note('coupon-status', 'partial')] : undefined);
 };
@@ -233,6 +241,9 @@ export function buildCustomerGroups(ctx: ModelContext): CustomerGroupsModel {
   };
 }
 const projectCustomerGroups: Projector<'customer-groups'> = (ctx, condition, variant) => {
+  // REAL-PLAN F19: HTTP groups domain (B19 reads); the fixture path below is unchanged.
+  const real = ctx.snapshot.tables.realGroups;
+  if (real) return realView('customer-groups', projectRealGroups(real), condition, variant, (state) => emptyAs('customer-groups', variant, state));
   if (customersOf(tables(ctx), 'normal').length === 0) return emptyAs('customer-groups', variant, 'no-history');
   return ready('customer-groups', condition, variant, buildCustomerGroups(ctx), variant === 'partial' ? [note('customer-groups', 'partial')] : undefined);
 };
@@ -272,6 +283,7 @@ export function buildPerformance(ctx: ModelContext, condition: QueryCondition, v
     period, periodKind: lastMonth ? 'last-month' : 'this-month', issued, used, rate,
     rateDelta: !lastMonth && rate !== null && lastRate !== null ? { value: rate - lastRate, kind: 'pp' } : null,
     revenue, revenueDelta: lastMonth ? null : { value: revenue.total - (prev.revenueCoupon + prev.revenueAttributed), kind: 'count', unit: 'KRW' },
+    couponRevenueDelta: lastMonth ? null : { value: revenue.coupon - prev.revenueCoupon, kind: 'count', unit: 'KRW' },
     cost: fixed.cost, discount: fixed.discount, profit: revenue.total - fixed.cost - (m.promoStore[0]?.sourceId === 'cafe' ? 0 : fixed.discount),
     returnRate: fixed.returnRate, returnRateDelta: lastMonth || fixed.returnRate === null || prev.returnRate === null ? null : { value: fixed.returnRate - prev.returnRate, kind: 'pp' },
     routes, missingRoutes, best,
@@ -283,7 +295,8 @@ export function buildPerformance(ctx: ModelContext, condition: QueryCondition, v
     byVideo: lastMonth ? [] : m.promoVideo.filter((v) => v.status === 'posted').map((v) => {
       const code = videoCode(m, v);
       const i = code && isActiveCode(code) ? code.issueCount : 0, u = code ? codeUsed(m, code.codeId) : 0;
-      return { videoId: v.videoId, couponId: code?.couponId ?? null, postedRoute: v.postedRoute, issued: i, used: u, rate: ratePercent(u, i) };
+      return { videoId: v.videoId, couponId: code?.couponId ?? null, postedRoute: v.postedRoute, issued: i, used: u, rate: ratePercent(u, i),
+        ...(v.publication && { publication: v.publication }) };
     }),
     insight: !lastMonth && best && best.route !== 'sms' ? { bestRoute: best.route, compareRoute: 'sms' } : null,
     recentIssued: lastMonth ? 0 : codes.filter((c) => c.activatedAt !== null && dateOf(c.activatedAt) === TODAY).reduce((s, c) => s + c.issueCount, 0),
@@ -291,8 +304,10 @@ export function buildPerformance(ctx: ModelContext, condition: QueryCondition, v
   };
 }
 const projectPerformance: Projector<'marketing-performance'> = (ctx, condition, variant) => {
+  const real = ctx.snapshot.tables.realGroups;
+  if (real) return realView('marketing-performance', projectRealPerformance(ctx.snapshot, real, condition), condition, variant, (state) => emptyAs('marketing-performance', variant, state));
   const model = buildPerformance(ctx, condition, variant);
-  if (model.issued === 0 && model.used === 0) return emptyAs('marketing-performance', variant, 'no-redemptions');
+  if (model.issued === 0 && model.used === 0 && !model.byVideo.some(row => row.publication)) return emptyAs('marketing-performance', variant, 'no-redemptions');
   return ready('marketing-performance', condition, variant, model, variant === 'partial' ? [note('marketing-performance', 'partial')] : undefined);
 };
 
@@ -316,6 +331,8 @@ export function buildMarketingToday(ctx: ModelContext, variant = 'normal'): Mark
   return { cells, folded: (['now', 'today', 'week'] as const).filter((s) => !cells.some((c) => c.slot === s)), tapTarget };
 }
 const projectMarketingToday: Projector<'marketing-today'> = (ctx, condition, variant) => {
+  const real = ctx.snapshot.tables.realGroups;
+  if (real) return realView('marketing-today', projectRealToday(real), condition, variant, (state) => emptyAs('marketing-today', variant, state));
   const model = buildMarketingToday(ctx, variant);
   if (!model) return emptyAs('marketing-today', variant, 'none');
   return ready('marketing-today', condition, variant, model, variant === 'partial' ? [note('marketing-today', 'partial')] : undefined);

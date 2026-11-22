@@ -30,7 +30,8 @@ export const marketingSourcedRows = {
   'data.marketing.mood.clean': ['깔끔한', 'Clean', '简洁', '簡潔'],
   'data.marketing.mood.lively': ['활기찬', 'Lively', '活力', '活力'],
   'data.marketing.mood.elegant': ['고급스러운', 'Elegant', '高级', '高級'],
-  'data.marketing.concept.review-roundup': ['리뷰 모음', 'Review roundup', '好评合集', '好評合集'],
+  // D-347 (LOCALES 10): the concept id stays `review-roundup`; only its label changed (no review photos are used any more).
+  'data.marketing.concept.review-roundup': ['매장 소개', 'About our shop', '店铺介绍', '店鋪介紹'],
   'data.marketing.concept.behind-the-scenes': ['만드는 과정', 'Behind the scenes', '制作过程', '製作過程'],
   'data.marketing.concept.todays-deal': ['오늘의 할인', "Today's deal", '今日优惠', '今日優惠'],
   'data.marketing.concept.new-item': ['신메뉴 소개', 'New item', '新品介绍', '新品介紹'],
@@ -77,16 +78,16 @@ export const marketingSourcedRows = {
   'data.marketing.error.noReminderRecipients': ['알림을 보낼 수 있는 손님이 없어요', 'No customers can receive this reminder', '没有可以接收提醒的顾客', '沒有可以接收提醒的顧客'],
   'data.marketing.error.noExpiryStock': ['기한이 다가오는 재고가 없어요', 'No stock is nearing its expiry.', '没有临近保质期的库存。', '沒有臨近保存期限的庫存。'],
   'data.marketing.perf.basis': ['사용률은 코드를 쓴 경우만, 매출은 홍보 후 14일 안 방문까지 세요', 'The rate counts coupon-code use only; sales also count visits within 14 days of a promotion', '核销率只统计优惠码使用；销售额还包含推广后 14 天内的到店', '核銷率只統計優惠碼使用；銷售額還包含推廣後 14 天內的到店'],
-  'data.state.marketing-today.none': ['지금 급한 홍보는 없어요. 빈 시간 단골 쿠폰을 만들어 보세요', 'Nothing urgent to promote right now. Check your active coupons.', '现在没有紧急的推广。看看进行中的优惠券吧。', '現在沒有緊急的推廣。看看進行中的優惠券吧。'],
+  'data.state.marketing-today.none': ['지금 급한 홍보는 없어요. 빈 시간 단골 쿠폰을 만들어 보세요', 'Nothing urgent to promote right now. Try making a quiet-hour coupon', '现在没有紧急的推广。试试制作闲时优惠券吧', '現在沒有緊急的推廣。試試製作離峰時段優惠券吧'],
   'data.state.slot-coupon.no-slots': ['내일부터 7일은 한산한 시간이 없어요', 'There are no quiet hours in the next 7 days.', '未来 7 天没有清闲的时段。', '未來 7 天沒有清閒的時段。'],
   'data.state.slot-coupon.no-regulars': ['보낼 단골이 없어요', 'No regulars to send to', '没有可发送的熟客', '沒有可發送的熟客'],
   'data.state.expiry-coupon.none': ['기한이 다가오는 재고가 없어요', 'No stock is nearing its expiry.', '没有临近保质期的库存。', '沒有臨近保存期限的庫存。'],
-  'data.state.coupon-status.none': ['진행 중인 쿠폰이 없어요. 빈 시간 단골 쿠폰을 만들어 보세요', "No active coupons. Check today's promotions.", '目前没有进行中的优惠券。看看今日推广吧。', '目前沒有進行中的優惠券。看看今日推廣吧。'],
+  'data.state.coupon-status.none': ['진행 중인 쿠폰이 없어요. 빈 시간 단골 쿠폰을 만들어 보세요', "No active coupons. Try making a quiet-hour coupon", '目前没有进行中的优惠券。试试制作闲时优惠券吧', '目前沒有進行中的優惠券。試試製作離峰時段優惠券吧'],
   'data.state.customer-groups.no-history': ['방문 기록이 쌓이면 손님을 나눠 드릴게요', "Once visits build up, we'll sort your customers into groups.", '到店记录积累后会为您分组顾客。', '到店記錄累積後會為您分組顧客。'],
   'data.state.marketing-performance.no-redemptions': ['쿠폰이 사용되면 여기서 효과를 보여 드릴게요', "Once coupons are used, you'll see the results here.", '优惠券被使用后，这里会显示成效。', '優惠券被使用後，這裡會顯示成效。'],
   'data.fact.slot.quietHours.count': ['내일부터 7일 빈 시간', 'Quiet hours, next 7 days', '未来 7 天空闲时段', '未來 7 天空閒時段'],
   'data.fact.perf.rate': ['쿠폰 사용률', 'Coupon redemption rate', '优惠券核销率', '優惠券核銷率'],
-  'data.fact.perf.revenue': ['홍보로 생긴 매출', 'Sales from promotions', '推广带来的销售额', '推廣帶來的銷售額'],
+  'data.fact.perf.revenue': ['쿠폰 사용 결제액', 'Paid with coupons', '优惠券支付金额', '優惠券支付金額'],
   'data.fact.perf.profit': ['할인 후 실제 이익', 'Profit after discounts', '折扣后实际利润', '折扣後實際利潤'],
   'data.fact.perf.returnRate': ['다시 온 손님', 'Returning customers', '回头顾客', '回頭顧客'],
   'data.fact.perf.issued': ['발행', 'Issued', '发放', '發放'],
@@ -94,8 +95,8 @@ export const marketingSourcedRows = {
   'data.fact.coupons.active': ['진행 중인 쿠폰', 'Active coupons', '进行中的优惠券', '進行中的優惠券'],
   'data.fact.groups.churnRisk': ['떠날 수 있는 손님', 'Customers who may leave', '可能流失的顾客', '可能流失的顧客'],
   // DESIGN_SYSTEM 11.11 / 11.11a
-  'data.marketing.action.viewActiveCoupons': ['빈 시간 단골 쿠폰 열기', 'View active coupons', '查看进行中的优惠券', '查看進行中的優惠券'],
-  'data.marketing.action.viewTodayPromotions': ['빈 시간 단골 쿠폰 열기', "View today's promotions", '查看今日推广', '查看今日推廣'],
+  'data.marketing.action.viewActiveCoupons': ['빈 시간 단골 쿠폰 열기', 'Open quiet-hour coupons', '打开闲时优惠券', '開啟離峰時段優惠券'],
+  'data.marketing.action.viewTodayPromotions': ['빈 시간 단골 쿠폰 열기', 'Open quiet-hour coupons', '打开闲时优惠券', '開啟離峰時段優惠券'],
   'data.marketing.groups.basis': ['카드 결제 기준이에요(CCTV 방문 집계와 달라요)', 'Based on card payments (differs from CCTV visits)', '按刷卡记录统计（与 CCTV 客流统计不同）', '依刷卡紀錄統計（與 CCTV 客流統計不同）'],
   'data.marketing.error.overLimit': ['여기부터는 손해예요', 'Past this point you lose money', '超过此处将亏损', '超過此處將虧損'],
   'data.fact.video.posted.count': ['올린 영상', 'Posted videos', '已发布视频', '已發布影片'],
@@ -124,7 +125,7 @@ export const marketingWrittenRows = {
   'data.marketing.sms.slotPercent': [`{startMonth}월 {startDay}일~{endMonth}월 {endDay}일 한산한 시간에 오시면 {p}% 할인해 드려요. {untilMonth}월 {untilDay}일까지 쓸 수 있어요.`, `Visit during our quiet hours ({startEn} – {endEn}) for {p}% off. Valid until {untilEn}.`, `{startMonth}月{startDay}日至{endMonth}月{endDay}日的空闲时段到店可享 {p}% 折扣，有效期至 {untilMonth}月{untilDay}日。`, `{startMonth}月{startDay}日至{endMonth}月{endDay}日的空閒時段到店可享 {p}% 折扣，有效期至 {untilMonth}月{untilDay}日。`],
   'data.marketing.sms.slotAmount': [`{startMonth}월 {startDay}일~{endMonth}월 {endDay}일 한산한 시간에 오시면 {amount}원 할인해 드려요. {untilMonth}월 {untilDay}일까지 쓸 수 있어요.`, `Visit during our quiet hours ({startEn} – {endEn}) for ₩{amount} off. Valid until {untilEn}.`, `{startMonth}月{startDay}日至{endMonth}月{endDay}日的空闲时段到店可减 {amount}韩元，有效期至 {untilMonth}月{untilDay}日。`, `{startMonth}月{startDay}日至{endMonth}月{endDay}日的空閒時段到店可減 {amount}韓元，有效期至 {untilMonth}月{untilDay}日。`],
   'data.marketing.sms.expiry': ['{item, particle, 을/를} 오늘만 {p}% 할인해요. 오늘 마감 전까지 쓸 수 있어요.', '{item} is {p}% off today only. Valid until we close today.', '{item}今天限时 {p}% 折扣，今日打烊前有效。', '{item}今天限時 {p}% 折扣，今日打烊前有效。'],
-  'data.marketing.sms.reachOut': ['오랜만이에요. 다시 와 주셔서 고마워요 쿠폰을 드려요. 2주 안에 쓸 수 있어요.', "It's been a while! Here's a thanks-for-coming-back coupon. Valid for 2 weeks.", '好久不见！送您一张感谢再次光临优惠券，2 周内有效。', '好久不見！送您一張感謝再次光臨優惠券，2 週內有效。'],
+  'data.marketing.sms.reachOut': ['오랜만이에요. 다시 오시면 쓸 수 있는 쿠폰을 드려요. 2주 안에 쓰실 수 있어요', "It's been a while. Here's a coupon for your next visit. It's valid for 2 weeks", '好久不见！送您一张下次到店可用的优惠券，2 周内有效', '好久不見！送您一張下次到店可用的優惠券，2 週內有效'],
   'data.marketing.sms.reminder': ['받으신 쿠폰이 곧 끝나요. 끝나기 전에 들러 주세요.', 'Your coupon ends soon. Drop by before it does.', '您的优惠券即将到期，请在到期前光临。', '您的優惠券即將到期，請在到期前光臨。'],
   'data.marketing.post.expiry': ['오늘만! {item} {p}% 할인. 계산할 때 쿠폰 코드를 보여 주세요: {code}', 'Today only! {item} {p}% off. Show this coupon code at checkout: {code}', '仅限今天！{item} {p}% 折扣。结账时请出示优惠码：{code}', '僅限今天！{item} {p}% 折扣。結帳時請出示優惠碼：{code}'],
   'data.marketing.notice.counting': ['쿠폰 코드를 세기 시작했어요', 'Started counting the coupon code', '已开始统计优惠码', '已開始統計優惠碼'],
@@ -179,9 +180,9 @@ export const marketingWrittenRows = {
   // The 손님 그룹 count is by recent visits, not by the 회원 grade, so the label (and every answer built from it) says so.
   'data.fact.groups.regular': ['최근 방문 기준 단골', 'Regulars by recent visits', '按近期到店统计的熟客', '按近期到店統計的熟客'],
   'data.fact.coupons.paused': ['중지된 쿠폰', 'Paused coupons', '已暂停的优惠券', '已暫停的優惠券'],
-  'data.fact.groups.reachOut': ['챙길 수 있는 손님', 'Customers you can reach out to', '可联系的顾客', '可聯繫的顧客'],
+  'data.fact.groups.reachOut': ['쿠폰을 보낼 수 있는 손님', 'Customers you can send a coupon to', '可发送优惠券的顾客', '可傳送優惠券的顧客'],
   'data.fact.perf.rate.delta': ['사용률 증감', 'Redemption rate change', '核销率变化', '核銷率變化'],
-  'data.fact.perf.revenue.delta': ['홍보 매출 증감', 'Change in sales from promotions', '推广销售额变化', '推廣銷售額變化'],
+  'data.fact.perf.revenue.delta': ['쿠폰 사용 결제액 증감', 'Change in coupon payments', '优惠券支付金额变化', '優惠券支付金額變化'],
   'data.fact.perf.route.rate': ['경로별 사용률', 'Rate by channel', '各渠道核销率', '各管道核銷率'],
   'data.fact.perf.bestRoute': ['가장 잘된 경로', 'Best channel', '效果最好的渠道', '效果最好的管道'],
 } as const satisfies Readonly<Record<string, Row>>;
@@ -200,12 +201,11 @@ export const marketingVariantLabelRows = {
 } as const satisfies Readonly<Record<string, Row>>;
 
 /** LOCALES 4.1 widget names (for the generated per-widget error messages). */
-export const marketingWidgetNames: Readonly<Record<MarketingWidgetId, Row>> = {
+export const marketingWidgetNames: Readonly<Record<Exclude<MarketingWidgetId, 'marketing-performance'>, Row>> = {
   'marketing-today': ['오늘 할 홍보', "Today's promotions", '今日推广', '今日推廣'],
   'slot-coupon': ['빈 시간 단골 쿠폰', 'Quiet-hour coupons', '空闲时段熟客券', '空閒時段熟客券'],
   'expiry-coupon': ['당일 소진 쿠폰', 'Sell-today coupons', '当日清仓券', '當日清倉券'],
   'promo-video': ['AI 홍보 영상', 'AI promo video', 'AI 推广视频', 'AI 推廣影片'],
   'coupon-status': ['진행 중인 쿠폰', 'Active coupons', '进行中的优惠券', '進行中的優惠券'],
   'customer-groups': ['손님 그룹', 'Customer groups', '顾客分组', '顧客分組'],
-  'marketing-performance': ['마케팅 성과', 'Marketing results', '营销成效', '行銷成效'],
 };

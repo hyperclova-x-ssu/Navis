@@ -1,3 +1,6 @@
+import { withRealMemberMoney } from '../reality/05/dto';
+import { realAccountingPresentation } from '../reality/09/views';
+import { withRealPickups } from '../reality/08/dto';
 import type { CustomOrderRead, CustomMoneyEffects, CustomPlanResult } from '../iteration7/custom-orders';
 import { selectPosDrawer } from '../../pos/closing';
 import type { PosState } from '../../contracts/pos';
@@ -11,9 +14,7 @@ import { selectPosDataRead } from './catalog';
 import { adaptPosSettlementSource } from '../../pos/domain/iteration7';
 import { getPaymentBillId } from '../../pos/loyalty/selectors';
 import { addDays, LAST_MONTH_END, LAST_MONTH_START, TODAY } from '../db/time';
-import { seedCatalog } from '../db/generated/catalog';
-import { seedHistory } from '../db/generated/history';
-import { seedToday } from '../db/generated/today';
+import { isArchivedCafeDay, seedCatalog, seedHistory, seedToday } from '../db/cafe-fixtures';
 import { cafeOpeningMoney } from '../db/cafe-money';
 import { businessNow } from '../../pos/clock';
 import type { DataSnapshot, DataTables, DailySales, MenuDaily } from '../db/types';
@@ -202,7 +203,10 @@ export function projectPosDay({ pos, data, scenario, date }: { readonly pos: Pos
 const baselineSales = selectPosSalesByMenu(createPosSeed());
 /** Refresh all read adapters; apply only the change since the last published POS to retail. */
 export function projectPosTables(tables: DataTables, pos: PosState, previousPos?: PosState): DataTables {
-  tables = projectMoneyMembers(!previousPos&&pos.money?tables:projectPosLoyalty(tables, pos, previousPos),pos);
+  // REAL-PLAN F05: once the member service's rows are loaded, fixture POS member/visit rows must not overwrite them.
+  if (!tables.realMembers) tables = projectMoneyMembers(!previousPos&&pos.money?tables:projectPosLoyalty(tables, pos, previousPos),pos);
+  if (isArchivedCafeDay(pos.businessDate) && !pos.orders.length &&
+    tables.dayClosing.some(row => row.businessDate === pos.businessDate && row.scenario === 'normal' && row.status === 'closed')) return tables;
   const day = projectPosDay({ pos, data: { revision: 0, seq: 0, tables }, scenario: 'normal', date: pos.businessDate });
   const previous = previousPos ? moneySalesByMenu(previousPos) : baselineSales;
   const deltaByItem: Record<string, number> = {};
@@ -227,8 +231,11 @@ export function selectCustomOrderRead(snapshot: DataSnapshot): CustomOrderRead {
   let read = customReadCache.get(snapshot);
   if (!read) {
     const pos = snapshot.pos;
-    read = deepFreeze({ revision: snapshot.revision, accounting:pos?.money, tables: { ...snapshot.tables, reservation:snapshot.tables.reservation.map(r=>r.kind==='pickup'?r:r.kind==='visit'?r as import('../db/types').Reservation & {readonly kind:'visit'}:{...r,kind:'visit' as const}), member: snapshot.tables.memberProfile },
-      money: { settlements: pos?.customSettlements ?? [], payments: pos?.customPayments ?? [], recognitions: pos?.customRecognitions ?? [], corrections: pos?.customCorrections ?? [] }, businessDate: pos?.businessDate });
+    // F08: on an HTTP build the pickups and each order's payment view come from the POS service (`realCustom`), not the seed.
+    const real = snapshot.tables.realCustom;
+    read = deepFreeze({ revision: snapshot.revision, accounting:pos?.money, tables: { ...snapshot.tables, reservation:withRealPickups(snapshot.tables.reservation, real).map(r=>r.kind==='pickup'?r:r.kind==='visit'?r as import('../db/types').Reservation & {readonly kind:'visit'}:{...r,kind:'visit' as const}), member: snapshot.tables.memberProfile },
+      money: { settlements: pos?.customSettlements ?? [], payments: pos?.customPayments ?? [], recognitions: pos?.customRecognitions ?? [], corrections: pos?.customCorrections ?? [] }, businessDate: pos?.businessDate,
+      ...(real ? { payments: real.payments } : {}) });
     customReadCache.set(snapshot, read);
   }
   return read;
@@ -305,9 +312,10 @@ export function selectM2Drawer(pos: PosState, scenario: 'normal' | 'empty' = 'no
 export function moneyReadBase(snapshot:DataSnapshot,scenario:MoneyRead['scenario']='normal'):MoneyRead {
   const pos=snapshot.pos, t=snapshot.tables,date=pos?.businessDate??TODAY;
   const closing=t.dayClosing.filter(c=>c.businessDate===date&&c.scenario==='normal').at(-1);
-  return {runId:snapshot.runId??'run',revision:snapshot.revision,generation:closing?.generation??0,businessDate:date,now:businessNow(),scenario,dayClosed:closing?.status==='closed',state:pos?canonicalPosMoney(pos)??emptyMoneyState():emptyMoneyState(),sources:[],
+  // REAL-PLAN F05: when the member service's rows are loaded they replace members, products, accounts and passes; all other money stays.
+  return withRealMemberMoney({runId:snapshot.runId??'run',revision:snapshot.revision,generation:closing?.generation??0,businessDate:date,now:businessNow(),scenario,dayClosed:closing?.status==='closed',state:pos?canonicalPosMoney(pos)??emptyMoneyState():emptyMoneyState(),sources:[],
     members:t.memberProfile.flatMap(p=>{const c=t.marketing.mktCustomer.find(c=>c.customerId===p.customerId&&!c.deletedAt&&c.variant===null);if(!c)return [];const masked=maskCustomer(c);return [{memberId:p.memberId,name:typeof masked.name==='string'?masked.name:'예시 회원',phone:masked.phone}];}),
-    products:membershipProducts,drawer:pos?.drawer,expenses:t.expense.filter(e=>e.businessDate===date&&e.status==='confirmed').reduce((n,e)=>n+e.amount,0)};
+    products:membershipProducts,drawer:pos?.drawer,expenses:t.expense.filter(e=>e.businessDate===date&&e.status==='confirmed').reduce((n,e)=>n+e.amount,0)},t.realMembers);
 }
 const moneyReadCache=new WeakMap<DataSnapshot,Map<string,MoneyRead>>();
 export function selectMoneyRead(snapshot:DataSnapshot,scenario:MoneyRead['scenario']='normal'):MoneyRead {
@@ -347,12 +355,12 @@ export function selectMoneyRead(snapshot:DataSnapshot,scenario:MoneyRead['scenar
   const read=deepFreeze({...base,sources});variants.set(scenario,read);return read;
 }
 export interface AccountingTransactionRead {
-  readonly id:string;readonly at:string;readonly purpose:import('../iteration7/accounting/types').SettlementPurpose;readonly kind:'receipt'|'cancel'|'refund';readonly amount:number;readonly salesAmount:number;
+  readonly id:string;/** The service's transaction number (HTTP deposits); the grid falls back to `id`. */readonly transactionNo?:string;readonly at:string;readonly purpose:import('../iteration7/accounting/types').SettlementPurpose;readonly kind:'receipt'|'cancel'|'refund';readonly amount:number;readonly salesAmount:number|null;
   readonly methods:readonly {readonly method:import('../iteration7/accounting/types').RealMethod;readonly amount:number}[];
   readonly settlementKinds:readonly ('charge'|'receivable'|'membership_count'|'membership_period')[];readonly settlementId:string;readonly paymentId?:string;readonly originalId?:string;readonly sourceRef?:{readonly kind:string;readonly id:string};
 }
 export type AccountingViewRead={
-  readonly status:'ready';readonly period:{readonly start:string;readonly end:string};readonly summary:import('../iteration7/accounting/types').AccountingDay;
+  readonly status:'ready';/** `http`: the finance service's figures (REAL-PLAN F09); the groups it does not split stay hidden. */readonly source?:'http';readonly period:{readonly start:string;readonly end:string};readonly summary:import('../iteration7/accounting/types').AccountingDay;
   readonly transactions:readonly AccountingTransactionRead[];readonly drawer?:ReturnType<typeof selectAccountingDrawer>;
   readonly unknownCostSales?:import('../iteration7/accounting/types').AccountingDay['unknownCostSales'];
   readonly legacySales?:number;
@@ -360,7 +368,10 @@ export type AccountingViewRead={
 }|{readonly status:'loading'|'empty'|'error'|'unavailable';readonly period:{readonly start:string;readonly end:string}};
 const accountingViews=new WeakMap<DataSnapshot,{readonly views:readonly AccountingViewRead[];readonly history:readonly AccountingViewRead[]}>();
 export function selectAccountingPresentation(snapshot:DataSnapshot){
-  const hit=accountingViews.get(snapshot);if(hit)return hit;const read=selectMoneyRead(snapshot),date=read.businessDate;
+  const hit=accountingViews.get(snapshot);if(hit)return hit;
+  // REAL-PLAN F09: the HTTP money domain serves the cards from the finance service.
+  if(snapshot.tables.realFinance){const real=deepFreeze(realAccountingPresentation(snapshot.tables.realFinance));accountingViews.set(snapshot,real);return real;}
+  const read=selectMoneyRead(snapshot),date=read.businessDate;
   const transactions:AccountingTransactionRead[]=read.state.settlements.map(s=>{const payment=read.state.payments.find(p=>p.settlementId===s.settlementId);return {id:s.settlementId,at:s.at,purpose:s.purpose,kind:'receipt',amount:payment?.amount??0,salesAmount:read.state.recognitions.filter(r=>r.settlementId===s.settlementId&&!r.originalRecognitionId).reduce((n,r)=>n+r.amount,0),methods:payment?.splits??[],settlementKinds:[...new Set(s.allocations.flatMap(a=>a.kind==='method'?[]:[a.kind]))],settlementId:s.settlementId,...(payment?{paymentId:payment.paymentId}:{}),sourceRef:s.sourceRef};});
   for(const c of read.state.corrections){const s=read.state.settlements.find(s=>s.settlementId===c.settlementId)!;const p=read.state.payments.find(p=>p.settlementId===s.settlementId);transactions.push({id:c.correctionId,at:c.at,purpose:s.purpose,kind:c.kind,amount:-c.realMethodReturns.reduce((n,m)=>n+m.amount,0),salesAmount:c.recognitionEffects.reduce((n,r)=>n+r.amount,0),methods:c.realMethodReturns.map(m=>({...m,amount:-m.amount})),settlementKinds:[...new Set(s.allocations.flatMap(a=>a.kind==='method'?[]:[a.kind]))],settlementId:s.settlementId,paymentId:p?.paymentId,originalId:s.settlementId,sourceRef:s.sourceRef});}
   const month={start:date.slice(0,7)+'-01',end:date};

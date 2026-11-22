@@ -1,22 +1,20 @@
 /**
- * The one explicit business clock of the mockup (D-248, ARCH16.6) and the one boundary rule built on it.
+ * Business day and appointment phase from the shared store clock (D-248, D-346).
  *
  * Booking creation, visit completion / no-show, the 예약 availability "next slot", and the calendar's
  * "upcoming" entries all read this file. Before GD-1 the reservation and calendar code carried their own
  * 15:42 while the POS scenario clock is 15:45 (S3-208); 15:42 stays only where it is data (the last POS
  * payment's time, the stock "as of" label), never as "now".
- *
- * Leaf module: imports only the date constants, so derive/, commands/ and widgets can all use it.
  */
-import { NOW_TIME, TODAY } from '../db/time';
+import { APP_CLOCK } from '../db/app-clock';
 
-export const BUSINESS_CLOCK = Object.freeze({ date: TODAY, time: NOW_TIME });
+export const BUSINESS_CLOCK = Object.freeze({ date: APP_CLOCK.businessDate, time: APP_CLOCK.time });
 
 export type SlotPhase = 'past' | 'now' | 'future';
 
 /** Where a slot sits against the clock. A slot at exactly the clock time is 'now': not yet past, not yet later. */
 export function slotPhase(date: string, time: string | null | undefined): SlotPhase {
-  if (date !== BUSINESS_CLOCK.date) return date < BUSINESS_CLOCK.date ? 'past' : 'future';
+  if (date !== APP_CLOCK.calendarDate) return date < APP_CLOCK.calendarDate ? 'past' : 'future';
   if (time == null) return 'now';
   return time < BUSINESS_CLOCK.time ? 'past' : time === BUSINESS_CLOCK.time ? 'now' : 'future';
 }

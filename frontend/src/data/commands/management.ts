@@ -1,4 +1,5 @@
 import { cafeMenuPhoto } from '../db/cafe-menu-photos';
+import { normalizeMenuCategory } from '../../contracts';
 import type { DataTables, DataText, Reservation } from '../db/types';
 import type { RecipeLine } from '../db/management-types';
 import { addDays, isIsoDate, isTime, NOW, LEGACY_GRANT_EVALUATION_NOW, TODAY } from '../db/time';
@@ -36,7 +37,6 @@ const phone = (s: unknown): s is string => typeof s === 'string' && /^\d{10,11}$
 const integer = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n);
 const quantities = (n: unknown, unit: string, minimum = 0): n is number => typeof n === 'number' && n >= minimum && toBase(n, unit) !== null;
 const replace = <T>(rows: readonly T[], row: T, next: T): readonly T[] => rows.map((r) => r === row ? next : r);
-const categories = ['drink', 'dessert'];
 // A base64 PNG of the editor's 512px canvas fits within this bound.
 const maxMenuPhotoDataUrlLength = 2 * 1024 * 1024;
 const menuPhotoDataUrl = /^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}(?![\s\S])/;
@@ -108,12 +108,13 @@ function validateManual(input: Partial<ManualInput>): HandlerResult | null {
 export const managementHandlers: Handlers = {
   'menu.create': ({ tables: t, nextId }, c) => {
     if (!nonempty(c.name)) return rejected('MENU_NAME_REQUIRED', 'name');
-    if (!categories.includes(c.category)) return rejected('CATEGORY_INVALID', 'category');
+    const category = normalizeMenuCategory(c.category);
+    if (!category) return rejected('CATEGORY_INVALID', 'category');
     if (!integer(c.price) || c.price <= 0) return rejected('PRICE_INVALID', 'price');
     const same = findSameName(liveMenus(t), menuLabel, c.name);
     if (same) return nameExists(same.menuId);
     const menuId = nextId('m-new');
-    return changed({ ...t, menuItem: [...t.menuItem, { menuId, kind: 'menu', nameKey: 'data.management.customMenu', name: raw(c.name), category: c.category, categoryKey: `data.management.category.${c.category}`, price: c.price, memo: c.memo?.trim() ? raw(c.memo) : null, recipe: [], prepMin: 3, saleStatus: 'selling', photoKey: null, optionGroups: [], costEffectiveFrom: TODAY }] }, { menuId });
+    return changed({ ...t, menuItem: [...t.menuItem, { menuId, kind: 'menu', nameKey: 'data.management.customMenu', name: raw(c.name), category, categoryKey: `data.management.category.${category}`, price: c.price, memo: c.memo?.trim() ? raw(c.memo) : null, recipe: [], prepMin: 3, saleStatus: 'selling', photoKey: null, optionGroups: [], costEffectiveFrom: TODAY }] }, { menuId });
   },
   'menu.update': ({ tables: t }, c) => {
     const m = t.menuItem.find((m) => m.menuId === c.menuId && m.kind === 'menu' && !m.deletedAt);
@@ -122,11 +123,12 @@ export const managementHandlers: Handlers = {
     const field = forbidden(p, ['name', 'category', 'price', 'memo']);
     if (field) return rejected('READ_ONLY_FIELD', field);
     if (p.name !== undefined && !nonempty(p.name)) return rejected('MENU_NAME_REQUIRED', 'name');
-    if (p.category !== undefined && !categories.includes(p.category)) return rejected('CATEGORY_INVALID', 'category');
+    const category = normalizeMenuCategory(p.category);
+    if (p.category !== undefined && !category) return rejected('CATEGORY_INVALID', 'category');
     if (p.price !== undefined && (!integer(p.price) || p.price <= 0)) return rejected('PRICE_INVALID', 'price');
     const same = p.name !== undefined ? findSameName(liveMenus(t), menuLabel, p.name, (other) => other.menuId === m.menuId) : undefined;
     if (same) return nameExists(same.menuId);
-    const next = { ...m, ...(p.name !== undefined ? { name: raw(p.name) } : {}), ...(p.category !== undefined ? { category: p.category } : {}), ...(p.price !== undefined ? { price: p.price } : {}), ...(p.memo !== undefined ? { memo: p.memo?.trim() ? raw(p.memo) : null } : {}) };
+    const next = { ...m, ...(p.name !== undefined ? { name: raw(p.name) } : {}), ...(category ? { category, categoryKey: `data.management.category.${category}` } : {}), ...(p.price !== undefined ? { price: p.price } : {}), ...(p.memo !== undefined ? { memo: p.memo?.trim() ? raw(p.memo) : null } : {}) };
     return changed({ ...t, menuItem: replace(t.menuItem, m, next) }, { menuId: m.menuId });
   },
   'menu.delete': ({ tables: t }, c) => {

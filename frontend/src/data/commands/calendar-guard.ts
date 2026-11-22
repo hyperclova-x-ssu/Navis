@@ -7,7 +7,8 @@
  * Both are typed refusals with `details`, so the widget can offer the "yes, I mean it" button.
  */
 import type { DataTables, DataText } from '../db/types';
-import { isIsoDate, isTime, NOW_TIME, TODAY } from '../db/time';
+import { isIsoDate, isTime } from '../db/time';
+import { staffCalendarClock } from '../iteration7/staff/clock';
 import { sourcedRows } from '../messages/sourced';
 import { writtenRows } from '../messages/written';
 import type { HandlerResult } from './handlers';
@@ -34,7 +35,7 @@ const failure = (code: 'VALIDATION' | 'CONFLICT', reason: string, field: string,
   ({ ok: false, code, reason, field, messageKey: `data.calendar.error.${reason}`, details });
 
 /** `null` when the write may go ahead. Malformed input is left to the handler's own validation. */
-export function guardCalendarWrite(t: Pick<DataTables, 'calendarEvent'>, c: CalendarWrite, today: string = TODAY): HandlerResult | null {
+export function guardCalendarWrite(t: Pick<DataTables, 'calendarEvent' | 'staffCalendarAsOf'>, c: CalendarWrite, today: string = staffCalendarClock(t).date): HandlerResult | null {
   const current = c.type === 'calendar.updateEvent' ? t.calendarEvent.find(e => e.eventId === c.eventId) : undefined;
   if (c.type === 'calendar.updateEvent' && !current) return null;
   const date = c.date ?? current?.date ?? today;
@@ -50,7 +51,7 @@ export function guardCalendarWrite(t: Pick<DataTables, 'calendarEvent'>, c: Cale
   }
   const time = c.time === undefined ? current?.time : c.time;
   const timeChanged = c.time !== undefined && time !== current?.time;
-  if ((dateChanged || timeChanged) && date === today && isTime(time) && time < NOW_TIME && c.dateIntent !== 'historical') {
+  if ((dateChanged || timeChanged) && date === today && isTime(time) && time < staffCalendarClock(t).time && c.dateIntent !== 'historical') {
     return failure('VALIDATION', 'CALENDAR_PAST_DATE', 'date', { date, today, time });
   }
   return null;
