@@ -5,10 +5,52 @@ import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWidgetDataStore, koKey, koText, makeHost, manualsModel as model, renderDetail, renderPanel } from './test-helpers';
+import { draft, draftId, insight, insightSession, manual, manualId, updatedAt } from '../../../data/reality/11/testing';
+import { addDays, TODAY } from '../../../data/db/time';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 /** The first seed manual of a category (the cafe seed has one opening, one closing, three new-staff manuals). */
 const firstOf = (store: ReturnType<typeof createWidgetDataStore>, category: string) => model(store).manuals.find((m) => m.category === category)!;
+
+it('publishes an Insight draft only after confirmation and re-reads a checked step in a fresh session', async () => {
+  const { backend, collections, newStore, setBusinessDay } = insightSession();
+  backend.on('POST', `${insight}/manual-drafts`, () => {
+    collections.set('manual-drafts', [draft]);
+    return { resourceId: draftId, receiptId: 'draft-receipt', revision: 2, affectedSources: ['manuals'] };
+  });
+  backend.on('POST', `${insight}/manual-drafts/${draftId}/save`, () => {
+    collections.set('manual-drafts', []);
+    collections.set('manuals', [manual]);
+    return { resourceId: manualId, receiptId: 'publish-receipt', revision: 1, affectedSources: ['manuals', 'briefing'] };
+  });
+  backend.on('POST', `${insight}/checklists`, () => {
+    collections.set('checklists', [{ id: 'checklist-1', businessDay: updatedAt.slice(0, 10), manualId, manualRevision: 1, checkedSteps: [1], totalSteps: 1, revision: 1, updatedAt }]);
+    return { resourceId: 'checklist-1', receiptId: 'check-receipt', revision: 1, affectedSources: ['checklists', 'briefing'] };
+  });
+  const user = userEvent.setup();
+  const view = renderDetail('manuals', makeHost().host, { store: newStore() });
+  await user.click(await screen.findByRole('button', { name: '메모로 만들기' }));
+  await user.type(screen.getByRole('textbox', { name: '메모' }), '마감 점검');
+  await user.click(screen.getByRole('button', { name: '초안 만들기' }));
+  expect(backend.callsTo('POST', `${insight}/manual-drafts`)[0]?.body).toEqual({ memo: '마감 점검' });
+  await user.click(await screen.findByRole('radio', { name: '마감' }));
+  await user.click(await screen.findByRole('button', { name: '저장하기' }));
+  expect(backend.callsTo('POST', `${insight}/manual-drafts/${draftId}/save`)).toHaveLength(0);
+  await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '게시하기' }));
+  await user.click(await screen.findByRole('checkbox', { name: '기기 전원을 꺼요' }));
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: '기기 전원을 꺼요' })).toBeChecked());
+  expect(backend.callsTo('POST', `${insight}/manual-drafts/${draftId}/save`)[0]?.body).toMatchObject({ expectedRevision: 2, category: 'closing' });
+  expect(backend.callsTo('POST', `${insight}/checklists`)[0]?.body).toEqual({ manualId, stepNo: 1, checked: true, expectedRevision: 1, expectedChecklistRevision: 0, businessDay: updatedAt.slice(0, 10) });
+  view.unmount();
+  const fresh = renderDetail('manuals', makeHost().host, { store: newStore() });
+  expect(await screen.findByRole('checkbox', { name: '기기 전원을 꺼요' })).toBeChecked();
+  fresh.unmount();
+  const nextDay = addDays(TODAY, 1);
+  setBusinessDay(nextDay);
+  renderDetail('manuals', makeHost().host, { store: newStore() });
+  expect(await screen.findByRole('checkbox', { name: '기기 전원을 꺼요' })).not.toBeChecked();
+  expect(backend.callsTo('GET', `${insight}/checklists`).at(-1)?.query).toEqual({ limit: '100', from: nextDay, to: nextDay });
+});
 
 describe('manuals panel (AC-262)', () => {
   it('1×1 shows the manual count', () => {
@@ -50,7 +92,8 @@ describe('manuals detail', () => {
     await userEvent.click(screen.getByRole('button', { name: (name) => name.startsWith(koText(opening.title)) }));
     expect(screen.getAllByText(`${start}/${total}`).length).toBeGreaterThan(0);
     expect(screen.getAllByText(`${total}단계 중 ${start}단계 완료`).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('img', { name: /단계 예시 그림/ })).toHaveLength(total);
+    expect(screen.queryByRole('img', { name: /단계 예시 그림/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/가상 교육용 매뉴얼/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('checkbox', { name: stepName }));
     expect(screen.getAllByText(`${start + 1}/${total}`).length).toBeGreaterThan(0);
     expect(done()).toBe(start + 1);
@@ -165,7 +208,7 @@ describe('manual document layout', () => {
     expect(getComputedStyle(steps).gap).toBe('var(--space-4)');
     for (const step of steps.children) {
       expect(getComputedStyle(step).gap).toBe('var(--space-2)');
-      expect(step.querySelector('figure > figcaption')).toHaveTextContent(/단계 예시 그림/);
+      expect(step.querySelector('figure > figcaption')).toBeNull();
     }
   });
 });
@@ -213,7 +256,7 @@ it('edits a generated title, ordered steps and cautions, then publishes using th
   fireEvent.click(save);
   expect(model(store).publishedCount).toBe(before + 1);
   expect(screen.getByRole('button', { name: /아침 점검 문서/ })).toBeVisible();
-  expect(screen.getByText('입구 조명을 먼저 켜요')).toBeVisible();
+  expect(await screen.findByText('입구 조명을 먼저 켜요')).toBeVisible();
   expect(screen.getByText(/입구 매트를 확인해요/)).toBeVisible();
 });
 

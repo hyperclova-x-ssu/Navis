@@ -76,3 +76,34 @@ it('shows a missing cost as a chip with its icon and words', () => {
  expect(chips.length).toBeGreaterThan(0);
  for (const chip of chips) expect(chip.querySelector('svg')).not.toBeNull();
 });
+
+/* FIX-PKG-A / T-03: the period the owner picks names every card, sentence and equation (not only "오늘"). */
+it.each([['최근 7일'], ['최근 30일']])('names the chosen period "%s" on the rate card and the contribution sentences', async period => {
+ const { default: userEvent } = await import('@testing-library/user-event');
+ renderWithKit(<MarginDetail featureId="margin" condition={{ kind: 'default' }} detailRef={{ featureId: 'margin' }} host={host} />);
+ expect(screen.getByText('오늘 마진율')).toBeInTheDocument();
+ await userEvent.click(screen.getByRole('radio', { name: period }));
+ expect(screen.queryByText('오늘 마진율')).not.toBeInTheDocument();
+ expect(screen.getByText(`${period} 마진율`)).toBeInTheDocument();
+ const chart = screen.getByRole('region', { name: '수익성 비교' });
+ expect(within(chart).getByText(new RegExp(`^${period} 매출 .*원가.*= 마진`))).toBeInTheDocument();
+ expect(within(chart).queryByText(/^오늘 /)).not.toBeInTheDocument();
+ expect(within(chart).getByText(new RegExp(`^${period} 마진이 가장 큰 품목은 `))).toBeInTheDocument();
+ await userEvent.click(screen.getByRole('radio', { name: '오늘' }));
+ expect(screen.getByText('오늘 마진율')).toBeInTheDocument();
+});
+
+/* FIX-PKG-A / T-01: over HTTP an ingredient arrives as a raw name with a placeholder key; the recipe lists the raw name. */
+it('lists recipe ingredients by their own name when the ingredient only has a raw name (real server)', async () => {
+ const { default: userEvent } = await import('@testing-library/user-event');
+ const tables = createWidgetDataStore().getSnapshot().tables;
+ const named = tables.inventoryItem.map((item, index) => ({ ...item, name: { raw: `재료${index}` }, nameKey: 'data.state.inventory-booking.partial-data' }));
+ const store = createWidgetDataStore({ inventoryItem: named } as never);
+ const row = marginOf(store).menus.find(menu => menu.recipe.length > 0 && menu.unitCost !== null)!;
+ const name = menuLabel(store, row.menuId);
+ renderWithKit(<MarginDetail featureId="margin" condition={{ kind: 'default' }} detailRef={{ featureId: 'margin' }} host={host} />, { store });
+ await userEvent.click(screen.getByRole('gridcell', { name: `${name}, 품목, ${name}` }));
+ const recipe = document.querySelector<HTMLElement>('[data-slot="margin.recipe"]')!;
+ expect(recipe.textContent).not.toContain('일부 자료를 불러오지 못했어요');
+ expect(recipe.textContent).toMatch(/재료\d+/);
+});

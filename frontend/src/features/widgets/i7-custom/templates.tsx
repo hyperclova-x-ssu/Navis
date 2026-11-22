@@ -5,6 +5,8 @@ import { ActionButton, Checkbox, InlineForm, NumberField, Spinner, Textarea, Tex
 import { commandError, customOrderListBundle, inputLabels, isPastPickup, requestKey } from './copy';
 import { DateTimeField } from './date-time-field';
 import type { CustomOrderPort, CustomUiResult } from './port';
+import { useCustomRun } from './use-custom-run';
+import { ReferencePhotoPicker } from './reference-photos';
 import type { CustomOrderRow } from './widget';
 
 // SCR-276 names these reference products independently of the visible order list.
@@ -26,38 +28,53 @@ export function TemplateManager({ port, templates, notify, initialTemplateId }: 
   const [editor, setEditor] = useState<CustomTemplate | 'new' | null>(() => templates.find(template => template.templateId === initialTemplateId) ?? null), [productKind, setProductKind] = useState(''), [keywords, setKeywords] = useState('');
   const [generating, setGenerating] = useState(false), [error, setError] = useState(''), [kindError, setKindError] = useState(''), [pendingDelete, setPendingDelete] = useState<CustomTemplate | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined), generatingRef = useRef(false);
+  const { pending, run } = useCustomRun(port);
   useEffect(() => () => { clearTimeout(timer.current); generatingRef.current = false; }, []);
+  const settleGenerated = (result: CustomUiResult) => {
+    generatingRef.current = false; setGenerating(false);
+    if (!result.ok) { setError(commandError(result.reason)); return; }
+    notify(result);
+    const template = selectCustomOrders(port.read()).templates.find(item => item.templateId === result.value?.templateId);
+    if (template) setEditor(template);
+  };
   const generate = () => {
     if (generatingRef.current) return;
     if (!productKind.trim()) { setKindError(t('widget.custom-order.productKindRequired')); return; }
     generatingRef.current = true; setGenerating(true); setError(''); setKindError('');
-    timer.current = setTimeout(() => {
-      const result = port.dispatch({ type: 'customTemplate.generate', productKind, keywords, idempotencyKey: requestKey() });
-      generatingRef.current = false; setGenerating(false);
-      if (!result.ok) { setError(commandError(result.reason)); return; }
-      notify(result);
-      const template = selectCustomOrders(port.read()).templates.find(item => item.templateId === result.value?.templateId);
-      if (template) setEditor(template);
-    }, posTimeTokens.payApproveMs);
+    const send = () => { if (!run({ type: 'customTemplate.generate', productKind, keywords, idempotencyKey: requestKey() }, settleGenerated)) { generatingRef.current = false; setGenerating(false); } };
+    // The fixture build shows its short example-generation wait; the service call is its own wait.
+    if (port.real) send(); else timer.current = setTimeout(send, posTimeTokens.payApproveMs);
   };
   return <section className="custom-templates" aria-label="템플릿 관리">
-    <div className="custom-toolbar"><TextField label={t('widget.custom-order.productKind')} hint={t('widget.custom-order.productKindHint')} error={kindError || undefined} value={productKind} onValueChange={value => { setProductKind(value); setKindError(''); }} /><TextField label={t('widget.custom-order.keywords')} hint={t('widget.custom-order.keywordsHint')} value={keywords} onValueChange={setKeywords} />
-      <ActionButton disabled={generating} aria-busy={generating || undefined} onClick={generate}>{generating ? <><Spinner />AI가 예시 템플릿을 만들고 있어요</> : 'AI로 템플릿 만들기'}</ActionButton><ActionButton variant="secondary" disabled={generating} onClick={() => setEditor('new')}>템플릿 만들기</ActionButton></div>
-    {error && <p role="alert" className="custom-error">{error}</p>}
-    {!templates.length ? <p>저장된 템플릿이 없어요</p> : <ul className="custom-template-list">{templates.map(template => <li key={template.templateId}><strong>{template.name}</strong><ActionButton variant="secondary" aria-label={`${template.name} 템플릿 고치기`} onClick={() => setEditor(template)}>템플릿 고치기</ActionButton><ActionButton variant="secondary" aria-label={`${template.name} 템플릿 지우기`} onClick={() => { setError(''); setPendingDelete(template); }}>템플릿 지우기</ActionButton></li>)}</ul>}
+    {!templates.length ? <p>저장된 템플릿이 없어요</p> : <ul className="custom-template-list">{templates.map(template => <li key={template.templateId}>
+      <details>
+        <summary>{template.name}</summary>
+        <ul>{template.fields.map(field => <li key={field.fieldId}>
+          <strong>{field.label}</strong> · {inputLabels[field.input]}{field.required ? ' · 필수 입력' : ''}
+          {field.options.length > 0 && <ul>{field.options.map(option => <li key={option.optionId}>{option.label}{option.extraAmount > 0 ? ` +${option.extraAmount.toLocaleString('ko-KR')}원` : ''}</li>)}</ul>}
+        </li>)}</ul>
+      </details>
+      <ActionButton variant="secondary" aria-label={`${template.name} 템플릿 고치기`} onClick={() => setEditor(template)}>템플릿 고치기</ActionButton>
+      <ActionButton variant="destructive" aria-label={`${template.name} 템플릿 지우기`} onClick={() => { setError(''); setPendingDelete(template); }}>템플릿 지우기</ActionButton>
+    </li>)}</ul>}
+    <div><ActionButton variant="secondary" disabled={generating} onClick={() => setEditor('new')}>템플릿 만들기</ActionButton></div>
     {editor && <TemplateEditor key={editor === 'new' ? 'new' : editor.templateId} template={editor === 'new' ? undefined : editor} port={port} onClose={() => setEditor(null)} onSaved={result => { notify(result); setEditor(null); }} />}
-    {pendingDelete && <InlineForm title="템플릿 지우기" saveLabel="지우기" onClose={() => setPendingDelete(null)} onSave={() => { const result = port.dispatch({ type: 'customTemplate.delete', templateId: pendingDelete.templateId, idempotencyKey: requestKey() }); if (result.ok) { notify(result); setError(''); setPendingDelete(null); } else setError(commandError(result.reason)); }}><p>{pendingDelete.name}을 지워요. 접수된 주문의 내용은 보관해요.</p></InlineForm>}
+    <div className="custom-toolbar"><TextField label={t('widget.custom-order.productKind')} hint={t('widget.custom-order.productKindHint')} error={kindError || undefined} value={productKind} onValueChange={value => { setProductKind(value); setKindError(''); }} /><TextField label={t('widget.custom-order.keywords')} hint={t('widget.custom-order.keywordsHint')} value={keywords} onValueChange={setKeywords} />
+      <ActionButton disabled={generating} aria-busy={generating || undefined} onClick={generate}>{generating ? <><Spinner />양식 견본을 만들고 있어요</> : '양식 견본 만들기'}</ActionButton></div>
+    {error && <p role="alert" className="custom-error">{error}</p>}
+    {pendingDelete && <InlineForm title="템플릿 지우기" saveLabel="지우기" saving={pending} onClose={() => setPendingDelete(null)} onSave={() => { run({ type: 'customTemplate.delete', templateId: pendingDelete.templateId, idempotencyKey: requestKey() }, result => { if (result.ok) { notify(result); setError(''); setPendingDelete(null); } else setError(commandError(result.reason)); }); }}><p>{pendingDelete.name}을 지워요. 접수된 주문의 내용은 보관해요.</p></InlineForm>}
   </section>;
 }
 function TemplateEditor({ template, port, onClose, onSaved }: { template?: CustomTemplate; port: CustomOrderPort; onClose: () => void; onSaved: (result: CustomUiResult) => void }) {
   const [name, setName] = useState(template?.name ?? ''), [fields, setFields] = useState<readonly CustomTemplateField[]>(template?.fields ?? [newField()]);
   const [preview, setPreview] = useState(false), [answers, setAnswers] = useState<CustomAnswers>({}), [error, setError] = useState('');
   const [key] = useState(requestKey);
+  const { pending, run } = useCustomRun(port);
   const patch = (fieldId: string, changes: Partial<CustomTemplateField>) => setFields(fields.map(field => field.fieldId === fieldId ? { ...field, ...changes } : field));
-  return <InlineForm title={template ? '템플릿 고치기' : '템플릿 만들기'} saveLabel="템플릿 저장하기" onClose={onClose} onSave={() => {
+  return <InlineForm title={template ? '템플릿 고치기' : '템플릿 만들기'} saveLabel="템플릿 저장하기" saving={pending} onClose={onClose} onSave={() => {
     if (!name.trim() || !fields.length || fields.some(field => !field.label.trim() || field.options.some(option => !option.label.trim() || !Number.isSafeInteger(option.extraAmount) || option.extraAmount < 0) || ((field.input === 'single' || field.input === 'multiple') && !field.options.length))) { setError('필수 항목을 모두 넣어 주세요'); return; }
-    const result = port.dispatch({ type: 'customTemplate.save', ...(template ? { templateId: template.templateId } : {}), name, fields, idempotencyKey: key });
-    if (result.ok) onSaved(result); else setError(commandError(result.reason));
+    run({ type: 'customTemplate.save', ...(template ? { templateId: template.templateId } : {}), name, fields, idempotencyKey: key },
+      result => { if (result.ok) onSaved(result); else setError(commandError(result.reason)); });
   }}>
     <TextField label="템플릿 이름" value={name} onValueChange={setName} />
     {fields.map((field, index) => <fieldset className="custom-fieldset" key={field.fieldId}><legend>입력 항목 {index + 1}</legend><TextField label={`항목 ${index + 1} 이름`} value={field.label} onValueChange={label => patch(field.fieldId, { label })} />
@@ -83,15 +100,18 @@ export function ReceiptForm({ port, templates, order, prefill, focusProduct, tod
   const [channel, setChannel] = useState(order?.channel ?? prefill?.channel ?? 'phone'), [memberId, setMemberId] = useState(order?.memberId ?? port.members?.find(member => member.memberId === prefill?.memberId)?.memberId ?? ''), [name, setName] = useState(order?.guest?.name ?? prefill?.guest?.name ?? ''), [phone, setPhone] = useState(order?.guest?.phone ?? prefill?.guest?.phone ?? '');
   const [productLabel, setProductLabel] = useState(order?.productLabel ?? prefill?.productLabel ?? ''), [options, setOptions] = useState(order?.options.join(', ') ?? prefill?.options?.join(', ') ?? ''), [quantity, setQuantity] = useState<number | null>(order?.quantity ?? prefill?.quantity ?? 1);
   const [request, setRequest] = useState(order?.request ?? prefill?.request ?? ''), [pickupAt, setPickupAt] = useState(order?.desiredPickupAt ?? prefill?.desiredPickupAt ?? ''), [photos, setPhotos] = useState<readonly string[]>(order?.referencePhotoKeys ?? []);
+  const photoFiles = port.real?.files;
+  const photoChoices = photoFiles ? [] : referencePhotos;
   const [error, setError] = useState(''), [pickupError, setPickupError] = useState(''), [key] = useState(requestKey);
+  const { pending, run } = useCustomRun(port);
   const productInput = useRef<HTMLInputElement>(null);
   useEffect(() => { if (focusProduct) productInput.current?.focus(); }, [focusProduct]);
-  return <InlineForm title={order ? '주문 고치기' : '주문 접수'} saveLabel={order ? '주문 고치기' : '주문 접수하기'} onClose={onClose} onSave={() => {
+  return <InlineForm title={order ? '주문 고치기' : '주문 접수'} saveLabel={order ? '주문 고치기' : '주문 접수하기'} saving={pending} onClose={onClose} onSave={() => {
     if (!template || !productLabel.trim() || !pickupAt || !Number.isSafeInteger(quantity) || (quantity ?? 0) < 1 || (!memberId && (!name.trim() || !phone.trim())) || template.fields.some(field => field.required && (!answers[field.fieldId] || !answers[field.fieldId]?.length))) { setError('필수 항목을 모두 넣어 주세요'); return; }
     if (isPastPickup(pickupAt, now) && pickupAt !== order?.desiredPickupAt) { setError(''); setPickupError(t('widget.custom-order.pickupPast')); return; }
     const receipt = { answers, channel, memberId: memberId || null, guest: memberId ? null : { name, phone }, productLabel, options: options.split(',').map(value => value.trim()).filter(Boolean), quantity: quantity!, request, desiredPickupAt: pickupAt, referencePhotoKeys: photos };
-    const result = port.dispatch(order ? { type: 'customOrder.update', customOrderId: order.customOrderId, expectedQuoteRevision: order.quoteRevision, ...receipt } : { type: 'customOrder.create', templateId, ...receipt, idempotencyKey: key });
-    if (result.ok) onSaved(result); else setError(commandError(result.reason));
+    run(order ? { type: 'customOrder.update', customOrderId: order.customOrderId, expectedQuoteRevision: order.quoteRevision, ...receipt } : { type: 'customOrder.create', templateId, ...receipt, idempotencyKey: key },
+      result => { if (result.ok) onSaved(result); else setError(commandError(result.reason)); });
   }}>
     {!order && <label className="custom-field">주문서 템플릿<select className="ui-text-input" value={templateId} onChange={event => { setTemplateId(event.currentTarget.value); setAnswers({}); }}><option value="">선택해 주세요</option>{templates.map(item => <option value={item.templateId} key={item.templateId}>{item.name}</option>)}</select></label>}
     {!template && <p>저장된 템플릿이 없어요. 템플릿 관리에서 먼저 만들어 주세요</p>}
@@ -102,8 +122,9 @@ export function ReceiptForm({ port, templates, order, prefill, focusProduct, tod
     <DateTimeField label="희망 픽업 일시" dateLabel="희망 픽업 날짜" timeLabel="희망 픽업 시각" today={today} value={pickupAt} error={pickupError || undefined} onValueChange={value => { setPickupAt(value); setPickupError(''); }} /><Textarea label="요청사항" value={request} onValueChange={setRequest} />
     <fieldset className="custom-fieldset">
       <legend>{t('widget.custom-order.referencePhotos')}</legend>
-      {referencePhotos.map(photo => <Checkbox key={photo.key} label={photo.label} checked={photos.includes(photo.key)}
+      {photoChoices.map(photo => <Checkbox key={photo.key} label={photo.label} checked={photos.includes(photo.key)}
         onCheckedChange={checked => setPhotos(current => checked ? [...current, photo.key] : current.filter(value => value !== photo.key))} />)}
+      {photoFiles && <ReferencePhotoPicker files={photoFiles} values={photos} onChange={setPhotos} />}
     </fieldset>
     {template && <AnswerFields fields={template.fields} answers={answers} onChange={setAnswers} />}
     {error && <p role="alert" className="custom-error">{error}</p>}

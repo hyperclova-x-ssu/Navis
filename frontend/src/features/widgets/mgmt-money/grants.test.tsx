@@ -8,10 +8,55 @@ import { renderWithKit } from '../../../ui/test-utils';
 import { createWidgetDataStore, selectWidget, TODAY } from '../../../data/widget-data';
 import type { WidgetHost } from '../../../contracts';
 import { GrantsDetail } from './grants';
+import { applicationId, grant, insight, insightSession, noticeId, updatedAt } from '../../../data/reality/11/testing';
+import { manualsGrantsDomain } from '../../assistant/domains/manuals-grants';
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const host: WidgetHost = { layer: 'management', resetPreview: vi.fn(), openClosing: vi.fn(() => true), openLinked: vi.fn(), openDetail: vi.fn(), notify: vi.fn(), acknowledgeBriefing: vi.fn() };
 const detail = <GrantsDetail featureId="grants" condition={{ kind: 'default' }} detailRef={{ featureId: 'grants' }} host={host} />;
 const widgetStyles = readFileSync('src/features/widgets/mgmt-money/widget.css', 'utf8');
+
+it('keeps the official notice period and records a historical application in Insight', async () => {
+ const { backend, collections, newStore } = insightSession();
+ collections.set('grant-notices', [grant]);
+ backend.on('POST', `${insight}/grant-applications`, () => {
+  collections.set('grant-applications', [{ id: applicationId, noticeId, title: grant.title, source: 'owner', status: 'applied', appliedOn: TODAY, receiptNumber: null, resultMemo: null, updatedAt, revision: 1 }]);
+  return { resourceId: applicationId, receiptId: 'application-receipt', revision: 1, affectedSources: ['grants', 'briefing'] };
+ });
+ const store = newStore();
+ const user = userEvent.setup();
+ renderWithKit(detail, { store });
+ const official = await screen.findByRole('link', { name: '공식 공고 열기' });
+ expect(official).toHaveAttribute('href', grant.officialUrl);
+ expect(screen.getByText('기업마당')).toBeVisible();
+ expect(screen.getByText('9/30(금)')).toBeVisible();
+ const clipboard = vi.spyOn(navigator.clipboard, 'writeText');
+ await user.click(screen.getByRole('tab', { name: '신청서 초안' }));
+ await user.click(screen.getByRole('button', { name: '초안 복사하기' }));
+ expect(clipboard).toHaveBeenCalledWith(`${grant.title}\n${grant.agency}\n${grant.officialUrl}\n\n`);
+ await user.click(screen.getByRole('tab', { name: '사업 목록' }));
+ expect(backend.callsTo('POST', `${insight}/grant-applications`)).toHaveLength(0);
+ await user.click(screen.getByRole('button', { name: '신청 완료로 표시하기' }));
+ await user.click(screen.getByRole('tab', { name: '지원 현황' }));
+ const grid = await screen.findByRole('grid', { name: '지원 현황' });
+ expect(await within(grid).findByText(grant.title)).toBeVisible();
+ expect(backend.callsTo('POST', `${insight}/grant-applications`)[0]?.body).toEqual({ noticeId });
+ expect(store.getSnapshot().tables.grantApplication[0]).toMatchObject({ applicationId, source: 'owner' });
+});
+
+it('projects known dates without a time, skips unknown deadlines, and keeps a historical application name in Navis', async () => {
+ const { collections, newStore } = insightSession();
+ collections.set('grant-notices', [grant, { ...grant, id: 'unknown-date', deadline: null }]);
+ collections.set('grant-applications', [{ id: applicationId, noticeId: 'archived-notice', title: '예전에 신청한 지원', source: 'owner', status: 'applied', appliedOn: TODAY, receiptNumber: null, resultMemo: null, updatedAt, revision: 1 }]);
+ const store = newStore();
+ await store.real!.load('manuals');
+ const projection = manualsGrantsDomain.projectWidget(store.getSnapshot(), 'grants', { kind: 'default' }, 'ko');
+ if (!projection || !('facts' in projection)) throw new Error('Missing Navis grant facts');
+ const { facts } = projection;
+ expect(facts).toContainEqual(expect.objectContaining({ key: `grants.notice.${noticeId}.deadline`, value: '2022-09-30', source: '기업마당' }));
+ expect(facts.find(fact => fact.key === `grants.notice.${noticeId}.deadline`)?.display).not.toContain('23:59');
+ expect(facts.some(fact => fact.key === 'grants.notice.unknown-date.deadline')).toBe(false);
+ expect(facts).toContainEqual(expect.objectContaining({ key: `grants.application.${applicationId}.status`, label: '예전에 신청한 지원', source: '사장님 기록' }));
+});
 
 it.each([{ locale: 'ko', label: '마감' }, { locale: 'en', label: 'Deadline' }] as const)(
  'places the $label facts beside their labels in $locale', ({ locale, label }) => {
@@ -56,6 +101,8 @@ it('applies, deletes and restores a grant application', async () => {
  expect(row.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
  expect(within(row).getByText('신청함').closest('.ui-status-chip')).toHaveAttribute('data-semantic', 'info');
  await userEvent.click(screen.getAllByRole('button', { name: '신청 기록 지우기' })[0]!);
+ expect(store.getSnapshot().tables.grantApplication).toHaveLength(before + 1);
+ await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '신청 기록 지우기' }));
  expect(store.getSnapshot().tables.grantApplication).toHaveLength(before);
  const notice = vi.mocked(host.notify).mock.calls.at(-1)?.[0];
  expect(notice?.undoToken).toBeTruthy();
@@ -190,4 +237,74 @@ it('marks the official-notice block as an Esc layer of the detail window and giv
  close.click();
  await waitFor(() => expect(document.querySelector('[data-slot="grants.official"]')).toBeNull());
  expect(opener).toHaveFocus();
+});
+
+it('reads a closed Financial Center recommendation alongside Bizinfo and re-reads it in a new session', async () => {
+ const { backend, collections, newStore } = insightSession();
+ collections.set('grant-notices', [grant]);
+ const path = '/insight/financial-center/recommendations';
+ const row = { ref: 'policy-2026', title: '소상공인 정책자금', source: 'naver-financial-center', officialNoticeUrl: 'https://www.semas.or.kr/', status: 'closed', endDate: '2026-09-30' };
+ const sourceUrl = 'https://help.admin.pay.naver.com/faq/content.help?faqId=13148';
+ backend.on('GET', path, () => ({ state: 'ready', items: [row], source: row.source, sourceUrl, asOf: updatedAt, nextCursor: null, sourceRevision: 'test' }));
+ backend.on('GET', `${path}/policy-2026`, () => ({ ...row, sourceUrl, asOf: updatedAt, overview: '시설 자금 안내', eligibility: '소상공인', applicationMethod: '기관에서 신청', documents: ['사업자등록증'] }));
+ for (let session = 0; session < 2; session++) {
+  renderWithKit(detail, { store: newStore() });
+  expect(await screen.findByText('기업마당')).toBeVisible();
+  const recommendation = await screen.findByRole('button', { name: /소상공인 정책자금.*마감/u });
+  await userEvent.click(recommendation);
+  expect(await screen.findByText('사업자등록증')).toBeVisible();
+  const section = document.querySelector<HTMLElement>('[data-slot="grants.financial-center.detail"]')!;
+  expect(within(section).getByText('기관에서 신청')).toBeVisible();
+  // T-27: the 기준일 is store day and clock, never the browser's date string.
+  expect(section.textContent).toMatch(/기준일\d{1,2}\/\d{1,2}\([월화수목금토일]\) 15:00/);
+  expect(section.textContent).not.toMatch(/GMT|오전|오후/);
+  expect(within(section).getByRole('link', { name: '공식 안내 열기' })).toHaveAttribute('href', row.officialNoticeUrl);
+  expect(within(section).queryByRole('button', { name: /신청 완료/u })).toBeNull();
+  cleanup();
+ }
+ expect(backend.callsTo('GET', `${path}/policy-2026`)).toHaveLength(2);
+ expect(backend.callsTo('POST', '/insight/grant-applications')).toHaveLength(0);
+});
+
+it('retries a Financial Center failure without hiding Bizinfo', async () => {
+ const { backend, collections, newStore } = insightSession();
+ collections.set('grant-notices', [grant]);
+ const path = '/insight/financial-center/recommendations';
+ let available = false;
+ backend.on('GET', path, () => available
+  ? { state: 'ready', items: [] }
+  : { status: 503, body: { code: 'NAVER_SOURCE_UNAVAILABLE' } });
+ renderWithKit(detail, { store: newStore() });
+ const section = await screen.findByRole('region', { name: '네이버 금융센터 추천' });
+ expect(await within(section).findByText('네이버 금융센터 추천을 불러오지 못했어요')).toBeVisible();
+ expect(screen.getByText('기업마당')).toBeVisible();
+ available = true;
+ await userEvent.click(within(section).getByRole('button', { name: '다시 시도하기' }));
+ expect(await within(section).findByText('추천 공고가 없어요')).toBeVisible();
+ expect(backend.callsTo('GET', path)).toHaveLength(2);
+});
+
+/* FIX-PKG-A / T-27, T-28 (gate r1a W13): official notice dates read like the rest of the app, and the real draft tab carries no sample wording. */
+it('shows official notice dates as day and weekday, and the source time as day and clock (no ISO date, no browser date string)', async () => {
+ const { collections, newStore } = insightSession();
+ collections.set('grant-notices', [grant]);
+ renderWithKit(detail, { store: newStore() });
+ await screen.findByRole('link', { name: '공식 공고 열기' });
+ const facts = document.querySelector<HTMLElement>('[data-slot="grants.item"]')!;
+ expect(facts.textContent).toContain('7/27(수)');
+ expect(facts.textContent).toContain('9/30(금)');
+ expect(facts.textContent).toMatch(/\d{1,2}\/\d{1,2}\([월화수목금토일]\) 15:00/);
+ expect(facts.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}|GMT|오전|오후|\d{4}\. \d/);
+});
+
+it('names the notice-less draft start by what it does, not as a sample (real server)', async () => {
+ const { collections, newStore } = insightSession();
+ collections.set('grant-notices', [grant]);
+ const user = userEvent.setup();
+ renderWithKit(detail, { store: newStore() });
+ await screen.findByRole('link', { name: '공식 공고 열기' });
+ await user.click(screen.getByRole('tab', { name: '신청서 초안' }));
+ expect(screen.queryByRole('button', { name: '자료가 없는 예시' })).not.toBeInTheDocument();
+ expect(screen.getByRole('button', { name: '공고 없이 직접 쓰기' })).toBeVisible();
+ expect(document.body.textContent).not.toMatch(/예시/);
 });

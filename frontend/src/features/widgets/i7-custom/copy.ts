@@ -12,7 +12,7 @@ export const customOrderListBundle = {
     'widget.custom-order.productKindHint': '템플릿 이름이 ‘상품 종류 + 주문서’로 만들어져요',
     'widget.custom-order.productKindRequired': '상품 종류를 넣어 주세요',
     'widget.custom-order.keywords': '키워드',
-    'widget.custom-order.keywordsHint': '템플릿 이름 뒤에 붙어요 (선택)',
+    'widget.custom-order.keywordsHint': '템플릿 이름 뒤에 붙어요(선택)',
     'widget.custom-order.noResults': '검색 결과가 없어요',
     'widget.custom-order.empty': '아직 등록한 주문제작이 없어요',
     'widget.custom-order.history.created': '주문을 접수했어요',
@@ -121,6 +121,14 @@ export const channelLabels = { phone: '전화', message: '메시지', visit: '�
 export const inputLabels = { text: '직접 입력', single: '단일 선택', multiple: '복수 선택', datetime: '날짜·시간 선택' } as const;
 export const commandError = (reason?: string) => ({
   REQUIRED_FIELD: '필수 항목을 모두 넣어 주세요', INVALID_QUOTE_AMOUNT: '견적 금액을 1원 이상 넣어 주세요', APPROVAL_REQUIRED: '손님 승인을 먼저 기록해 주세요', QUOTE_CHANGED: '견적이 바뀌었어요. 다시 확인해 주세요', PAYMENT_REQUIRED: '결제를 먼저 완료해 주세요', INVALID_STAGE_TRANSITION: '현재 진행 상태를 확인해 주세요', PAYMENT_REVERSAL_REQUIRED: '결제 취소·환불을 먼저 확인해 주세요',
+  // HTTP builds: the service's own refusals (B08). Nothing was saved in any of them.
+  STALE_REVISION: '다른 곳에서 바뀌었어요. 새로 불러왔으니 다시 확인해 주세요', CONFIRMATION_REQUIRED: '한 번 더 확인해 주세요', DUPLICATE_CUSTOM_ORDER: '같은 주문이 이미 있어요', QUOTE_REISSUE_REQUIRED: '견적을 다시 내 주세요',
+  BOOKING_PAST: '지난 날짜나 시각은 픽업으로 정할 수 없어요', MEMBER_NOT_FOUND: '찾을 수 없는 회원이에요', REFERENCE_PHOTO_NOT_FOUND: '참고 사진을 찾지 못했어요. 다시 올려 주세요',
+  PHOTO_SERVICE_UNAVAILABLE: '사진을 저장하지 못했어요. 잠시 뒤 다시 해 주세요', FILE_INVALID: '올릴 수 없는 사진이에요. 사진 파일을 확인해 주세요', DAY_CLOSED: '마감한 날은 바꿀 수 없어요', ALLOCATION_SUM_MISMATCH: '받은 금액이 결제할 금액과 같아야 해요',
+  TERMINAL_RECORD_REQUIRED: '단말기 승인 번호나 영수증 번호를 넣어 주세요', TERMINAL_REFERENCE_EXISTS: '이미 기록한 단말기 번호예요', TERMINAL_TIME_INVALID: '단말기 거래 시각을 확인해 주세요', REFUND_LIMIT: '환불할 수 있는 금액을 넘었어요',
+  MEMBER_REQUIRED: '회원을 연결한 주문만 충전금·외상으로 받을 수 있어요', CHARGE_BALANCE_EXCEEDED: '충전금 잔액보다 많이 쓸 수 없어요', CHARGE_LIMIT: '충전금 잔액보다 많이 쓸 수 없어요',
+  RECEIVABLE_LIMIT: '외상으로 둘 수 있는 한도를 넘었어요', RECEIVABLE_ALREADY_COLLECTED: '이 외상은 이미 수금했어요. 수금 기록을 먼저 되돌려 주세요',
+  UNDO_EXPIRED: '되돌릴 수 있는 시간이 지났어요', SERVICE_UNAVAILABLE: '지금은 서버에 연결할 수 없어요. 잠시 뒤 다시 해 주세요',
 }[reason ?? ''] ?? '저장하지 못했어요. 다시 시도해 주세요');
 export const money = (amount: number) => `${new Intl.NumberFormat('ko-KR').format(amount)}원`;
 export const maskName = (name: string) => name.includes('○') ? name : [...name].length > 1 ? `${[...name][0]}${'○'.repeat(Math.min([...name].length - 1, 2))}` : name;
@@ -130,7 +138,8 @@ export const maskPhone = (phone: string) => {
   return digits.length >= 7 ? `${digits.slice(0, 3)}-****-${digits.slice(-4)}` : '***';
 };
 /** The order number people read and say. Ids from the store data (`sample-custom-1`) are never shown; `CO-001` style numbers pass through. */
-export const orderNumber = (id: string) => /^CO-\d+$/.test(id) ? id : /(\d+)$/.test(id) ? `CO-${/(\d+)$/.exec(id)![1]!.padStart(3, '0')}` : '주문';
+export const orderNumber = (id: string, orderNo?: number) => orderNo !== undefined && Number.isSafeInteger(orderNo) && orderNo > 0 ? `CO-${String(orderNo).padStart(3, '0')}`
+  : /^CO-\d+$/.test(id) ? id : /(\d+)$/.test(id) ? `CO-${/(\d+)$/.exec(id)![1]!.padStart(3, '0')}` : '주문';
 /** Local `YYYY-MM-DDTHH:MM` pickup stamps are compared as strings (same shape, store clock). */
 export const isPastPickup = (value: string, now: string | undefined) => !!now && !!value && value.slice(0, 16) < now.slice(0, 16);
 export const requestKey = () => `custom-ui:${crypto.randomUUID()}`;

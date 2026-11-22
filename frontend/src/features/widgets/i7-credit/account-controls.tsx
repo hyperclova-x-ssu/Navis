@@ -1,11 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { DetailRef } from '../../../contracts';
 import { ActionButton, NumberField } from '../../../ui';
-import { accountIssue, creditCopy, money, transactionLabel } from './copy';
-import type { AccountMember, AccountTransaction, CreditPort, MemberReturnContext, OriginalMoneyTransaction } from './types';
-
-/** An original exists when the transaction points at a settlement, an earlier transaction or a source record. */
-export const hasOriginal = (transaction: OriginalMoneyTransaction) => !!(transaction.settlementId || transaction.originalTxnId || transaction.sourceRef);
+import { accountIssue, creditCopy, hasOriginal, money, transactionLabel } from './copy';
+import type { AccountMember, AccountTransaction, CreditPort, MemberReturnContext } from './types';
 
 export function AccountActions({ member, port, detailRef, initialPurpose, initialAmount = null, focusAmount }: {
   readonly member: AccountMember; readonly port: CreditPort; readonly detailRef: DetailRef;

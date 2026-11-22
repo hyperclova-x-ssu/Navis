@@ -59,7 +59,7 @@ it('M-81 sends one exact review edit to the displayed alias with both provider t
     const confirm = screen.getByRole('button', { name: '테스트 문자 보내기' });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
-    expect(await screen.findByText('보냈어요(예시)')).toBeVisible();
+    expect(await screen.findByText('답변함')).toBeVisible();
     expect(fakeSends).toEqual([previewText]);
     expect(fetchSpy.mock.calls.filter(([path]) => path === '/api/navis/reply-test-send')).toHaveLength(1);
     expect(providerModel).not.toHaveBeenCalled();

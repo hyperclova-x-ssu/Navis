@@ -21,7 +21,8 @@ it('restores all offered rows in a roomy editing panel instead of permanently hi
   styles('./widget.css');
   renderWithKit(<FeaturePanel featureId="ledger" groupId="finance" label="손익" width={4} height={4} editing><LedgerPanel featureId="ledger" condition={{ kind: 'default' }} width={4} height={4} shape="L" presetId="A" editing host={host} /></FeaturePanel>);
   const rows = document.querySelectorAll('.mm-row');
-  expect(rows).toHaveLength(6);
+  // 6 basic rows + the paid amount and the discount a 4-high card adds (D-333; the seed has a discount and no refund)
+  expect(rows).toHaveLength(8);
   for (const row of rows) expect(getComputedStyle(row).display).not.toBe('none');
 });
 it('keeps both manual counts visible in the smallest panel, including 125% text', () => {

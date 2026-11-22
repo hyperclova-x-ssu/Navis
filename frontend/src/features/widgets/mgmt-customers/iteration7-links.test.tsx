@@ -1,5 +1,6 @@
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
+import { readFileSync } from 'node:fs';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithKit } from '../../../ui/test-utils';
@@ -13,9 +14,13 @@ it('forwards the controlled POS picker through the live camera setup',async()=>{
  const cells=new Uint8Array(CELLS);cells.fill(1,0,40);const zone={id:'z1',number:1,source:'drawn' as const,mask:encodeRle(cells)};
  const api={get:vi.fn(async()=>({revision:1,savedAt:'x',frameAspect:1.78,zones:[zone]})),put:vi.fn(),suggest:vi.fn()} as never;
  const onChange=vi.fn();
- renderWithKit(<CctvSetup start="zones" onDone={()=>{}} host={{notify:vi.fn()} as never} zonesApi={api} linkPicker={{valueFor:()=>null,optionsFor:()=>[{value:'T1',label:'T1'}],onChange}}/>);
+ const styles = readFileSync('src/features/widgets/mgmt-customers/widgets.css', 'utf8');
+ renderWithKit(<div className="cc-detail"><style>{styles}</style><CctvSetup start="zones" onDone={()=>{}} host={{notify:vi.fn()} as never} zonesApi={api} linkPicker={{valueFor:()=>null,optionsFor:()=>[{value:'T1',label:'T1'}],onChange}}/></div>, { theme: 'dark' });
  fireEvent.click(await screen.findByText('테이블 목록'));
- fireEvent.change(screen.getByRole('combobox',{name:'테이블 1 POS 테이블 연결'}),{target:{value:'T1'}});
+ const picker = screen.getByRole('combobox',{name:'테이블 1 POS 테이블 연결'});
+ expect(getComputedStyle(picker).minHeight).toBe('var(--target-default)');
+ expect(getComputedStyle(picker).fontSize).toBe('var(--type-body)');
+ fireEvent.change(picker,{target:{value:'T1'}});
  expect(onChange).toHaveBeenCalledExactlyOnceWith('z1','T1');
 });
 it('shows linked order status on CCTV and removes the clearing warning after cups clear', async () => {

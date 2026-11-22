@@ -18,7 +18,7 @@ describe('widget module registry', () => {
   it('collects the folders present in the working tree without duplicates', () => {
     const ids = widgetModules.map(m => m.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.length).toBe(30);
+    expect(ids.length).toBe(29);
     expect(Object.keys(import.meta.glob('./*/index.ts'))).toHaveLength(13);
     for (const id of ['demand','hiring','interior','floor-plan','memberships']) expect(ids).not.toContain(id);
   });

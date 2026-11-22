@@ -8,6 +8,15 @@ import { createEnvironmentPort, environmentView } from './source';
 const sample = seedSupplement.environment[0];
 
 describe('environment source adapter', () => {
+  it('feeds manual DB readings to the original climate view without claiming a connected sensor', () => {
+    const { storeEnvironment } = createEnvironmentSeed();
+    const reading = { measuredAt: '2026-11-17T15:45', temperatureC: 29, humidityPct: 45 };
+    const tables = { storeEnvironment: { ...storeEnvironment, source: 'manual' as const, current: reading, readings: [reading] } };
+    expect(environmentView(selectStoreEnvironment({ tables }))).toMatchObject({
+      status: 'ready', sensorStatus: 'manual', current: { temperature: 29, humidity: 45 }, lastMeasuredAt: '15:45',
+      trend: [{ time: '15:45', temperature: 29, humidity: 45 }], music: { deviceStatus: 'disconnected' },
+    });
+  });
   it('uses the same selector as briefing for both ordinary and special states', () => {
     const tables = createEnvironmentSeed();
     expect(environmentView(selectStoreEnvironment({ tables }, 'normal'))).toMatchObject({ status: 'ready', current: { temperature: sample.temperature, humidity: sample.humidity }, lastMeasuredAt: sample.measuredAt.slice(11, 16) });

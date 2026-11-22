@@ -1,7 +1,7 @@
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
 import { readFileSync } from 'node:fs';
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithKit } from '../../../ui/test-utils';
@@ -15,6 +15,28 @@ const rawName = (payment: { type: { raw: string } | object }) => ('raw' in payme
 const payments = (store: ReturnType<typeof createWidgetDataStore>) => store.getSnapshot().tables.taxPayment;
 const withholdingOf = (store: ReturnType<typeof createWidgetDataStore>) => payments(store).find(p => rawName(p).includes('원천세'))!;
 const host: WidgetHost = { layer: 'management', resetPreview: vi.fn(), openClosing: vi.fn(() => true), openLinked: vi.fn(), openDetail: vi.fn(), notify: vi.fn(), acknowledgeBriefing: vi.fn() };
+
+it('UX-A-21 downloads a CSV and omits the old connection chips', () => {
+ const store = createWidgetDataStore();
+ const objects = URL.createObjectURL;
+ const makeUrl = vi.fn(() => 'blob:tax-file');
+ URL.createObjectURL = makeUrl;
+ let filename = '';
+ const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+   filename = this.download;
+ });
+ try {
+  renderWithKit(<TaxDetail featureId="tax" condition={{ kind: 'default' }} detailRef={{ featureId: 'tax' }} host={host} />, { store });
+  fireEvent.click(screen.getByRole('button', { name: '세무사 자료 받기' }));
+  expect(makeUrl).toHaveBeenCalledWith(expect.objectContaining({ type: 'text/csv;charset=utf-8' }));
+  expect(filename).toMatch(/^tax-.*\.csv$/);
+  expect(screen.queryByRole('heading', { name: '자료 연결 상태' })).not.toBeInTheDocument();
+  expect(screen.getByRole('status')).not.toHaveTextContent('예시');
+ } finally {
+  URL.createObjectURL = objects;
+  click.mockRestore();
+ }
+});
 it('records a payment and removes its briefing alert when paid', async () => {
  const store = createWidgetDataStore();
  const withholding = withholdingOf(store);
@@ -152,6 +174,9 @@ it('marks a payment with its status chip and says 지웠어요 when it is remove
  expect(within(screen.getByText(/원천세/).closest('tr') as HTMLElement).getByText('납부 완료').closest('.ui-status-chip')).toHaveAttribute('data-semantic','done');
  await userEvent.click(within(screen.getByText(/원천세/).closest('tr') as HTMLElement).getByRole('button',{name:/더 보기$/}));
  await userEvent.click(within(document.querySelector('.mm-tax-actions__menu') as HTMLElement).getByRole('button',{name:'납부 기록 지우기'}));
+ expect(withholdingOf(store)).toBeDefined();
+ const confirm = screen.getByRole('alertdialog', { name: '납부 기록을 지울까요?' });
+ await userEvent.click(within(confirm).getByRole('button', { name: '납부 기록 지우기' }));
  expect(host.notify).toHaveBeenLastCalledWith(expect.objectContaining({messageKey:'data.management.notice.deleted', undoToken:expect.any(String)}));
 });
 
@@ -171,14 +196,15 @@ it('lists the review items before the data sources, shows a few at first and the
  const store = createWidgetDataStore();
  renderWithKit(<TaxDetail featureId="tax" condition={{kind:'default'}} detailRef={{featureId:'tax'}} host={host}/>, { store, reducedMotion: true });
  const headings=screen.getAllByRole('heading',{level:3}).map(h=>h.textContent);
- expect(headings.indexOf('확인 목록')).toBeLessThan(headings.indexOf('자료 연결 상태'));
+ expect(headings).toContain('확인 목록');
+ expect(headings).not.toContain('자료 연결 상태');
  const rows=()=>document.querySelectorAll('[data-slot="tax.list"] .mm-select-row').length;
  const total=Number((screen.getByRole('button',{name:/^나머지 \d+건 더 보기$/}).textContent!.match(/\d+/) ?? ['0'])[0]);
  expect(rows()).toBe(5);
  await userEvent.click(screen.getByRole('button',{name:/^나머지 \d+건 더 보기$/}));
  expect(rows()).toBe(5+total);
  expect(screen.queryByRole('button',{name:/더 보기$/})).toBeNull();
- expect(screen.getByRole('button',{name:'세무사에게 보낼 자료 내보내기'})).toBeVisible();
+ expect(screen.getByRole('button',{name:'세무사 자료 받기'})).toBeVisible();
  // the export preview is a kit Table with a header row
  expect(document.querySelector('[data-slot="tax.export"] table.ui-table thead th')).not.toBeNull();
 });

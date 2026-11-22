@@ -126,11 +126,11 @@ describe('M3 financial presentation', () => {
     await userEvent.click(within(refund).getByRole('button', { name: '영수증 보기' }));
     expect(onOpenAccountingReceipt).toHaveBeenCalledWith(m3.transactions[1]);
   });
-  it('keeps tax amounts explicitly marked as examples and uses the supplied reporting period', () => {
+  it('shows tax amounts without an example chip (D-329) and uses the supplied reporting period', () => {
     const accounting = { ...m3, period: { start: `${TODAY.slice(0, 8)}01`, end: TODAY } };
     renderWithKit(<TaxDetail featureId="tax" condition={{ kind: 'default' }} detailRef={{ featureId: 'tax' }} host={host} {...{ accounting }} />);
     const split = screen.getByRole('region', { name: '매출 · 실제 입금' });
-    expect(within(split).getAllByText('예시')).toHaveLength(2);
+    expect(within(split).queryByText('예시')).toBeNull();
     expect(within(split).getByText((_,node) => node?.textContent === '1,284,000원', {selector:'.ui-pos-money--display'})).toBeInTheDocument();
     expect(within(split).getByText((_,node) => node?.textContent === '1,386,336원', {selector:'.ui-pos-money--display'})).toBeInTheDocument();
   });
@@ -149,6 +149,19 @@ it('M3 receipt filters show only the selected real-method share of a mixed recei
   await userEvent.click(screen.getByRole('radio', { name: '카드' }));
   const grid = screen.getByRole('grid', { name: '결제 · 입금 내역' });
   expect(grid.querySelector('[data-grid-column-id="amount"][data-grid-row-id="mixed"]')).toHaveTextContent('1,500원');
+});
+
+it('C-07 shows a public transaction number and hides internal keys in the ledger', () => {
+  const original = m3.transactions[0]!;
+  const accounting = { ...m3, transactions: [
+    { ...original, id: 'legacy:dc24bb57-f465-5be0-bb22-20f6acb759ef' },
+    { ...original, id: 'b', transactionNo: 'legacy:dc24bb57-f465-5be0-bb22-20f6acb759ef' },
+    { ...original, id: 'c', transactionNo: 'TX-0007' },
+  ] };
+  renderWithKit(<LedgerDetail featureId="ledger" condition={{ kind: 'default' }} detailRef={{ featureId: 'ledger' }} host={host} accounting={accounting} />);
+  const grid = screen.getByRole('grid', { name: '결제 · 입금 내역' });
+  expect(within(grid).getAllByRole('gridcell', { name: /거래번호, —$/ })).toHaveLength(2);
+  expect(within(grid).getByRole('gridcell', { name: /거래번호, TX-0007$/ })).toBeVisible();
 });
 
 it('M3 provider publishes the five PRD12.6 cumulative deltas without widget-owned arithmetic', () => {

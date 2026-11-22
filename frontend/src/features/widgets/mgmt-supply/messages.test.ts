@@ -47,7 +47,13 @@ describe('mgmt-supply bundle (ARCHITECTURE 11.6, API-12)', () => {
     for (const row of fromPlan) {
       const source = plan.get(renamed[row[0]] ?? row[0]);
       expect(source, row[0]).toBeDefined();
-      const koAmendments: Record<string, string> = { 'widget.inventory-booking.empty': '아직 등록한 품목이 없어요', 'widget.inventory-booking.registerItem': '품목 추가하기', 'widget.inventory-booking.registerProduct': '상품 추가하기', 'widget.suppliers.registerSupplier': '발주사 추가하기' };
+      const koAmendments: Record<string, string> = {
+        'widget.inventory-booking.empty': '아직 등록한 품목이 없어요', 'widget.inventory-booking.registerItem': '품목 추가하기',
+        'widget.inventory-booking.registerProduct': '상품 추가하기', 'widget.suppliers.registerSupplier': '발주사 추가하기',
+        'widget.inventory-booking.needsReview': '현재 재고와 안전 재고를 확인해 주세요',
+        'widget.inventory-booking.threshold': '안전 재고', 'widget.inventory-booking.thresholdShort': '안전 재고 {threshold}',
+        'widget.inventory-booking.lowInChannel': '보충 필요',
+      };
       expect([row[1], row[2], row[3], row[4]].map((cell) => cell.replace(/\u00A0/g, ' ')), row[0]).toEqual([koAmendments[row[0]] ?? source![0], ...source!.slice(1)]);
     }
   });

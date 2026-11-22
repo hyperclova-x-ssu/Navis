@@ -4,11 +4,11 @@ import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithKit } from '../../../ui/test-utils';
-import { createWidgetDataStore, resolveDataText, selectCameras, selectMembers, selectMenus, selectReservations, TODAY } from '../../../data/widget-data';
+import { createWidgetDataStore, selectMembers, selectMenus, selectReservations, TODAY } from '../../../data/widget-data';
 import { MenuDetail } from '../mgmt-products/menu';
 import { MembersDetail } from './members';
 import { VoiceBookingDetail } from './voice-booking';
-import { CustomerAnalysisDetail, CustomerAnalysisPanel } from './customer-analysis';
+import { CustomerAnalysisPanel } from './customer-analysis';
 const makeHost = () => ({ layer:'management' as const, resetPreview:vi.fn(), openLinked:vi.fn(), openDetail:vi.fn(), notify:vi.fn(), acknowledgeBriefing:vi.fn(), openClosing:vi.fn(()=>true) });
 const condition = {kind:'default' as const};
 afterEach(cleanup);
@@ -66,8 +66,14 @@ it('edits reservations in a DataGrid, warns on capacity, confirms and cancels wi
  act(() => { store.undo(host.notify.mock.calls.at(-1)![0].undoToken!); });
  expect(selectReservations(store.getSnapshot(), { date: TODAY }).count).toBe(today.count);
 });
-it('uses the CCTV status grid and restores still frames after resizing',()=>{
- const host=makeHost();const v=renderWithKit(<CustomerAnalysisDetail featureId="customer-analysis" condition={condition} detailRef={{featureId:'customer-analysis'}} host={host}/>);expect(screen.getByRole('grid',{name:'CCTV 상태'})).toBeInTheDocument();v.unmount();const p={featureId:'customer-analysis' as const,condition,host,presetId:'A' as const,editing:false};const stillName=`${resolveDataText(k=>k,selectCameras(createWidgetDataStore().getSnapshot(),{})[0]!.name)} 카메라 예시 정지 화면`;const view=renderWithKit(<CustomerAnalysisPanel {...p} width={2} height={2} shape="S"/>);expect(screen.getByRole('img',{name:stillName})).toBeInTheDocument();view.rerender(<CustomerAnalysisPanel {...p} width={1} height={1} shape="Q"/>);expect(screen.queryByRole('img',{name:stillName})).not.toBeInTheDocument();view.rerender(<CustomerAnalysisPanel {...p} width={2} height={2} shape="S"/>);expect(screen.getByRole('img',{name:stillName})).toBeInTheDocument();
+it('restores the CCTV preview video when the panel is expanded again',()=>{
+ const props = {featureId:'customer-analysis' as const,condition,host:makeHost(),presetId:'A' as const,editing:false};
+ const view = renderWithKit(<CustomerAnalysisPanel {...props} width={2} height={2} shape="S"/>);
+ expect(screen.getByTestId('panel-video')).toBeInTheDocument();
+ view.rerender(<CustomerAnalysisPanel {...props} width={1} height={1} shape="Q"/>);
+ expect(screen.queryByTestId('panel-video')).not.toBeInTheDocument();
+ view.rerender(<CustomerAnalysisPanel {...props} width={2} height={2} shape="S"/>);
+ expect(screen.getByTestId('panel-video')).toBeInTheDocument();
 });
 it.each(['menu','members'] as const)('empty %s resets only its own example and opens a new row without changing data',async featureId=>{
  const {useState}=await import('react');const {WidgetDataProvider}=await import('../../../data/react');const {MenuPanel}=await import('../mgmt-products/menu');const {MembersPanel}=await import('./members');

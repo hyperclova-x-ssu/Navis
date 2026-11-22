@@ -147,6 +147,13 @@ export function createNaverDraftsClient(transport: NaverDraftTransport = browser
 }
 
 export const naverDrafts = createNaverDraftsClient();
+
+/** Project the widget's validated allowlist response for callers that only display its size. */
+export async function readReplyTestTargetCount(signal: AbortSignal): Promise<number | undefined> {
+  const result = await naverDrafts.getTargets(signal);
+  return result.status === 'targets' ? result.targets.length : undefined;
+}
+
 export const useNaverDraftCopy = () => useBundle(mgmtMoneyBundle);
 
 /** Tag generated Korean text without changing the language of translated field labels. */

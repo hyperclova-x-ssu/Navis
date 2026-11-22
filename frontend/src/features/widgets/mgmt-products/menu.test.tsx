@@ -15,14 +15,37 @@ const menuGridStyles = ['src/ui/mastermanage.css', 'src/features/widgets/mgmt-pr
 afterEach(cleanup);
 /** The 안숭잘부 카페 menus the widget itself reads (24 on the demo day), so counts and prices are never retyped here. */
 const cafeMenus = () => selectMenus(createWidgetDataStore().getSnapshot(), {}).rows;
-it('renders built-in thumbnails and a readable empty photo state', () => {
-  // DATA-FIX item 2 (877f99a): the cafe seed gives six menus a generated photo from /menu-photos/ (photo value 내 사진) and the other 18 the agreed empty state (the words 사진 없음), never an image.
+it('filters the 24 café menus by the five tabs and keeps season independent', async () => {
+  const user = userEvent.setup();
   renderWithKit(<MenuDetail {...common} detailRef={{ featureId: 'menu' }} />);
+  const tabs = screen.getAllByRole('tab');
+  expect(tabs.map(tab => tab.textContent)).toEqual(['전체', '커피', '티', '음료', '디저트']);
+  expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+  for (const [index, count] of [24, 8, 4, 8, 4].entries()) {
+    await user.click(tabs[index]);
+    expect(within(screen.getByRole('grid')).getAllByRole('row')).toHaveLength(count + 1);
+    if (index === 2) expect(screen.getByRole('row', { name: /고흥 유자 캐모마일 티/ })).toHaveTextContent('시즌');
+  }
+});
+
+it.each([
+  ['en', ['All', 'Coffee', 'Tea', 'Drinks', 'Desserts']],
+  ['zh-Hans', ['全部', '咖啡', '茶', '饮品', '甜点']],
+  ['zh-Hant', ['全部', '咖啡', '茶', '飲品', '甜點']],
+] as const)('localizes the category tabs in %s', (locale, labels) => {
+  renderWithKit(<MenuDetail {...common} detailRef={{ featureId: 'menu' }} />, { locale });
+  expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(labels);
+});
+
+it('renders built-in thumbnails and a readable empty photo state', () => {
+  const store = createWidgetDataStore();
+  expect(store.dispatch({ type: 'menu.setPhoto', menuId: 'm-americano', photoKey: null }).ok).toBe(true);
+  renderWithKit(<MenuDetail {...common} detailRef={{ featureId: 'menu' }} />, { store });
   expect(screen.getAllByRole('gridcell', { name: /, 메뉴 사진,/ })).toHaveLength(cafeMenus().length);
   const photoCells = screen.getAllByRole('gridcell', { name: /, 메뉴 사진, 내 사진/ });
   const emptyCells = screen.getAllByRole('gridcell', { name: /, 메뉴 사진, 사진 없음/ });
-  expect(photoCells).toHaveLength(6);
-  expect(emptyCells).toHaveLength(18);
+  expect(photoCells).toHaveLength(cafeMenus().length - 1);
+  expect(emptyCells).toHaveLength(1);
   for (const cell of photoCells) {
     expect(cell).toHaveAccessibleName(/, 메뉴 사진, 내 사진/);
     expect(cell.querySelector('img')).toHaveAttribute('src', expect.stringMatching(/^\/menu-photos\//));
@@ -35,20 +58,18 @@ it('renders built-in thumbnails and a readable empty photo state', () => {
   }
   cleanup();
 
-  // A menu with a built-in picture shows its thumbnail; the 18 menus without one keep the empty state.
-  const store = createWidgetDataStore();
   expect(store.dispatch({ type: 'menu.setPhoto', menuId: 'm-americano', photoKey: 'menu-photo-01' }).ok).toBe(true);
   renderWithKit(<MenuDetail {...common} detailRef={{ featureId: 'menu' }} />, { store });
   const photo = screen.getByRole('gridcell', { name: /^아메리카노, 메뉴 사진, 뜨거운 컵 그림/ });
   expect(photo.querySelector('[data-size="thumbnail"] svg')).toBeInTheDocument();
   expect(photo.querySelector('img')).toBeNull();
-  expect(screen.getAllByRole('gridcell', { name: /, 메뉴 사진, 사진 없음/ })).toHaveLength(18);
+  expect(screen.queryByRole('gridcell', { name: /, 메뉴 사진, 사진 없음/ })).not.toBeInTheDocument();
 });
 
-it('uses a fixed seed-sized menu name track', () => {
+it('keeps the seed-sized minimum while the menu name track fills spare table width', () => {
   renderWithKit(<MenuDetail {...common} detailRef={{ featureId: 'menu' }} />);
   const table = screen.getByRole('grid', { name: '메뉴 목록' });
-  expect(table.style.getPropertyValue('--data-grid-columns')).toMatch(/^264px /);
+  expect(table.style.getPropertyValue('--data-grid-columns')).toMatch(/^minmax\(264px, 1fr\) /);
 });
 
 it('validates, adds, replaces and removes a local photo from the detail panel', async () => {
@@ -358,7 +379,7 @@ it('shows the panel subtitle, margin summary, Korean units and no primary button
   const row = cafeMenus().find(menu => menu.menuId === 'm-cafe-latte')!;
   renderWithKit(<MenuDetail {...common} detailRef={{ featureId: 'menu', itemId: row.menuId }} />);
   const panel = within(screen.getByRole('region', { name: '카페라떼' }));
-  expect(panel.getByText(`음료 · ${row.price.toLocaleString('ko-KR')}원`)).toBeInTheDocument();
+  expect(panel.getByText(`커피 · ${row.price.toLocaleString('ko-KR')}원`)).toBeInTheDocument();
   expect(panel.getByText(`원가 ${row.cost!.toLocaleString('ko-KR')}원 · 마진 ${(row.price - row.cost!).toLocaleString('ko-KR')}원(${row.rate!.toFixed(1)}%)`)).toBeInTheDocument();
   const region = screen.getByRole('region', { name: '카페라떼' });
   expect(region.textContent).not.toMatch(/pcs|\d\.\d{4,}/);
@@ -383,8 +404,9 @@ it('hides columns one at a time beside the side panel in the DS order, keeping �
     if (expression) return { width: expression.includes('table-action-width') ? 72 : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} } as DOMRect;
     return rect.call(this);
   });
-  const dropped = () => document.querySelector('.menu-management > .ui-data-grid')?.getAttribute('data-dropped-columns') ?? '';
-  const headers = () => [...document.querySelectorAll('.menu-management > .ui-data-grid thead th')].map(th => th.textContent!.trim()).filter(Boolean);
+  const gridSelector = '.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid';
+  const dropped = () => document.querySelector(gridSelector)?.getAttribute('data-dropped-columns') ?? '';
+  const headers = () => [...document.querySelectorAll(`${gridSelector} thead th`)].map(th => th.textContent!.trim()).filter(Boolean);
   try {
     // no panel: nothing is hidden, however narrow
     widths.scroll = 400;

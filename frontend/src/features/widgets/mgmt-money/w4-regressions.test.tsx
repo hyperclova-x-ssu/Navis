@@ -37,7 +37,8 @@ it.each(['ko', 'en', 'zh-Hans', 'zh-Hant'] as const)('uses the specified ledger 
     const heading = screen.getByRole('heading', { name: text });
     expect(heading.closest('[lang]')).toHaveAttribute('lang', 'ko');
   }
-  expect(screen.getByText(locale === 'ko' ? '오늘 매출' : '총매출')).toHaveAttribute('lang', 'ko');
+  const salesLabel = { ko: '오늘 매출', en: "Today's sales", 'zh-Hans': '今日销售额', 'zh-Hant': '今日銷售額' }[locale];
+  expect(screen.getAllByText(salesLabel).some(node => node.closest('[data-slot="ledger.kpi.sales"]'))).toBe(true);
   expect(screen.getByText('총지출')).toHaveAttribute('lang', 'ko');
   unmount();
   const week = renderWithKit(<LedgerDetail featureId="ledger" condition={supportedConditions('ledger')[1]!} detailRef={{ featureId: 'ledger', view: 'expenses' }} host={host} />, { store, locale });

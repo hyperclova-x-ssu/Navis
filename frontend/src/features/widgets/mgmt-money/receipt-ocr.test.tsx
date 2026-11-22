@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest';
 import type { WidgetHost } from '../../../contracts';
 import { createWidgetDataStore, TODAY } from '../../../data/widget-data';
+import { addIsoDays } from '../../../ui';
 import { renderWithKit } from '../../../ui/test-utils';
 import { LedgerDetail } from './ledger';
 import { openReceipt } from './test-values';
@@ -77,6 +78,40 @@ it('leaves unreadable fields blank and marks them for review', async () => {
   expect(store.getSnapshot().tables.expense).toEqual(before);
 });
 
+it('preserves fields edited during a scan and marks them for review', async () => {
+  open();
+  const expense = screen.getByRole('form', { name: '지출 기록하기' });
+  const form = within(expense);
+  const memo = form.getByRole('textbox', { name: /메모/ });
+  const merchant = form.getByRole('textbox', { name: '거래처' });
+  let finish!: (response: Response) => void;
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { finish = resolve; })));
+  upload();
+  fireEvent.click(form.getByRole('button', { name: '이전 날짜' }));
+  fireEvent.change(amount(), { target: { value: '22500' } });
+  fireEvent.change(amount(), { target: { value: '' } });
+  fireEvent.change(memo, { target: { value: '직접 입력한 메모' } });
+  fireEvent.click(form.getByRole('radio', { name: '증빙 없음' }));
+  await act(async () => { finish(Response.json({ ...proposal, merchant: { value: '시험 거래처', needsReview: false } })); });
+
+  expect(expense).toHaveFormValues({ 'expense-date': addIsoDays(TODAY, -1) });
+  const date = form.getByRole('button', { name: /^날짜 / });
+  expect(date).toHaveAccessibleDescription('확인해 주세요');
+  expect(amount()).toHaveValue(null);
+  expect(amount()).toHaveAccessibleDescription('확인해 주세요');
+  expect(memo).toHaveValue('직접 입력한 메모');
+  expect(memo).toHaveAccessibleDescription('확인해 주세요');
+  expect(form.getByRole('radio', { name: '증빙 없음' })).toBeChecked();
+  expect(form.getByRole('group', { name: '증빙' })).toHaveAccessibleDescription('확인해 주세요');
+  expect(merchant).toHaveValue('시험 거래처');
+  expect(merchant).not.toHaveAccessibleDescription();
+
+  upload();
+  await act(async () => { finish(Response.json(proposal)); });
+  expect(amount()).toHaveValue(39_700);
+  expect(amount()).not.toHaveAccessibleDescription();
+});
+
 it('falls back to manual entry after unreadable media', async () => {
   const store = open();
   const before = store.getSnapshot().tables.expense.length;
@@ -104,4 +139,10 @@ it('aborts a closed scan and ignores its late result after reopening', async () 
   await act(async () => { finish(Response.json(proposal)); });
   expect(amount()).toHaveValue(null);
   expect(screen.queryByText('읽은 내용이에요. 확인하고 저장해 주세요')).not.toBeInTheDocument();
+});
+
+// T-52 (D-381/D-382, W05-F5): the entry says the original photo is not kept after it is read (WIDGET_FUNCTIONS: "원본 사진은 읽은 뒤 남지 않습니다").
+it('says before a photo is chosen that the original photo is not kept after reading', () => {
+  open();
+  expect(screen.getByText('원본 사진은 읽은 뒤 남지 않아요')).toBeInTheDocument();
 });

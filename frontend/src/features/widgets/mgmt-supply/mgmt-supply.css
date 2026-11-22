@@ -28,6 +28,7 @@
 .ms-warn .ui-icon { flex: none; width: var(--space-5); height: var(--space-5); margin-top: calc(var(--space-1) / 2); }
 .ms-aside, .ms-chart, .ms-list { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .ms-list__title { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.ms-aside > .ms-list + .ms-list { margin-top: var(--space-3); }
 .ms-rule { flex: none; width: 100%; margin: 0; border: 0; border-top: var(--stroke-hairline) solid var(--border); }
 
 .ms-rows { list-style: none; margin: 0; padding: 0; min-width: 0; }
@@ -133,6 +134,8 @@
 .ms-entry__chevron { align-self: center; color: var(--muted-foreground); }
 .ms-entry__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding-inline-start: var(--space-4); }
 .ms-entry__actions > .ms-caption { flex: 1 1 100%; }
+.ms-closure-delete { display: grid; flex-basis: 100%; gap: var(--space-2); }
+.ms-closure-delete__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .ms-tag { display: inline-block; padding: 0 var(--space-2); border-radius: var(--radius-sm); background: var(--secondary); color: var(--secondary-foreground); white-space: nowrap; }
 .ms-switches { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .ms-switch-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-height: var(--target-default); border-bottom: var(--stroke-hairline) solid var(--border); }
@@ -194,9 +197,9 @@
 .ui-data-grid__table[aria-labelledby="stock-grid-label"] [data-grid-column-id="delivery"]:active > .ui-data-grid__value { transform: none; }
 .ms-stock-order.ui-button { min-height: var(--target-min); }
 
-.ms-stock-expanded { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-6); }
+.ms-stock-expanded { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); }
 .ms-stock-expanded > section { min-width: 0; overflow-wrap: anywhere; }
-.ms-stock-history { overflow-y: auto; }
+.ms-stock-history { grid-column: 1 / -1; overflow-y: auto; }
 .ms-stock-history table { width: 100%; border-collapse: collapse; }
 .ms-stock-history td { padding: var(--space-2); border-bottom: var(--stroke-hairline) solid var(--border); }
 .ms-calendar-toolbar__primary > label { display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--target-min); }
@@ -208,12 +211,20 @@
 .ms-mini .ui-mini-table { table-layout: auto; }
 .ms-mini .ui-mini-table th { font-weight: var(--weight-bold); padding-inline: var(--space-2); }
 .ms-mini .ui-mini-table td { overflow-wrap: anywhere; }
+/* UI-SMALL-3: with the item column's `anywhere` wrapping the auto layout squeezed the date to "11/11(수" + ")"; a date never breaks. */
+.ms-mini--orders .ui-mini-table td:first-child { overflow-wrap: normal; white-space: nowrap; }
 .ms-rows[data-wide-rows] { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: var(--space-4); }
 .ms-panel[data-wide] .ms-aside .ms-rows { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: var(--space-4); }
 .ms-stock-history { max-height: calc(var(--target-primary) * 7.5); overscroll-behavior: contain; }
 [data-screen-preset="B"] .ms-stock-history { max-height: calc(var(--target-primary) * 10); }
 .ms-stock-history .ui-data-grid__scroll { max-height: none; overflow-y: visible; }
-.ms-stock-history .ui-data-grid__table { min-width: 0; }
+.ms-history-day .ui-data-grid__table .ui-data-grid__cell[data-first] { left: 0; background: var(--muted); }
+.ms-history-day .ui-data-grid__cell[data-first] > .ui-data-grid__value { min-width: 0; }
+.ms-history-day .ui-data-grid__cell[data-grid-column-id='description'] .ui-data-grid__value { white-space: normal; overflow-wrap: anywhere; }
+.ms-order-fields { display: flex; flex-wrap: wrap; align-items: start; gap: var(--space-4); }
+.ms-order-fields > .ui-field { flex: 1 1 var(--sidepanel-width); min-width: 0; }
+.ms-order-quantity { display: grid; grid-template-columns: auto minmax(0, calc(var(--target-default) * 3)) auto; align-items: start; gap: var(--space-2); }
+.ms-order-quantity > .ui-button { margin-block-start: calc(var(--space-6) + var(--space-2)); }
 .ms-history-day h5 { padding: var(--space-2); margin-block: var(--space-2); background: var(--muted); font-size: var(--type-caption); }
 .ms-history-day tr[data-grid-row^="opening:"], .ms-history-day tr[data-grid-row^="ending:"] { font-weight: var(--weight-bold); }
 .ms-history-day tr[data-grid-row^="ending:"] { border-top: var(--stroke-hairline) solid var(--input); }

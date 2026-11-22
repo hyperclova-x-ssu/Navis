@@ -39,7 +39,8 @@ it.each(['inventory-booking','suppliers'] as const)('%s의 16크기는 핵심값
     const {unmount}=renderWithKit(<SupplyPanel id={id} width={width} height={height}/>,{textScale:125,reducedMotion:true,store});
     expect(document.querySelector('.ui-metric-fit__value')).toHaveTextContent('3');
     expect(document.querySelector('.ui-metric-fit__unit')).toHaveTextContent(id==='suppliers'?'건':'개 품목');
-    if(width>=3&&height>=2){expect(screen.getByRole('table',{name:id==='suppliers'?'발주 내역':'원자재'}).querySelectorAll('tbody tr')).toHaveLength(5);}
+    // D-333: a card 3 rows high and up lists more than the 5 rows of the short cards (what the data has, up to 12); the short ones keep 5
+    if(width>=3&&height>=2){const rows=screen.getByRole('table',{name:id==='suppliers'?'발주 내역':'원자재'}).querySelectorAll('tbody tr');if(height>=3){expect(rows.length).toBeGreaterThan(5);expect(rows.length).toBeLessThanOrEqual(12);}else expect(rows).toHaveLength(5);}
     else expect(screen.queryByRole('table')).toBeNull();
     if(id==='inventory-booking'&&width===2&&height>=3)expect(document.querySelectorAll('.ms-rows [data-row-id]')).toHaveLength(6);
     unmount();
@@ -58,11 +59,12 @@ it.each(['inventory-booking','suppliers'] as const)('%s: 공간이 돌아오면 
     scrollHeight:{get:()=>100+[...table.querySelectorAll('tbody tr')].filter(r=>!(r as HTMLElement).hidden).length*64},
   });
   act(()=>measure());
-  expect([...table.querySelectorAll('th[hidden]')].map(c=>c.textContent)).toEqual(id==='suppliers'?['발주 일자','주문 수량']:['안전 재고','오늘 사용량']);
+  // the 4×3 card has the extra supplier column (D-333); it is dropped first, then the same two columns as before
+  expect([...table.querySelectorAll('th[hidden]')].map(c=>c.textContent)).toEqual(id==='suppliers'?['발주 일자','발주사','주문 수량']:['안전 재고','오늘 사용량']);
   expect(table.querySelectorAll('tbody tr[hidden]').length).toBeGreaterThan(0);
   width=1200;height=900;act(()=>measure());
   expect(table.querySelectorAll('[hidden]')).toHaveLength(0);
-  expect(table.querySelectorAll('tbody tr')).toHaveLength(5);
+  expect(table.querySelectorAll('tbody tr').length).toBeGreaterThan(5);
 });
 
 it('캘린더 16크기의 오늘·주간 핵심값과 날짜는 크기에 맞게 전환된다',()=>{
@@ -224,13 +226,18 @@ it.each(['ko','en'] as const)('발주 예정 없음 %s: 편집 1×1의 확인 �
   expect(container.querySelector('.ms-sup-state-note')).toHaveTextContent(locale==='ko'?'입고 확인 필요 1건':'1 delivery to check');
 });
 
-it.each(['원자재','판매 상품'])('%s 상세는 위쪽 내용을 보존하고 표의 최소 높이를 본문 스크롤에 전달한다',tab=>{
+it.each(['재료','판매 상품'])('%s 상세는 위쪽 내용을 보존하고 표의 최소 높이를 본문 스크롤에 전달한다',tab=>{
   const {container}=renderWithKit(<><style>{supplyCss}</style><DetailStack root={{featureId:'inventory-booking'}} /></>);
   fireEvent.click(screen.getByRole('tab',{name:tab}));
   const root=container.querySelector<HTMLElement>('.ms-detail.ms-inv')!;
   const panel=screen.getByRole('tabpanel');
+  if (tab === '판매 상품') {
+    expect(within(panel).getByText('아직 등록한 판매 상품이 없어요')).toBeVisible();
+    expect(within(panel).queryByRole('grid')).not.toBeInTheDocument();
+    return;
+  }
   const grid=within(panel).getByRole('grid',{name:tab}).closest<HTMLElement>('.ui-data-grid')!;
-  const above=tab==='원자재'?panel.querySelector<HTMLElement>(':scope > p')!:panel.querySelector<HTMLElement>('.ms-products__summary')!;
+  const above=panel.querySelector<HTMLElement>(':scope > p')!;
   expect(getComputedStyle(root).height).toBe('100%');
   expect(getComputedStyle(root).minHeight).toBe('0');
   expect(getComputedStyle(above).flexShrink).toBe('0');

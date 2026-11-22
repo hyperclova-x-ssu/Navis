@@ -3,6 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createWidgetDataStore, TODAY } from '../../../data/widget-data';
+import { addDays, NOW_TIME } from '../../../data/db/time';
 import { renderWithKit } from '../../../ui/test-utils';
 import { StaffDetail } from './widget';
 import type { WidgetDetailProps } from '../../../contracts';
@@ -27,12 +28,37 @@ const fill = (start: string, end: string) => {
 };
 
 describe('GD-2 staff editor overlap guard', () => {
+  it.each([
+    ['ko', '지난 근무'],
+    ['en', 'Past shift'],
+    ['zh-Hans', '已结束的班次'],
+    ['zh-Hant', '已結束的班次'],
+  ] as const)('marks completed work shifts in %s and leaves current work and days off alone', (locale, warning) => {
+    const seed = createWidgetDataStore(), { first, shift } = firstWorker(seed);
+    const base = { ...shift, staffId: first.staffId };
+    const store = createWidgetDataStore({ staffSchedule: [
+      { ...base, scheduleId: 'past', date: addDays(TODAY, -1) },
+      { ...base, scheduleId: 'ended', end: NOW_TIME },
+      { ...base, scheduleId: 'working', start: NOW_TIME, end: '23:00' },
+      { ...base, scheduleId: 'off', date: addDays(TODAY, -1), kind: 'off', start: null, end: null, breakMinutes: 0 },
+    ] });
+    const { container } = renderWithKit(<StaffDetail {...props} />, { store, locale });
+    const cell = (id: string) => container.querySelector(`.staff-grid [data-schedule-id="${id}"]`);
+    expect(cell('past')).toHaveTextContent(warning);
+    expect(cell('ended')).toHaveAccessibleDescription(warning);
+    expect(cell('working')).not.toHaveTextContent(warning);
+    expect(cell('off')).not.toHaveTextContent(warning);
+  });
+
   it('shows the overlap message at the time fields, lists the clashing row and saves nothing', () => {
     const store = createWidgetDataStore(), before = store.getSnapshot(), { shift } = firstWorker(store);
-    renderWithKit(<StaffDetail {...props} />, { store });
+    const supersedeSuccessNotice = vi.fn();
+    renderWithKit(<StaffDetail {...props} host={{ ...props.host, supersedeSuccessNotice }} />, { store });
     fireEvent.click(screen.getByRole('button', { name: '근무 추가하기' }));
+    expect(supersedeSuccessNotice).not.toHaveBeenCalled();
     fill(shift.start!, shift.end!);
     fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+    expect(supersedeSuccessNotice).toHaveBeenCalledOnce();
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent(OVERLAP);
     expect(screen.getByLabelText('퇴근 시각')).toHaveAttribute('aria-invalid', 'true');

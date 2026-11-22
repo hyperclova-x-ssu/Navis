@@ -110,4 +110,32 @@ describe('createWidgetHost against a real RunStore', () => {
     expect(run.getState().overlay).toMatchObject({ type: 'closing', returnFocusKey: 'briefing:closing' });
     expect(run.getState().layer).toBe('marketing');
   });
+  it('retires only its own superseded success notice', () => {
+    const staff = createWidgetHost(run, { featureId: 'staff-schedule', layer: 'management' });
+    const calendar = createWidgetHost(run, { featureId: 'calendar', layer: 'management' });
+    calendar.notify({ kind: 'success', messageKey: 'data.notice.calendarAdded' });
+    const other = selectCommonNotice(run.getState());
+    staff.supersedeSuccessNotice?.();
+    expect(selectCommonNotice(run.getState())).toBe(other);
+
+    staff.notify({ kind: 'error', messageKey: 'data.staff.error.STAFF_SHIFT_OVERLAP' });
+    const error = selectCommonNotice(run.getState());
+    staff.supersedeSuccessNotice?.();
+    expect(selectCommonNotice(run.getState())).toBe(error);
+
+    staff.notify({ kind: 'success', messageKey: 'data.staff.notice.scheduleSaved' });
+    staff.supersedeSuccessNotice?.();
+    expect(selectCommonNotice(run.getState())).toBeNull();
+  });
+  it('keeps the original undo token and deadline when retiring the success text', () => {
+    const host = createWidgetHost(run, { featureId: 'staff-schedule', layer: 'management' });
+    host.notify({ kind: 'success', messageKey: 'data.staff.notice.scheduleSaved', undoToken: 'staff-change',
+      undoUntil: new Date(Date.now() + 1_500).toISOString() });
+    const before = selectCommonNotice(run.getState())!;
+    host.supersedeSuccessNotice?.();
+    expect(selectCommonNotice(run.getState())).toMatchObject({
+      id: before.id, kind: 'complete', messageKey: 'data.real.receipt.previousChange',
+      expiresAt: before.expiresAt, remainingMs: before.remainingMs, undo: { target: 'data', token: 'staff-change' },
+    });
+  });
 });

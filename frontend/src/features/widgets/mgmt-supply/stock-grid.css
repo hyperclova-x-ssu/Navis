@@ -1,0 +1,22 @@
+.ms-supplier-message-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ms-inv .ui-data-grid:has(> #stock-grid-label) > .ui-data-grid__toolbar .ui-search-field__control > .ui-input {
+  align-self: center;
+  min-block-size: var(--target-primary);
+}
+
+.ms-order-due-date {
+  position: relative;
+}
+
+.ms-order-due-date::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 50%;
+  inline-size: max(100%, var(--target-primary));
+  transform: translateX(-50%);
+  content: '';
+}

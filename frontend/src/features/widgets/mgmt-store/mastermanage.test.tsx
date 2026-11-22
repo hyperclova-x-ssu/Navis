@@ -16,6 +16,10 @@ it('creates and deletes a store information document with undo', async () => {
  expect(store.getSnapshot().tables.manual.some(m => 'raw' in m.title && m.title.raw === '배달 포장 규칙')).toBe(true);
  await userEvent.click(screen.getByRole('button', { name: /배달 포장 규칙/ }));
  await userEvent.click(screen.getByRole('button', { name: '문서 지우기' }));
+ expect(store.getSnapshot().tables.manual.some(m => 'raw' in m.title && m.title.raw === '배달 포장 규칙')).toBe(true);
+ const confirmation = screen.getByRole('alertdialog');
+ await userEvent.click(within(confirmation).getByRole('button', { name: '문서 지우기' }));
+ expect(store.getSnapshot().tables.manual.some(m => 'raw' in m.title && m.title.raw === '배달 포장 규칙')).toBe(false);
  const token = notify.mock.calls.at(-1)?.[0].undoToken;
  expect(token).toBeTruthy();
  expect(store.undo(token!).ok).toBe(true);

@@ -17,7 +17,7 @@ import { createWidgetDataStore, selectReservations, TODAY } from '../../../data/
 
 const host = { layer: 'management' as const, resetPreview: vi.fn(), openLinked: vi.fn(), openDetail: vi.fn(), notify: vi.fn(), acknowledgeBriefing: vi.fn(), openClosing: vi.fn(() => true) };
 const style = document.createElement('style');
-style.textContent = ['src/ui/tokens.css', 'src/ui/mastermanage.css', 'src/features/widgets/mgmt-customers/widgets.css']
+style.textContent = ['src/ui/tokens.css', 'src/ui/mastermanage.css', 'src/features/widgets/mgmt-customers/widgets.css', 'src/features/widgets/mgmt-products/pos-menu.css']
  .map(file => readFileSync(file, 'utf8')).join('\n');
 document.head.append(style);
 afterEach(cleanup);
@@ -65,6 +65,9 @@ it.each([
  render(<KitProviders locale={locale}>
   <VoiceBookingDetail featureId="voice-booking" condition={{ kind: 'default' }} host={host} detailRef={{ featureId: 'voice-booking' }} />
  </KitProviders>);
+ const disclosure = screen.getByText(caption, { selector: 'summary' }).parentElement!;
+ expect(disclosure).not.toHaveAttribute('open');
+ disclosure.setAttribute('open', '');
  const table = screen.getByRole('table', { name: caption });
  const headers = within(table).getAllByRole('columnheader');
  expect(headers.map(header => header.textContent)).toEqual(labels);
@@ -96,10 +99,13 @@ it.each([100, 125] as const)('예약 상세는 %i 퍼센트에서 창 본문을 
  expect(getComputedStyle(root).flexDirection).toBe('column');
  const grid = within(dialog).getByRole('grid', { name: '예약 목록' });
  const gridRoot = grid.closest('.ui-data-grid')!;
- expect(gridRoot.parentElement).toBe(root);
+ const content = gridRoot.parentElement!;
+ expect(content).toHaveClass('mc-booking-content');
+ expect(content.parentElement).toBe(root);
+ expect(getComputedStyle(content).overflowY).toBe('auto');
  expect(getComputedStyle(gridRoot).flexGrow).toBe('1');
- expect(getComputedStyle(gridRoot).minHeight).toBe('0');
- const fixed = Array.from(root.children).filter(child => !child.matches('.ui-data-grid, .ui-detail-side-panel'));
+ expect(getComputedStyle(gridRoot).minBlockSize).toBe('var(--booking-table-min)');
+ const fixed = Array.from(content.children).filter(child => !child.matches('.ui-data-grid'));
  expect(fixed.length).toBeGreaterThanOrEqual(3);
  expect(fixed.map(section => getComputedStyle(section).flexShrink)).toEqual(fixed.map(() => '0'));
  const context = root.querySelector('.mc-booking-toolbar')!;
@@ -118,6 +124,7 @@ it.each([100, 125] as const)('예약 상세는 %i 퍼센트에서 창 본문을 
  expect(dialog.querySelector('.mc-kpis')).toBeNull();
 
  // the time table is the kit Table: header 48 (var), sticky, rows at the table row minimum, numbers right aligned
+ within(dialog).getByText('시간대별 예약', { selector: 'summary' }).parentElement!.setAttribute('open', '');
  const timeTable = within(dialog).getByRole('table', { name: '시간대별 예약' });
  expect(timeTable).toHaveClass('ui-table');
  const headers = within(timeTable).getAllByRole('columnheader');

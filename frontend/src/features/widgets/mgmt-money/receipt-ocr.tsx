@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import type { Locale } from '../../../contracts';
 import { ActionButton, Icon, StatusBadge } from '../../../ui';
 import { postMedia } from '../../assistant/media/media-request';
@@ -17,14 +17,14 @@ interface ReceiptProposal {
     readonly amountWon: Recognized<number>;
   }[];
 }
-export type ReceiptField = 'merchant' | 'date' | 'amount' | 'memo';
+export type ReceiptField = 'merchant' | 'date' | 'amount' | 'memo' | 'evidence';
 const MAX_PHOTO_BYTES = 5_000_000;
 
 const receiptCopy = {
-  ko: { scan: '영수증 찍기', pick: '사진 고르기', reading: '영수증을 읽고 있어요', proposal: '읽은 내용이에요. 확인하고 저장해 주세요', review: '확인해 주세요', error: '영수증을 읽지 못했어요. 직접 입력해 주세요', retry: '다시 시도하기', retake: '다시 찍기' },
-  en: { scan: 'Scan receipt', pick: 'Choose a photo', reading: 'Reading the receipt', proposal: 'Please check and save', review: 'Please check', error: "Couldn't read it. Enter it yourself", retry: 'Try again', retake: 'Scan again' },
-  'zh-Hans': { scan: '拍收据', pick: '选择照片', reading: '正在识别收据', proposal: '请核对后保存', review: '请核对', error: '无法识别，请手动输入', retry: '重试', retake: '重新拍摄' },
-  'zh-Hant': { scan: '拍收據', pick: '選擇照片', reading: '正在辨識收據', proposal: '請核對後儲存', review: '請核對', error: '無法辨識，請手動輸入', retry: '重試', retake: '重新拍攝' },
+  ko: { scan: '영수증 찍기', pick: '사진 고르기', reading: '영수증을 읽고 있어요', proposal: '읽은 내용이에요. 확인하고 저장해 주세요', review: '확인해 주세요', error: '영수증을 읽지 못했어요. 직접 입력해 주세요', retry: '다시 시도하기', retake: '다시 찍기', kept: '원본 사진은 읽은 뒤 남지 않아요' },
+  en: { scan: 'Scan receipt', pick: 'Choose a photo', reading: 'Reading the receipt', proposal: 'Please check and save', review: 'Please check', error: "Couldn't read it. Enter it yourself", retry: 'Try again', retake: 'Scan again', kept: 'The original photo is not kept after it is read' },
+  'zh-Hans': { scan: '拍收据', pick: '选择照片', reading: '正在识别收据', proposal: '请核对后保存', review: '请核对', error: '无法识别，请手动输入', retry: '重试', retake: '重新拍摄', kept: '原始照片读取后不会保留' },
+  'zh-Hant': { scan: '拍收據', pick: '選擇照片', reading: '正在辨識收據', proposal: '請核對後儲存', review: '請核對', error: '無法辨識，請手動輸入', retry: '重試', retake: '重新拍攝', kept: '原始照片讀取後不會保留' },
 } satisfies Record<Locale, Record<string, string>>;
 
 function needsReview(field: Recognized<unknown>) {
@@ -47,19 +47,23 @@ function receiptFormValues(proposal: ReceiptProposal, t: T) {
       amount: needsReview(proposal.totalWon),
       merchant: needsReview(proposal.merchant),
       memo: !items || proposal.items.some(item => needsReview(item.name) || needsReview(item.quantity) || needsReview(item.amountWon)),
+      evidence: false,
     } satisfies Record<ReceiptField, boolean>,
   };
 }
 
-export function ReceiptReviewField({ review, locale, children }: { review?: boolean; locale: Locale; children: (hint?: string) => ReactNode }) {
+export function ReceiptReviewField({ review, locale, groupLabel, children }: { review?: boolean; locale: Locale; groupLabel?: string; children: (hint?: string) => ReactNode }) {
   const hint = review ? receiptCopy[locale].review : undefined;
-  return <div className="receipt-ocr-field" data-review={review || undefined}>
+  const hintId = useId();
+  const group = hint ? groupLabel : undefined;
+  return <div className="receipt-ocr-field" data-review={review && !group || undefined}
+    role={group ? 'group' : undefined} aria-label={group} aria-describedby={group ? hintId : undefined}>
     {children(hint)}
-    {hint && <span className="receipt-ocr-field__badge" aria-hidden="true"><StatusBadge kind="needsReview" label={hint} /></span>}
+    {hint && <span className="receipt-ocr-field__badge" id={group ? hintId : undefined} aria-hidden={group ? undefined : true}><StatusBadge kind="needsReview" label={hint} /></span>}
   </div>;
 }
 
-export function ReceiptScanEntry({ t, onRecognized }: { t: T; onRecognized: (values: ReturnType<typeof receiptFormValues>) => void }) {
+export function ReceiptScanEntry({ t, onScanStart, onRecognized }: { t: T; onScanStart: () => void; onRecognized: (values: ReturnType<typeof receiptFormValues>) => void }) {
   const words = receiptCopy[t.locale];
   const [status, setStatus] = useState<'idle' | 'reading' | 'proposal' | 'error'>('idle');
   const request = useRef<AbortController | null>(null);
@@ -78,6 +82,7 @@ export function ReceiptScanEntry({ t, onRecognized }: { t: T; onRecognized: (val
     }
     const controller = new AbortController();
     request.current = controller;
+    onScanStart();
     setStatus('reading');
     try {
       const proposal = await postMedia<ReceiptProposal>('receipt-ocr', photo, controller.signal);
@@ -98,6 +103,7 @@ export function ReceiptScanEntry({ t, onRecognized }: { t: T; onRecognized: (val
       </ActionButton>
       <ActionButton variant="secondary" className="receipt-ocr__picker" onClick={() => picker.current?.click()} disabled={status === 'reading'}>{words.pick}</ActionButton>
     </div> : null}
+    {status === 'idle' || status === 'reading' ? <p className="receipt-ocr__note">{words.kept}</p> : null}
     <input ref={camera} type="file" accept="image/jpeg,image/png" capture="environment" hidden onChange={event => void scan(event)} />
     <input ref={picker} type="file" accept="image/jpeg,image/png" hidden onChange={event => void scan(event)} />
     {status === 'reading' && <p className="receipt-ocr__band" role="status">{words.reading}</p>}

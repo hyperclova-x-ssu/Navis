@@ -4,6 +4,7 @@ import type { SettlementTarget } from '../../../data/iteration7/accounting/types
 
 /** Presentation boundary: composition maps the API-276/277 selectors into these values. */
 export interface OriginalMoneyTransaction {
+  readonly fundingId?: string;
   readonly txnId?: string;
   readonly settlementId?: string | null;
   readonly originalTxnId?: string | null;
@@ -59,9 +60,9 @@ export interface MemberPass {
   readonly startsOn: string;
   readonly endsOn: string;
   readonly usesRemaining: number | null;
-  readonly recognizedValue: number;
-  readonly unrecognizedValue: number;
-  readonly refundedValue: number;
+  readonly recognizedValue: number | null;
+  readonly unrecognizedValue: number | null;
+  readonly refundedValue: number | null;
   readonly status: 'active' | 'expired' | 'refunded' | 'exhausted' | 'canceled';
   readonly saleSettlementId?: string | null;
   readonly uses: readonly { readonly useId: string; readonly usedAt: string; readonly canceledAt?: string | null; readonly settlementId?: string | null; readonly sourceRef?: { readonly kind: string; readonly id: string } }[];
@@ -81,6 +82,7 @@ export interface CreditPort {
   readonly openMembershipUse: (memberId: string, membershipId: string, context: MemberReturnContext) => void;
 }
 export interface CreditBinding {
+  readonly today?: string;
   readonly view: CreditView;
   readonly port: CreditPort;
   readonly products: readonly PassProduct[];

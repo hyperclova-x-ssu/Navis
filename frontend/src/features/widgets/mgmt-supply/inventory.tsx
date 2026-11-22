@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- widget registry consumes the module descriptor. */
 import { SupplyDetailSession } from './detail-session';
 /**
  * 재고관리 (F-36, SCR-30·31·32, D-54 merged with stock-sync): ingredients to restock first, products for sale
@@ -5,15 +6,15 @@ import { SupplyDetailSession } from './detail-session';
  * apart (‘당일 소진 · 오늘까지’) and never counts in restock or in the 248 products (SCREENS 8.13).
  * The nearest delivery opens the supplier order (‘출처 열기’ → suppliers `view:'order'`).
  */
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { ProductGrid, StockGrid, NewItem, useStockText } from './stock-grid';
 import type { WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../../contracts';
-import { useWidgetView } from '../../../data/react';
+import { useDomainState, useRealRetry, useWidgetDataStore, useWidgetView } from '../../../data/react';
 import type { IngredientRow, InventoryModel } from '../../../data/widget-data';
-import { ActionButton, DetailTabs, Icon, InlineForm, MetricFit, PanelState, SplitBar, StatusBadge, StatusChip, TextField } from '../../../ui';
-import { Flash, notifySample, relativeDay, stateTone, SupplyPanelState, useFit, useSupplyText, SupplySurface, useTextScale, useViewMemory, WarnLine, type SupplyText } from './shared';
+import { ActionButton, DetailTabs, Icon, MetricFit, PanelState, Spinner, SplitBar, StatusBadge, StatusChip } from '../../../ui';
+import { Flash, relativeDay, stateTone, SupplyPanelState, useFit, useSupplyText, SupplySurface, useTextScale, useViewMemory, WarnLine, type SupplyText } from './shared';
 
-import { orderedStock, StockMiniTable } from './mini-tables';
+import { orderedStock, StockMiniTable, TALL_MINI_ROWS } from './mini-tables';
 import { inventoryDetailEntry } from '../../assistant/domains/inventory';
 
 const ID = 'inventory-booking' as const;
@@ -23,8 +24,16 @@ const qty = (x: SupplyText, value: number | null, unit: IngredientRow['unit']) =
 /** ‘확인된 품목 중 보충 필요 0개’: values are missing and nothing confirmed needs restocking (DS 11.5). */
 const partialZero = (m: InventoryModel) => m.reviewCount > 0 && m.restockCount === 0;
 
+function useInventoryView(condition: WidgetPanelProps['condition']) {
+  const view = useWidgetView(ID, condition);
+  const state = useDomainState('stock');
+  const retry = useRealRetry('stock');
+  const http = state.mode === 'http';
+  return { view, http, retry, loading: http && (state.status === 'idle' || state.status === 'loading') };
+}
 
-export function deliveryText(x: SupplyText, row: IngredientRow): string | null {
+
+function deliveryText(x: SupplyText, row: IngredientRow): string | null {
   const d = row.nextDelivery;
   if (!d) return null;
   return x.t('widget.inventory-booking.nextDelivery', { when: relativeDay(x, d.date), qty: x.format.quantity(d.remaining.value, d.remaining.unit), supplier: x.tk(d.supplierNameKey) });
@@ -58,19 +67,21 @@ function IngredientLine({ x, row, index, area, drop, status=false }: { x: Supply
   </li>;
 }
 
-function ProductsLine({ x, m, area, drop }: { x: SupplyText; m: InventoryModel; area?: string; drop: number }) {
+function ProductsLine({ x, m, area, drop, complete }: { x: SupplyText; m: InventoryModel; area?: string; drop: number; complete: boolean }) {
   const p = m.products;
   return <li className="ms-row" data-drop={drop} data-row-id="products" data-slot={`${ID}.list.row`}>
     {area ? <span className="ms-row__area" data-drop={960}>{area}</span> : <span className="ms-row__name">{x.t('common.inventoryTab.products')}</span>}
     {p.items.length === 0 ? <span className="ms-row__name">{x.t('data.state.inventory-booking.no-products')}</span>
+      : !complete ? <span className="ms-row__name">{x.tk('data.real.partial')}</span>
       : <span className="ms-row__value"><Flash value={p.total}>{x.format.count(p.total, 'pcs')}</Flash><span className="ms-row__caption">{x.t('widget.inventory-booking.channelLine', { store: x.format.number(p.byChannel.store), online: x.format.number(p.byChannel.online) })}</span></span>}
   </li>;
 }
 
-function ProductsSplit({ x, m, drop=950 }: { x: SupplyText; m: InventoryModel;drop?:number }) {
+function ProductsSplit({ x, m, drop=950, complete }: { x: SupplyText; m: InventoryModel; drop?: number; complete: boolean }) {
   const p = m.products;
   // SCR-32: the products area gives way before the ingredients (the 1×1 number is always ingredients).
   if (p.items.length === 0) return <p className="ms-caption" data-drop={950}>{x.t('data.state.inventory-booking.no-products')}</p>;
+  if (!complete) return <p className="ms-caption" data-drop={drop}>{x.tk('data.real.partial')}</p>;
   return <div className="ms-split" data-drop={drop}>
     <p className="ms-split__total">{x.t('widget.inventory-booking.productsTotal')} <Flash value={p.total}><strong>{x.format.count(p.total, 'pcs')}</strong></Flash></p>
     <SplitBar a={{ label: x.t('widget.inventory-booking.channel.store'), value: p.byChannel.store, display: x.format.count(p.byChannel.store, 'pcs') }} b={{ label: x.t('widget.inventory-booking.channel.online'), value: p.byChannel.online, display: x.format.count(p.byChannel.online, 'pcs') }} />
@@ -78,41 +89,53 @@ function ProductsSplit({ x, m, drop=950 }: { x: SupplyText; m: InventoryModel;dr
 }
 
 function InventoryPanelContent({ condition, width, height, shape, editing, host }: WidgetPanelProps) {
-  const view = useWidgetView(ID, condition);
+  const { view, http, loading, retry } = useInventoryView(condition);
   const x = useSupplyText();
   const scale = useTextScale();
+  const dataStore = useWidgetDataStore();
+  const snapshot = useSyncExternalStore(dataStore.subscribe, dataStore.getSnapshot, dataStore.getSnapshot);
   const { ref, hiddenRows } = useFit<HTMLDivElement>([view, width, height, scale, x.locale, editing]);
-  if (view.status !== 'ready') {
-    const action = view.status === 'error' ? { label: x.t('common.retry'), run: () => host.resetPreview() }
-      : view.actionKey ? { label: x.tk(view.actionKey), run: () => { host.resetPreview(); host.openDetail({ featureId: ID, view: 'register', focus: 'action' }); } } : null;
-    return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID} data-state={view.status}><SupplyPanelState featureId={ID} tone={stateTone(view.status)} shape={shape} message={x.tk(view.messageKey)} actionLabel={action?.label} onAction={action?.run} /></div>;
+  if (loading) return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID}><span role="status"><Spinner /> {x.tk('data.real.loading')}</span></div>;
+  const empty = view.status === 'ready' && http && !view.model.ingredients.length && !view.model.products.items.length;
+  if (view.status !== 'ready' || empty) {
+    const registration = empty ? 'data.action.registerItem' : view.status === 'empty' ? view.actionKey : undefined;
+    const action = view.status === 'error' ? { label: x.t('common.retry'), run: http ? retry : () => host.resetPreview() }
+      : registration ? { label: x.tk(registration), run: () => { if (!http) host.resetPreview(); host.openDetail({ featureId: ID, view: 'register', focus: 'action' }); } } : null;
+    const message = view.status === 'ready' ? 'data.state.inventory-booking.no-items' : view.status === 'error' && http ? 'data.state.inventory-booking.error' : view.messageKey;
+    const status = view.status === 'error' ? 'error' : 'empty';
+    return <div ref={ref} className="ms-panel" data-shape={shape} data-widget={ID} data-state={status}><SupplyPanelState featureId={ID} tone={stateTone(status)} shape={shape} message={x.tk(message)} actionLabel={action?.label} onAction={action?.run} /></div>;
   }
   const m = view.model;
+  const productIds = new Set(m.products.items.map(item => item.itemId));
+  const productsComplete = !http || !snapshot.tables.inventoryStock.some(row => productIds.has(row.itemId) && row.qty === null);
   const key = <InventoryKey x={x} m={m} editing={editing} shape={shape} />;
   const more = <li className="ms-row ms-row--more" data-more="" hidden>{x.t('common.moreItems', { n: hiddenRows })}</li>;
   const rows = orderedStock(m,x).filter(r=>r.trackRestock);
-  if (shape === 'Q') return <div ref={ref} className="ms-panel" data-shape="Q" data-widget={ID}>{key}</div>;
+  const sourceNote = http && view.notes?.[0] ? <p className="ms-caption" data-drop={950}>{x.tk(view.notes[0].messageKey)}</p> : null;
+  if (shape === 'Q') return <div ref={ref} className="ms-panel" data-shape="Q" data-widget={ID}>{key}{sourceNote}</div>;
   if (shape === 'W') return <div ref={ref} className="ms-panel" data-shape="W" data-widget={ID}>{key}<div className="ms-aside"><ul className="ms-rows" data-wide-rows={width>=3||undefined}>
     {rows.slice(0,width>=3?3:1).map((r,i)=><IngredientLine key={r.itemId} x={x} row={r} index={i} area={width===2&&i===0?x.t('common.inventoryTab.ingredients'):undefined}/>)}
-    <ProductsLine x={x} m={m} drop={950}/>{more}
+    <ProductsLine x={x} m={m} drop={950} complete={productsComplete}/>{more}
   </ul></div></div>;
   if (shape === 'T') return <div ref={ref} className="ms-panel" data-shape="T" data-widget={ID}>{key}<hr className="ms-rule"/><ul className="ms-rows">
     {rows.slice(0,height>=3?4:3).map((r,i)=><IngredientLine key={r.itemId} x={x} row={r} index={i}/>)}
-    {height>=3?<ProductsLine x={x} m={m} drop={950}/>:null}{more}
+    {height>=3?<ProductsLine x={x} m={m} drop={950} complete={productsComplete}/>:null}{more}
   </ul></div>;
   const delivery=rows.map(r=>deliveryText(x,r)).find(Boolean);
-  const split=<ProductsSplit x={x} m={m} drop={width>=3?400:950}/>;
-  if(width>=3)return <div ref={ref} className="ms-panel" data-shape={shape} data-mini="true" data-widget={ID}>{key}<StockMiniTable model={m}/>{more}{split}</div>;
+  const split=<ProductsSplit x={x} m={m} drop={width>=3?400:950} complete={productsComplete}/>;
+  // D-333: at 3 rows high and up the card has room for more of the real data: every stock row the fit allows and the nearest delivery line (the reverse of the SCR-212 drop order).
+  if(width>=3)return <div ref={ref} className="ms-panel" data-shape={shape} data-mini="true" data-widget={ID}>{key}<StockMiniTable model={m} limit={height>=3?TALL_MINI_ROWS:undefined}/>{more}{height>=3&&delivery?<p className="ms-caption" data-drop={920}>{delivery}</p>:null}{split}</div>;
   return <div ref={ref} className="ms-panel" data-shape={shape} data-mini="false" data-widget={ID}>{key}<ul className="ms-rows">
     {(shape==='S'?rows.slice(0,3):orderedStock(m,x).slice(0,6)).map((r,i)=><IngredientLine key={r.itemId} x={x} row={r} index={i} status/>)}{more}
   </ul>{delivery?<p className="ms-caption" data-drop={920}>{delivery}</p>:null}{split}</div>;
 }
 
 function useInventorySummary({ condition }: { condition: WidgetPanelProps['condition'] }): string {
-  const view = useWidgetView(ID, condition);
+  const { view, http } = useInventoryView(condition);
   const x = useSupplyText();
   if (view.status !== 'ready') return x.tk(view.messageKey);
   const m = view.model;
+  if (http && !m.ingredients.length && !m.products.items.length) return x.tk('data.state.inventory-booking.no-items');
   if (partialZero(m)) return x.t('widget.inventory-booking.partialZero');
   const summary = x.t('widget.inventory-booking.summary', { count: m.restockCount });
   return m.outOfStockCount > 0 ? x.t('widget.inventory-booking.summaryOut', { summary, out: m.outOfStockCount }) : summary;
@@ -120,30 +143,20 @@ function useInventorySummary({ condition }: { condition: WidgetPanelProps['condi
 
 /* ───────── Detail ───────── */
 
-function RegisterForm({ kind, onClose, host }: { kind: 'item' | 'product'; onClose: () => void; host: WidgetDetailProps['host'] }) {
-  const x = useSupplyText();
-  const [name, setName] = useState('');
-  const [error, setError] = useState<string | undefined>();
-  return <InlineForm title={kind === 'item' ? x.t('widget.inventory-booking.registerItem') : x.t('widget.inventory-booking.registerProduct')} onClose={onClose} saveLabel={x.t('common.saveAction')} closeLabel={x.t('common.close')}
-    onSave={() => { if (!name.trim()) { setError(x.t('data.error.titleRequired')); return; } notifySample(host, x.t(kind === 'item' ? 'widget.inventory-booking.registered' : 'widget.inventory-booking.registeredProduct')); onClose(); }}>
-    <TextField label={kind === 'item' ? x.t('widget.inventory-booking.form.itemName') : x.t('widget.inventory-booking.form.productName')} value={name} onValueChange={(v) => { setName(v); setError(undefined); }} error={error} name="register-name" />
-    <p className="ms-caption">{x.t('widget.inventory-booking.sampleNote')}</p>
-  </InlineForm>;
-}
-
 function InventoryDetailContent({ condition, detailRef, host }: WidgetDetailProps) {
-  const view = useWidgetView(ID, condition);
+  const { view, http, loading, retry } = useInventoryView(condition);
   const x = useSupplyText();
   const {t}=useStockText();
   const entry = inventoryDetailEntry(detailRef, view.status === 'ready' ? view.model : undefined);
   const [tab, setTab] = useViewMemory<Tab>('inventory.tab', () => entry.tab);
   const [register, setRegister] = useState(entry.register);
+  if (loading) return <div className="ms-detail ms-inv" data-widget={ID}><span role="status"><Spinner /> {x.tk('data.real.loading')}</span></div>;
   if (view.status !== 'ready') {
     const isError = view.status === 'error';
     return <div className="ms-detail ms-inv" data-widget={ID}>
       <div className="ms-detail-state" data-tone={stateTone(view.status)} data-slot={`${ID}.state.message`}>
-        <Icon name={isError ? 'error' : 'info'} /><p role={isError ? 'alert' : undefined}>{x.tk(view.messageKey)}</p>
-        {isError ? <ActionButton variant="outline" onClick={() => host.resetPreview()}>{x.t('common.retry')}</ActionButton>
+        <Icon name={isError ? 'error' : 'info'} /><p role={isError ? 'alert' : undefined}>{x.tk(isError && http ? 'data.state.inventory-booking.error' : view.messageKey)}</p>
+        {isError ? <ActionButton variant="outline" onClick={http ? retry : () => host.resetPreview()}>{x.t('common.retry')}</ActionButton>
           : view.actionKey && !register ? <ActionButton variant="secondary" onClick={() => {host.resetPreview(); setRegister(true);}}>{x.tk(view.actionKey)}</ActionButton>
           : !view.actionKey ? <ActionButton variant="secondary" onClick={() => host.resetPreview()}>{t('supply.stock.recheck')}</ActionButton> : null}
       </div>
@@ -152,9 +165,10 @@ function InventoryDetailContent({ condition, detailRef, host }: WidgetDetailProp
   }
   const m = view.model;
   return <div className="ms-detail ms-inv" data-widget={ID}>
+    {http && view.notes?.length ? <div role="status">{view.notes.map(note => <p key={note.messageKey}>{x.tk(note.messageKey)}</p>)}<ActionButton variant="secondary" onClick={retry}>{x.t('common.retry')}</ActionButton></div> : null}
     <DetailTabs label={x.tk('widget.inventory-booking.title')} value={tab} onValueChange={setTab}
       tabs={[{ value: 'ingredients', label: t('supply.stock.grid') }, { value: 'products', label: x.t('common.inventoryTab.products') }]}
-      panels={{ ingredients: <StockGrid model={m} host={host} initialAdd={entry.register} initialItemId={entry.itemId} prefill={entry.prefill} />, products: <><ProductGrid model={m} host={host} onRegister={()=>setRegister(true)} />{register && !entry.register?<RegisterForm kind="product" host={host} onClose={()=>setRegister(false)}/>:null}</> }} />
+      panels={{ ingredients: <StockGrid model={m} host={host} initialAdd={entry.register} initialItemId={entry.itemId} prefill={entry.prefill} />, products: <ProductGrid model={m} host={host} /> }} />
   </div>;
 }
 

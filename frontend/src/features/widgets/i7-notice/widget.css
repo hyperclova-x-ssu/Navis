@@ -31,6 +31,10 @@
 .i7-notice-status[data-tone='error'] { color: var(--destructive); }
 .i7-notice-status[data-tone='ok'] { color: var(--success); }
 .i7-notice-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-3); flex: none; max-width: 100%; }
+.i7-notice-schedules { display: grid; gap: var(--space-3); list-style: none; padding: 0; margin: 0; }
+.i7-notice-schedules > li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); padding: var(--space-3); border-bottom: var(--stroke-hairline) solid var(--border); overflow-wrap: anywhere; }
+.i7-notice-schedules > li > div:first-child { flex: 1 1 auto; min-width: 0; }
+.i7-notice-schedules p { margin: 0; }
 /* 보낸 기록: the kit DataGrid is as tall as its rows (never a stretched empty table) and scrolls its own body once the rows outgrow the window; the empty state keeps its next action centred. */
 .i7-notice-sent-grid { display: flex; flex-direction: column; flex: 0 1 auto; min-width: 0; min-height: 0; }
 .i7-notice-sent-grid > .ui-data-grid { height: auto; }
@@ -62,7 +66,11 @@
 .i7-notice-panel-list > :is(.i7-notice-closure, .i7-notice-history, .i7-notice-history-empty) { margin-top: var(--space-6); }
 .i7-notice-history-empty { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
 .i7-notice-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); min-width: 0; }
-.i7-notice-drafts { margin-top: var(--space-6); }
+.i7-notice-drafts, .i7-notice-scheduled { margin-top: var(--space-6); }
+/* D-333: a draft row on the large card: title, then kind · dates, then the first words of the text (muted, wraps; the fit guard drops them before any row). */
+.i7-notice-draft { align-items: flex-start; padding-block: var(--space-1); }
+.i7-notice-draft > span { display: flex; flex-direction: column; }
+.i7-notice-draft__sub, .i7-notice-draft__body { color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-regular); overflow-wrap: anywhere; }
 .i7-notice-history-table { min-width: 0; }
 .i7-notice-history-table table { width: 100%; border-collapse: collapse; font-size: var(--type-body); line-height: var(--leading-body); word-break: keep-all; }
 .i7-notice-history-table th { color: var(--muted-foreground); font-size: var(--type-caption); font-weight: var(--weight-medium); }

@@ -14,13 +14,14 @@ afterEach(cleanup);
 
 const LANGS = ['ko', 'en', 'zh-Hans', 'zh-Hant'] as const;
 
-it('writes the example unit line, the now-numbers title and the analysis note without 추정 / Estimate / 估算 in all four locales', () => {
-  for (const key of ['cctv.unit.mock', 'cctv.nowNumbers.mock', 'cctv.estimateNote'] as const) {
+it('writes the example unit line and the now-numbers title without 추정 / Estimate / 估算 in all four locales', () => {
+  for (const key of ['cctv.unit.mock', 'cctv.nowNumbers.mock'] as const) {
     for (const l of LANGS) expect((cctvBundle[l] as Record<string, string>)[key], `${l} ${key}`).not.toMatch(/추정|Estimate|估算|[·]\s*$/u);
   }
   expect(cctvBundle.ko['cctv.unit.mock']).toBe('매장 안 손님');
   expect(cctvBundle.ko['cctv.nowNumbers.mock']).toBe('지금 숫자');
-  expect(cctvBundle.ko['cctv.estimateNote']).toBe('카메라 영상을 미리 분석한 숫자예요');
+  // 카메라 영상을 미리 분석한 숫자예요 (cctv.estimateNote) is gone by the owner's request: no key, no line on either CCTV screen.
+  expect(cctvBundle.ko).not.toHaveProperty(['cctv.estimateNote']);
   // the live wording keeps 실시간
   expect(cctvBundle.ko['cctv.unit.live']).toBe('매장 안 손님 · 실시간');
   expect(cctvBundle.ko['cctv.nowNumbers.live']).toBe('지금 숫자 · 실시간');

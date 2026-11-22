@@ -98,7 +98,7 @@
 .i7-environment-trend [data-kind='humidity'] .ui-line-plot line { stroke-dasharray: 6 4; }
 .i7-environment-panel .i7-environment-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .i7-environment-panel .i7-environment-trend .ui-chart-plot { min-height: 120px; height: 120px; }
-.i7-environment-trend-rows { margin-top: var(--space-6); }
+.i7-environment-trend-rows, .i7-environment-large-rows { margin-top: var(--space-6); }
 .i7-environment-value-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); min-height: var(--target-min); border-bottom: var(--stroke-hairline) solid var(--border); font-size: var(--type-body); line-height: var(--leading-body); }
 .i7-environment-value-row:last-child { border-bottom: 0; }
 .i7-environment-value-row strong { font-weight: var(--weight-bold); text-align: right; font-variant-numeric: tabular-nums; }
@@ -173,3 +173,22 @@
 .i7-environment-panel[data-height='1']:not([data-width='1']) .i7-environment-climate-half > :is(.i7-environment-status, .i7-environment-measured) { margin-top: var(--space-1); }
 /* 54px reading + 28px abnormal chip must remain within the A one-row 84px budget. */
 .i7-environment-panel[data-height='1']:is([data-width='3'], [data-width='4']) .i7-environment-climate-half > .i7-environment-status { margin-top: var(--stroke-control); }
+.i7-environment-manual-panel {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+.i7-environment-manual-panel strong { font-size: var(--type-body); }
+.i7-environment-manual-panel span { color: var(--muted-foreground); }
+.i7-environment-manual { display: grid; justify-items: start; gap: var(--space-3); margin-top: var(--space-4); }
+.i7-environment-manual-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.i7-environment-manual-form { display: grid; justify-items: start; gap: var(--space-3); }
+.i7-environment-manual-form fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.i7-environment-manual-form .ui-field { min-width: 0; }

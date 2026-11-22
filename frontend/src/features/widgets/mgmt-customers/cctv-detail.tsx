@@ -5,10 +5,11 @@ import type { ReactNode } from 'react';
 import type { WidgetDetailProps } from '../../../contracts';
 import type { CctvMode, CctvView } from '../../cctv';
 import { CctvPlayback, CctvSetup, CctvStage, setCctvMode, useCctvMode, useCctvView } from '../../cctv';
-import { Badge } from '../../../ui';
+import { ActionButton, Badge } from '../../../ui';
 import { changeText } from './cctv-panel';
 import { ModeToggle, WidgetMenu, useCctvT, useSecondly, type CctvT } from './cctv-parts';
 import type { ZoneEditorProps } from '../../cctv/zones';
+import type { ZonesApi } from '../../cctv/zones/api';
 import { linkedOccupancyText, type LinkedTableDisplay } from '../../cctv/zones/linked-ui';
 
 export interface CctvLinksProps {
@@ -16,19 +17,25 @@ export interface CctvLinksProps {
   readonly linkPicker?: ZoneEditorProps['linkPicker'];
   readonly linkZones?: readonly { id: string; label: string }[];
   readonly linkError?: string | null;
+  readonly linkBusy?: boolean;
+  readonly linkConfirm?: { label: string; text: string; onPress(): void; onCancel(): void };
 }
 const orderLabels = { empty: '빈 테이블', reserved: '예약됨', occupied: '이용 중', payment_pending: '결제 대기', cleaning: '정리 중' } as const;
 export function LinkedCctvRows({ links, zoneLabel }: { links: readonly LinkedTableDisplay[]; zoneLabel: (zoneId: string) => string }) {
   if (!links.length) return null;
-  return <ul aria-label="연결된 테이블">{links.map(link => <li key={link.zoneId}><span>{zoneLabel(link.zoneId)} · 연결 테이블 {link.tableId} · {orderLabels[link.linkedOrderStatus]}</span> <span>{linkedOccupancyText(link)}</span>{link.needsClearingBadge ? <span>치울 테이블</span> : null}</li>)}</ul>;
+  return <ul aria-label="연결된 테이블">{links.map(link => <li key={link.zoneId}><span>{zoneLabel(link.zoneId)} · 연결 테이블 {link.tableLabel ?? link.tableId} · {orderLabels[link.linkedOrderStatus]}</span> <span>{linkedOccupancyText(link)}</span>{link.needsClearingBadge ? <span>치울 테이블</span> : null}</li>)}</ul>;
 }
-export function CctvLinks({ linkedTables = [], linkPicker, linkZones = [], linkError }: CctvLinksProps) {
+export function CctvLinks({ linkedTables = [], linkPicker, linkZones = [], linkError, linkBusy, linkConfirm }: CctvLinksProps) {
   if (!linkPicker && linkedTables.length === 0) return null;
   const zoneLabel = (id: string) => linkZones.find(zone => zone.id === id)?.label ?? id;
   return <section lang="ko" aria-label="CCTV 테이블 연결">
     {linkPicker?.disabled ? <p>테이블별 주문이 있는 후불형에서 연결할 수 있어요</p> : null}
     {linkError ? <p role="alert">{linkError}</p> : null}
-    {linkPicker && !linkPicker.disabled ? linkZones.filter(zone => linkPicker.enabledFor?.(zone.id) ?? true).map(zone => <label key={zone.id}>{zone.label} POS 테이블 연결 <select value={linkPicker.valueFor(zone.id) ?? ''} onChange={event => linkPicker.onChange(zone.id, event.currentTarget.value || null)}><option value="">연결 안 됨</option>{linkPicker.optionsFor(zone.id).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>) : null}
+    {linkPicker && !linkPicker.disabled ? linkZones.filter(zone => linkPicker.enabledFor?.(zone.id) ?? true).map(zone => <label className="cc-zone-link" key={zone.id}>{zone.label} POS 테이블 연결 <select value={linkPicker.valueFor(zone.id) ?? ''} disabled={linkBusy} onChange={event => linkPicker.onChange(zone.id, event.currentTarget.value || null)}><option value="">연결 안 됨</option>{linkPicker.optionsFor(zone.id).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>) : null}
+    {linkConfirm && <div className="mc-actions" role="group" aria-label={linkConfirm.label}>
+      <p>{linkConfirm.text}</p><ActionButton disabled={linkBusy} onClick={linkConfirm.onPress}>{linkConfirm.label}</ActionButton>
+      <ActionButton variant="secondary" onClick={linkConfirm.onCancel}>취소</ActionButton>
+    </div>}
     <LinkedCctvRows links={linkPicker?.disabled ? [] : linkedTables} zoneLabel={zoneLabel}/>
   </section>;
 }
@@ -127,7 +134,7 @@ function LiveArea({ onSetup }: { readonly onSetup: (s: Setup) => void }) {
 }
 
 /** The area above "하루 기록". `record` is the unchanged day-record body (same in both modes: AC-1344). */
-export function CctvAnalysisDetail({ host, detailRef, record, linkedTables, linkPicker, linkZones, linkError }: WidgetDetailProps & { readonly record: ReactNode } & CctvLinksProps) {
+export function CctvAnalysisDetail({ host, detailRef, record, zonesApi, linkedTables, linkPicker, linkZones, linkError }: WidgetDetailProps & { readonly record: ReactNode; /** The store's own zone api over the service (D-355: the same setup flow saves real zones). */ readonly zonesApi?: ZonesApi } & CctvLinksProps) {
   const t = useCctvT();
   const mode = useCctvMode();
   const status = useCctvView({ video: false });
@@ -138,7 +145,7 @@ export function CctvAnalysisDetail({ host, detailRef, record, linkedTables, link
   // Live and no current camera: the setup is the picture area (SCR-347). It stays until it is done.
   if (live && setup === null && NOT_LIVE.has(status.connection ?? '')) setSetup('connect');
   const change = (m: CctvMode) => { setCctvMode(m); setSetup(null); setSaid(t(m === 'live' ? 'cctv.mode.changedLive' : 'cctv.mode.changedMock')); };
-  const menu = { reconnect: () => setSetup('connect'), resetZones: () => setSetup('zones'), canResetZones: status.connection === 'live' || status.connection === 'reconnecting' };
+  const menu = { reconnect: () => setSetup('connect'), resetZones: () => setSetup('zones'), canResetZones: status.connection === 'live' || status.connection === 'reconnecting' || zonesApi !== undefined };
   // The shell's detail header has an empty slot for this widget (T-079): the toggle and ⋯ go there; without it (dev host) they stay in the body.
   const [head, setHead] = useState<Element | null>(null);
   useLayoutEffect(() => { setHead(document.querySelector('[data-detail-header-slot="customer-analysis"]')); }, []); // eslint-disable-line react-hooks/set-state-in-effect
@@ -148,7 +155,7 @@ export function CctvAnalysisDetail({ host, detailRef, record, linkedTables, link
       {head ? createPortal(controls, head) : <div className="cc-detail__head">{controls}</div>}
       <span className="cc-sr" role="status">{said}</span>
       {!live ? <CctvPlayback />
-        : setup ? <CctvSetup key={setup} start={setup} host={host} onDone={done} linkPicker={linkPicker} />
+        : setup ? <CctvSetup key={setup} start={setup} host={host} onDone={done} linkPicker={linkPicker} zonesApi={zonesApi} />
         : <LiveArea onSetup={setSetup} />}
       <CctvLinks linkedTables={linkedTables} linkPicker={linkPicker} linkZones={linkZones} linkError={linkError}/>
       <div className="cc-record" data-testid="cctv-day-record">

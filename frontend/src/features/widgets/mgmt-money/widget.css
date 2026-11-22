@@ -191,8 +191,10 @@
 
 .mm-chart__groups { position: absolute; inset: 0; display: flex; gap: var(--space-2); }
 .mm-chart__group { position: relative; display: flex; flex: 1; min-width: 0; gap: var(--space-1); }
-.mm-chart__paired-bar { position: relative; align-self: flex-end; flex: 1; min-width: 0; background: var(--chart-1); border-start-start-radius: var(--radius-sm); border-start-end-radius: var(--radius-sm); }
-.mm-chart__paired-bar[data-series-index="1"] { background: var(--chart-2); }
+/* T-50: the value label sits above the bar, not on it, so it is a child of a transparent box and the fill is its own element (a contrast check reads the label's own ancestors). */
+.mm-chart__paired-bar { position: relative; align-self: flex-end; flex: 1; min-width: 0; }
+.mm-chart__paired-fill { position: absolute; inset: 0; background: var(--chart-1); border-start-start-radius: var(--radius-sm); border-start-end-radius: var(--radius-sm); }
+.mm-chart__paired-bar[data-series-index="1"] > .mm-chart__paired-fill { background: var(--chart-2); }
 .mm-chart__legend { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--type-caption); line-height: var(--leading-caption); }
 .mm-chart__legend > span::before { content: ''; display: inline-block; width: var(--space-2); height: var(--space-2); margin-inline-end: var(--space-1); background: var(--chart-1); }
 .mm-chart__legend > [data-series-index="1"]::before { background: var(--chart-2); }

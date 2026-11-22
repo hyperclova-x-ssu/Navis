@@ -77,7 +77,7 @@ export interface PanelParts {
 }
 
 /** SCR-212: secondary text first, then list/chart, label last. Value and unit stay. */
-export const STORE_FIT: readonly FitPart[] = [{ selector: '.mgmt-sub' }, { selector: '.mgmt-list__title' }, { selector: '.mgmt-row:not([data-row-id^="check-"])', last: true }, { selector: '.mgmt-row', last: true }, { selector: '.ui-panel-chart' }, { selector: '.mgmt-label' }];
+export const STORE_FIT: readonly FitPart[] = [{ selector: '.mgmt-sub' }, { selector: '.mgmt-row__sub' }, { selector: '.mgmt-list__title' }, { selector: '.mgmt-row:not([data-row-id^="check-"])', last: true }, { selector: '.mgmt-row', last: true }, { selector: '.ui-panel-chart' }, { selector: '.mgmt-label' }];
 
 /** Label, key value (MetricFit, text never shrinks below the kit steps), caption and the shape's other slots. */
 export function PanelLayout({ id, width, height, label, value, semanticValue, subSemanticValue, unit, longest, sub, textValue, chart, list, workspace }: PanelParts) {

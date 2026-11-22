@@ -27,6 +27,33 @@ const names = (store: ReturnType<typeof createWidgetDataStore>) => {
 };
 const DOT = ' · ';
 
+it('UX-A-14 starts at the first valid order quantity and resets it for a different item', () => {
+  const store = createWidgetDataStore();
+  renderWithKit(<DetailStack root={{ featureId: 'suppliers' }} />, { store });
+  fireEvent.click(screen.getByRole('button', { name: '발주 추가하기' }));
+  const item = screen.getByRole<HTMLSelectElement>('combobox', { name: '발주 품목' });
+  const quantity = screen.getByRole('spinbutton', { name: '주문 수량' });
+  const terms = (id: string) => store.getSnapshot().tables.purchaseItem.find(row => row.purchaseItemId === id)!;
+  const minimum = (id: string) => {
+    const { minimumQty, orderStep } = terms(id);
+    return Math.ceil(minimumQty / orderStep - 1e-9) * orderStep;
+  };
+  expect(quantity).toHaveValue(minimum(item.value));
+  const next = store.getSnapshot().tables.purchaseItem.find(row => row.purchaseItemId !== item.value && minimum(row.purchaseItemId) !== minimum(item.value))!;
+  fireEvent.change(item, { target: { value: next.purchaseItemId } });
+  expect(quantity).toHaveValue(minimum(next.purchaseItemId));
+  fireEvent.change(quantity, { target: { value: 0 } });
+  fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
+  expect(quantity.closest('.ms-order-quantity')?.querySelector('[role="alert"]')).toHaveTextContent('0보다 큰 숫자를 넣어 주세요');
+  expect(quantity).toHaveAttribute('aria-invalid', 'true');
+});
+
+it('PU-01 omits placeholder supplier contacts without inventing a callable number', () => {
+  renderWithKit(<DetailStack root={{ featureId: 'suppliers' }} />);
+  fireEvent.click(screen.getByRole('tab', { name: '발주사' }));
+  expect(screen.getByRole('grid', { name: '발주사' })).not.toHaveTextContent(/가상 담당자|실제 연락\/발주 금지|02-\*\*\*\*-/);
+});
+
 describe('suppliers panel (SCR-30, AC-273)', () => {
   it('1×1: 7일 내 입고 예정 3건 (ko, en, zh-Hant)', () => {
     panel(1, 1);
@@ -59,6 +86,17 @@ describe('suppliers panel (SCR-30, AC-273)', () => {
     cleanup();
     renderWithKit(<SupplyPanel id="suppliers" width={1} height={2} host={createTestHost('suppliers')} />, { store, locale: 'en' });
     expect(rowTexts()).toEqual([`Today${DOT}${n.milk}${DOT}12 L`, `Tomorrow${DOT}${n.beans}${DOT}5 kg`, `In 2 days${DOT}${n.cups}${DOT}500 pcs`]);
+  });
+  it('2×2 and 2×3 keep no 「예정 입고」 title over an empty list when nothing is due (UI-SMALL-3)', () => {
+    for (const [width, height] of [[2, 2], [2, 3]] as const) {
+      renderWithKit(<SupplyPanel id="suppliers" width={width} height={height} host={createTestHost('suppliers')} />, { store: createWidgetDataStore() });
+      expect(readModel(createWidgetDataStore().getSnapshot(), 'suppliers').upcomingCount).toBe(0);
+      expect(body()).toHaveTextContent('7일 내 입고 예정');
+      expect(body().querySelector('.ms-list__title')).toBeNull();
+      cleanup();
+    }
+    panel(2, 2);
+    expect(body().querySelector('.ms-list__title')).toHaveTextContent('예정 입고');
   });
   it('2×2 shows upcoming orders and the suggestion/month summary', () => {
     panel(2, 2);
@@ -139,12 +177,13 @@ describe('suppliers detail (SCR-31, AC-273, AC-236~238 order side)', () => {
     expect(row).toHaveAttribute('aria-selected', 'true');
     expect(within(row).getByRole('gridcell', { name: /주문 수량/ })).toHaveTextContent('12 L');
     expect(within(row).getByRole('gridcell', { name: /총 주문 금액/ })).toHaveTextContent(`${(12 * price).toLocaleString('en-US')}원`);
-    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('0 / 12 L');
+    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('0 L / 12 L');
     expect(within(row).getByRole('gridcell', { name: /입고 예정일/ })).toHaveTextContent(shortDate(TODAY));
     fireEvent.click(screen.getByRole('tab', { name: '발주사' }));
     const dairy = store.getSnapshot().tables.supplier.find((v) => v.supplierId === 's-dairy')!;
     const supplier = screen.getByRole('grid', { name: '발주사' }).querySelector('[data-grid-row="s-dairy"]') as HTMLElement;
-    expect(supplier).toHaveTextContent(dairy.phoneMask);
+    expect(supplier).not.toHaveTextContent(dairy.phoneMask);
+    expect(within(supplier).getByRole('gridcell', { name: /연락처, —$/ })).toBeInTheDocument();
     expect(supplier).not.toHaveTextContent(/010-?\d{4}-?\d{4}/);
   });
 
@@ -189,7 +228,7 @@ describe('suppliers detail (SCR-31, AC-273, AC-236~238 order side)', () => {
     expect(onNotify).toHaveBeenCalledWith(expect.objectContaining({ messageKey: 'data.notice.receiptRecorded', undoToken: expect.any(String) }));
     const row = screen.getByRole('grid', { name: '발주 내역' }).querySelector(`[data-grid-row="${milkPo}"]`) as HTMLElement;
     expect(within(row).getByRole('gridcell', { name: /주문 수량/ })).toHaveTextContent('12 L');
-    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('8 / 4 L');
+    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('8 L / 4 L');
     expect(screen.getAllByText('일부 입고').length).toBeGreaterThan(0);
   });
 
@@ -245,7 +284,7 @@ describe('suppliers detail (SCR-31, AC-273, AC-236~238 order side)', () => {
     expect(first).toHaveTextContent(names(store).milk);
     expect(within(first).getByRole('gridcell', { name: /주문 수량/ })).toHaveTextContent('12 L');
     expect(within(first).getByRole('gridcell', { name: /입고 예정일/ })).toHaveTextContent(shortDate(addIsoDays(TODAY, -1)));
-    expect(within(first).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('0 / 12 L');
+    expect(within(first).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent('0 L / 12 L');
     // only the example is overdue: every other row is the cafe's own
     expect(rows.slice(1).some((row) => row.textContent?.includes('입고 확인 필요'))).toBe(false);
     expect(document.querySelector('.ui-feature-panel [data-widget="suppliers"]')).toHaveTextContent('입고 확인 필요 1건');

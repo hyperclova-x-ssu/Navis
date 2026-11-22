@@ -27,8 +27,9 @@
 .custom-facts dt { color: var(--muted-foreground); }
 .custom-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 .custom-template-list { list-style: none; padding: 0; display: grid; gap: var(--space-3); }
-.custom-template-list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-.custom-template-list strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.custom-template-list > li { display: flex; flex-wrap: wrap; align-items: start; gap: var(--space-2); }
+.custom-template-list details { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.custom-template-list summary { min-height: var(--target-default); align-content: center; cursor: pointer; font-weight: var(--weight-bold); }
 .custom-error { color: var(--destructive); }
 
 /* D-298: MetricBlock, four equal stage counts and two-line order rows. */
@@ -61,5 +62,17 @@
 /* DS 12.1 MiniTable: the header is one caption line, only body rows are 56 (a 56 header left no room for a row at 3x2). */
 .custom-panel-table th { height: auto; min-height: 0; padding-block: var(--space-1); }
 .custom-panel-table tr:last-child td { border-bottom: 0; }
-.custom-panel-table .custom-quote-column, .custom-panel-table tr > :first-child { text-align: right; font-variant-numeric: tabular-nums; }
+.custom-panel-table .custom-quote-column, .custom-panel-table .custom-pickup-column { text-align: right; font-variant-numeric: tabular-nums; }
+/* D-333: the order number column (large card) and the customer's request under the product, only when the order has one. */
+.custom-panel-table .custom-number-column { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.custom-panel-table .custom-request { margin: 0; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); overflow-wrap: anywhere; }
 .custom-panel .i7-panel-remainder { margin: var(--space-2) 0 0; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+
+/* F08: reference photos of an order (HTTP builds): thumbnails read through the account file service. */
+.custom-photos, .custom-photos ul, ul.custom-photos { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-3); min-width: 0; }
+.custom-photos h4 { flex-basis: 100%; }
+.custom-photo { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.custom-photo img { display: block; width: var(--space-16); height: var(--space-16); object-fit: cover; border-radius: var(--radius-md); border: var(--stroke-hairline) solid var(--border); }
+.custom-photo-empty { display: grid; place-items: center; min-width: var(--space-16); min-height: var(--space-16); padding: var(--space-2); color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); border-radius: var(--radius-md); border: var(--stroke-hairline) dashed var(--border); }
+.custom-photo-picker { display: grid; gap: var(--space-3); min-width: 0; }
+.custom-money-dialog { display: grid; gap: var(--space-4); min-width: 0; }

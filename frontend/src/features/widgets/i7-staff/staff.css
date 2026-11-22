@@ -9,7 +9,7 @@
 .staff-mini table { width: 100%; border-collapse: collapse; font-size: var(--type-caption); }
 .staff-mini th, .staff-mini td { padding: var(--space-1); text-align: left; vertical-align: top; }
 .staff-mini td span { display: block; }
-.staff-detail { display: grid; align-content: start; gap: var(--space-4); min-width: 0; }
+.staff-detail { --staff-grid-column-min: 8rem; display: grid; align-content: start; gap: var(--space-4); min-width: 0; }
 .staff-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .staff-toolbar__view { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
 /* A6/C3: the add buttons are secondary 48 buttons at the right end of the tool row. */
@@ -21,7 +21,7 @@
 /* Separate borders let the sticky cells paint their own outer edge during scroll. */
 .staff-grid { border-collapse: separate; border-spacing: 0; }
 .staff-history { border-collapse: collapse; }
-.staff-grid th, .staff-grid td, .staff-history th, .staff-history td { min-width: 8rem; min-height: var(--space-16); padding: var(--space-2); border: 1px solid var(--border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.staff-grid th, .staff-grid td, .staff-history th, .staff-history td { min-width: var(--staff-grid-column-min); min-height: var(--space-16); padding: var(--space-2); border: 1px solid var(--border); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 .staff-grid :is(th, td) { border-width: 0 var(--stroke-hairline) var(--stroke-hairline) 0; }
 .staff-grid thead th { border-top-width: var(--stroke-hairline); }
 .staff-grid tbody th { background: var(--secondary); }
@@ -35,6 +35,7 @@
 .staff-grid .staff-shift { min-inline-size: min-content; padding-inline: var(--space-1); }
 .staff-shift__time { white-space: nowrap; }
 .staff-shift__rest { display: block; }
+.staff-shift__warning { display: block; margin-block-start: var(--space-1); }
 .staff-shift[data-kind='off'] { background: var(--secondary); color: var(--muted-foreground); border-color: var(--border); }
 .staff-shift:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
 .staff-people { min-width: 0; }
@@ -50,6 +51,13 @@
 /* D-326 Q11: add/edit/delete open in the right DetailSidePanel (DS 12.2), which overlays the right edge of the dialog body.
    Everything else in the detail (tabs, tool row, table) keeps to the width left of it, so no column or button sits under the panel. */
 .staff-detail:has(> .ui-detail-side-panel[data-layout="overlay"]) > :not(.ui-detail-side-panel) { max-width: calc(100% - var(--sidepanel-width) - var(--space-6)); }
+.staff-detail:has(> .ui-detail-side-panel[data-layout="overlay"]) .staff-grid-scroll[data-period="week"][data-orientation="employee"] .staff-grid {
+  table-layout: fixed;
+  min-inline-size: calc(var(--staff-grid-column-min) * 8);
+}
+.staff-detail:has(> .ui-detail-side-panel[data-layout="overlay"]) .staff-grid-scroll[data-period="week"][data-orientation="employee"] .staff-shift__time {
+  white-space: normal;
+}
 /* The form is one column of fields inside the 560 panel. Messages, the overlap list and the extra buttons take the whole row. */
 .staff-editor { display: grid; gap: var(--space-4); min-width: 0; }
 .staff-editor > :is(p, ul) { margin: 0; }
@@ -109,3 +117,13 @@
 .staff-panel .i7-panel-remainder { margin-top: var(--space-2); color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
 /* At 125% the 3-column preview drops both weekend columns together, preserving header/cell alignment. */
 [data-text-scale='125'] .staff-panel[data-width='3'] .staff-mini .staff-late-day { display: none; }
+.staff-panel .staff-mini .staff-break { display: block; font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-medium); }
+/* GAPUI-CAL (SCR-271 PN11): the WORKS team schedule area under an existing shift in the side panel, and the fifth tab. Kit tokens only. */
+.staff-works { display: grid; gap: var(--space-3); min-width: 0; padding-block-start: var(--space-4); border-block-start: var(--stroke-hairline) solid var(--border); }
+.staff-works__title { margin: 0; font-size: var(--type-body); font-weight: var(--weight-bold); }
+.staff-works__status, .staff-works__note { margin: 0; color: var(--muted-foreground); overflow-wrap: anywhere; }
+.staff-works__status:has(> [role='alert']) { display: grid; gap: var(--space-2); justify-items: start; color: inherit; }
+.staff-works__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* DS: ghost destructive 48 — the ghost face with the destructive text colour. */
+.staff-works__delete > .ui-press-surface, .staff-works__delete { color: var(--destructive); }
+.staff-works-tab { display: grid; align-content: start; gap: var(--space-3); min-width: 0; }

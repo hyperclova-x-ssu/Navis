@@ -1,0 +1,14 @@
+/* NAVER booking cancel in the booking side panel (SCR-225, AC-1617, AC-1618): reason and refund terms, then the extra confirmation. Tokens only. */
+.mc-workspace[data-widget="voice-booking"] .mc-booking-cancel { display: grid; gap: var(--space-3); min-width: 0; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-cancel textarea { min-height: calc(var(--target-default) * 2); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-refund { display: grid; gap: var(--space-3); min-width: 0; padding-block-start: var(--space-3); border-block-start: var(--stroke-hairline) solid var(--border); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-refund__paid { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); font-variant-numeric: tabular-nums; }
+/* The extra confirmation: destructive tint and a hairline in the destructive colour (DS C-11), the irreversible sentence first. */
+.mc-workspace[data-widget="voice-booking"] .mc-booking-confirm { display: grid; gap: var(--space-3); min-width: 0; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-confirm--final { padding: var(--space-4); border: var(--stroke-hairline) solid var(--destructive); border-radius: var(--radius-lg); background: var(--change-up-bg); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-confirm--final > .ui-badge { justify-self: start; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-confirm__lead { margin: 0; font-size: var(--type-control); line-height: var(--leading-control); font-weight: var(--weight-semibold); overflow-wrap: anywhere; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-confirm__rows { grid-template-columns: minmax(0, 1fr); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-confirm__quote { white-space: pre-wrap; }
+/* What the cancel did, then that it cannot be undone: one live region, two lines. */
+.mc-workspace[data-widget="voice-booking"] .mc-done__note { display: block; color: var(--muted-foreground); font-weight: var(--weight-regular); }

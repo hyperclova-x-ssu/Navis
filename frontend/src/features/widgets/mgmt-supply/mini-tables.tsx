@@ -3,12 +3,12 @@ import { useWidgetDataStore } from '../../../data/react';
 import { deriveOpenOrders, TODAY } from '../../../data/widget-data';
 import type { IngredientRow, InventoryModel, SuppliersModel } from '../../../data/widget-data';
 import { useBundle } from '../../../i18n';
-import { MiniTable, StatusChip } from '../../../ui';
+import { MiniTable, StatusChip, type MiniTableColumn } from '../../../ui';
 import { Flash, byNearestDue, relativeDay, useSupplyText, type SupplyText } from './shared';
 
 const bundle={id:'widget.mgmt-supply.mini',ko:{
   'supply.mini.stock':'원자재','supply.mini.name':'이름','supply.mini.stockQty':'현재 재고','supply.mini.safe':'안전 재고','supply.mini.status':'상태','supply.mini.used':'오늘 사용량',
-  'supply.mini.orders':'발주 내역','supply.mini.date':'발주 일자','supply.mini.item':'발주 품목','supply.mini.qty':'주문 수량','supply.mini.due':'입고 예정일','supply.mini.orderStatus':'발주 상태',
+  'supply.mini.orders':'발주 내역','supply.mini.date':'발주 일자','supply.mini.item':'발주 품목','supply.mini.supplier':'발주사','supply.mini.qty':'주문 수량','supply.mini.due':'입고 예정일','supply.mini.orderStatus':'발주 상태',
   'supply.mini.sufficient':'충분','supply.mini.out':'품절','supply.mini.restock':'보충 필요','supply.mini.expiry':'당일 소진','supply.mini.pending':'입고 대기','supply.mini.partial':'일부 입고','supply.mini.complete':'입고 완료','supply.mini.canceled':'취소','supply.mini.issue':'입고 확인 필요',
   'supply.mini.summary':'발주 제안 {n}건 · 이번 달 발주 {amount}',
 },en:{},'zh-Hans':{},'zh-Hant':{}};
@@ -17,9 +17,11 @@ export function orderedStock(model:InventoryModel,x:SupplyText):IngredientRow[]{
   return [...model.ingredients].sort((a,b)=>rank(a)-rank(b)||(a.stock??0)/(a.threshold||Infinity)-(b.stock??0)/(b.threshold||Infinity)||x.text(a.name??{key:a.nameKey}).localeCompare(x.text(b.name??{key:b.nameKey}),'ko')||a.itemId.localeCompare(b.itemId));
 }
 /** These are the public kit MiniTable. The adapter supplies column drop priorities to useFit. */
-export function StockMiniTable({model}:{model:InventoryModel}){
+/** D-333: a short card shows 5 stock rows; a tall one (L-wide 3×3 and up) shows as many as the data has and the fit guard hides what does not fit. */
+export const SHORT_MINI_ROWS=5,TALL_MINI_ROWS=12;
+export function StockMiniTable({model,limit=SHORT_MINI_ROWS}:{model:InventoryModel;limit?:number}){
   const x=useSupplyText(),{t}=useBundle(bundle);
-  return <div className="ms-mini" data-mini-columns="0,0,820,0,830" data-mini-row-priority="600"><MiniTable label={t('supply.mini.stock')} rows={orderedStock(model,x).slice(0,5)} getRowId={r=>r.itemId} columns={[
+  return <div className="ms-mini" data-mini-columns="0,0,820,0,830" data-mini-row-priority="600" data-mini-extra-rows={limit>SHORT_MINI_ROWS?SHORT_MINI_ROWS:undefined}><MiniTable label={t('supply.mini.stock')} rows={orderedStock(model,x).slice(0,limit)} getRowId={r=>r.itemId} columns={[
     {id:'name',label:t('supply.mini.name'),render:r=>x.text(r.name??{key:r.nameKey})},
     {id:'stock',label:t('supply.mini.stockQty'),numeric:true,render:r=><Flash value={r.stock}>{r.stock===null?'—':x.format.quantity(r.stock,r.unit)}</Flash>},
     {id:'safe',label:t('supply.mini.safe'),numeric:true,render:r=><Flash value={r.threshold}>{r.threshold===null?'—':x.format.quantity(r.threshold,r.unit)}</Flash>},
@@ -27,12 +29,18 @@ export function StockMiniTable({model}:{model:InventoryModel}){
     {id:'used',label:t('supply.mini.used'),numeric:true,render:r=><Flash value={r.usedToday}>{x.format.quantity(r.usedToday,r.unit)}</Flash>},
   ]}/></div>;
 }
-export function OrderMiniTable(){
+export function OrderMiniTable({limit=SHORT_MINI_ROWS}:{limit?:number}={}){
   const store=useWidgetDataStore(),snapshot=useSyncExternalStore(store.subscribe,store.getSnapshot,store.getSnapshot);
   const x=useSupplyText(),{t}=useBundle(bundle);
-  return <div className="ms-mini" data-mini-columns="820,0,830,0,0" data-mini-row-priority="600"><MiniTable label={t('supply.mini.orders')} rows={[...deriveOpenOrders(snapshot,{date:TODAY}).orders].sort(byNearestDue).slice(0,5)} getRowId={r=>r.poId} columns={[
+  const orders=[...deriveOpenOrders(snapshot,{date:TODAY}).orders].sort(byNearestDue).slice(0,limit);
+  type Order=typeof orders[number];
+  // D-333: only the tall card has the width and the rows for the supplier column; it is the first column the fit guard drops.
+  const tall=limit>SHORT_MINI_ROWS;
+  const supplier:MiniTableColumn<Order>[]=tall?[{id:'supplier',label:t('supply.mini.supplier'),render:r=>x.text(r.supplierName??{key:r.supplierNameKey})}]:[];
+  return <div className="ms-mini ms-mini--orders" data-mini-columns={tall?'820,0,840,830,0,0':'820,0,830,0,0'} data-mini-row-priority="600" data-mini-extra-rows={tall?SHORT_MINI_ROWS:undefined}><MiniTable label={t('supply.mini.orders')} rows={orders} getRowId={r=>r.poId} columns={[
     {id:'date',label:t('supply.mini.date'),render:r=>r.orderedOn?x.format.date(r.orderedOn,'short'):'—'},
     {id:'item',label:t('supply.mini.item'),render:r=>r.lines.map(l=>x.text(l.itemName??{key:l.itemNameKey})).join(' · ')},
+    ...supplier,
     {id:'qty',label:t('supply.mini.qty'),numeric:true,render:r=>r.lines.map(l=>x.format.quantity(l.ordered,l.unit)).join(' · ')},
     {id:'due',label:t('supply.mini.due'),render:r=><Flash value={r.dueDate}>{relativeDay(x,r.dueDate)}</Flash>},
     {id:'status',label:t('supply.mini.orderStatus'),render:r=><Flash value={`${r.status}:${r.overdue}`}><StatusChip tone={r.overdue||r.status==='partial'?'warning':r.status==='complete'?'success':'neutral'}>{t(r.overdue?'supply.mini.issue':r.status==='scheduled'?'supply.mini.pending':r.status==='partial'?'supply.mini.partial':r.status==='complete'?'supply.mini.complete':'supply.mini.canceled')}</StatusChip></Flash>},

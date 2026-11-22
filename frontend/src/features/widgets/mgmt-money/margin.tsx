@@ -9,7 +9,7 @@ import {
   type ChartData, type PanelSpec, type RowData, type T,
 } from './shared';
 import { CustomSalesBreakdown } from '../i7-custom/accounting';
-import { AccountingUnknownCosts, accountingForPeriod, useAccountingPresentation, type AccountingDetailProps } from './ledger';
+import { AccountingUnknownCosts, SalesMethodCard, accountingForPeriod, useAccountingPresentation, type AccountingDetailProps } from './ledger';
 
 const ID = 'margin' as const;
 
@@ -125,19 +125,22 @@ export function MarginDetail({ condition, detailRef, host, accounting: explicitA
   const rate = m.rate === null ? { value: m.costMissing ? t('data.state.margin.missing-cost') : t('widget.margin.unknown'), unit: '' } : splitFormatted(t.format.percent(m.rate, 1));
   const chart = trendChart(t, m);
   const compare = compareText(t, m);
+  /** The picked period names every label and sentence below, so 7 and 30 days never read "오늘" (T-03). */
+  const periodName = t(PERIOD_KEYS[period]);
   return (
     <div className="mm-detail mm-detail--grid" data-widget={ID}>
       <section className="mm-detail__overview" tabIndex={0} aria-label={t('widget.margin.title')}>
         <div className="mm-detail__tools">{periodChips}</div>
         <div className="mm-kpis" data-slot="margin.kpis">
-          <Kpi slot="margin.kpi.rate" label={t('widget.margin.rate')} value={rate.value} unit={rate.unit} semanticValue={m.rate} tone={m.rate === null ? 'warning' : undefined} />
+          <Kpi slot="margin.kpi.rate" label={t('widget.margin.ratePeriod', { period: periodName })} value={rate.value} unit={rate.unit} semanticValue={m.rate} tone={m.rate === null ? 'warning' : undefined} />
           <Kpi slot="margin.kpi.netSales" label={t('widget.margin.netSales')} value={split(m.netSales).value} unit={split(m.netSales).unit} semanticValue={m.netSales} />
           <Kpi slot="margin.kpi.cost" label={t('widget.margin.cost')} value={split(m.cost).value} unit={split(m.cost).unit} semanticValue={m.cost} />
           <Kpi slot="margin.kpi.grossProfit" label={t('widget.margin.grossProfit')} value={split(m.grossProfit).value} unit={split(m.grossProfit).unit} semanticValue={m.grossProfit} />
         </div>
         {compare ? <p className="mm-detail__note">{compare}</p> : null}
         {m.costMissing ? <p className="mm-detail__note"><StatusBadge kind="needsReview" label={t('data.state.margin.missing-cost')} /></p> : null}
-        {accounting ? accounting.status === 'ready' ? <AccountingUnknownCosts rows={accounting.unknownCostSales ?? []} /> : null : <CustomSalesBreakdown period={m.period} />}
+        {accounting ? accounting.status === 'ready' ? <AccountingUnknownCosts rows={accounting.unknownCostSales ?? []} http={accounting.source === 'http'} /> : null : <CustomSalesBreakdown period={m.period} />}
+        <SalesMethodCard view={accounting} />
         {chart ? (
           <section className="mm-card" aria-label={t('widget.margin.trend')}>
             <h3 className="mm-card__title">{t('widget.margin.trend')}</h3>
@@ -145,7 +148,7 @@ export function MarginDetail({ condition, detailRef, host, accounting: explicitA
             <p className="mm-muted">{t('widget.margin.axisNote')}</p>
           </section>
         ) : null}
-        <section className="mm-card" aria-label={t('widget.margin.contribution')}><h3 lang="ko">{t('widget.margin.contribution')}</h3><ul className="mm-contributions">{[...m.menus].sort((a, b) => (b.contribution ?? 0) - (a.contribution ?? 0)).map(row => <li key={row.menuId}><span>{resolveDataText(t, row.name)}</span><meter aria-label={resolveDataText(t, row.name)} min={0} max={Math.max(1, ...m.menus.map(item => item.contribution ?? 0))} value={Math.max(0, row.contribution ?? 0)} /><strong>{money(row.contribution)}</strong></li>)}</ul>{ledgerView.status === 'ready' && m.grossProfit !== null ? <p lang="ko">{t('widget.margin.contributionEquation', { sales: money(m.netSales), cost: money(m.cost), discount: money(ledgerView.model.sales.discount), refund: money(ledgerView.model.sales.refund), profit: money(m.grossProfit) })}</p> : null}{m.menus.length ? <p lang="ko">{t('widget.margin.highest', { name: resolveDataText(t, [...m.menus].sort((a, b) => (b.contribution ?? 0) - (a.contribution ?? 0))[0]!.name) })}</p> : null}</section>
+        <section className="mm-card" aria-label={t('widget.margin.contribution')}><h3 lang="ko">{t('widget.margin.contribution')}</h3><ul className="mm-contributions">{[...m.menus].sort((a, b) => (b.contribution ?? 0) - (a.contribution ?? 0)).map(row => <li key={row.menuId}><span>{resolveDataText(t, row.name)}</span><meter aria-label={resolveDataText(t, row.name)} min={0} max={Math.max(1, ...m.menus.map(item => item.contribution ?? 0))} value={Math.max(0, row.contribution ?? 0)} /><strong>{money(row.contribution)}</strong></li>)}</ul>{ledgerView.status === 'ready' && m.grossProfit !== null ? <p lang="ko">{t('widget.margin.contributionEquation', { period: periodName, sales: money(m.netSales), cost: money(m.cost), discount: money(ledgerView.model.sales.discount), refund: money(ledgerView.model.sales.refund), profit: money(m.grossProfit) })}</p> : null}{m.menus.length ? <p lang="ko">{t('widget.margin.highest', { period: periodName, name: resolveDataText(t, [...m.menus].sort((a, b) => (b.contribution ?? 0) - (a.contribution ?? 0))[0]!.name) })}</p> : null}</section>
         {!selected ? <p className="mm-muted">{t('widget.margin.selectMenu')}</p> : null}
       </section>
       <section className="mm-card mm-margin-items" aria-label={t('widget.margin.menuBreakdown')}>
@@ -187,7 +190,7 @@ function MenuBreakdown({ t, menu, host, prefill, priceRef }: {
           </dl>
           <h4 className="mm-card__subtitle mm-spaced">{t('widget.margin.recipe')}</h4>
           <ul className="mm-plain-list" data-slot="margin.recipe">
-            {menu.recipe.map((part, i) => <li key={`${part.nameKey}-${i}`}><span>{t(part.nameKey)}{'\u00A0'}· {t.format.quantity(part.qty.value, part.qty.unit)}</span><strong>{full(part.cost)}</strong></li>)}
+            {menu.recipe.map((part, i) => <li key={`${part.nameKey}-${i}`}><span>{resolveDataText(t, part.name ?? { key: part.nameKey })}{'\u00A0'}· {t.format.quantity(part.qty.value, part.qty.unit)}</span><strong>{full(part.cost)}</strong></li>)}
           </ul>
           <p className="mm-muted">{t('widget.margin.effectiveFrom', { date: t.format.date(menu.costEffectiveFrom, 'long') })}</p><ActionButton variant="outline" onClick={() => host.openLinked({ featureId: 'menu', itemId: menu.menuId })}>{t('widget.margin.openMenu')}</ActionButton><ActionButton variant="outline" onClick={() => host.openLinked({ featureId: 'suppliers' })}>{t('widget.margin.openSuppliers')}</ActionButton>
         </div>

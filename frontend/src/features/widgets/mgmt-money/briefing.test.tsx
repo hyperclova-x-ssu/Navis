@@ -143,7 +143,10 @@ it('counts alert items and lists only the schedules counted today', () => {
  const today = within(screen.getByRole('heading', { name: '오늘의 주요 일정' }).closest('section')!.querySelector('ul')!);
  const [, month, day] = addIsoDays(TODAY, 1).split('-').map(Number);
  expect(today.queryByText(new RegExp(`${month}/${day}\\(`))).not.toBeInTheDocument();
- expect(today.getAllByText(/^\d+\/\d+\(.\)/)).toHaveLength(model.schedules.todayEntries.length);
+ expect(today.queryByText(/^\d+\/\d+\(.\)/)).not.toBeInTheDocument();
+ for (const entry of model.schedules.todayEntries) {
+   if (entry.time) expect(today.getByText(new RegExp(`^${entry.time} `))).toBeInTheDocument();
+ }
 });
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -218,4 +221,19 @@ it('keeps its own press state when the host has no run (previews)', async () => 
   await userEvent.click(screen.getByRole('button', { name: '모두 읽음으로 표시하기' }));
   expect(acknowledgeBriefing).toHaveBeenCalledTimes(1);
   expect(screen.getByRole('button', { name: '모두 읽음으로 표시하기' })).toBeDisabled();
+});
+
+/* FIX-PKG-A / T-02 (gate r1a W17-F2, G-13): a due-date entry that falls today carries what it is and a status chip, never only its label. */
+it('shows today\'s tax due-date entry with a status chip and a link, not as a bare label', async () => {
+  const tables = createWidgetDataStore().getSnapshot().tables;
+  const store = createWidgetDataStore({
+    calendarProjection: [{ source: 'tax-due', sourceId: 'tax-due-1', sourceRevision: 1, featureId: 'tax', categoryId: 'tax-admin', visibility: 'deadline', date: TODAY, endDate: null, time: null, title: '세금 납부 기한' }],
+    calendarSettings: { ...tables.calendarSettings, deadline: true },
+  } as never);
+  renderWithKit(<BriefingDetail featureId="briefing" condition={condition} detailRef={{ featureId: 'briefing' }} host={host} />, { store, reducedMotion: true });
+  const card = screen.getByRole('heading', { name: '일정 브리핑' }).closest('section')!;
+  const row = within(card).getByText(/세금 납부 기한/).closest('li')!;
+  expect(within(row).getByText('오늘까지')).toBeInTheDocument();
+  await act(async () => { fireEvent.click(within(row).getByRole('button')); });
+  expect(host.openLinked).toHaveBeenCalledWith(expect.objectContaining({ featureId: 'tax', itemId: 'tax-due-1' }));
 });

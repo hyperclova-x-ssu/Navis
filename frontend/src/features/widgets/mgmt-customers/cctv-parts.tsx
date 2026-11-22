@@ -35,6 +35,16 @@ export function ModeToggle({ mode, onChange, hidden = false, className = '' }: M
   );
 }
 
+/** The widget header also hosts the example switch when the data comes from the service. */
+export function DetailModeToggle({ mode, onChange }: Pick<ModeToggleProps, 'mode' | 'onChange'>) {
+  const [header, setHeader] = useState<Element | null>(null);
+  useLayoutEffect(() => {
+    setHeader(document.querySelector('[data-detail-header-slot="customer-analysis"]'));
+  }, []); // eslint-disable-line react-hooks/set-state-in-effect
+  const toggle = <ModeToggle mode={mode} onChange={onChange} />;
+  return header ? createPortal(toggle, header) : <div className="cc-detail__head">{toggle}</div>;
+}
+
 export interface MenuActions { readonly reconnect: () => void; readonly resetZones: () => void; readonly canResetZones: boolean }
 /** The ⋯ button of this widget only (SCREENS 9.11): 카메라 다시 연결 · 테이블 다시 설정. The list is a portal, so a panel never clips it. */
 export function WidgetMenu({ actions, hidden = false }: { readonly actions: MenuActions; readonly hidden?: boolean }) {

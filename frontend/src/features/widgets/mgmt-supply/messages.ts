@@ -60,7 +60,7 @@ const inventoryRows = [
   ['widget.inventory-booking.stockRowWithThreshold', '{item} {stock} / 기준 {threshold}', '{item}\u00A0· {stock} / Threshold {threshold}', '{item}\u00A0· {stock} / 补货阈值 {threshold}', '{item}\u00A0· {stock} / 補貨門檻 {threshold}', P],
   ['widget.inventory-booking.empty', '아직 등록한 품목이 없어요', 'No inventory items yet', '尚未添加库存商品', '尚未新增庫存商品', P],
   ['widget.inventory-booking.registerItem', '품목 추가하기', 'Add item', '添加商品', '新增商品', P],
-  ['widget.inventory-booking.needsReview', '현재고와 보충 기준을 확인해 주세요', 'Check stock levels and restock thresholds', '请检查库存和补货阈值', '請確認庫存與補貨門檻', P],
+  ['widget.inventory-booking.needsReview', '현재 재고와 안전 재고를 확인해 주세요', 'Check stock levels and restock thresholds', '请检查库存和补货阈值', '請確認庫存與補貨門檻', P],
   ['widget.inventory-booking.itemNeedsReview', '확인 필요', 'Needs review', '需要确认', '需要確認', P],
   ['widget.inventory-booking.partialZero', '확인된 품목 중 보충 필요 0개', 'No checked items need restocking', '已确认的商品中没有需要补货的商品', '已確認的商品中沒有需要補貨的商品', P],
   ['widget.inventory-booking.noRestock', '보충이 필요한 품목이 없어요', 'No items need restocking', '没有需要补货的商品', '沒有需要補貨的商品', P],
@@ -69,7 +69,7 @@ const inventoryRows = [
   ['widget.inventory-booking.options.showOutOfStock', '품절 품목 수 표시', 'Show out-of-stock count', '显示缺货商品数量', '顯示缺貨商品數量', P],
   // stock-sync merged into inventory (D-54): its two plan-1 rows move under this widget's prefix.
   ['widget.inventory-booking.productsTotal', '전체 재고', 'Total stock', '总库存', '總庫存', P],
-  ['widget.inventory-booking.lowInChannel', '품절 가까움', 'Running low', '即将缺货', '即將缺貨', P],
+  ['widget.inventory-booking.lowInChannel', '보충 필요', 'Running low', '即将缺货', '即將缺貨', P],
   ['widget.inventory-booking.restockUnit', '개 품목', '{count, plural, one {item} other {items}}', '种商品', '種商品', W],
   ['widget.inventory-booking.summary', '보충 필요 {count}개 품목', 'Needs restocking: {count, plural, one {# item} other {# items}}', '需要补货 {count} 种商品', '需要補貨 {count} 種商品', W],
   ['widget.inventory-booking.summaryOut', '{summary}, 품절 {out}개 품목', '{summary}, {out} out of stock', '{summary}，{out} 种商品缺货', '{summary}，{out} 種商品缺貨', W],
@@ -77,8 +77,8 @@ const inventoryRows = [
   ['widget.inventory-booking.filter.label', '목록 보기', 'Show', '显示', '顯示', W],
   ['widget.inventory-booking.filter.all', '전체', 'All', '全部', '全部', W],
   ['widget.inventory-booking.stock', '현재고', 'In stock', '现有库存', '現有庫存', W],
-  ['widget.inventory-booking.threshold', '보충 기준', 'Restock threshold', '补货阈值', '補貨門檻', W],
-  ['widget.inventory-booking.thresholdShort', '기준 {threshold}', 'Threshold {threshold}', '补货阈值 {threshold}', '補貨門檻 {threshold}', W],
+  ['widget.inventory-booking.threshold', '안전 재고', 'Restock threshold', '补货阈值', '補貨門檻', W],
+  ['widget.inventory-booking.thresholdShort', '안전 재고 {threshold}', 'Threshold {threshold}', '补货阈值 {threshold}', '補貨門檻 {threshold}', W],
   ['widget.inventory-booking.channel.store', '매장', 'Store', '门店', '門市', W],
   ['widget.inventory-booking.channel.online', '온라인', 'Online', '线上', '線上', W],
   ['widget.inventory-booking.moved', '채널을 옮겼어요', 'Stock moved between channels', '已调配渠道库存', '已調配通路庫存', W],
@@ -150,7 +150,6 @@ const supplierRows = [
   ['widget.suppliers.due.calendarNote', '바꾸면 캘린더의 입고 일정도 함께 옮겨져요', 'The calendar delivery moves with it', '日历中的到货日程会一起更改', '行事曆中的到貨行程會一起更改', W],
   ['widget.suppliers.registered', '거래처를 등록했어요', 'Supplier added', '已添加供应商', '已新增供應商', W],
   ['widget.suppliers.form.supplierName', '거래처 이름', 'Supplier name', '供应商名称', '供應商名稱', W],
-  ['widget.suppliers.sampleNote', '예시 화면이라 실제로 저장하지 않아요', 'This is a sample, so nothing is saved', '这是示例，不会实际保存', '這是範例，不會實際儲存', W],
   ['widget.suppliers.noOrder', '주문을 골라 주세요', 'Choose an order', '请选择订单', '請選擇訂單', W],
 ] as const satisfies readonly Row[];
 

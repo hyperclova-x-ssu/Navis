@@ -50,7 +50,8 @@ export function useSizeCtx(props: Pick<WidgetPanelProps, 'shape' | 'width' | 'he
   return { shape: props.shape, width: props.width, height: props.height, scale: ui.textScale, preset: ui.screenPreset.id };
 }
 const T_ROWS = { A: { 100: [3, 5, 7], 125: [2, 4, 5] }, B: { 100: [3, 6, 8], 125: [3, 5, 6] } } as const;
-const L_ROWS = { A: { 100: [3, 5, 7], 125: [2, 4, 5] }, B: { 100: [4, 6, 8], 125: [3, 5, 6] } } as const;
+/** D-333: the 4-high card lists more rows (only margin has a row budget); the fit guard still hides whatever does not fit. */
+const L_ROWS = { A: { 100: [3, 5, 15], 125: [2, 4, 10] }, B: { 100: [4, 6, 16], 125: [3, 5, 11] } } as const;
 /** Largest number of list rows the size can show (the widget may use fewer). */
 export function rowBudget(ctx: SizeCtx): number {
   const index = Math.min(2, Math.max(0, ctx.height - 2));
@@ -115,7 +116,7 @@ export function MiniSeries({ data, className = '' }: { readonly data: ChartData;
   const top = kind === 'line' ? hi + span * 0.25 : Math.max(0, hi);
   const pos = (v: number) => ((v - bottom) / (top - bottom || 1)) * 100;
   const last = values.length - 1;
-  const summary = `${data.ariaLabel}: ${values.map((v, i) => `${data.dates?.[i] ?? labels[i] ?? i + 1} ${data.series ? data.series.map(series => `${series.label} ${data.format(series.values[i] ?? 0)}`).join(' · ') : data.format(v)}`).join(', ')}`;
+  const summary = `${data.ariaLabel}: ${values.map((v, i) => `${labels[i] ?? data.dates?.[i] ?? i + 1} ${data.series ? data.series.map(series => `${series.label} ${data.format(series.values[i] ?? 0)}`).join(' · ') : data.format(v)}`).join(', ')}`;
   return (
     <figure className={`mm-chart ${className}`} data-kind={kind}>
       <div className="mm-chart__plot" role="img" aria-label={summary}>
@@ -125,6 +126,7 @@ export function MiniSeries({ data, className = '' }: { readonly data: ChartData;
             {data.series!.map((series, seriesIndex) => {
               const value = series.values[i] ?? 0;
               return <span key={series.id} className="mm-chart__paired-bar" data-series={series.id} data-series-index={seriesIndex} data-value={value} style={{ height: `${Math.abs(pos(value) - pos(0))}%`, bottom: `${Math.min(pos(value), pos(0))}%` }}>
+                <span className="mm-chart__paired-fill" />
                 {data.valueLabels ? <span className="mm-chart__bar-value" data-negative={value < 0 || undefined}>{data.format(value)}</span> : null}
               </span>;
             })}
@@ -151,7 +153,7 @@ export function MiniSeries({ data, className = '' }: { readonly data: ChartData;
 }
 
 /* ---------- panel layout ---------- */
-export interface RowData { readonly id: string; readonly name: string; readonly value?: string; readonly sub?: string; readonly badge?: ReactNode; readonly semanticValue?: string | number | boolean | null }
+export interface RowData { readonly id: string; readonly name: string; readonly value?: string; readonly sub?: string; /** D-333: a third caption line that only large cards fill (it is hidden with the other sub text when it does not fit). */ readonly detail?: string; readonly badge?: ReactNode; readonly semanticValue?: string | number | boolean | null }
 export interface PanelSpec {
   readonly slot: FeatureId;
   readonly label: string;
@@ -191,7 +193,7 @@ export function Rows({ rows, title, slot, dropped, rowLimit }: { readonly rows: 
       <ul className="mm-rows" data-slot={`${slot}.list`} data-fit-dropped={dropped ? dropped : undefined} data-row-limit={rowLimit}>
         {rows.map((row) => (
           <li key={row.id} className="mm-row" data-slot={`${slot}.list.row`} data-row-id={row.id}>
-            <span className="mm-row__text"><span className="mm-row__name" lang={copyLang(row.name)}>{row.name}</span>{row.sub ? <span className="mm-row__sub" lang={copyLang(row.sub)}><ValueSlot slotId={`${slot}.dashboard.row.${row.id}.sub`} featureId={slot} scope="dashboard" semanticValue={row.semanticValue === undefined ? row.sub : row.semanticValue}>{row.sub}</ValueSlot></span> : null}</span>
+            <span className="mm-row__text"><span className="mm-row__name" lang={copyLang(row.name)}>{row.name}</span>{row.sub ? <span className="mm-row__sub" lang={copyLang(row.sub)}><ValueSlot slotId={`${slot}.dashboard.row.${row.id}.sub`} featureId={slot} scope="dashboard" semanticValue={row.semanticValue === undefined ? row.sub : row.semanticValue}>{row.sub}</ValueSlot></span> : null}{row.detail ? <span className="mm-row__sub mm-row__detail" lang={copyLang(row.detail)}>{row.detail}</span> : null}</span>
             {row.badge ? <span className="mm-row__badge">{row.badge}</span> : null}
             {row.value ? <span className="mm-row__value" lang={copyLang(row.value)}><ValueSlot slotId={`${slot}.dashboard.row.${row.id}.value`} featureId={slot} scope="dashboard" semanticValue={row.semanticValue === undefined ? row.value : row.semanticValue}>{row.value}</ValueSlot></span> : null}
           </li>

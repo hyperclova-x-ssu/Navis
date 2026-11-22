@@ -20,7 +20,7 @@ const rows = {
   'widget.hiring.weekdayLoad': ['요일별 바쁜 정도', 'Busy level by day', '各星期的忙碌程度', '各星期的忙碌程度'],
   'widget.hiring.loadTable': ['요일·시간대별 일손 부담', 'Staffing load by day and hour', '按星期和时段的人手压力', '按星期和時段的人手壓力'],
   'widget.hiring.loadHint': ['1단계는 여유롭고 5단계는 가장 바빠요. 최근 4주 결제 건수와 근무 인원으로 계산해요', 'Level 1 is calm and level 5 is the busiest. Based on payments and staffing over the last 4 weeks', '1 级最空闲，5 级最忙。依据最近 4 周的结算笔数和上班人数计算', '1 級最空閒，5 級最忙。依據最近 4 週的結帳筆數和上班人數計算'],
-  'widget.hiring.basis': ['기준 기간\u00A0· 최근 4주 ({range})', 'Basis\u00A0· last 4 weeks ({range})', '统计期间\u00A0· 最近 4 周（{range}）', '統計期間\u00A0· 最近 4 週（{range}）'],
+  'widget.hiring.basis': ['기준 기간\u00A0· 최근 4주({range})', 'Basis\u00A0· last 4 weeks ({range})', '统计期间\u00A0· 最近 4 周（{range}）', '統計期間\u00A0· 最近 4 週（{range}）'],
   'widget.hiring.hourColumn': ['시간', 'Hour', '时间', '時間'],
   'widget.hiring.statusNone': ['공고 초안 없음', 'No job post draft', '暂无招聘草稿', '尚無徵才草稿'],
   'widget.hiring.statusDraft': ['공고 초안 저장함', 'Job post draft saved', '招聘草稿已保存', '徵才草稿已儲存'],
@@ -105,7 +105,6 @@ const rows = {
   'widget.floor-plan.photos': ['예시 사진', 'Sample photos', '示例照片', '示範照片'],
   'widget.floor-plan.photoN': ['예시 사진 {n}', 'Sample photo {n}', '示例照片 {n}', '示範照片 {n}'],
   'widget.floor-plan.progress': ['사진을 살펴보고 자리도를 그리고 있어요', 'Looking at your photos and drawing the plan', '正在查看照片并绘制座位图', '正在查看照片並繪製座位圖'],
-  'widget.floor-plan.pos': ['주문/결제 연결됨(예시)', 'Orders/payments connected (sample)', '订单/支付已连接（示例）', '訂單/付款已連線（範例）'],
   'widget.floor-plan.voiceLink': ['음성 예약확정이 이 좌석 수를 써요', 'Voice booking uses this seat count', '语音预约确认使用这个座位数', '語音預約確認使用這個座位數'],
   'widget.floor-plan.goInterior': ['매장 인테리어 보기', 'Open store interior', '查看店铺装修', '查看店鋪裝潢'],
   'widget.floor-plan.draftOnly': ['저장만 해서는 좌석 수가 바뀌지 않아요', "Saving a layout doesn't change your seats", '仅保存不会改变座位数', '僅儲存不會改變座位數'],
@@ -125,7 +124,6 @@ const mastermanageKo = {
   'widget.manuals.contentRequired': '내용을 넣어 주세요',
   'widget.manuals.storeCount': '매장 정보 {n}개',
   'widget.manuals.progressSentence': '{total}단계 중 {done}단계 완료',
-  'widget.manuals.stepExample': '{n}단계 예시 그림',
   'widget.manuals.procedures': '하는 방법',
 } as const;
 export type MgmtStoreKey = keyof typeof rows | keyof typeof mastermanageKo;

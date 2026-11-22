@@ -40,8 +40,8 @@ describe('custom UI consumes the real M2 planners', () => {
     renderWithKit(<CustomOrderProvider port={port}><CustomOrderDetail {...props} /></CustomOrderProvider>);
     fireEvent.click(screen.getByRole('tab', { name: '템플릿 관리' }));
     fireEvent.change(screen.getByLabelText('상품 종류'), { target: { value: '꽃 케이크' } });
-    fireEvent.click(screen.getByRole('button', { name: 'AI로 템플릿 만들기' }));
-    expect(screen.getByRole('button', { name: 'AI가 예시 템플릿을 만들고 있어요' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '양식 견본 만들기' }));
+    expect(screen.getByRole('button', { name: '양식 견본을 만들고 있어요' })).toBeDisabled();
     act(() => vi.advanceTimersByTime(1000));
     const editor = screen.getByRole('form', { name: '템플릿 고치기' });
     fireEvent.change(within(editor).getByLabelText('템플릿 이름'), { target: { value: '꽃 주문서' } });

@@ -1,4 +1,5 @@
 import type { FeatureId, WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../../contracts';
+import { useDomainState } from '../../../data/react';
 import { creditCopy, money } from './copy';
 import { CreditDetail, CreditPanel } from './widget';
 import type { UseCreditBinding } from './types';
@@ -9,6 +10,8 @@ export function createCreditWidget(id: FeatureId, useBinding: UseCreditBinding):
   function Detail(props: WidgetDetailProps) { const binding = useBinding(props.condition); return <CreditDetail {...props} {...binding} />; }
   function useSummary({ condition }: Parameters<WidgetModule['useSummary']>[0]) {
     const { view } = useBinding(condition);
+    const state = useDomainState('members');
+    if (state.status === 'idle' || state.status === 'loading') return creditCopy.loading;
     return view.status === 'ready' ? `총 충전금 ${money(view.model.chargeBalance)} · 총 외상 ${money(view.model.receivableBalance)}` : view.status === 'empty' ? creditCopy.empty : creditCopy.error;
   }
   return { id, Panel, Detail, useSummary };

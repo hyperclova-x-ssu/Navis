@@ -68,9 +68,11 @@ export function createWidgetHost(run: Pick<RunStore, 'actions'> & Partial<Pick<R
     openClosing: (returnFocusKey) => actions.openClosing(returnFocusKey),
     openLinked: (ref) => { actions.openLinkedDetail(ref); },
     openDetail: (ref) => { actions.openDetailRef(ref, focusKey ?? `panel:${featureId}`); },
-    notify: ({ kind, messageKey, params, undoToken }) => actions.showNotice({
+    notify: ({ kind, messageKey, params, undoToken, undoUntil }) => actions.showNotice({
       kind, messageKey, featureId, ...(params ? { params } : {}), ...(undoToken ? { undo: { target: 'data' as const, token: undoToken } } : {}),
+      ...(undoToken && undoUntil && Number.isFinite(Date.parse(undoUntil)) ? { undoUntil: Date.parse(undoUntil) } : {}),
     }),
+    supersedeSuccessNotice: () => actions.supersedeWidgetSuccessNotice(featureId),
     acknowledgeBriefing: () => actions.acknowledgeBriefing(),
     ...(briefingAcknowledged ? { briefingAcknowledged } : {}),
   };

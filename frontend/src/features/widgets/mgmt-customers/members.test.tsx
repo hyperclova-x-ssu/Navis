@@ -25,6 +25,21 @@ it('switches to the membership table', async () => {
   await userEvent.click(screen.getByRole('tab', { name: '회원권' }));
   expect(screen.getByRole('grid', { name: '회원권' })).toBeInTheDocument();
 });
+it('finds a member by their compact display number and uses the canonical row ID', async () => {
+  const store = createWidgetDataStore();
+  const { memberProfile } = store.getSnapshot().tables;
+  const original = memberProfile.find(row => row.memberId === 'M-0008')!;
+  const memberId = 'e79a88b6-e6a5-4d5b-b23a-78c7f72e2dcc';
+  store.hydrate({ memberProfile: memberProfile.map(row => row === original ? { ...row, memberCode: undefined, memberId } : row) });
+  renderWithKit(<MembersDetail {...common} detailRef={{ featureId: 'members' }} />, { store });
+  const grid = screen.getByRole('grid', { name: '회원목록' });
+  await userEvent.type(screen.getByRole('searchbox'), 'M-E79A88B6');
+  const compact = within(grid).getByText('M-E79A88B6');
+  expect(compact.closest('tr')).toHaveAttribute('data-grid-row', memberId);
+  expect(grid).not.toHaveTextContent(memberId);
+  await userEvent.click(compact);
+  expect(screen.getByRole('region')).toHaveTextContent('M-E79A88B6');
+});
 it('right-aligns the membership counts with their unit and their header in the member list', () => {
   renderWithKit(<><style>{gridStyles}</style><MembersDetail {...common} detailRef={{ featureId: 'members' }} /></>);
   const grid = screen.getByRole('grid', { name: '회원목록' });

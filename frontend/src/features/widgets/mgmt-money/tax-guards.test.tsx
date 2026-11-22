@@ -59,11 +59,12 @@ describe('a repeated payment is surfaced before it is added', () => {
     const before = store.getSnapshot().tables.taxPayment.length;
     await userEvent.click(screen.getByRole('button', { name: '저장하기' }));
     expect(store.getSnapshot().tables.taxPayment.length).toBe(before);
-    expect(screen.getByText('같은 세금 납부 일정이 있어요. 기존 일정을 확인해 주세요')).toBeInTheDocument();
+    // T-17: a refusal reads "실행하지 못했어요 · {이유}" (the form already shows its next step, so no second one is added).
+    expect(screen.getByText('실행하지 못했어요 · 같은 세금 납부 일정이 있어요. 기존 일정을 확인해 주세요')).toBeInTheDocument();
     expect(document.querySelector('[data-slot="tax.existing"]')).toHaveTextContent(shortDate(row.dueOn));
     expect(host.notify).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'error', messageKey: 'data.management.error.TAX_PAYMENT_EXISTS' }));
     await userEvent.click(screen.getByRole('button', { name: '그래도 추가하기' }));
     expect(store.getSnapshot().tables.taxPayment.length).toBe(before + 1);
-    expect(within(document.body).queryByText('같은 세금 납부 일정이 있어요. 기존 일정을 확인해 주세요')).toBeNull();
+    expect(within(document.body).queryByText(/같은 세금 납부 일정이 있어요/)).toBeNull();
   });
 });

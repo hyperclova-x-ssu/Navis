@@ -51,6 +51,10 @@
 .credit-panel-table .ui-table thead th { height: var(--table-header-height); padding-block: 0; background: var(--muted); color: var(--foreground); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-bold); vertical-align: middle; }
 .credit-panel-table .ui-table tr > :first-child { text-align: left; }
 .credit-panel-table .ui-table tbody tr:last-child td { border-bottom: 0; }
+/* D-333: the dated recent-transaction lines of the large card: the text with its date under it on the left, the amount on the right. */
+.credit-panel-recent .credit-history-title { margin: 0 0 var(--space-1); }
+.credit-panel-history--dated .credit-history-text { display: flex; flex-direction: column; min-width: 0; }
+.credit-panel-history--dated .credit-when { color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-regular); font-variant-numeric: tabular-nums; }
 .credit-panel .i7-panel-remainder { margin: var(--space-2) 0 0; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
 
 /* 원거래 column (DS 12.1 LinkCell): label + right chevron, the whole cell is one press target. */

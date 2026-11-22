@@ -41,7 +41,7 @@ it('재고 표에서 키보드로 수정하고 변동 기록과 되돌리기를 
   const notify = vi.fn();
   const adjustments = store.getSnapshot().tables.stockAdjustment.length;
   inventoryDetail(store,{textScale:125,reducedMotion:true},{onNotify:notify});
-  const grid = screen.getByRole('grid', {name:'원자재'});
+  const grid = screen.getByRole('grid', {name:'재료'});
   const row = grid.querySelector(`[data-grid-row="${BEANS}"]`)!;
   const stock = within(row as HTMLElement).getByRole('gridcell', {name:/현재 재고/});
   fireEvent.keyDown(stock, {key:'Enter'});
@@ -143,7 +143,7 @@ it('시럽 사용 증가가 발주 제안과 새 발주 및 캘린더에 이어�
 it('재고 펼침은 우유를 쓰는 메뉴와 당일 소진 품목의 7일 기록을 보여준다', () => {
   const store=createWidgetDataStore();
   inventoryDetail(store);
-  const grid=screen.getByRole('grid',{name:'원자재'});
+  const grid=screen.getByRole('grid',{name:'재료'});
   const milk=grid.querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
   fireEvent.click(within(milk).getByRole('button',{name:`${raw(store,MILK)} 재고 변동 기록`}));
   expect(screen.getByRole('button',{name:/카페라떼/})).toBeInTheDocument();
@@ -159,7 +159,7 @@ it('재고 펼침은 우유를 쓰는 메뉴와 당일 소진 품목의 7일 기
 it('잘못된 재고 값은 저장하거나 다른 행으로 이동하지 않는다', () => {
  const store=createWidgetDataStore();
  inventoryDetail(store,{textScale:125,reducedMotion:true});
- const grid=screen.getByRole('grid',{name:'원자재'}),row=grid.querySelector(`[data-grid-row="${BEANS}"]`) as HTMLElement;
+ const grid=screen.getByRole('grid',{name:'재료'}),row=grid.querySelector(`[data-grid-row="${BEANS}"]`) as HTMLElement;
  fireEvent.click(row.querySelector('[data-grid-column-id="stock"]')!);
  const input=within(row).getByRole('textbox');fireEvent.change(input,{target:{value:'-1'}});fireEvent.keyDown(input,{key:'Tab'});
  expect(input).toHaveAttribute('aria-invalid','true');expect(store.getSnapshot().revision).toBe(0);
@@ -233,6 +233,8 @@ it('발주 MOQ·주문 단위는 저장을 막고 유효 주문 취소·undo는 
   expect(row).toHaveTextContent('3 kg');
   fireEvent.click(row.querySelector('[data-grid-column-id="item"]')!);
   fireEvent.click(screen.getByRole('button',{name:'발주 취소하기'}));
+  // Stale expectation, not a regression: the purchasing cutover made cancel a two-step action (extra confirmation, safety invariant).
+  fireEvent.click(screen.getByRole('button',{name:'발주 취소 확인'}));
   expect(selectCalendar(store.getSnapshot(),{date:TODAY}).monthEntries.some(e=>e.sourceId===order.poId)).toBe(false);
   expect(store.undo(notify.mock.calls.at(-1)![0].undoToken).ok).toBe(true);
   expect(selectCalendar(store.getSnapshot(),{date:TODAY}).monthEntries.some(e=>e.sourceId===order.poId)).toBe(true);
@@ -241,7 +243,7 @@ it('발주 MOQ·주문 단위는 저장을 막고 유효 주문 취소·undo는 
 it('표 검색·숫자 정렬은 selector의 업무 원본과 집계를 바꾸지 않는다', () => {
   const store=createWidgetDataStore();
   inventoryDetail(store);
-  const before=store.getSnapshot(),grid=screen.getByRole('grid',{name:'원자재'});
+  const before=store.getSnapshot(),grid=screen.getByRole('grid',{name:'재료'});
   fireEvent.click(within(grid).getByRole('button',{name:'현재 재고'}));
   const ascending=[...model(store).ingredients].sort((a,b)=>(a.stock??0)-(b.stock??0)||a.itemId.localeCompare(b.itemId)).map(r=>r.itemId);
   expect([...grid.querySelectorAll('[data-grid-row]')].map(r=>r.getAttribute('data-grid-row'))).toEqual(ascending);
@@ -286,6 +288,8 @@ it('발주 품목 추가·삭제는 원본을 바꾸고 활성 레시피의 유�
   const added=store.getSnapshot().tables.purchaseItem.at(-1)!;
   const row=screen.getByRole('grid',{name:'발주 품목'}).querySelector(`[data-grid-row="${added.purchaseItemId}"]`) as HTMLElement;
   fireEvent.click(within(row).getByRole('button',{name:'새 재료 지우기'}));
+  // Stale expectation, not a regression: purchase-item delete now asks for an extra confirmation (the 27th row stays until it is pressed).
+  fireEvent.click(screen.getByRole('button',{name:'지우기 확인'}));
   expect(store.getSnapshot().tables.purchaseItem).toHaveLength(items);
   const milkItem=purchaseOf(store.getSnapshot().tables,MILK);
   const original=screen.getByRole('grid',{name:'발주 품목'}).querySelector(`[data-grid-row="${milkItem.purchaseItemId}"]`) as HTMLElement;
@@ -298,7 +302,7 @@ it('발주 품목 추가·삭제는 원본을 바꾸고 활성 레시피의 유�
 it('출처에서 돌아오면 검색·정렬·펼침·표 스크롤을 복원하고 완전 닫기 뒤에는 초기화한다', () => {
   const {store}=shortMilk();
   const view=renderWithKit(<DetailStack root={{featureId:'inventory-booking'}}/>,{store});
-  const grid=screen.getByRole('grid',{name:'원자재'});
+  const grid=screen.getByRole('grid',{name:'재료'});
   const open=`${raw(store,MILK)} 재고 변동 기록`;
   fireEvent.change(screen.getByRole('searchbox'),{target:{value:'우유'}});
   fireEvent.click(within(grid).getByRole('button',{name:'현재 재고'}));
@@ -307,7 +311,7 @@ it('출처에서 돌아오면 검색·정렬·펼침·표 스크롤을 복원하
   fireEvent.click(within(grid).getByRole('button',{name:'발주 보기'}));
   expect(screen.getByRole('grid',{name:'발주 내역'})).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'돌아가기'}));
-  const restored=screen.getByRole('grid',{name:'원자재'});
+  const restored=screen.getByRole('grid',{name:'재료'});
   expect(screen.getByRole('searchbox')).toHaveValue('우유');
   expect(within(restored).getByRole('columnheader',{name:'현재 재고'})).toHaveAttribute('aria-sort','ascending');
   expect(screen.getByRole('button',{name:open})).toHaveAttribute('aria-expanded','true');
@@ -347,7 +351,7 @@ it('재고 값은 공용 강조 coordinator에 의미값을 등록하고 자체 
  renderWithKit(<VisibleSlotProvider registry={registry}><Detail featureId="inventory-booking" condition={{kind:'default'}} detailRef={{featureId:'inventory-booking'}} host={createTestHost('inventory-booking')}/></VisibleSlotProvider>,{store});
  const slot=()=>registry.getSnapshot().find(s=>s.slotId===`inventory-booking:${BEANS}:stock`);
  expect(slot()?.semanticValue).toBe(stockNow);
- const row=screen.getByRole('grid',{name:'원자재'}).querySelector(`[data-grid-row="${BEANS}"]`) as HTMLElement;
+ const row=screen.getByRole('grid',{name:'재료'}).querySelector(`[data-grid-row="${BEANS}"]`) as HTMLElement;
  fireEvent.click(row.querySelector('[data-grid-column-id="stock"]')!);
  const input=within(row).getByRole('textbox');fireEvent.change(input,{target:{value:String(stockNow+2000)}});fireEvent.keyDown(input,{key:'Enter'});
  expect(slot()?.semanticValue).toBe(stockNow+2000);expect(slot()?.scope).toBe('editor');
@@ -357,7 +361,7 @@ it('재고 값은 공용 강조 coordinator에 의미값을 등록하고 자체 
 it('오늘 사용량 칸을 클릭하거나 Enter로 펼쳐 메뉴별 사용을 보여준다', () => {
  const store=createWidgetDataStore();
  inventoryDetail(store);
- const row=screen.getByRole('grid',{name:'원자재'}).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
+ const row=screen.getByRole('grid',{name:'재료'}).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
  const used=row.querySelector('[data-grid-column-id="used"]')!;
  fireEvent.click(used);
  expect(screen.getByRole('grid',{name:ledgerName(store,MILK)})).toHaveTextContent('카페라떼 24잔');
@@ -369,7 +373,7 @@ it('재고 품절 상태는 중복 경고 띠 없이 표시되고 펼침 뒤에�
  const store=createWidgetDataStore();
  store.dispatch({type:'inventory.updateItem',itemId:MILK,stock:0});
  inventoryDetail(store);
- const row=screen.getByRole('grid',{name:'원자재'}).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
+ const row=screen.getByRole('grid',{name:'재료'}).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
  expect(within(row).getByText('품절')).toBeInTheDocument();
  expect(row).not.toHaveAttribute('aria-describedby');
  fireEvent.click(within(row).getByRole('button',{name:`${raw(store,MILK)} 재고 변동 기록`}));
@@ -389,7 +393,7 @@ it('표 편집 중에도 이전 의미값을 유지해 저장 후 같은 칸을 
  const stockNow=model(store).ingredients.find(r=>r.itemId===BEANS)!.stock!;
  renderWithKit(<VisibleSlotProvider registry={registry}><Detail featureId="inventory-booking" condition={{kind:'default'}} detailRef={{featureId:'inventory-booking'}} host={createTestHost('inventory-booking')}/></VisibleSlotProvider>,{store});
  const id=`inventory-booking:${BEANS}:stock`;
- const row=screen.getByRole('grid',{name:'원자재'}).querySelector(`[data-grid-row="${BEANS}"]`) as HTMLElement;
+ const row=screen.getByRole('grid',{name:'재료'}).querySelector(`[data-grid-row="${BEANS}"]`) as HTMLElement;
  fireEvent.click(row.querySelector('[data-grid-column-id="stock"]')!);
  expect(registry.getSnapshot().find(s=>s.slotId===id)?.semanticValue).toBe(stockNow);
  expect(row.querySelector('[data-grid-column-id="stock"]')).toHaveAttribute('data-slot-id',id);
@@ -402,7 +406,7 @@ it('공용 coordinator는 재고 편집을 실제 표 칸에 강조한다', asyn
   const run=createRunStore({screenPreset:screenPresets.A,catalog:getRegistry('A'),time:timePolicy,clock:()=>0,theme:'light'}),Detail=inventoryWidget.Detail!;
   renderWithKit(<ValueHighlights run={run}><Detail featureId="inventory-booking" condition={{kind:'default'}} detailRef={{featureId:'inventory-booking'}} host={createTestHost('inventory-booking')}/></ValueHighlights>);
   await act(async()=>{});
-  const cell=screen.getByRole('grid',{name:'원자재'}).querySelector(`[data-grid-row="${BEANS}"] [data-grid-column-id="stock"]`) as HTMLElement;
+  const cell=screen.getByRole('grid',{name:'재료'}).querySelector(`[data-grid-row="${BEANS}"] [data-grid-column-id="stock"]`) as HTMLElement;
   fireEvent.click(cell);await act(async()=>{});
   const input=within(cell).getByRole('textbox');fireEvent.change(input,{target:{value:'7688'}});fireEvent.keyDown(input,{key:'Enter'});
   await waitFor(()=>expect(cell).toHaveAttribute('data-highlighted'));
@@ -421,11 +425,11 @@ it('음수 사용과 누락된 안전 재고는 각 행 아래에 설명한다',
  const store=createWidgetDataStore(),m=model(store);
  const ingredients=m.ingredients.map(r=>r.itemId===MILK?{...r,deficit:3.9}:r.itemId===BEANS?{...r,threshold:null,needsReview:true}:r);
  renderWithKit(<StockGrid model={{...m,ingredients}} host={createTestHost('inventory-booking')}/>,{store});
- const grid=screen.getByRole('grid',{name:'원자재'});
+ const grid=screen.getByRole('grid',{name:'재료'});
  const milk=grid.querySelector(`[data-grid-row="${MILK}"]`)!,beans=grid.querySelector(`[data-grid-row="${BEANS}"]`)!;
  // the stock unit of the milk is mL
  expect(document.getElementById(milk.getAttribute('aria-describedby')!)).toHaveTextContent('오늘 사용량이 재고보다 3.9 mL 많아요');
- expect(document.getElementById(beans.getAttribute('aria-describedby')!)).toHaveTextContent('현재고와 보충 기준을 확인해 주세요');
+ expect(document.getElementById(beans.getAttribute('aria-describedby')!)).toHaveTextContent('현재 재고와 안전 재고를 확인해 주세요');
 });
 
 it('가려진 값은 실제 가시 여부가 바뀔 때 슬롯에 반영된다', async () => {
@@ -481,7 +485,7 @@ it('오늘 이미 지난 시각으로 고칠 때 지난 기록으로 남기기�
 });
 
 it.each([
-  ['inventory-booking','원자재',['원자재','판매 상품']],
+  ['inventory-booking','재료',['재료','판매 상품']],
   ['suppliers','발주 내역',['발주 내역','발주 품목','발주사']],
 ] as const)('%s 상세의 각 표는 남은 높이를 받는 탭 패널 안에 있다',(id,initialGrid,tabs)=>{
   const Detail=id==='suppliers'?suppliersWidget.Detail!:inventoryWidget.Detail!;
@@ -493,6 +497,10 @@ it.each([
   expect(screen.getByRole('grid',{name:initialGrid})).toBeInTheDocument();
   for(const tab of tabs){
     fireEvent.click(screen.getByRole('tab',{name:tab}));
+    if (tab === '판매 상품') {
+      expect(screen.getByText('아직 등록한 판매 상품이 없어요')).toBeVisible();
+      continue;
+    }
     const grid=screen.getByRole('grid',{name:tab});
     const panel=grid.closest<HTMLElement>('.ui-detail-tabs__panel')!;
     const tabRoot=panel.parentElement!;

@@ -6,6 +6,7 @@ import { useDataDispatch, useNotices, useStoreEnvironment, useWidgetDataStore, u
 import { dataBundles } from '../../data/widget-data';
 import { selectStoreClosures } from '../../data/iteration7/notices';
 import { useBundle } from '../../i18n';
+import { noticeBusinessNow } from '../../data/iteration7/notices/commands';
 import { createNoticePort, createNoticeWidget, noticeView } from './i7-notice';
 import { createEnvironmentPort, createEnvironmentWidget, environmentView } from './i7-environment';
 import { createCustomOrderWidget, type CustomOrderBinding, type CustomOrderPort } from './i7-custom';
@@ -23,7 +24,7 @@ function useNoticeBinding() {
   const groups = useWidgetView('customer-groups'), { t } = useBundle(...dataBundles);
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const port = useMemo(() => createNoticePort(dispatch, id => store.getSnapshot().tables.noticeDraft.find(draft => draft.noticeId === id), () => host?.resetPreview('notice-send'), () => `notice:${globalThis.crypto.randomUUID()}`), [dispatch, store, host]);
-  return { view: view.status === 'ready' ? noticeView(view.model, selectStoreClosures(snapshot), groups.status === 'ready' ? groups.model.groups.map(group => ({ groupId: group.id, name: t(group.nameKey) })) : []) : { status: view.status === 'error' ? 'error' as const : 'empty' as const }, port };
+  return { view: view.status === 'ready' ? noticeView(view.model, selectStoreClosures(snapshot), groups.status === 'ready' ? groups.model.groups.map(group => ({ groupId: group.id, name: t(group.nameKey) })) : [], noticeBusinessNow(snapshot)) : { status: view.status === 'error' ? 'error' as const : 'empty' as const }, port };
 }
 function useEnvironmentBinding() {
   const view = useStoreEnvironment(), dispatch = useDataDispatch(), host = useM2WidgetBindings();

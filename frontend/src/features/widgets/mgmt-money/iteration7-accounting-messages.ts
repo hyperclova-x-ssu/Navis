@@ -9,7 +9,7 @@ export function depositCoverageNote(start: string, end: string): string {
 }
 
 export const accountingCopy = {
-  title: '매출 · 실제 입금', sales: '오늘 매출', deposits: '실제 입금', example: '예시',
+  title: '매출 · 실제 입금', sales: '오늘 매출', deposits: '실제 입금',
   salesMethods: '판매분 결제 수단', settlementSales: '정산 유형별 매출', depositMethods: '수단별 실제 입금',
   depositPurposes: '입금 종류별 내역', card: '카드', easy_pay: '간편결제', cash: '현금',
   cardSale: '카드 판매분', easyPaySale: '간편결제 판매분', cashSale: '현금 판매분',

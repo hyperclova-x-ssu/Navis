@@ -137,11 +137,11 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
   };
   const todayCount = (store: ReturnType<typeof createWidgetDataStore>) => readModel(store.getSnapshot(), 'calendar').todayCount;
 
-  it('shows the fake connection and adds an event and a to-do that really appear (AC-226, AC-258)', () => {
+  it('uses Navis calendar copy and adds an event and a to-do that appear (AC-226, AC-258)', () => {
     const onNotify = vi.fn();
     const { store } = open({}, { onNotify });
     const start = todayCount(store);
-    expect(screen.getByText('네이버 캘린더 연결됨(예시)')).toBeInTheDocument();
+    expect(screen.queryByText('네이버 캘린더 연결됨(예시)')).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /일정 추가하기/ })[0]!);
     fireEvent.change(screen.getByLabelText('일정 제목'), { target: { value: '거래처 전화' } });
     fireEvent.change(screen.getByLabelText('시각'), { target: { value: '16:00' } });
@@ -150,7 +150,7 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
     const today = screen.getByRole('list', { name: '오늘 일정' });
     expect([...today.querySelectorAll('.ms-entry__time')].map((n) => n.textContent)).toEqual(['12:00', '16:00', '16:30', '17:00']);
     expect(onNotify).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'success', messageKey: 'data.notice.calendarAdded', undoToken: expect.any(String) }));
-    expect(within(screen.getByRole('list', { name: 'notices' })).getByText('네이버 캘린더에 반영했어요(예시)')).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'notices' })).getByText('일정에 추가했어요')).toBeInTheDocument();
     // The panel reads the same store.
     expect(document.querySelector('[data-widget="calendar"] .ui-metric-fit__value')).toHaveTextContent(String(start + 1));
 
@@ -214,6 +214,8 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
     fireEvent.click(screen.getByRole('button', { name: '저장하기' }));
     expect(within(screen.getByRole('list', { name: '오늘 일정' })).getByText(`${SAMPLE}(마감 전)`)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: `${SAMPLE}(마감 전) 지우기` }));
+    expect(todayCount(store)).toBe(start);
+    fireEvent.click(within(screen.getByRole('group', { name: '일정을 지울까요?' })).getByRole('button', { name: '지우기' }));
     expect(todayCount(store)).toBe(start - 1);
   });
 
@@ -322,7 +324,7 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
     expect(within(agenda).getByRole('button', { name: new RegExp(SAMPLE) }).querySelector('.ms-entry__chevron')).toBeNull();
   });
 
-  it('keeps the toolbar to two rows: view, source switches, connection and add buttons on the first, the category checkboxes on the second (SCR-224)', () => {
+  it('keeps the view, source switches and add buttons above the category checkboxes (SCR-224)', () => {
     const { container } = open();
     renderWithKit(<style>{calendarCss}</style>);
     const toolbar = container.querySelector<HTMLElement>('.ms-calendar-toolbar')!;
@@ -331,7 +333,7 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
     expect(getComputedStyle(primary!).alignItems).toBe('center');
     expect(within(primary!).getByRole('radiogroup', { name: '보기' })).toBeInTheDocument();
     expect(within(primary!).getAllByRole('switch')).toHaveLength(2);
-    expect(within(primary!).getByText('네이버 캘린더 연결됨(예시)')).toBeInTheDocument();
+    expect(within(primary!).queryByText('네이버 캘린더 연결됨(예시)')).not.toBeInTheDocument();
     expect(within(primary!).getByRole('button', { name: '일정 추가하기' })).toBeInTheDocument();
     expect(getComputedStyle(filters!).alignItems).toBe('center');
     expect(within(filters!).getAllByRole('checkbox')).toHaveLength(3);
@@ -366,6 +368,6 @@ describe('calendar detail (SCR-14·31·33, AC-226·258)', () => {
   it('opens with the add form when asked for the action (focus) and in English', () => {
     renderWithKit(<DetailStack root={{ featureId: 'calendar', focus: 'action' }} />, { locale: 'en' });
     expect(screen.getByRole('form', { name: 'Add event' })).toBeInTheDocument();
-    expect(screen.getByText('Naver Calendar connected (sample)')).toBeInTheDocument();
+    expect(screen.queryByText('Naver Calendar connected (sample)')).not.toBeInTheDocument();
   });
 });

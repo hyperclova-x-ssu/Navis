@@ -84,3 +84,10 @@
 .ui-inline-form:has(> .ui-inline-form__body > .receipt-ocr) .ui-inline-form__actions > button[type="submit"] {
   min-block-size: var(--target-primary);
 }
+
+.receipt-ocr__note {
+  margin: 0;
+  font-size: var(--type-caption);
+  line-height: var(--leading-caption);
+  color: var(--muted-foreground);
+}

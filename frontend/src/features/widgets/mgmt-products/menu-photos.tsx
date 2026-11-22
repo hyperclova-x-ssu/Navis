@@ -1,11 +1,12 @@
-import { useId, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useId, useRef, useState, type ChangeEvent } from 'react';
 import type { WidgetHost } from '../../../contracts';
 import type { PosMenuPhotoDataUrl, PosMenuPhotoKey, PosMenuPhotoSelection } from '../../../contracts/pos';
-import { useDataDispatch } from '../../../data/react';
+import { useRealPort } from '../../../data/react';
 import { dataBundles } from '../../../data/widget-data';
 import { useBundle } from '../../../i18n';
 import { ActionButton, Icon, MenuPhoto } from '../../../ui';
 import { menuPhotoBundle, reportMenuResult } from './pos-menu-messages';
+import { onMenuResult, useMenuCommand } from './menu-controls';
 import './pos-menu.css';
 
 const photoTypes = ['image/png', 'image/jpeg', 'image/webp'];
@@ -35,11 +36,50 @@ interface MenuPhotoEditorProps {
   name: string;
   photoKey: PosMenuPhotoKey | null;
   customPhotoUrl: PosMenuPhotoDataUrl | null;
+  photoFileId?: string | null;
   host: WidgetHost;
 }
 
-export function MenuPhotoEditor({ menuId, name, photoKey, customPhotoUrl, host }: MenuPhotoEditorProps) {
-  const dispatch = useDataDispatch();
+export function MenuPhotoView({ photoFileId, size = 'preview', ...props }: Omit<MenuPhotoEditorProps, 'menuId' | 'host'> & { size?: 'preview' | 'thumbnail' }) {
+  const files = useRealPort()?.files;
+  const [photo, setPhoto] = useState<{ fileId: string; url: string }>();
+  const target = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!photoFileId || !files || !target.current) return;
+    let active = true;
+    let url: string | undefined;
+    const read = async () => {
+      try {
+        url = await files.readUrl(photoFileId);
+        if (active) setPhoto({ fileId: photoFileId, url });
+        else URL.revokeObjectURL(url);
+      } catch {
+        // Keep the menu's fallback artwork if the attachment is unavailable.
+      }
+    };
+    const observer = typeof IntersectionObserver === 'undefined' ? undefined : new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      observer?.disconnect();
+      void read();
+    });
+    if (observer) observer.observe(target.current);
+    else void read();
+    return () => {
+      active = false;
+      observer?.disconnect();
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [files, photoFileId]);
+  if (!photoFileId) return <MenuPhoto {...props} size={size} />;
+  return photo?.fileId === photoFileId
+    ? <span ref={target} aria-hidden="true" className={`ui-menu-photo${size === 'preview' ? ' menu-pos-photo' : ''}`} data-size={size}>
+      <img src={photo.url} alt="" decoding="async" />
+    </span>
+    : <span ref={target}><MenuPhoto {...props} size={size} /></span>;
+}
+
+export function MenuPhotoEditor({ menuId, name, photoKey, customPhotoUrl, photoFileId, host }: MenuPhotoEditorProps) {
+  const { send, pending: saving } = useMenuCommand();
   const { t, locale } = useBundle(menuPhotoBundle, ...dataBundles);
   const errorId = useId();
   const uploadButton = useRef<HTMLButtonElement>(null);
@@ -49,18 +89,19 @@ export function MenuPhotoEditor({ menuId, name, photoKey, customPhotoUrl, host }
   const [error, setError] = useState<string | null>(null);
 
   const photoLabel = t('widget.menu.photo.label');
-  const hasPhoto = Boolean(photoKey || customPhotoUrl);
+  const hasPhoto = Boolean(photoKey || customPhotoUrl || photoFileId);
   const uploadLabel = t(hasPhoto ? 'widget.menu.photo.replace' : 'widget.menu.photo.upload');
   const applyPhoto = (selection: PosMenuPhotoSelection) => {
     const command = { type: 'menu.setPhoto' as const, menuId, ...selection };
-    const result = dispatch(command);
-    reportMenuResult(host, result, command, name, t);
+    const result = send(command);
+    onMenuResult(result, response => reportMenuResult(host, response, command, name, t));
+    return result;
   };
   const upload = async (event: ChangeEvent<HTMLInputElement>) => {
     const field = event.currentTarget;
     const file = field.files?.[0];
     field.value = '';
-    if (!file || inFlight.current) return;
+    if (!file || inFlight.current || saving) return;
     if (!photoTypes.includes(file.type)) {
       setError('widget.menu.photo.wrongType');
       return;
@@ -77,7 +118,7 @@ export function MenuPhotoEditor({ menuId, name, photoKey, customPhotoUrl, host }
     const isCurrent = () => inFlight.current === request && input.current === field;
     try {
       const url = await resizePhoto(file);
-      if (isCurrent()) applyPhoto({ photoKey: null, customPhotoUrl: url });
+      if (isCurrent()) await applyPhoto({ photoKey: null, customPhotoUrl: url });
     } catch {
       if (isCurrent()) setError('widget.menu.photo.unreadable');
     } finally {
@@ -97,16 +138,16 @@ export function MenuPhotoEditor({ menuId, name, photoKey, customPhotoUrl, host }
 
   return <section className="menu-editor-section menu-photo-editor" aria-label={photoLabel} lang={locale}>
     <h4>{photoLabel}</h4>
-    <MenuPhoto photoKey={photoKey} customPhotoUrl={customPhotoUrl} name={name} />
+    <MenuPhotoView key={photoFileId} photoKey={photoKey} customPhotoUrl={customPhotoUrl} photoFileId={photoFileId} name={name} />
     {!hasPhoto && <span className="menu-photo-empty">{t('widget.menu.photo.none')}</span>}
-    <div className="menu-pos-actions" aria-busy={pending || undefined}>
-      <ActionButton ref={uploadButton} variant="secondary" aria-disabled={pending || undefined}
-        aria-describedby={error ? errorId : undefined} onClick={() => { if (!inFlight.current) input.current?.click(); }}>
+    <div className="menu-pos-actions" aria-busy={pending || saving || undefined}>
+      <ActionButton ref={uploadButton} variant="secondary" aria-disabled={pending || saving || undefined}
+        aria-describedby={error ? errorId : undefined} onClick={() => { if (!inFlight.current && !saving) input.current?.click(); }}>
         {pending && <span className="ui-progress" aria-hidden="true" />}
         {uploadLabel}
       </ActionButton>
       <input ref={input} type="file" name="menu-photo" aria-label={uploadLabel} accept="image/*" hidden onChange={upload} />
-      {hasPhoto && <ActionButton variant="ghost" onClick={remove}>{t('widget.menu.photo.remove')}</ActionButton>}
+      {hasPhoto && <ActionButton variant="ghost" disabled={saving} onClick={remove}>{t('widget.menu.photo.remove')}</ActionButton>}
     </div>
     {error && <p className="ui-field__error" id={errorId} role="alert"><Icon name="error" />{t(error)}</p>}
   </section>;

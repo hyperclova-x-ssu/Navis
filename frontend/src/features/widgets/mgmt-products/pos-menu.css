@@ -51,37 +51,47 @@
 }
 .menu-editor-recipe-grid[data-short-list] .ui-data-grid__table > tbody > tr:last-child > td { border-bottom-color: transparent; }
 
-.menu-management > .ui-data-grid {
+.menu-management > .menu-category-tabs,
+.menu-category-tabs > .ui-detail-tabs,
+.menu-category-tabs .ui-detail-tabs__panel:not([hidden]) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.menu-category-tabs .ui-detail-tabs__list { flex-shrink: 0; }
+.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid {
   --table-action-width: calc(var(--target-default) + 2 * var(--table-cell-padding-x));
 }
-.menu-management[data-panel-open] > .ui-data-grid {
+.menu-management[data-panel-open] > .menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid {
   width: calc(100% - var(--sidepanel-width) - var(--space-6));
 }
-.menu-management[data-panel-open] > .ui-data-grid > .ui-data-grid__scroll {
+.menu-management[data-panel-open] > .menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll {
   overflow-x: auto;
 }
-.menu-management[data-panel-open][data-more-columns] > .ui-data-grid > .ui-data-grid__scroll {
+.menu-management[data-panel-open][data-more-columns] > .menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll {
   mask-image: linear-gradient(to right, black calc(100% - var(--space-4)), transparent);
 }
-.menu-management > .ui-data-grid .ui-data-grid__cell { cursor: pointer; }
+.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll .ui-data-grid__cell { cursor: pointer; }
 
-.menu-management > .ui-data-grid .ui-data-grid__cell[data-first] .ui-data-grid__value {
+.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll .ui-data-grid__cell[data-first] .ui-data-grid__value {
   min-width: 0;
   word-break: keep-all;
   overflow: hidden;
 }
 
 /* Keep the thumbnail and the empty state aligned with the column heading. */
-.menu-management > .ui-data-grid .ui-data-grid__cell[data-grid-column-id="photo"] {
+.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll .ui-data-grid__cell[data-grid-column-id="photo"] {
   text-align: left;
 }
 
-.menu-management > .ui-data-grid .ui-data-grid__header-content > [data-grid-target='["$header","photo"]'] {
+.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll .ui-data-grid__header-content > [data-grid-target='["$header","photo"]'] {
   justify-content: flex-start;
   text-align: left;
 }
 
-.menu-management > .ui-data-grid .ui-data-grid__table > thead > tr > th:last-child > span {
+.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll .ui-data-grid__table > thead > tr > th:last-child > span {
   position: absolute;
   inline-size: var(--stroke-hairline);
   block-size: var(--stroke-hairline);
@@ -90,22 +100,22 @@
   white-space: nowrap;
 }
 
-.menu-management > .ui-data-grid .ui-data-grid__actions > span {
+.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll .ui-data-grid__actions > span {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.menu-management > .ui-data-grid .ui-data-grid__actions .ui-button > .ui-press-surface {
+.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll .ui-data-grid__actions .ui-button > .ui-press-surface {
   color: var(--muted-foreground);
 }
 
-.menu-management > .ui-data-grid .ui-data-grid__actions .ui-button[aria-disabled="true"] {
+.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll .ui-data-grid__actions .ui-button[aria-disabled="true"] {
   padding: calc(var(--space-3) / 2);
   cursor: not-allowed;
 }
 
-.menu-management > .ui-data-grid .ui-data-grid__actions .ui-button[aria-disabled="true"] > .ui-press-surface {
+.menu-category-tabs .ui-detail-tabs__panel > .ui-data-grid > .ui-data-grid__scroll .ui-data-grid__actions .ui-button[aria-disabled="true"] > .ui-press-surface {
   min-height: 0;
   padding: 0;
   background: var(--muted);

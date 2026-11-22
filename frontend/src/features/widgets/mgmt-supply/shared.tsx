@@ -62,6 +62,8 @@ export const newIdempotencyKey = (prefix: string): string => `${prefix}:${(keySe
  * until the content fits its box; `data-row` marks list rows so a `data-more` line (‘외 n개’) can replace them.
  * Text is never shrunk, clipped or ellipsized. Without layout (tests) everything stays visible.
  */
+/** Drop number of a tall card's extra table rows: above every other part, so they are the first to go. */
+const EXTRA_ROW_DROP=1000;
 export function useFit<T extends HTMLElement>(deps: DependencyList): { readonly ref: RefObject<T | null>; readonly hiddenRows: number } {
   const ref = useRef<T>(null);
   const [hiddenRows, setHiddenRows] = useState(0);
@@ -75,7 +77,9 @@ export function useFit<T extends HTMLElement>(deps: DependencyList): { readonly 
       for(const mini of root.querySelectorAll<HTMLElement>('[data-mini-columns]')){
         const priorities=(mini.dataset.miniColumns??'').split(',').map(Number);
         priorities.forEach((priority,index)=>{if(priority)candidates.push({nodes:Array.from(mini.querySelectorAll<HTMLElement>(`tr > :nth-child(${index+1})`)),priority,row:false});});
-        Array.from(mini.querySelectorAll<HTMLElement>('tbody tr')).forEach((el,index)=>candidates.push({nodes:[el],priority:Number(mini.dataset.miniRowPriority)+index,row:true}));
+        // D-333: rows from `data-mini-extra-rows` on are the ones only a tall card adds; they go before anything the short card already showed.
+        const extraFrom=Number(mini.dataset.miniExtraRows);
+        Array.from(mini.querySelectorAll<HTMLElement>('tbody tr')).forEach((el,index)=>candidates.push({nodes:[el],priority:extraFrom>0&&index>=extraFrom?EXTRA_ROW_DROP+index:Number(mini.dataset.miniRowPriority)+index,row:true}));
       }
       for(const c of candidates)for(const el of c.nodes)el.hidden=false;
       if(more)more.hidden=true;

@@ -61,16 +61,26 @@ describe('mode toggle (AC-1323·1325)', () => {
     expect(container.querySelector('[data-mode="live"]')).toBeNull();
     expect(container).toHaveTextContent('방문 감지');
   });
-  it('the mock panel is the 반복 5 layout with no toggle at any size (D-230)', () => {
+  it('keeps the mock panel toggle in detail and shows the sample clip at expanded sizes', () => {
     for (const [w, h] of [[1, 1], [1, 2], [2, 1], [2, 2], [4, 4]] as const) {
       const p = panel('customer-analysis', w, h);
       expect(p.container.querySelector('[data-slot="customer-analysis.mode-toggle"]')).toBeNull();
+      const clip = p.container.querySelector('video');
+      if (w > 1 && h > 1) expect(clip).toHaveAttribute('src', '/cnn/store-sample.mp4');
+      else expect(clip).not.toBeInTheDocument();
       p.unmount();
     }
   });
 });
 
 describe('live panel states (AC-1328·1330)', () => {
+  it('renders the same live stage as detail in an expanded panel, with no sample clip', () => {
+    fakeClient({});
+    setCctvMode('live');
+    const expanded = panel('customer-analysis', 2, 2);
+    expect(within(expanded.container).getByTestId('cctv-live-stage')).toHaveAttribute('data-connection', 'live');
+    expect(expanded.container.querySelector('video')).not.toBeInTheDocument();
+  });
   it('1x1 with no camera: status line and a button, and the setup opens only by that button', async () => {
     fakeClient({ connection: 'none', frame: null, zones: null });
     setCctvMode('live');
@@ -96,7 +106,9 @@ describe('live panel states (AC-1328·1330)', () => {
   it('server down offers a retry that calls the client', async () => {
     const f = fakeClient({ connection: 'server-down', serverDown: 'unreachable', frame: null, zones: null });
     setCctvMode('live');
-    panel('customer-analysis', 1, 1);
+    const { container } = panel('customer-analysis', 1, 1);
+    expect(container.querySelector('.cc-status')).toBeVisible();
+    expect(container.querySelector('[data-slot="customer-analysis.metric.value"]')).toHaveTextContent('—');
     await userEvent.click(screen.getByRole('button', { name: /다시 시도하기/ }));
     expect(f.retry).toHaveBeenCalled();
   });

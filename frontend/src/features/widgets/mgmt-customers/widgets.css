@@ -140,18 +140,22 @@ button.mc-bar[aria-pressed="true"] { background: var(--selection); color: var(--
 .ui-feature-panel[data-editing="true"] .mc-root[data-widget="customer-analysis"] .mc-camera-chart { padding-bottom: calc(var(--target-default) + var(--space-4) - var(--panel-padding)); }
 .mc-recipe-usage { display: flex; flex-direction: column; gap: var(--space-2); padding: 0; list-style: none; }
 .mc-detail select { background: var(--card); color: var(--foreground); }
-.mc-workspace > .ui-data-grid, .mc-grid-region > .ui-data-grid { flex: 1; min-height: 0; }
+.mc-workspace > .ui-data-grid, .mc-grid-region > .ui-data-grid,
+.menu-management .ui-detail-tabs__panel > .ui-data-grid { flex: 1; min-height: 0; }
 .mc-workspace > .mc-grid-region, .mc-workspace > .mc-grid-context { flex: 1 1 0; min-height: 0; }
 .mc-grid-region { display: flex; flex-direction: column; }
 .mc-grid-context { display: flex; flex-direction: column; gap: var(--space-4); overflow: auto; }
 .mc-root[data-widget="menu"] .ui-panel-body[data-shape="L"], .mc-root[data-widget="voice-booking"] .ui-panel-body[data-shape="L"] { grid-template-columns: minmax(0,1fr); }
+/* UI-SMALL-3: members at 4x4 stretched the chart/list row to 342px, leaving a 220px hole before the recent visits; the rows stay content-high. */
+.mc-root[data-widget="members"] .ui-panel-body[data-shape="L"] { grid-template-rows: auto auto auto; align-content: start; }
 /* A visible booking chart takes its natural height; the list gets the flexible row.
    Once hidden, its wrapper collapses and the kit's two rows apply again (also in 3x2). */
 .mc-root[data-widget="voice-booking"] .ui-panel-body[data-shape="L"]:has(> .ui-panel-chart > .mc-chart-slot:not([hidden])) { grid-template-rows: auto auto minmax(0, 1fr); }
 .mc-root[data-widget="menu"] .ui-panel-body[data-shape="L"] .ui-panel-list, .mc-root[data-widget="voice-booking"] .ui-panel-body[data-shape="L"] .ui-panel-list { grid-column: 1 / -1; }
-.mc-root[data-widget="customer-analysis"] .ui-still-frame-container { min-width: 0; }
-.mc-root[data-widget="customer-analysis"] .ui-still-frame { max-height: var(--stillframe-height); object-fit: contain; }
-.mc-root[data-widget="customer-analysis"] .ui-panel-body[data-shape="L"] .ui-still-frame { max-height: none; }
+.mc-cctv-preview { position: relative; block-size: 100%; min-block-size: 0; border-radius: var(--radius-md); overflow: hidden; }
+.mc-cctv-preview__badge { position: absolute; inset-block-start: var(--space-2); inset-inline-start: var(--space-2); pointer-events: none; }
+.mc-root[data-widget="customer-analysis"] .ui-panel-body[data-shape="S"]:has(.mc-cctv-preview) { grid-template-rows: auto minmax(0,1fr); align-content: stretch; }
+.mc-cctv-preview-state { display: grid; grid-template-rows: minmax(0,1fr) auto; gap: var(--space-2); block-size: 100%; }
 .mc-root .ui-panel-body[data-shape="W"] .mc-list ul { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,var(--stillframe-width)),1fr)); column-gap: var(--space-4); }
 .mc-value > .ui-visible-value { display: block; }
 
@@ -172,6 +176,18 @@ button.mc-bar[aria-pressed="true"] { background: var(--selection); color: var(--
 .cc-numbers--T { flex-direction: column; }
 .cc-numbers__main { display: flex; flex-direction: column; gap: var(--space-1); }
 .cc-status { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); color: var(--foreground); flex: none; }
+.cc-status:has(> [aria-hidden]) { display: flex; align-items: center; gap: var(--space-2); }
+.cc-detail .cz-list select, .cc-zone-link select {
+  min-height: var(--target-default);
+  padding-inline: var(--space-2);
+  border: var(--stroke-hairline) solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: var(--type-body);
+  line-height: var(--leading-body);
+}
+.cc-detail .cz-list select:focus-visible, .cc-zone-link select:focus-visible { outline: var(--stroke-focus) solid var(--ring); outline-offset: var(--focus-offset); }
 .cc-video { flex: 1 1 auto; min-height: 0; border-radius: var(--radius-md); overflow: hidden; background: var(--muted); position: relative; }
 .cc-video--off { background: transparent; }
 .cc-video > * { width: 100%; height: 100%; }
@@ -238,10 +254,21 @@ button.mc-bar[aria-pressed="true"] { background: var(--selection); color: var(--
 .mc-workspace[data-widget="customer-analysis"] { height: auto; }
 .mc-workspace[data-widget="customer-analysis"] > .mc-grid-context, .mc-workspace[data-widget="customer-analysis"] > .mc-grid-region { flex: none; overflow: visible; }
 
-/* 예약 창 (SCR-225, DS 12.2): the window body never scrolls. Toolbar, summary and the time table / pickups band keep their height, the reservation
-   grid takes the rest and scrolls inside. The side panel is the kit overlay, so the grid beside it shrinks and drops columns (dropOrder). */
-.mc-workspace[data-widget="voice-booking"] > :not(.ui-data-grid, .ui-detail-side-panel) { flex: none; }
-.mc-workspace[data-widget="voice-booking"]:has(> .ui-detail-side-panel[data-layout="overlay"]) > :not(.ui-data-grid, .ui-detail-side-panel) { max-width: calc(100% - var(--sidepanel-width) - var(--space-6)); }
+/* Keep the panel anchored to its viewport while the booking list and form can scroll together when space runs out. */
+.mc-booking-content { display: flex; flex: 1; flex-direction: column; gap: inherit; min-block-size: 0; overflow-y: auto; }
+.mc-booking-content > :not(.ui-data-grid) { flex: none; }
+.mc-booking-content > .ui-data-grid {
+  --booking-table-min: calc(var(--table-header-height) + 3 * var(--table-row-min) + 3 * var(--stroke-hairline));
+  flex: 1;
+  min-block-size: var(--booking-table-min);
+}
+.mc-booking-content > .ui-data-grid:has(> .ui-data-grid__toolbar) {
+  min-block-size: calc(var(--booking-table-min) + var(--table-toolbar-height) + var(--space-2));
+}
+.mc-workspace[data-widget="voice-booking"]:has(> .ui-detail-side-panel[data-layout="overlay"]) > .mc-booking-content > * {
+  max-width: calc(100% - var(--sidepanel-width) - var(--space-6));
+}
+.ui-dialog:has(.mc-workspace[data-widget="voice-booking"][data-command-pending="true"]) > footer .ui-overlay-notice-slot { visibility: hidden; }
 .mc-workspace[data-widget="voice-booking"] .mc-booking {
   display: flex;
   flex-direction: column;
@@ -273,9 +300,11 @@ button.mc-bar[aria-pressed="true"] { background: var(--selection); color: var(--
 .mc-workspace[data-widget="voice-booking"] .mc-booking-summary__total strong { font-size: var(--type-section); line-height: var(--leading-section); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums lining-nums; }
 .mc-workspace[data-widget="voice-booking"] .mc-booking-summary__chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .mc-workspace[data-widget="voice-booking"] .mc-booking-summary__free { margin-inline-start: auto !important; font-size: var(--type-body); line-height: var(--leading-body); color: var(--muted-foreground); }
-/* Band: time table (kit Table, header 48) beside the pickups. Both cap at the height of the table with four slots and scroll inside past that. */
-.mc-workspace[data-widget="voice-booking"] .mc-booking-band { --mc-band-max: calc(var(--table-header-height) + 4 * var(--table-row-min) + 3rem); display: flex; align-items: flex-start; gap: var(--space-6); min-width: 0; }
-.mc-workspace[data-widget="voice-booking"] .mc-booking-time-wrap { flex: 0 0 min(400px, 100%); max-height: var(--mc-band-max); overflow: auto; }
+/* Compact summaries leave the remaining workspace height to the reservation grid. */
+.mc-workspace[data-widget="voice-booking"] { --mc-band-max: calc(var(--table-header-height) + 4 * var(--table-row-min) + 3rem); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-by-time { flex-shrink: 0; }
+.mc-booking-by-time > summary { min-height: var(--target-default); align-content: center; cursor: pointer; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-time-wrap { max-width: var(--sidepanel-width); max-height: var(--mc-band-max); overflow: auto; }
 .mc-workspace[data-widget="voice-booking"] .mc-booking-time { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
 .mc-workspace[data-widget="voice-booking"] .mc-booking-time__time { width: 30%; }
 .mc-workspace[data-widget="voice-booking"] .mc-booking-time caption { text-align: start; padding-block-end: var(--space-1); }
@@ -292,9 +321,9 @@ button.mc-bar[aria-pressed="true"] { background: var(--selection); color: var(--
 }
 .mc-workspace[data-widget="voice-booking"] .mc-booking-toolbar > .ui-button { margin-inline-start: auto; }
 .mc-workspace[data-widget="voice-booking"] .mc-booking-toolbar > .ui-button > .ui-press-surface { padding-block: 0; }
-.mc-workspace[data-widget="voice-booking"] .mc-booking-pickups { flex: 1 1 0; min-width: 0; max-height: var(--mc-band-max); overflow: auto; display: flex; flex-direction: column; gap: var(--space-2); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-pickups { flex: none; min-width: 0; max-height: var(--mc-band-max); overflow: auto; display: flex; flex-direction: column; gap: var(--space-2); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-pickups > p { margin: 0; }
 .mc-workspace[data-widget="voice-booking"] .mc-booking-pickups .ui-data-grid { flex: none; height: auto; }
-.mc-workspace[data-widget="voice-booking"] .custom-pickups > :is(h3, .custom-pickup-summary) { display: none; }
 .mc-workspace[data-widget="voice-booking"] .custom-pickups [data-grid-column-id="order"] .ui-button {
   font-size: inherit;
   line-height: inherit;
@@ -302,6 +331,23 @@ button.mc-bar[aria-pressed="true"] { background: var(--selection); color: var(--
 }
 .mc-booking-empty { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
 .mc-booking-empty p { margin: 0; }
+/* SmartCall daily aggregates and the booking-product names: one closed line each (the grid keeps its room); the daily table scrolls inside at four rows. */
+.mc-workspace[data-widget="voice-booking"] :is(.mc-booking-calls > details, .mc-booking-products) > summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); min-height: var(--target-default); cursor: pointer; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-calls__total { font-size: var(--type-body); line-height: var(--leading-body); font-variant-numeric: tabular-nums; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-calls__wrap { max-height: calc(var(--table-header-height) + 4 * var(--table-row-min)); overflow: auto; margin-block: var(--space-2); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-calls__table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-calls__table :is(th, td) { padding-inline: var(--table-cell-padding-x); text-align: start; border-bottom: var(--stroke-hairline) solid var(--border); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-calls__table thead th { position: sticky; inset-block-start: 0; height: var(--table-header-height); background: var(--card); white-space: nowrap; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-calls__table tbody tr { height: var(--table-row-min); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-calls__table tbody th { font-weight: var(--weight-medium); }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-calls__table .mc-booking-calls__number { text-align: end; font-variant-numeric: tabular-nums; }
+.mc-workspace[data-widget="voice-booking"] .mc-booking-products ul { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+/* The extra question before a cancel or a declined request; for a NAVER cancel it also holds the reason (the customer reads it) and, for a paid Npay booking, the refund terms. */
+.mc-booking-confirm { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-2); padding: var(--space-4); border: var(--stroke-hairline) solid var(--border); border-radius: var(--radius-lg); background: var(--muted); min-width: 0; }
+.mc-booking-confirm > p, .mc-booking-cancel > p, .mc-booking-refund > p { margin: 0; }
+.mc-booking-cancel { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.mc-booking-refund { display: flex; flex-direction: column; gap: var(--space-3); padding-block-start: var(--space-3); border-block-start: var(--stroke-hairline) solid var(--border); min-width: 0; }
+.mc-booking-refund__summary, .mc-booking-refund__paid { font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
 
 /* 회원목록 (SCR-220): beside the side panel the search shrinks instead of pushing 회원 추가하기 to a second line (C3); the grid width is the kit push rule. */
 .mc-workspace[data-widget="members"] .ui-data-grid__toolbar { flex-wrap: nowrap; }

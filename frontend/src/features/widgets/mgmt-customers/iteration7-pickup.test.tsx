@@ -35,7 +35,7 @@ describe('pickup and visit reservations remain separate', () => {
     expect(heading.parentElement).toContainElement(pickups);
     expect(document.getElementById(pickups.getAttribute('aria-labelledby')!)).toHaveClass('ui-sr-only');
     expect(within(pickups).getByText(order.productLabel)).toBeInTheDocument();
-    expect(within(pickups).getAllByText('—')).toHaveLength(2);
+    expect(within(pickups).queryByRole('columnheader', { name: /인원|테이블/ })).not.toBeInTheDocument();
   });
   it('reschedules the same pickup identity from reservation detail without editing visit data, and follows its end', async () => {
     const { port } = createCustomTestSource();
@@ -53,6 +53,6 @@ describe('pickup and visit reservations remain separate', () => {
     // The pickup state comes from the same source: when the pickup ends (here cancelled: the sample has no settled payment to receive against) the count drops and the row says so.
     act(() => { port.dispatch({ type: 'pickup.cancel', reservationId: id, idempotencyKey: 'cancelled' }); });
     expect(screen.getByRole('heading', { name: '픽업 0건' })).toBeInTheDocument();
-    expect(screen.getAllByText('취소').length).toBeGreaterThan(0);
+    expect(within(screen.getByRole('grid', { name: '픽업 예약' })).getByText('취소')).toBeInTheDocument();
   });
 });

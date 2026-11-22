@@ -71,7 +71,7 @@ describe('inventory panel (SCR-30·32, AC-268·269)', () => {
   it('1×2 lists stock / threshold out of stock first and never the sell-today items', () => {
     const { store } = staged(), milk = raw(store, MILK), beans = raw(store, BEANS), cups = raw(store, CUPS);
     renderWithKit(<SupplyPanel id="inventory-booking" width={1} height={2} host={createTestHost('inventory-booking')} />, { store });
-    expect(rowTexts()).toEqual([`${milk}품절0 mL기준 12,000 mL`, `${beans}3,000 g기준 4,000 g`, `${cups}400개기준 500개`]);
+    expect(rowTexts()).toEqual([`${milk}품절0 mL안전 재고 12,000 mL`, `${beans}3,000 g안전 재고 4,000 g`, `${cups}400개안전 재고 500개`]);
     expect(body()).not.toHaveTextContent(raw(store, 'i-basque-cake'));
     cleanup();
     renderWithKit(<SupplyPanel id="inventory-booking" width={1} height={2} host={createTestHost('inventory-booking')} />, { store, locale: 'en' });
@@ -81,7 +81,7 @@ describe('inventory panel (SCR-30·32, AC-268·269)', () => {
   it('2×1 shows the ingredient row and the products line (248 = 180 + 68)', () => {
     const { store } = staged();
     renderWithKit(<SupplyPanel id="inventory-booking" width={2} height={1} host={createTestHost('inventory-booking')} />, { store });
-    expect(rowTexts()).toEqual([`재료${raw(store, MILK)}품절0 mL기준 12,000 mL`, '판매 상품248개매장 180 · 온라인 68']);
+    expect(rowTexts()).toEqual([`재료${raw(store, MILK)}품절0 mL안전 재고 12,000 mL`, '판매 상품248개매장 180 · 온라인 68']);
     const products = body().querySelector('[data-row-id="products"]')!;
     expect(Number(products.getAttribute('data-drop'))).toBeGreaterThan(Number(body().querySelector(`[data-row-id="${MILK}"]`)!.getAttribute('data-drop')));
   });
@@ -181,7 +181,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
 
   it('원자재 표는 상태 순이며 당일 소진은 보충 필요 집계에 섞이지 않는다', () => {
     const { store } = open();
-    const grid = screen.getByRole('grid', { name: '원자재' });
+    const grid = screen.getByRole('grid', { name: '재료' });
     const ids = [...grid.querySelectorAll('[data-grid-row]')].map(r => r.getAttribute('data-grid-row'));
     expect(ids).toHaveLength(26);
     expect(ids.slice(0, 3)).toEqual([MILK, BEANS, CUPS]);
@@ -196,7 +196,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
 
   it('numbers carry their unit behind them in the stock unit (g, mL, 개) and there is no separate 단위 column (DS 12.1)', () => {
     open();
-    const grid = screen.getByRole('grid', { name: '원자재' });
+    const grid = screen.getByRole('grid', { name: '재료' });
     expect(within(grid).queryByRole('columnheader', { name: '단위' })).toBeNull();
     const beans = grid.querySelector(`[data-grid-row="${BEANS}"]`) as HTMLElement;
     expect(within(beans).getByRole('gridcell', { name: /현재 재고/ })).toHaveTextContent(grams(3000));
@@ -208,7 +208,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
   it('reserves width for the longest inventory status and history chips at 125%', () => {
     const { store } = open({ textScale: 125, reducedMotion: true });
     const sellToday = raw(store, SELL_TODAY);
-    const ingredients = screen.getByRole('grid', { name: '원자재' });
+    const ingredients = screen.getByRole('grid', { name: '재료' });
     const statusHeader = within(ingredients).getByRole('columnheader', { name: '상태' });
     expect(statusHeader).toHaveStyle({ minWidth: '232px' });
     const status = within(ingredients).getByRole('gridcell', { name: new RegExp(`${sellToday.replace(/[()]/g, '\\$&')}, 상태, 당일 소진`) });
@@ -222,7 +222,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
     fireEvent.click(screen.getByRole('tab', { name: '판매 상품' }));
     const products = screen.getByRole('grid', { name: '판매 상품' });
     expect(within(products).getByRole('columnheader', { name: '상태' })).toHaveStyle({ minWidth: '176px' });
-    expect(within(products).getByRole('gridcell', { name: /상태, 품절 가까움/ })).toBeInTheDocument();
+    expect(within(products).getByRole('gridcell', { name: /상태, 보충 필요/ })).toBeInTheDocument();
   });
 
   it('products tab: 248 = 180 + 68 per product, 7-day sales, running low, sell-today items excluded (AC-269)', () => {
@@ -233,15 +233,16 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
     expect(screen.getByText('당일 소진 품목은 포함하지 않아요')).toBeInTheDocument();
     const table = screen.getByRole('grid', { name: '판매 상품' });
     const rows = [...table.querySelectorAll('[data-grid-row]')].map(r => [...r.querySelectorAll('.ui-data-grid__value')].map(c => c.textContent!.replace(/\s+/g, ' ').trim()));
-    expect(rows).toEqual([['원두 200g', '120', '40', '160', '52', '충분'], ['드립백 세트', '60', '28', '88', '36', '품절 가까움']]);
+    expect(rows).toEqual([['원두 200g', '120', '40', '160', '52', '충분'], ['드립백 세트', '60', '28', '88', '36', '보충 필요']]);
     expect(table).not.toHaveTextContent('바스크');
   });
 
-  it('on the cafe seed alone the 판매 상품 tab says there is no product yet and offers 판매 상품 등록', () => {
+  it('on the cafe seed alone the 판매 상품 tab says there is no product yet without an unsupported product-registration action', () => {
     open({ store: createWidgetDataStore() });
     fireEvent.click(screen.getByRole('tab', { name: '판매 상품' }));
     expect(screen.getByText('아직 등록한 판매 상품이 없어요')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '상품 추가하기' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '상품 추가하기' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('grid', { name: '판매 상품' })).not.toBeInTheDocument();
   });
 
   it('moves 20 from store to online: 160 / 88, total 248, undo offered; a double press moves once (AC-270)', () => {
@@ -268,7 +269,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
     expect(coupons).toBeGreaterThan(0);
     // the coupon counts what can still be sold of the expiring batch (8 of the 18 on the shelf), so it follows an edit below that batch
     const batch = readModel(store.getSnapshot(), 'expiry-coupon').target!.stock;
-    const row = screen.getByRole('grid', { name: '원자재' }).querySelector(`[data-grid-row="${SELL_TODAY}"]`) as HTMLElement;
+    const row = screen.getByRole('grid', { name: '재료' }).querySelector(`[data-grid-row="${SELL_TODAY}"]`) as HTMLElement;
     fireEvent.click(within(row).getByRole('gridcell', { name: /현재 재고/ }));
     const field = within(row).getByRole('textbox');
     expect(field).toHaveValue(String(model(store).ingredients.find((r) => r.itemId === SELL_TODAY)!.stock));
@@ -282,7 +283,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
   it('edits stock and threshold of an ingredient (restock 3 → 2 when milk is 13,000 mL)', () => {
     const onNotify = vi.fn();
     const { store } = open({}, { onNotify });
-    const row = screen.getByRole('grid', { name: '원자재' }).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
+    const row = screen.getByRole('grid', { name: '재료' }).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
     fireEvent.click(within(row).getByRole('gridcell', { name: /현재 재고/ }));
     let field = within(row).getByRole('textbox');
     fireEvent.change(field, { target: { value: '13000' } });
@@ -302,7 +303,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
   it('opens the nearest supplier order through the secondary action', () => {
     const onLinked = vi.fn();
     const { poId } = open({}, { onLinked });
-    const grid = within(screen.getByRole('grid', { name: '원자재' }));
+    const grid = within(screen.getByRole('grid', { name: '재료' }));
     expect(grid.getByRole('columnheader', { name: '발주 보기' })).toBeInTheDocument();
     const button = grid.getByRole('button', { name: '발주 보기' });
     expect(button).toHaveClass('ui-button--secondary');
@@ -314,7 +315,7 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
     const { store } = staged();
     placeOrder(store, BEANS, 5, addIsoDays(TODAY, 1));
     open({ store });
-    const grid = within(screen.getByRole('grid', { name: '원자재' }));
+    const grid = within(screen.getByRole('grid', { name: '재료' }));
     fireEvent.click(grid.getByRole('button', { name: `${raw(store, BEANS)} 재고 변동 기록` }));
     expect(grid.getByRole('button', { name: /^5 kg · / })).toBeInTheDocument();
   });
@@ -343,10 +344,10 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
     fireEvent.change(search, { target: { value: '없는 품목' } });
     expect(screen.getByText('찾는 항목이 없어요')).toBeInTheDocument();
     fireEvent.click(within(document.querySelector<HTMLElement>('.ui-data-grid__empty')!).getByRole('button', { name: '검색어 지우기' }));
-    expect(screen.getByRole('grid', { name: '원자재' }).querySelectorAll('[data-grid-row]')).toHaveLength(26);
+    expect(screen.getByRole('grid', { name: '재료' }).querySelectorAll('[data-grid-row]')).toHaveLength(26);
     // the SKU is searched too (RM-004 is the milk)
     fireEvent.change(search, { target: { value: 'RM-004' } });
-    expect([...screen.getByRole('grid', { name: '원자재' }).querySelectorAll('[data-grid-row]')].map((r) => r.getAttribute('data-grid-row'))).toEqual([MILK]);
+    expect([...screen.getByRole('grid', { name: '재료' }).querySelectorAll('[data-grid-row]')].map((r) => r.getAttribute('data-grid-row'))).toEqual([MILK]);
   });
 
   it('the needs-review sample state offers 재고 다시 확인하기 in the detail, not only a sentence (H1)', () => {
@@ -365,7 +366,6 @@ describe('inventory detail: 재료 | 판매 상품 (SCR-32, AC-268~270, plan-2 8
     cleanup();
     renderWithKit(<DetailStack root={{ featureId: 'inventory-booking', view: 'products' }} />, { preview: preview('normal', { 'inventory-booking': 'no-products' }), locale: 'zh-Hans' });
     expect(screen.getByText('尚未添加在售商品')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '添加在售商品' }));
-    expect(screen.getByLabelText('在售商品名称')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '添加在售商品' })).not.toBeInTheDocument();
   });
 });

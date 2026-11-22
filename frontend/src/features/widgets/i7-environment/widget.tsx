@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { ActionButton, ChipChoice, Icon, MetricFit, MiniChart, PanelState, StatusChip, Table } from '../../../ui';
 import { usePanelChrome } from '../../../ui/panel-chrome';
 import { FitProbe } from '../mgmt-money/fit';
@@ -6,7 +6,7 @@ import { DropletIcon, ThermometerIcon, TurntableArt } from './art';
 import './widget.css';
 
 type Music = { deviceStatus: 'connected' | 'disconnected'; playing: boolean; volumePct: number; track: string; playlistId: string; playlists: readonly { playlistId: string; name: string }[] };
-export type EnvironmentView = { status: 'empty' } | { status: 'error' } | { status: 'ready'; sensorStatus: 'connected' | 'disconnected'; current: { temperature: number; humidity: number }; lastMeasuredAt: string; ranges: { temperature: readonly [number, number]; humidity: readonly [number, number] }; trend: readonly { time: string; temperature: number; humidity: number }[]; music: Music };
+export type EnvironmentView = { status: 'empty' } | { status: 'error' } | { status: 'ready'; sensorStatus: 'connected' | 'disconnected' | 'manual'; current: { temperature: number; humidity: number }; lastMeasuredAt: string; ranges: { temperature: readonly [number, number]; humidity: readonly [number, number] }; trend: readonly { time: string; temperature: number; humidity: number }[]; music: Music };
 type Ready = Extract<EnvironmentView, { status: 'ready' }>;
 type ControlResult = void | { ok: boolean; reason?: string };
 export type EnvironmentPort = { setPlaying(playing: boolean): ControlResult; skipTrack(direction: 'previous' | 'next'): ControlResult; setVolume(volumePct: number): ControlResult; selectPlaylist(playlistId: string): ControlResult; retry(): void };
@@ -26,7 +26,7 @@ function Status({ view, block = false, single = false }: { view: Ready; block?: 
     {disconnected && !single && <StatusChip tone="warning">센서 확인 필요</StatusChip>}
   </div>;
 }
-function ClimateReadout({ view, kind, variant, status = false }: { view: Ready; kind: 'temperature' | 'humidity'; variant: 'row' | 'stack' | 'tile'; status?: boolean }) {
+function ClimateReadout({ view, kind, variant, status = false, range = false }: { view: Ready; kind: 'temperature' | 'humidity'; variant: 'row' | 'stack' | 'tile'; status?: boolean; range?: boolean }) {
   const temperature = kind === 'temperature';
   const value = temperature ? view.current.temperature.toFixed(1) : String(view.current.humidity);
   const unit = temperature ? '°C' : '%';
@@ -37,10 +37,14 @@ function ClimateReadout({ view, kind, variant, status = false }: { view: Ready; 
     {variant !== 'stack' && <span className="i7-climate-icon">{icon}</span>}
     <MetricFit value={value} unit={unit} stacked={false} presentation={variant === 'row' ? undefined : 'hero'} />
     {variant !== 'row' && <p className="i7-climate-label">{variant === 'stack' && icon}{label}</p>}
-    {variant === 'tile' && <p className="i7-climate-range">적정 {temperature ? view.ranges.temperature.map(n => n.toFixed(1)).join('~') : view.ranges.humidity.join('~')}{unit}</p>}
+    {(variant === 'tile' || range) && <p className="i7-climate-range">적정 {temperature ? view.ranges.temperature.map(n => n.toFixed(1)).join('~') : view.ranges.humidity.join('~')}{unit}</p>}
     {status && <Status view={view} />}
   </div>;
 }
+/** The music controls keep their own keys (arrows move the slider and chips, Enter/Space press) away from the panel and page key handlers.
+ *  Esc is the one key that has to travel up: once focus sat on a chip, the window never saw it and could not be closed with Esc (BUG-004). */
+const keepControlKeys = (event: KeyboardEvent<HTMLElement>) => { if (event.key !== 'Escape') event.stopPropagation(); };
+
 function TransportIcon({ kind }: { kind: 'previous' | 'next' | 'play' | 'pause' }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true" width="24" height="24" fill="currentColor">{kind === 'pause' ? <path d="M6 4h4v16H6zM14 4h4v16h-4z" /> : kind === 'play' ? <path d="m7 4 13 8-13 8z" /> : kind === 'previous' ? <path d="M4 4h3v16H4zm16 0L8 12l12 8z" /> : <path d="M17 4h3v16h-3zM4 4l12 8-12 8z" />}</svg>;
 }
@@ -63,7 +67,7 @@ function Player({ music, port, detail = false, controls = true, volume = false, 
         {artist && byline.length > 0 && <p className="i7-environment-artist">{byline.join(' · ')}</p>}
         <p className="i7-environment-music-state"><span aria-hidden="true">{playing ? '▶' : '‖'}</span>{playing ? '재생 중' : '일시정지'}</p>
       </>}
-      {controls && !disabled && <div className="i7-environment-control-scope" inert={hidden || undefined} aria-hidden={hidden || undefined} data-hidden={hidden || undefined} onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()} onPointerCancel={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
+      {controls && !disabled && <div className="i7-environment-control-scope" inert={hidden || undefined} aria-hidden={hidden || undefined} data-hidden={hidden || undefined} onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()} onPointerCancel={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onKeyDown={keepControlKeys}>
         <div className="i7-environment-controls">
           <ActionButton variant="secondary" aria-label="이전 곡" onClick={() => invoke(() => port.skipTrack('previous'))}><TransportIcon kind="previous" /></ActionButton>
           <ActionButton className="i7-environment-play" aria-label={playing ? '일시정지' : '재생'} onClick={() => invoke(() => port.setPlaying(!music.playing))}><TransportIcon kind={playing ? 'pause' : 'play'} /></ActionButton>
@@ -84,7 +88,9 @@ function Trend({ view, detail = false }: { view: Ready; detail?: boolean }) {
     {detail && <Table className="i7-environment-table"><thead><tr><th scope="col">시간</th><th scope="col" data-numeric="true">온도</th><th scope="col" data-numeric="true">습도</th></tr></thead><tbody>{view.trend.map(row => <tr key={row.time}><th scope="row">{row.time}</th><td data-numeric="true">{row.temperature.toFixed(1)}°C</td><td data-numeric="true">{row.humidity}%</td></tr>)}</tbody></Table>}
   </div>;
 }
-export function EnvironmentDetail({ view, port, focus }: { view: EnvironmentView; port: EnvironmentPort; focus?: string }) {
+const measured = (view: Ready) => `${view.sensorStatus === 'manual' ? '직접 측정' : '마지막 측정'} ${view.lastMeasuredAt}`;
+
+export function EnvironmentDetail({ view, port, focus, measurementEntry, stale }: { view: EnvironmentView; port: EnvironmentPort; focus?: string; measurementEntry?: ReactNode; stale?: boolean }) {
   // N19 deep link: a chat hand-off scrolls the named section ('sensor' or 'player') into view.
   const target = useRef<HTMLElement | null>(null);
   useEffect(() => { if (focus === 'sensor' || focus === 'player') target.current?.scrollIntoView?.({ block: 'start' }); }, [focus]);
@@ -95,16 +101,18 @@ export function EnvironmentDetail({ view, port, focus }: { view: EnvironmentView
   </div>;
   return <div className="i7-environment-detail" lang="ko">
     <section ref={focus === 'sensor' ? target : undefined} data-focus={focus === 'sensor' || undefined} className="i7-environment-section" role="group" aria-label="온도와 습도"><h3>환경 모니터링</h3>
-      {view.status === 'empty' ? <><p>연결된 센서가 없어요</p><p className="i7-environment-next">센서를 연결하면 온도와 습도가 여기에 보여요</p></> : <>
+      {stale && <p role="status">마지막으로 불러온 측정값이에요 <ActionButton variant="secondary" onClick={port.retry}>다시 불러오기</ActionButton></p>}
+      {view.status === 'empty' ? measurementEntry ? <p>입력한 측정값이 없어요</p> : <><p>연결된 센서가 없어요</p><p className="i7-environment-next">센서를 연결하면 온도와 습도가 여기에 보여요</p></> : <>
         {view.sensorStatus === 'disconnected' && <Status view={view} />}
         <div className="i7-environment-readings"><ClimateReadout view={view} kind="temperature" variant="tile" status={view.sensorStatus === 'connected' && outOfRange(view, 'temperature')} /><ClimateReadout view={view} kind="humidity" variant="tile" status={view.sensorStatus === 'connected' && !outOfRange(view, 'temperature') && outOfRange(view, 'humidity')} /></div>
-        <p className="i7-environment-measured">마지막 측정 {view.lastMeasuredAt}</p><Trend view={view} detail />
+        <p className="i7-environment-measured">{measured(view)}</p><Trend view={view} detail />
       </>}
+      {measurementEntry}
     </section>
     <section ref={focus === 'player' ? target : undefined} data-focus={focus === 'player' || undefined} className="i7-environment-section" role="group" aria-label="매장 음악"><h3>매장 음악 관리</h3><Player music={view.status === 'ready' ? view.music : emptyMusic} port={port} detail volume playlists artist next /></section>
   </div>;
 }
-export function EnvironmentPanel({ view, port, width, height }: { view: EnvironmentView; port: EnvironmentPort; width: number; height: number }) {
+export function EnvironmentPanel({ view, port, width, height, manual, stale }: { view: EnvironmentView; port: EnvironmentPort; width: number; height: number; manual?: boolean; stale?: boolean }) {
   const chrome = usePanelChrome();
   if (view.status === 'error') return <PanelState tone="error" message="매장 환경 정보를 불러오지 못했어요" shortMessage={height === 1 && width <= 2 ? '불러오지 못했어요' : undefined} action={{ label: '다시 시도하기', widgetName: '매장 환경', onPress: port.retry }} />;
   const small = width === 1 && height === 1;
@@ -112,15 +120,18 @@ export function EnvironmentPanel({ view, port, width, height }: { view: Environm
   const abnormal = view.status === 'ready' && Boolean(environmentAbnormal(view));
   const row = height === 1 || shortColumn;
   const showChart = (width >= 3 && height >= 3) || (width === 4 && height >= 2);
+  /** D-333: from 3x3 up the panel also lists every reading of the trend and the allowed range under each value (the reverse of the drop order). */
+  const large = width >= 3 && height >= 3;
   return <div className="i7-environment-panel" data-width={width} data-height={height} data-abnormal={abnormal || undefined} lang="ko">
-    <div className="i7-environment-climate-half" role="group" aria-label="온도와 습도">{view.status === 'empty' ? <><p>연결된 센서가 없어요</p>{!small && <p className="i7-environment-next">센서를 연결하면 온도와 습도가 여기에 보여요</p>}</> : <>
-      <div className="i7-environment-readings"><ClimateReadout view={view} kind="temperature" variant={row ? 'row' : 'stack'} /><ClimateReadout view={view} kind="humidity" variant={row ? 'row' : 'stack'} /></div>
-      {!small && (abnormal ? <Status view={view} single={(width === 2 && height === 1) || (width === 1 && height === 2)} /> : !shortColumn && <p className="i7-environment-measured">마지막 측정 {view.lastMeasuredAt}</p>)}
+    <div className="i7-environment-climate-half" role="group" aria-label="온도와 습도">{view.status === 'empty' ? <><p>{manual ? '입력한 측정값이 없어요' : '연결된 센서가 없어요'}</p>{!manual && !small && <p className="i7-environment-next">센서를 연결하면 온도와 습도가 여기에 보여요</p>}</> : <>
+      <div className="i7-environment-readings"><ClimateReadout view={view} kind="temperature" variant={row ? 'row' : 'stack'} range={large} /><ClimateReadout view={view} kind="humidity" variant={row ? 'row' : 'stack'} range={large} /></div>
+      {!small && (abnormal ? <Status view={view} single={(width === 2 && height === 1) || (width === 1 && height === 2)} /> : !shortColumn && <p className="i7-environment-measured">{measured(view)}</p>)}
       {width === 2 && height >= 3 && <div className="i7-environment-trend-rows"><h4>시간대별 변화</h4>{view.trend.slice(-(height === 3 ? 3 : 5)).map(item => <div className="i7-environment-value-row" key={item.time}><span>{item.time}</span><strong>{item.temperature.toFixed(1)}°C · {item.humidity}%</strong></div>)}</div>}
       {showChart && <Trend view={view} />}
-    </>}</div>
+      {large && view.trend.length > 0 && <div className="i7-environment-large-rows" role="list" aria-label="시간대별 변화">{[...view.trend].reverse().map(item => <div className="i7-environment-value-row" role="listitem" key={item.time}><span>{item.time}</span><strong>{item.temperature.toFixed(1)}°C · {item.humidity}%</strong></div>)}</div>}
+    </>}{stale && !small && <p role="status" className="i7-environment-next">마지막으로 불러온 측정값이에요</p>}</div>
     <div className="i7-environment-divider" aria-hidden="true" />
     <div className="i7-environment-music-half" role="group" aria-label="매장 음악">{small && abnormal && view.status === 'ready' ? <Status view={view} block /> : <Player music={view.status === 'ready' ? view.music : emptyMusic} port={port} controls={height > 1 || width >= 3} volume={(width === 1 && height === 4) || (width === 2 && height >= 3) || (width >= 3 && height >= 2)} playlists={showChart} playlistNameOnly={width === 2 && height === 4} artist={width >= 2 && height >= 2} hidden={chrome.editing || chrome.waiting} next={!small} />}</div>
-    <FitProbe order={[{ selector: '.i7-environment-next' }, { selector: '.i7-environment-artist' }, { selector: '.i7-environment-volume' }, { selector: '.i7-environment-measured' }, { selector: '.i7-environment-track-tail' }, ...(small ? [{ selector: '.i7-environment-art' }] : [])]} deps={[width, height, view.status, abnormal]} />
+    <FitProbe order={[{ selector: '.i7-environment-large-rows .i7-environment-value-row', last: true }, { selector: '.i7-climate-range' }, { selector: '.i7-environment-next' }, { selector: '.i7-environment-artist' }, { selector: '.i7-environment-volume' }, { selector: '.i7-environment-measured' }, { selector: '.i7-environment-track-tail' }, ...(small ? [{ selector: '.i7-environment-art' }] : [])]} deps={[width, height, view.status, abnormal]} />
   </div>;
 }

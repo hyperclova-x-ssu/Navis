@@ -37,12 +37,9 @@ it('smoke 1 default tax month uses canonical sales and deposits, including its e
   const split = within(tax.getByRole('region', { name: '매출 · 실제 입금' }));
   const ledgerSplit = within(ledger.getByRole('region', { name: '매출 · 실제 입금' }));
   const sampleCards = [/^매출$/, /^실제 입금$/].map(name => split.getByRole('region', { name }));
-  expect(split.getAllByText('예시')).toHaveLength(sampleCards.length);
-  for (const card of sampleCards) {
-    const heading = within(card).getByRole('heading', { level: 3 });
-    expect(within(heading.parentElement!).getByText('예시')).toBeInTheDocument();
-    expect(heading.parentElement).not.toBe(card);
-  }
+  // D-329: the tax screen no longer carries the small 「예시」 chip.
+  expect(split.queryByText('예시')).toBeNull();
+  for (const card of sampleCards) expect(within(card).getByRole('heading', { level: 3 })).toBeInTheDocument();
   // The cafe seed has a payment record for every day of the month: deposits equal the ledger's month sales, nothing predates the payments.
   const displayed = (scope: ReturnType<typeof within>, value: string) => scope.getAllByText((_: string, node: Element | null) => node?.textContent === value, {selector:'.ui-pos-money--display'});
   expect(displayed(split, monthlySales)).toHaveLength(2);
@@ -51,13 +48,12 @@ it('smoke 1 default tax month uses canonical sales and deposits, including its e
   expect(split.queryByText(/이전 날짜 매출/)).toBeNull();
   const exported = document.querySelector('[data-slot="tax.export"]')! as HTMLElement;
   const exportHeading = within(exported).getByRole('heading', { level: 3 });
-  expect(within(exportHeading.parentElement!).getByText('예시')).toBeInTheDocument();
-  expect(exportHeading.parentElement).not.toBe(exported);
-  expect(tax.getAllByText('예시')).toHaveLength(3);
+  expect(within(exportHeading.parentElement!).queryByText('예시')).toBeNull();
+  expect(tax.queryByText('예시')).toBeNull();
   expect(within(exported).getByRole('row', { name: `매출 합계 ${monthlySales}` })).toBeInTheDocument();
   expect(within(exported).queryByRole('row', { name: /이전 날짜 매출/ })).toBeNull();
   expect(within(exported).getByRole('row', { name: `실제 입금 ${monthlySales}` })).toBeInTheDocument();
-  expect(within(exported).getByRole('button', { name: '세무사에게 보낼 자료 내보내기' })).toBeEnabled();
+  expect(within(exported).getByRole('button', { name: '세무사 자료 받기' })).toBeEnabled();
   act(() => {
     const money = h.actions.money;
     const quote = money.quoteSettlement({ target: { purpose: 'charge_topup', memberId: 'M-0001', amount: 50000 }, allocations: [{ kind: 'method', method: 'card', amount: 50000 }] });
@@ -74,13 +70,13 @@ it('smoke 1 default tax month uses canonical sales and deposits, including its e
   expect(within(exported).getByRole('row', { name: `실제 입금 ${depositsAfterTopup}` })).toBeInTheDocument();
   fireEvent.click(tax.getByRole('radio', { name: '지난달' }));
   // The cafe seed keeps closed days for last month too: the cards and the export preview read the same canonical projection.
-  expect(tax.getByText('자료 기간 10월 1일~31일', { exact: false })).toBeInTheDocument();
+  expect(tax.getByText('자료 기간 10월 1일(목)~31일(토)', { exact: false })).toBeInTheDocument();
   const [lastSales, lastDeposits] = Array.from(tax.getByRole('region', { name: '매출 · 실제 입금' }).querySelectorAll('.ui-pos-money--display'), node => node.textContent ?? '');
   expect(lastSales).toMatch(/^[1-9][\d,]*원$/);
   expect(lastDeposits).toMatch(/^[1-9][\d,]*원$/);
   expect(within(exported).getByRole('row', { name: `매출 합계 ${lastSales}` })).toBeInTheDocument();
   expect(within(exported).getByRole('row', { name: `실제 입금 ${lastDeposits}` })).toBeInTheDocument();
-  expect(within(exported).getByRole('button', { name: '세무사에게 보낼 자료 내보내기' })).toBeEnabled();
+  expect(within(exported).getByRole('button', { name: '세무사 자료 받기' })).toBeEnabled();
 });
 
 it('shows no deposit data and keeps the export disabled when the accounting projection is unavailable', () => {
@@ -88,8 +84,8 @@ it('shows no deposit data and keeps the export disabled when the accounting proj
   renderWithKit(<TaxDetail featureId="tax" condition={{ kind: 'default' }} detailRef={{ featureId: 'tax' }} host={host} accounting={{ status: 'unavailable', period: { start: '2000-01-01', end: '2000-01-31' } }} />, { reducedMotion: true });
   expect(screen.getByText('이 날짜의 실제 입금 자료가 없어요')).toBeInTheDocument();
   const exported = document.querySelector('[data-slot="tax.export"]')! as HTMLElement;
-  expect(screen.getAllByText('예시')).toHaveLength(1);
+  expect(screen.queryByText('예시')).toBeNull();
   expect(within(exported).getByRole('row', { name: '매출 합계 —' })).toBeInTheDocument();
   expect(within(exported).getByRole('row', { name: '실제 입금 —' })).toBeInTheDocument();
-  expect(within(exported).getByRole('button', { name: '세무사에게 보낼 자료 내보내기' })).toBeDisabled();
+  expect(within(exported).getByRole('button', { name: '세무사 자료 받기' })).toBeDisabled();
 });

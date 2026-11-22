@@ -246,8 +246,8 @@ describe('custom-order templates tab', () => {
     fireEvent.click(screen.getByRole('tab', { name: '템플릿 관리' }));
     const kind = screen.getByLabelText('상품 종류');
     expect(kind).toHaveAccessibleDescription('템플릿 이름이 ‘상품 종류 + 주문서’로 만들어져요');
-    expect(screen.getByLabelText('키워드')).toHaveAccessibleDescription('템플릿 이름 뒤에 붙어요 (선택)');
-    fireEvent.click(screen.getByRole('button', { name: 'AI로 템플릿 만들기' }));
+    expect(screen.getByLabelText('키워드')).toHaveAccessibleDescription('템플릿 이름 뒤에 붙어요(선택)');
+    fireEvent.click(screen.getByRole('button', { name: '양식 견본 만들기' }));
     expect(screen.getByLabelText('상품 종류')).toHaveAccessibleDescription(/상품 종류를 넣어 주세요/);
     expect(screen.queryByText('필수 항목을 모두 넣어 주세요')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '템플릿 만들기' }));

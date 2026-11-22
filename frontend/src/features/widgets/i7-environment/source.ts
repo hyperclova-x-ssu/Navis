@@ -4,9 +4,9 @@ import type { EnvironmentView } from './widget';
 /** Project the same selector used for briefing into the controlled UI view. */
 export function environmentView(model: StoreEnvironmentModel): EnvironmentView {
   if (model.status === 'error') return { status: 'error' };
-  if (model.status === 'empty' || !model.current || model.sensorStatus === 'none') return { status: 'empty' };
+  if (model.status === 'empty' || !model.current || (model.source !== 'manual' && model.sensorStatus === 'none')) return { status: 'empty' };
   return {
-    status: 'ready', sensorStatus: model.sensorStatus,
+    status: 'ready', sensorStatus: model.source === 'manual' ? 'manual' : model.sensorStatus === 'disconnected' ? 'disconnected' : 'connected',
     current: { temperature: model.current.temperatureC, humidity: model.current.humidityPct },
     lastMeasuredAt: (model.lastMeasuredAt ?? '').slice(-5), ranges: model.ranges,
     trend: model.trend.map(item => ({ time: item.measuredAt.slice(-5), temperature: item.temperatureC, humidity: item.humidityPct })),

@@ -2,9 +2,9 @@ import { useBundle } from '../../../i18n';
 import { posBundle } from '../../../i18n/messages/pos';
 /** 가계부 (F-27, SCR-30/31): panel for the 16 sizes, detail with period/tabs/expense form, and the key sentence. */
 import { createContext, useContext, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
-import type { QueryCondition, WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../../contracts';
-import { useWidgetDataStore, useWidgetView } from '../../../data/react';
-import { TODAY, selectPayments, selectClosing, resolveDataText, supportedConditions, type ExpenseCategory, type Evidence, type LedgerExpenseRow, type LedgerModel } from '../../../data/widget-data';
+import type { QueryCondition, WidgetDetailProps, WidgetHost, WidgetModule, WidgetPanelProps } from '../../../contracts';
+import { useDataExecute, useRealPort, useWidgetDataStore, useWidgetView } from '../../../data/react';
+import { TODAY, selectPayments, selectClosing, resolveDataText, supportedConditions, type DataCommand, type DataCommandResult, type ExpenseCategory, type Evidence, type LedgerExpenseRow, type LedgerModel } from '../../../data/widget-data';
 import { selectHourlySales } from '../../../data/derive/payments';
 import { ActionButton, ChipChoice, PosMoney, DataGrid, DateField, DateStepper, DetailTabs, Icon, InlineEmpty, InlineForm, NumberField, StatusBadge, Table, TextField, type GridColumn, type GridFocus, type GridSort, layoutTokens, formatPosMoney } from '../../../ui';
 import {
@@ -18,15 +18,18 @@ import type { PosDrawerSnapshot } from '../../../contracts/pos';
 import { accountingCopy as ac, customAccountingCopy, depositCoverageNote } from './iteration7-accounting-messages';
 import { moneyDetailPrefill } from '../../assistant/domains/money';
 import { ReceiptReviewField, ReceiptScanEntry, type ReceiptField } from './receipt-ocr';
+import { dateRangeWithWeekdays } from '../date-range';
 
 export interface AccountingTransaction {
   readonly id: string;
+  readonly transactionNo?: string;
   readonly at: string;
   readonly purpose: SettlementPurpose;
   readonly kind: 'receipt' | 'cancel' | 'refund';
   /** Signed amounts are supplied by the accounting projection, including original returns. */
   readonly amount: number;
-  readonly salesAmount: number;
+  /** `null`: the finance service does not attribute recognized sales to a tender row. */
+  readonly salesAmount: number | null;
   readonly methods: readonly { readonly method: RealMethod; readonly amount: number }[];
   readonly settlementKinds: readonly ('charge' | 'receivable' | 'membership_count' | 'membership_period')[];
   readonly settlementId: string;
@@ -38,7 +41,9 @@ export type AccountingPeriod = { readonly start: string; readonly end: string };
 export type AccountingSummary = Pick<AccountingDay, 'sales' | 'deposits' | 'orderCount' | 'realPaymentCount'>;
 export type AccountingUnknownCost = AccountingDay['unknownCostSales'][number] & { readonly label?: string };
 export type AccountingView = {
-  readonly status: 'ready'; readonly period: AccountingPeriod; readonly summary: AccountingSummary;
+  readonly status: 'ready'; readonly period: AccountingPeriod;
+  /** `http`: figures of the finance service. It splits recognized sales by recorded tender (`sales.byMethod`, B09-2) but not by membership source, so those groups are not shown. */
+  readonly source?: 'http'; readonly summary: AccountingSummary;
   readonly transactions: readonly AccountingTransaction[];
   readonly drawer?: PosDrawerSnapshot;
   readonly unknownCostSales?: readonly AccountingUnknownCost[];
@@ -67,31 +72,63 @@ export function accountingForPeriod(presentation: AccountingPresentation | null,
 export type AccountingDetailProps = WidgetDetailProps & { readonly accounting?: AccountingView; readonly onOpenAccountingReceipt?: OpenAccountingReceipt };
 const realMethods = ['card', 'easy_pay', 'cash'] as const;
 const recognitionFields = ['chargeUsed', 'receivableCreated', 'membershipCount', 'subscriptionDaily', 'membershipExpiry', 'customPickup'] as const;
+const httpRecognitionFields = ['chargeUsed', 'receivableCreated', 'customPickup'] as const;
 const depositPurposes = ['sale', 'charge_topup', 'receivable_collection', 'membership_sale', 'custom_order'] as const;
 const won = (amount: number) => formatPosMoney(amount);
 function AmountTable({ title, rows }: { readonly title: string; readonly rows: readonly { readonly id: string; readonly label: string; readonly amount: number }[] }) {
   return <Table className="mm-table"><caption className="mm-table__caption">{title}</caption><tbody>{rows.map(row => <tr key={row.id}><th scope="row">{row.label}</th><td>{won(row.amount)}</td></tr>)}</tbody></Table>;
 }
+/** REAL-PLAN F09-2 copy (Korean-only like this card; for R2/R4 review). */
+const methodCopy = {
+  /** The one row a snapshot without `sales.byMethod` shows in place of the tender rows. */
+  unavailableLabel: '카드 · 간편결제 · 현금 판매분', unavailable: '집계 없음',
+  /** The subtotals that are already inside the amounts above: never added to them or to the day's sales. */
+  overlapTitle: '겹치는 소계(합계에 더하지 않아요)', mixed: '섞어 낸 결제', marginTitle: '매출을 받은 수단',
+} as const;
+/**
+ * HTTP only (B09-2 `sales.byMethod`). Three separate tables, as PRD F-287 keeps tender and settlement type apart: the real tender of the sales (card, easy
+ * pay, cash), the sales settled by member charge or on receivable, and the overlapping subtotals (mixed tenders, pickups), which the owner must not add up.
+ * A summary without the split (an archived closing) shows one "not available" row and the earlier activity-based settlement rows, never zeros.
+ */
+export function SalesMethodTables({ sales }: { readonly sales: AccountingSummary['sales'] }) {
+  const split = sales.byMethod;
+  if (!split) return <>
+    <Table className="mm-table"><caption className="mm-table__caption">{ac.salesMethods}</caption><tbody><tr><th scope="row">{methodCopy.unavailableLabel}</th><td>{methodCopy.unavailable}</td></tr></tbody></Table>
+    <AmountTable title={ac.settlementSales} rows={httpRecognitionFields.map(field => ({ id: field, label: ac[field], amount: sales[field] }))} />
+  </>;
+  return <>
+    <AmountTable title={ac.salesMethods} rows={realMethods.map((method, index) => ({ id: method, label: [ac.cardSale, ac.easyPaySale, ac.cashSale][index]!, amount: split[method] }))} />
+    <AmountTable title={ac.settlementSales} rows={[{ id: 'chargeUsed', label: ac.chargeUsed, amount: split.charge }, { id: 'receivableCreated', label: ac.receivableCreated, amount: split.receivable }]} />
+    <AmountTable title={methodCopy.overlapTitle} rows={[{ id: 'mixed', label: methodCopy.mixed, amount: split.mixed }, { id: 'customPickup', label: ac.customPickup, amount: sales.customPickup }]} />
+  </>;
+}
+/** The margin widget's card: the same tender split for the margin period (finance service rows only; nothing in fixture mode). */
+export function SalesMethodCard({ view }: { readonly view: AccountingView | undefined }) {
+  if (view?.status !== 'ready' || view.source !== 'http') return null;
+  return <section className="mm-card" lang="ko" aria-label={methodCopy.marginTitle}><h3 className="mm-card__title">{methodCopy.marginTitle}</h3><SalesMethodTables sales={view.summary.sales} /></section>;
+}
 /** A controlled projection: rendering never creates recognition or calculates financial totals. */
-export function SalesDepositSplitCard({ view, example = false, onRetry, featureId = 'ledger', stacked = false }: { readonly view: AccountingView; readonly example?: boolean; readonly onRetry?: () => void; readonly featureId?: 'ledger' | 'tax'; readonly stacked?: boolean }) {
+export function SalesDepositSplitCard({ view, onRetry, featureId = 'ledger', stacked = false }: { readonly view: AccountingView; readonly onRetry?: () => void; readonly featureId?: 'ledger' | 'tax'; readonly stacked?: boolean }) {
   const instanceId = useId();
   if (view.status !== 'ready') return <section className="mm-card" lang="ko" aria-label={ac.title}>
     {view.status === 'loading' ? <p role="status" aria-live="polite">{ac.loading}</p> : view.status === 'error' ? <div role="alert"><p>{ac.error}</p>{onRetry ? <ActionButton variant="outline" onClick={onRetry}>{ac.retry}</ActionButton> : null}</div> : <InlineEmpty title={ac[view.status]} />}
   </section>;
   const { sales, deposits } = view.summary;
+  const http = view.source === 'http';
   const salesLabel = view.period.start === TODAY && view.period.end === TODAY ? ac.sales : ac.recognized;
-  const sampleBadge = example ? <StatusBadge kind="suggested" label={ac.example} /> : null;
   return <section className={stacked ? "mm-detail" : undefined} tabIndex={stacked ? 0 : undefined} lang="ko" aria-label={ac.title}>
     <div className={stacked ? "mm-detail__overview" : "mm-detail__split"}>
       <section className="mm-card" aria-label={salesLabel}>
-        <header className="mm-card__header"><h3 className="mm-card__title">{salesLabel}</h3>{sampleBadge}</header>
+        <header className="mm-card__header"><h3 className="mm-card__title">{salesLabel}</h3></header>
         <p className="mm-kpi__value"><ValueSlot slotId={`${featureId}.accounting.${instanceId}.sales`} featureId={featureId} scope="detail" semanticValue={sales.total}><PosMoney amount={sales.total} size="display"/></ValueSlot></p>
-        <AmountTable title={ac.salesMethods} rows={realMethods.map((method, index) => ({ id: method, label: [ac.cardSale, ac.easyPaySale, ac.cashSale][index]!, amount: sales.byRealMethodSale[method] }))} />
-        <AmountTable title={ac.settlementSales} rows={recognitionFields.map(field => ({ id: field, label: ac[field], amount: sales[field] }))} />
-        <p className="mm-muted">{ac.gross} {won(sales.gross)} − {ac.discount} {won(sales.discount)} − {ac.refund} {won(sales.refund)} + {ac.subscriptionDaily} {won(sales.subscriptionDaily)} + {ac.membershipExpiry} {won(sales.membershipExpiry)} + {ac.customPickup} {won(sales.customPickup)}{view.legacySales !== undefined ? <> + {ac.legacySales} {won(view.legacySales)}</> : null}</p>
+        {http ? <SalesMethodTables sales={sales} /> : <>
+          <AmountTable title={ac.salesMethods} rows={realMethods.map((method, index) => ({ id: method, label: [ac.cardSale, ac.easyPaySale, ac.cashSale][index]!, amount: sales.byRealMethodSale[method] }))} />
+          <AmountTable title={ac.settlementSales} rows={recognitionFields.map(field => ({ id: field, label: ac[field], amount: sales[field] }))} />
+        </>}
+        <p className="mm-muted">{http ? <>{ac.gross} {won(sales.gross)} − {ac.discount} {won(sales.discount)} − {ac.refund} {won(sales.refund)}</> : <>{ac.gross} {won(sales.gross)} − {ac.discount} {won(sales.discount)} − {ac.refund} {won(sales.refund)} + {ac.subscriptionDaily} {won(sales.subscriptionDaily)} + {ac.membershipExpiry} {won(sales.membershipExpiry)} + {ac.customPickup} {won(sales.customPickup)}{view.legacySales !== undefined ? <> + {ac.legacySales} {won(view.legacySales)}</> : null}</>}</p>
       </section>
       <section className="mm-card" aria-label={ac.deposits}>
-        <header className="mm-card__header"><h3 className="mm-card__title">{ac.deposits}</h3>{sampleBadge}</header>
+        <header className="mm-card__header"><h3 className="mm-card__title">{ac.deposits}</h3></header>
         <p className="mm-kpi__value"><ValueSlot slotId={`${featureId}.accounting.${instanceId}.deposits`} featureId={featureId} scope="detail" semanticValue={deposits.total}><PosMoney amount={deposits.total} size="display"/></ValueSlot></p>
         {view.depositCoverage?.complete === false ? <p className="mm-muted">{depositCoverageNote(view.depositCoverage.start, view.depositCoverage.end)}</p> : null}
         <AmountTable title={ac.depositMethods} rows={realMethods.map(method => ({ id: method, label: ac[method], amount: deposits.byMethod[method] }))} />
@@ -101,10 +138,19 @@ export function SalesDepositSplitCard({ view, example = false, onRetry, featureI
     </div>
   </section>;
 }
-export function AccountingUnknownCosts({ rows }: { readonly rows: readonly AccountingUnknownCost[] }) {
+/** Over HTTP the rows are every sale without a registered cost (menu or pickup), so the card does not call them pickups. */
+const unregisteredCostTitle = '원가가 아직 없는 매출';
+export function AccountingUnknownCosts({ rows, http = false }: { readonly rows: readonly AccountingUnknownCost[]; readonly http?: boolean }) {
   if (!rows.length) return null;
-  return <section className="mm-card" lang="ko" aria-label={customAccountingCopy.title}><h3 className="mm-card__title">{customAccountingCopy.title}</h3><StatusBadge kind="needsReview" label={customAccountingCopy.unknownCost} /><Table className="mm-table"><thead><tr><th scope="col">{customAccountingCopy.product}</th><th scope="col">{customAccountingCopy.sales}</th><th scope="col">{customAccountingCopy.cost}</th></tr></thead><tbody>{rows.map(row => <tr key={row.recognitionId}><th scope="row">{row.label ?? row.sourceId}</th><td>{won(row.amount)}</td><td>{customAccountingCopy.unknownCost}</td></tr>)}</tbody></Table></section>;
+  const title = http ? unregisteredCostTitle : customAccountingCopy.title;
+  return <section className="mm-card" lang="ko" aria-label={title}><h3 className="mm-card__title">{title}</h3><StatusBadge kind="needsReview" label={customAccountingCopy.unknownCost} /><Table className="mm-table"><thead><tr><th scope="col">{customAccountingCopy.product}</th><th scope="col">{customAccountingCopy.sales}</th><th scope="col">{customAccountingCopy.cost}</th></tr></thead><tbody>{rows.map(row => <tr key={row.recognitionId}><th scope="row">{row.label ?? row.sourceId}</th><td>{won(row.amount)}</td><td>{customAccountingCopy.unknownCost}</td></tr>)}</tbody></Table></section>;
 }
+/** A reference the owner can read: the service's own ids (`legacy:…`, a bare UUID, or `기록-` + UUID) are never shown (T-25). */
+const INTERNAL_REFERENCE = /^(?:legacy:|(?:기록-)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$)/i;
+const referenceText = (value: string | undefined): string => {
+  const text = value?.trim();
+  return text && !INTERNAL_REFERENCE.test(text) ? text : '—';
+};
 export function AccountingTransactions({ rows, onOpenReceipt }: { readonly rows: readonly AccountingTransaction[]; readonly onOpenReceipt?: OpenAccountingReceipt }) {
   const gridId = useId();
   const [filter, setFilter] = useState('all');
@@ -120,20 +166,40 @@ export function AccountingTransactions({ rows, onOpenReceipt }: { readonly rows:
   const open = (row: AccountingTransaction) => { setSelectedId(row.id); onOpenReceipt?.(row); };
   const columns: readonly GridColumn<AccountingTransaction>[] = [
     { id: 'time', header: ac.time, kind: 'text', sortable: true, minWidth: layoutTokens.targetDefault * 2, value: row => row.at.slice(11, 16) },
-    { id: 'transaction', header: ac.transaction, kind: 'text', minWidth: layoutTokens.targetDefault * 3, value: row => row.id },
+    { id: 'transaction', header: ac.transaction, kind: 'text', minWidth: layoutTokens.targetDefault * 4, value: row => referenceText(row.transactionNo) },
     { id: 'purpose', header: ac.purpose, kind: 'text', minWidth: layoutTokens.targetDefault * 3, value: row => ac[row.purpose] },
     { id: 'amount', header: ac.amount, kind: 'number', sortable: true, minWidth: layoutTokens.targetDefault * 3, value: row => won(visibleAmount(row)) },
-    { id: 'recognized', header: ac.recognized, kind: 'number', minWidth: layoutTokens.targetDefault * 3, value: row => won(row.salesAmount) },
+    { id: 'recognized', header: ac.recognized, kind: 'number', minWidth: layoutTokens.targetDefault * 3, value: row => row.salesAmount === null ? '—' : won(row.salesAmount) },
     { id: 'method', header: ac.method, kind: 'text', minWidth: layoutTokens.targetDefault * 3, value: row => row.methods.map(split => `${ac[split.method]} ${won(split.amount)}`).join(' · ') || '—' },
     { id: 'settlement', header: ac.settlement, kind: 'text', minWidth: layoutTokens.targetDefault * 3, value: row => row.settlementKinds.map(kind => ac[kind]).join(' · ') || '—' },
     { id: 'status', header: ac.status, kind: 'status', minWidth: layoutTokens.targetDefault * 2, value: row => ac[row.kind] },
-    { id: 'original', header: ac.original, kind: 'text', minWidth: layoutTokens.targetDefault * 3, value: row => row.originalId ?? '—' },
+    { id: 'original', header: ac.original, kind: 'text', minWidth: layoutTokens.targetDefault * 3, value: row => referenceText(row.originalId) },
   ];
   return <DataGrid renderFilters={() => <ChipChoice label={ac.transactions} value={filter} onChange={setFilter} options={['all', ...realMethods, 'accounts', 'mixed'].map(key => ({ value: key, label: ac[key as 'all' | RealMethod | 'accounts' | 'mixed'] }))} />} id={`accounting-transactions-${gridId}`} label={ac.transactions} rows={ordered} getRowId={row => row.id} getRowLabel={row => `${row.at.slice(11, 16)} ${ac[row.purpose]}`} columns={columns} sort={sort} onSortChange={setSort} selectedRowId={selectedId} onSelectionChange={onOpenReceipt ? id => { const row = ordered.find(candidate => candidate.id === id); if (row) open(row); } : undefined} expandedRowIds={new Set()} focus={focus} onFocusChange={setFocus} getRowActions={onOpenReceipt ? row => [{ id: 'receipt', label: ac.openReceipt, onPress: () => open(row) }] : undefined} emptyContent={<InlineEmpty title={ac.emptyTransactions} />} />;
 }
 
 
 const ID = 'ledger' as const;
+
+/**
+ * Money writes over HTTP wait for the server receipt (REAL-PLAN F09): `run` returns a Promise there and the sync result in the fixture store.
+ * The notice carries the receipt's own undo deadline, so the toast never outlives the server's undo window.
+ */
+function useMoneyRun(host: WidgetHost) {
+  const http = useRealPort()?.mode('money') === 'http';
+  const execute = useDataExecute();
+  const runLocal = useRunCommand(host);
+  return (command: DataCommand, answeredInline?: readonly string[]): DataCommandResult | Promise<DataCommandResult> => {
+    if (!http) return runLocal(command, undefined, answeredInline);
+    return execute(command).then(result => {
+      if (result.ok) {
+        const until = result.value && typeof result.value === 'object' && 'undoUntil' in result.value && typeof result.value.undoUntil === 'string' ? result.value.undoUntil : undefined;
+        if (result.noticeKey && !result.duplicate) host.notify({ kind: 'success', messageKey: result.noticeKey, ...(result.undoToken ? { undoToken: result.undoToken } : {}), ...(until && result.undoToken ? { undoUntil: until } : {}) });
+      } else if (!(result.reason && answeredInline?.includes(result.reason))) host.notify({ kind: 'error', messageKey: result.messageKey });
+      return result;
+    });
+  };
+}
 const FORM_CATEGORIES: readonly ExpenseCategory[] = ['ingredients', 'operations', 'supplies', 'other'];
 const EVIDENCES: readonly Evidence[] = ['receipt', 'tax-invoice', 'card', 'none'];
 /** Closing status is the final optional slot (SCR-212). */
@@ -146,7 +212,7 @@ function compareText(t: T, model: LedgerModel): string | undefined {
   return t(model.period.start === model.period.end ? 'widget.ledger.vsWeek' : 'widget.ledger.vsPrev', { delta });
 }
 function labelOf(t: T, model: LedgerModel): string {
-  return model.period.start === model.period.end ? t('widget.ledger.todaySales') : t('widget.ledger.salesIn', { period: t.format.dateRange(model.period.start, model.period.end) });
+  return model.period.start === model.period.end ? t('widget.ledger.todaySales') : t('widget.ledger.salesIn', { period: dateRangeWithWeekdays(t, model.period.start, model.period.end) });
 }
 const trendChart = (t: T, points: LedgerModel['trend'], title: string, fields: readonly ('net' | 'expenses' | 'netProfit')[]): ChartData => ({
   values: points.map(point => point[fields[0]!]), dates: points.map(point => point.date),
@@ -184,7 +250,7 @@ function LedgerDetailChart({ data }: { data: ChartData }) {
   </div>;
 }
 
-function buildSpec(t: T, model: LedgerModel, notes: ReactNode, shape: string, closed: boolean): PanelSpec {
+function buildSpec(t: T, model: LedgerModel, notes: ReactNode, shape: string, closed: boolean, height = 2): PanelSpec {
   const formattedSales = splitMoney(t, model.sales.net);
   const sales = t.locale === 'en' && formattedSales.value.startsWith('₩')
     ? { value: formattedSales.value.slice(1), unit: '₩' }
@@ -196,7 +262,17 @@ function buildSpec(t: T, model: LedgerModel, notes: ReactNode, shape: string, cl
   const categories: RowData[] = model.expenses.byCategory.map((c) => ({ id: c.category, name: t(c.categoryKey), value: t.format.money(c.amount, 'compact'), semanticValue: c.amount }));
   const rate: RowData = { id: 'profitRate', name: t('widget.ledger.profitRate'), value: model.profitRate == null ? '–' : `${model.profitRate.toFixed(1)}%`, semanticValue: model.profitRate };
   const methods: RowData[] = (['card', 'easyPay', 'cash'] as const).map(method => ({ id: method, name: t(`widget.ledger.method.${method}`), value: t.format.money(model.sales.byMethod[method], 'compact'), semanticValue: model.sales.byMethod[method], badge: closed ? <StatusBadge kind="confirmed" /> : undefined }));
-  const rows = shape === 'T' ? categories : shape === 'W' ? [expensesRow, remainingRow, rate] : shape === 'S' ? [expensesRow, remainingRow, rate] : [expensesRow, remainingRow, rate, ...methods];
+  // D-333: a card 4 rows high has room for the sale totals the model holds that the short cards leave to the detail (what was paid, the discount, the refund: each only when it is above 0)
+  // and, when the day's expenses fall in two or more categories, their split (one category would only repeat the expenses row). The fit guard drops what does not fit.
+  const tall = shape === 'L' && height >= 4;
+  const split = model.expenses.byCategory.filter((c) => c.amount > 0);
+  const saleRows: RowData[] = tall ? [
+    { id: 'gross', name: t('widget.ledger.gross'), value: t.format.money(model.sales.gross, 'compact'), semanticValue: model.sales.gross },
+    ...(model.sales.discount > 0 ? [{ id: 'discount', name: t('widget.ledger.discount'), value: t.format.money(model.sales.discount, 'compact'), semanticValue: model.sales.discount }] : []),
+    ...(model.sales.refund > 0 ? [{ id: 'refund', name: t('widget.ledger.refund'), value: t.format.money(model.sales.refund, 'compact'), semanticValue: model.sales.refund }] : []),
+  ] : [];
+  const categoryRows: RowData[] = tall && split.length >= 2 ? split.map((c) => ({ id: `category-${c.category}`, name: `${t(c.categoryKey)} ${t('widget.ledger.expenses')}`, value: t.format.money(c.amount, 'compact'), semanticValue: c.amount })) : [];
+  const rows = shape === 'T' ? categories : shape === 'W' ? [expensesRow, remainingRow, rate] : shape === 'S' ? [expensesRow, remainingRow, rate] : [expensesRow, remainingRow, rate, ...(model.sales.byMethodKnown === false ? [] : methods), ...saleRows, ...categoryRows];
   const missing = model.missingEvidenceCount > 0 ? <span className="mm-note"><StatusBadge kind="needsReview" label={t('widget.ledger.missingEvidence', { n: model.missingEvidenceCount })} /></span> : null;
   return {
     slot: ID, label: labelOf(t, model), value: sales.value, semanticValue: model.sales.net, unit: sales.unit, unitPlacement: t.locale === 'en' ? 'before' : undefined, sub: compareText(t, model), rows, rowsTitle: shape === 'T' ? t('widget.ledger.byCategory') : undefined, fitOrder: LEDGER_FIT,
@@ -210,7 +286,7 @@ export function LedgerPanel(props: WidgetPanelProps) {
   const store = useWidgetDataStore();
   const view = useWidgetView(ID, props.condition);
   if (view.status !== 'ready') return <ViewState view={view} ctx={ctx} host={props.host} featureId={ID} t={t} />;
-  return <MoneyPanel spec={buildSpec(t, view.model, <NoteLine notes={view.notes} t={t} />, ctx.shape, selectClosing(store.getSnapshot(), { date: TODAY, scenario: 'normal' }).status === 'closed')} ctx={ctx} />;
+  return <MoneyPanel spec={buildSpec(t, view.model, <NoteLine notes={view.notes} t={t} />, ctx.shape, selectClosing(store.getSnapshot(), { date: TODAY, scenario: 'normal' }).status === 'closed', ctx.height)} ctx={ctx} />;
 }
 
 export function useLedgerSummary({ condition }: { featureId: unknown; condition: QueryCondition }): string {
@@ -239,7 +315,8 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
   const store = useWidgetDataStore();
   const view = useWidgetView(ID, conditionFor(period));
   const presentation = useAccountingPresentation();
-  const run = useRunCommand(host);
+  const run = useMoneyRun(host);
+  const [confirming, setConfirming] = useState<ReadonlySet<string>>(new Set());
   const [formOpen, setFormOpen] = useState(() => expenseView && detailRef.focus === 'action');
   const prefill = detailRef.focus === 'action' ? moneyDetailPrefill(detailRef) : undefined;
   const openButton = useRef<HTMLButtonElement>(null);
@@ -273,8 +350,9 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
   const confirmCandidate = (expenseId: string) => {
     if (pending.current.has(expenseId)) return;
     pending.current.add(expenseId);
-    run({ type: 'ledger.confirmCandidate', expenseId });
-    pending.current.delete(expenseId);
+    const settle = () => { pending.current.delete(expenseId); setConfirming(current => { const next = new Set(current); next.delete(expenseId); return next; }); };
+    const outcome = run({ type: 'ledger.confirmCandidate', expenseId });
+    if (outcome instanceof Promise) { setConfirming(current => new Set(current).add(expenseId)); void outcome.finally(settle); } else settle();
   };
   const hasGrid = tab === 'sales' || (tab === 'expenses' && m.expenses.items.length > 0);
   return (
@@ -285,7 +363,7 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
         <div className="mm-kpis" data-slot="ledger.kpis">
           <Kpi
             slot="ledger.kpi.sales"
-            label={t.locale === 'ko' ? labelOf(t, m) : '총매출'}
+            label={labelOf(t, m)}
             value={sales.value}
             unit={sales.unit}
             semanticValue={recognizedSales}
@@ -351,7 +429,7 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
                     <li key={c.expenseId} data-row-id={c.expenseId} data-slot="ledger.candidate">
                       <span className="mm-plain-list__text"><StatusBadge kind="suggested" label={t('widget.ledger.candidateTag')} /> {c.supplierNameKey ? t(c.supplierNameKey) : t(c.categoryKey)}{'\u00A0'}· {t.format.date(c.date, 'short')}</span>
                       <strong>{full(c.amount)}</strong>
-                      <ActionButton variant="outline" autoFocus={c.expenseId === detailRef.itemId} onClick={() => confirmCandidate(c.expenseId)}>{t('widget.ledger.confirmCandidate')}</ActionButton>
+                      <ActionButton variant="outline" autoFocus={c.expenseId === detailRef.itemId} disabled={confirming.has(c.expenseId)} onClick={() => confirmCandidate(c.expenseId)}>{t('widget.ledger.confirmCandidate')}</ActionButton>
                     </li>
                   ))}
                 </ul>
@@ -367,7 +445,7 @@ export function LedgerDetail({ condition, host, detailRef, accounting: explicitA
 }
 
 function ExpenseForm({ t, onClose, run, returnFocus, prefill }: {
-  readonly t: T; readonly onClose: () => void; readonly run: ReturnType<typeof useRunCommand>;
+  readonly t: T; readonly onClose: () => void; readonly run: ReturnType<typeof useMoneyRun>;
   readonly returnFocus: RefObject<HTMLElement | null>; readonly prefill?: NonNullable<ReturnType<typeof moneyDetailPrefill>>;
 }) {
   const [date, setDate] = useState<string | null>(() => typeof prefill?.date === 'string' && prefill.date <= TODAY ? prefill.date : TODAY);
@@ -383,9 +461,13 @@ function ExpenseForm({ t, onClose, run, returnFocus, prefill }: {
   const busy = useRef(false);
   const earliest = useMemo(() => addIsoDays(TODAY, -30), []);
   const [review, setReview] = useState<Record<ReceiptField, boolean> | null>(null);
+  const receiptEdits = useRef(new Set<ReceiptField>());
   /** Any edit makes the earlier answer (a look-alike, a future date) stale. */
   const edited = (field?: ReceiptField) => {
-    if (field) setReview(current => current?.[field] ? { ...current, [field]: false } : current);
+    if (field) {
+      receiptEdits.current.add(field);
+      setReview(current => current?.[field] ? { ...current, [field]: false } : current);
+    }
     setError(undefined);
     setDateError(undefined);
     setExisting(null);
@@ -398,33 +480,40 @@ function ExpenseForm({ t, onClose, run, returnFocus, prefill }: {
     setSaving(true);
     // Receipt text has no supplier or inventory receipt ID. Store only the owner-confirmed memo.
     const confirmedMemo = [merchant.trim(), memo.trim()].filter(Boolean).join(' · ');
-    const result = run({ type: 'ledger.recordExpense', date, category, amount, evidence, ...(confirmedMemo ? { memo: confirmedMemo } : {}), ...(confirmDuplicate ? { confirmDuplicate: true } : {}) }, undefined, ['EXPENSE_DATE_FUTURE', 'LIKELY_DUPLICATE_EXPENSE']);
-    if (result.ok) { onClose(); return; }
-    if (result.reason === 'EXPENSE_DATE_FUTURE') { edited(); setDateError(t(result.messageKey)); }
-    else if (result.reason === 'LIKELY_DUPLICATE_EXPENSE' && result.details) {
-      const found = result.details as { readonly date: string; readonly category: string; readonly amount: number };
-      edited(); setExisting({ message: t(result.messageKey), date: found.date, category: found.category, amount: found.amount });
-    } else setError(t(result.messageKey));
-    busy.current = false;
-    setSaving(false);
+    const settle = (result: DataCommandResult) => {
+      if (result.ok) { onClose(); return; }
+      if (result.reason === 'EXPENSE_DATE_FUTURE') { edited(); setDateError(t(result.messageKey)); }
+      else if (result.reason === 'LIKELY_DUPLICATE_EXPENSE' && result.details) {
+        const found = result.details as { readonly date: string; readonly category: string; readonly amount: number };
+        edited(); setExisting({ message: t(result.messageKey), date: found.date, category: found.category, amount: found.amount });
+      } else setError(t(result.messageKey));
+      busy.current = false;
+      setSaving(false);
+    };
+    const outcome = run({ type: 'ledger.recordExpense', date, category, amount, evidence, ...(confirmedMemo ? { memo: confirmedMemo } : {}), ...(confirmDuplicate ? { confirmDuplicate: true } : {}) }, ['EXPENSE_DATE_FUTURE', 'LIKELY_DUPLICATE_EXPENSE']);
+    // Over HTTP the form stays pending (and a second press is ignored) until the server's receipt arrives.
+    if (outcome instanceof Promise) void outcome.then(settle); else settle(outcome);
   };
   const manualDate = date ?? TODAY;
   return (
     <InlineForm title={t('common.recordExpense')} onSave={() => save()} onClose={onClose} saving={saving} returnFocusRef={returnFocus}>
-      <ReceiptScanEntry t={t} onRecognized={values => {
-        setDate(values.date);
-        setAmount(values.amount);
-        setMerchant(values.merchant);
-        setMemo(values.memo);
-        setEvidence('receipt');
-        setReview(values.review);
+      <ReceiptScanEntry t={t} onScanStart={() => receiptEdits.current.clear()} onRecognized={values => {
+        const preserved = receiptEdits.current;
+        if (!preserved.has('date')) setDate(values.date);
+        if (!preserved.has('amount')) setAmount(values.amount);
+        if (!preserved.has('merchant')) setMerchant(values.merchant);
+        if (!preserved.has('memo')) setMemo(values.memo);
+        if (!preserved.has('evidence')) setEvidence('receipt');
+        const nextReview: Record<ReceiptField, boolean> = { ...values.review };
+        for (const field of preserved) nextReview[field] = true;
+        setReview(nextReview);
         edited();
       }} />
       {review ? <ReceiptReviewField locale={t.locale} review={review.date}>
         {hint => <DateField name="expense-date" label={t('widget.ledger.field.date')} value={date} onValueChange={value => { setDate(value); edited('date'); }}
           today={TODAY} max={TODAY} required error={dateError} hint={hint} />}
       </ReceiptReviewField> : <div className="ui-field" data-invalid={dateError ? 'true' : undefined}>
-        <DateStepper label={t('widget.ledger.field.date')} text={t.format.date(manualDate, 'long')} onPrevious={() => { setDate(addIsoDays(manualDate, -1)); edited(); }} onNext={() => { setDate(addIsoDays(manualDate, 1)); edited(); }} previousDisabled={manualDate <= earliest} nextDisabled={manualDate >= TODAY} />
+        <DateStepper label={t('widget.ledger.field.date')} text={t.format.date(manualDate, 'long')} onPrevious={() => { setDate(addIsoDays(manualDate, -1)); edited('date'); }} onNext={() => { setDate(addIsoDays(manualDate, 1)); edited('date'); }} previousDisabled={manualDate <= earliest} nextDisabled={manualDate >= TODAY} />
         {dateError ? <p className="ui-field__error" role="alert" data-slot="ledger.dateError"><Icon name="error" />{dateError}</p> : null}
       </div>}
       <ChipChoice label={t('widget.ledger.field.category')} value={category} onChange={(v) => { setCategory(v); edited(); }} options={FORM_CATEGORIES.map((c) => ({ value: c, label: t(`data.expenseCategory.${c}`) }))} />
@@ -438,7 +527,9 @@ function ExpenseForm({ t, onClose, run, returnFocus, prefill }: {
       <ReceiptReviewField locale={t.locale} review={review?.memo}>
         {hint => <TextField name="expense-memo" label={t('widget.ledger.field.memo')} value={memo} onValueChange={value => { setMemo(value); edited('memo'); }} hint={hint} />}
       </ReceiptReviewField>
-      <ChipChoice label={t('widget.ledger.field.evidence')} value={evidence} onChange={setEvidence} options={EVIDENCES.map((e) => ({ value: e, label: e === 'receipt' ? t('widget.ledger.evidenceReceipt') : t(`data.evidence.${e}`) }))} />
+      <ReceiptReviewField locale={t.locale} review={review?.evidence} groupLabel={t('widget.ledger.field.evidence')}>
+        {() => <ChipChoice label={t('widget.ledger.field.evidence')} value={evidence} onChange={value => { setEvidence(value); edited('evidence'); }} options={EVIDENCES.map((e) => ({ value: e, label: e === 'receipt' ? t('widget.ledger.evidenceReceipt') : t(`data.evidence.${e}`) }))} />}
+      </ReceiptReviewField>
       {existing ? <div className="mm-field-answer" role="alert" data-slot="ledger.duplicate">
         <p className="mm-field-answer__text"><Icon name="warning" aria-hidden />{existing.message}</p>
         <p className="mm-muted" data-slot="ledger.existing">{t('widget.ledger.existingExpense', { date: t.format.date(existing.date, 'short'), category: t(`data.expenseCategory.${existing.category}`), amount: t.format.money(existing.amount, 'full') })}</p>

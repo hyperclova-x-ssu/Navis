@@ -1,20 +1,54 @@
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
 import { readFileSync } from 'node:fs';
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createWidgetDataStore } from '../../../data/widget-data';
 import { selectMoneyRead } from '../../../data/pos/projection';
 import { renderWithKit } from '../../../ui/test-utils';
 import { panelShape } from '../../../ui';
-import { CreditDetail, CreditPanel, memberMoneyBinding } from './index';
+import { CreditDetail, CreditPanel, createCreditWidget, MemberMoneyProvider, MemberMoneySection, memberMoneyBinding } from './index';
 import { binding, transaction } from './test-fixtures';
+import { createRealPort } from '../../../data/reality/00';
+import { autoloadedAdapters } from '../../../data/reality/00/autoload';
+import { fakeBackend, reply } from '../../../data/reality/00/testing';
+import { PosProvider } from '../../../pos/react';
+import { setup as setupPos } from '../../../pos/loyalty/test-setup';
+import { FundingDialog } from './real-funding';
 
 
 const host = { layer: 'management' as const, resetPreview: vi.fn(), openLinked: vi.fn(), openDetail: vi.fn(), notify: vi.fn(), acknowledgeBriefing: vi.fn(), openClosing: vi.fn(() => true) };
 const detail = { featureId: 'members' as const, condition: { kind: 'default' as const }, detailRef: { featureId: 'members' as const }, host };
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
+
+it('announces loading while the credit balance is still being read', () => {
+  const backend = fakeBackend();
+  backend.on('GET', '/customers', () => new Promise(() => {}));
+  const store = createWidgetDataStore();
+  store.bindReal(createRealPort({ store, fetch: backend.fetch, source: domain => domain === 'members' ? 'http' : 'fixture', adapters: autoloadedAdapters() }));
+  const widget = createCreditWidget('credit-receivable', () => ({ ...binding(), view: { status: 'empty' } }));
+  function Summary() {
+    const text = widget.useSummary({ featureId: 'credit-receivable', condition: detail.condition });
+    return <p>{text}</p>;
+  }
+  renderWithKit(<Summary />, { store });
+  expect(screen.getByText('충전금·외상 내역을 불러오고 있어요')).toBeVisible();
+  expect(screen.queryByText('아직 충전금·외상 거래가 없어요')).toBeNull();
+});
+
+it('shows a compact member number while preserving the row ID', async () => {
+  const fixture = binding();
+  if (fixture.view.status !== 'ready') throw new Error('Expected members');
+  const memberId = 'e79a88b6-e6a5-4d5b-b23a-78c7f72e2dcc';
+  const model = { ...fixture.view.model, members: [{ ...fixture.view.model.members[0], memberId }] };
+  const { container } = renderWithKit(<CreditDetail {...detail} {...fixture} view={{ status: 'ready', model }} />);
+  const row = container.querySelector<HTMLElement>(`[data-grid-row="${memberId}"]`)!;
+  expect(row).toHaveTextContent('M-E79A88B6');
+  expect(row).not.toHaveTextContent(memberId);
+  await userEvent.click(within(row).getByText('M-E79A88B6'));
+  expect(screen.getByRole('region', { name: 'M-E79A88B6 김○현' })).toBeInTheDocument();
+});
 
 it('omits the compact third line and gives both larger balances equal metric blocks', () => {
   const panel = { ...detail, ...binding(), width: 1 as const, height: 1 as const, shape: 'Q' as const, presetId: 'A' as const, editing: false };
@@ -89,6 +123,153 @@ it('validates topup and partial collection before opening the shared checkout, w
   await userEvent.click(within(side).getByRole('button', { name: '충전하기' }));
   expect(b.port.openSettlement).toHaveBeenLastCalledWith({ purpose: 'charge_topup', memberId: 'M-0005', amount: 5000 }, expect.any(Object));
   expect(within(side).queryByRole('button', { name: /외상 추가|외상 만들기/ })).not.toBeInTheDocument();
+});
+
+it('waits for the explicit cash record press before writing an HTTP top-up', async () => {
+  const backend = fakeBackend();
+  const page = (items: readonly unknown[]) => ({ items, nextCursor: null, asOf: '2026-11-21T06:00:00Z', sourceRevision: 1 });
+  for (const path of ['/customers', '/membership-products', '/memberships', '/pos/member-accounts']) backend.on('GET', path, () => page([]));
+  backend.on('GET', '/pos/member-accounts/M-0005', () => ({ memberId: 'M-0005', revision: 7, chargeBalance: 0, receivableBalance: 10000 }));
+  const path = '/pos/member-accounts/M-0005/entries';
+  backend.on('POST', path, () => ({ resourceId: 'txn', revision: 8, receiptId: 'receipt', affectedSources: ['pos.member-accounts'] }));
+  const store = createWidgetDataStore();
+  const port = createRealPort({ store, source: domain => domain === 'members' ? 'http' : 'fixture', adapters: autoloadedAdapters(), fetch: backend.fetch });
+  store.bindReal(port);
+  await port.load('members');
+  const fixture = binding();
+  renderWithKit(<CreditDetail {...detail} {...fixture} detailRef={{ ...detail.detailRef, itemId: 'M-0005' }} />, { store });
+  const side = screen.getByRole('region');
+  await userEvent.type(within(side).getByRole('spinbutton', { name: '금액' }), '5000');
+  await userEvent.click(within(side).getByRole('button', { name: '충전하기' }));
+  const dialog = await screen.findByRole('dialog', { name: '충전금 충전' });
+  expect(dialog.querySelector('.shared-settlement')).toBeInTheDocument();
+  expect(backend.callsTo('POST', path)).toHaveLength(0);
+  await userEvent.click(within(dialog).getByRole('button', { name: '현금' }));
+  expect(backend.callsTo('POST', path).map(call => call.body)).toEqual([
+    { purpose: 'charge_topup', amount: 5000, expectedRevision: 7, splits: [{ method: 'cash', amount: 5000 }] },
+  ]);
+  expect(fixture.port.openSettlement).not.toHaveBeenCalled();
+});
+
+it('shows recorded funding in the original receipt and commits a partial refund only after confirmation', async () => {
+  const backend = fakeBackend();
+  const at = '2026-11-21T06:00:00Z';
+  const original = { settlementId: 'funding-1', paymentId: 'payment-1', memberId: 'M-0005', purpose: 'charge_topup',
+    amount: 5000, at, splits: [{ method: 'cash', amount: 5000 }], terminal: { receiptNo: 'SLIP-1' },
+    remainingRefundable: 5000, remainingMethods: [{ method: 'cash', amount: 5000 }], refunds: [], revision: 7 };
+  const path = '/pos/member-funding/funding-1';
+  backend.on('GET', path, () => original);
+  for (const path of ['/customers', '/membership-products', '/memberships', '/pos/member-accounts']) {
+    backend.on('GET', path, () => ({ items: [], nextCursor: null, asOf: at, sourceRevision: 7 }));
+  }
+  backend.on('POST', `${path}/refunds`, () => ({ resourceId: 'refund-1', revision: 8, receiptId: 'receipt', affectedSources: ['pos.member-accounts'] }));
+  const store = createWidgetDataStore();
+  const real = createRealPort({ store, source: domain => domain === 'members' ? 'http' : 'fixture', adapters: autoloadedAdapters(), fetch: backend.fetch });
+  store.bindReal(real);
+  const context = { detailRef: detail.detailRef, selectedId: original.memberId, returnFocusRef: { current: null } };
+  renderWithKit(<PosProvider value={setupPos().pos}><FundingDialog action={{ fundingId: original.settlementId, context }}
+    real={real} products={[]} close={() => {}} /></PosProvider>, { store });
+  expect(await screen.findByText('SLIP-1')).toBeInTheDocument();
+  expect(screen.getByText('거래 일시').nextElementSibling).toHaveTextContent(/ · /);
+  await userEvent.click(screen.getByRole('button', { name: '환불하기' }));
+  const refund = await screen.findByRole('alertdialog', { name: '환불' });
+  const amount = within(refund).getByRole('spinbutton', { name: '환불 금액' });
+  await userEvent.clear(amount);
+  await userEvent.type(amount, '2000');
+  expect(backend.callsTo('POST', `${path}/refunds`)).toHaveLength(0);
+  await userEvent.click(within(refund).getByRole('button', { name: '환불 확정하기' }));
+  expect(backend.callsTo('POST', `${path}/refunds`).map(call => call.body)).toEqual([{ amount: 2000, confirmed: true, expectedRevision: 7 }]);
+  expect(await screen.findByText('환불을 기록했어요')).toBeVisible();
+});
+
+it('explains an invalid split refund slip and submits the corrected terminal record only on confirmation', async () => {
+  const backend = fakeBackend();
+  const at = '2026-11-17T03:00:00Z';
+  const splits = [{ method: 'card', amount: 10000 }, { method: 'cash', amount: 7500 }];
+  const path = '/pos/member-funding/funding-split';
+  backend.on('GET', path, () => ({ settlementId: 'funding-split', paymentId: 'payment-1', memberId: 'M-0005', purpose: 'charge_topup',
+    amount: 17500, at, splits, terminal: null, remainingRefundable: 17500, remainingMethods: splits, refunds: [], revision: 7 }));
+  for (const resource of ['/customers', '/membership-products', '/memberships', '/pos/member-accounts']) {
+    backend.on('GET', resource, () => ({ items: [], nextCursor: null, asOf: at, sourceRevision: 7 }));
+  }
+  backend.on('POST', `${path}/refunds`, () => ({ resourceId: 'funding-split', revision: 8, receiptId: 'receipt', affectedSources: ['pos.member-accounts'] }));
+  const store = createWidgetDataStore();
+  const real = createRealPort({ store, source: domain => domain === 'members' ? 'http' : 'fixture', adapters: autoloadedAdapters(), fetch: backend.fetch });
+  store.bindReal(real);
+  const context = { detailRef: detail.detailRef, selectedId: 'M-0005', returnFocusRef: { current: null } };
+  renderWithKit(<PosProvider value={setupPos().pos}><FundingDialog action={{ fundingId: 'funding-split', context }}
+    real={real} products={[]} close={() => {}} /></PosProvider>, { store });
+  await userEvent.click(await screen.findByRole('button', { name: '환불하기' }));
+  const refund = within(await screen.findByRole('alertdialog', { name: '환불' }));
+  const receipt = refund.getByRole('textbox', { name: '단말기 영수증 번호' });
+  fireEvent.change(refund.getByRole('textbox', { name: '단말기 승인 번호' }), { target: { value: '90821751' } });
+  fireEvent.change(receipt, { target: { value: 'G2C-W08-환불' } });
+  await userEvent.click(refund.getByRole('button', { name: /단말기 거래 시각/ }));
+  await userEvent.click(await screen.findByRole('option', { name: '12:10' }));
+  const confirm = refund.getByRole('button', { name: '환불 확정하기' });
+  expect(confirm).toBeDisabled();
+  expect(refund.getByRole('alert')).toHaveTextContent('영문자와 숫자');
+  expect(backend.callsTo('POST', `${path}/refunds`)).toHaveLength(0);
+  fireEvent.change(receipt, { target: { value: 'G2C-W08-REFUND' } });
+  await userEvent.click(confirm);
+  expect(backend.callsTo('POST', `${path}/refunds`).map(call => call.body)).toEqual([{
+    amount: 17500, confirmed: true, expectedRevision: 7,
+    terminal: { approvalNo: '90821751', receiptNo: 'G2C-W08-REFUND', occurredAt: '2026-11-17T03:10:00.000Z' },
+  }]);
+});
+
+it('requires an extra press before cancelling a recorded pass use', async () => {
+  const backend = fakeBackend();
+  const page = { items: [], nextCursor: null, asOf: '2026-11-21T06:00:00Z', sourceRevision: 1 };
+  for (const path of ['/customers', '/membership-products', '/pos/member-accounts']) backend.on('GET', path, () => page);
+  backend.on('GET', '/memberships', () => ({ ...page, items: [{ membershipId: 'pass', memberId: 'M-0001', productId: 'product',
+    startsOn: '2026-11-21', endsOn: '2026-11-27', terms: { kind: 'count', name: '검증 5회권', totalUses: 5, soldPrice: 10000 }, status: 'active', revision: 1 }] }));
+  const use = { useId: 'use', membershipId: 'pass', usedAt: '2026-11-21T06:00:00Z', settlementId: 'settlement', canceledAt: null as string | null };
+  backend.on('GET', '/memberships/pass/uses', () => ({ ...page, items: [use] }));
+  backend.on('POST', '/memberships/pass/uses/use/cancel', () => {
+    use.canceledAt = '2026-11-21T06:00:00Z';
+    return { resourceId: 'use', revision: 2, receiptId: 'cancel-receipt', affectedSources: ['memberships'] };
+  });
+  const store = createWidgetDataStore();
+  const port = createRealPort({ store, source: domain => domain === 'members' ? 'http' : 'fixture', adapters: autoloadedAdapters(), fetch: backend.fetch });
+  store.bindReal(port);
+  await port.load('members');
+  const fixture = binding();
+  renderWithKit(<MemberMoneyProvider binding={{ ...fixture, memberships: [{
+    membershipId: 'pass', memberId: 'M-0001', productLabel: '검증 5회권', kind: 'count', soldPrice: 10000,
+    totalUses: 5, usesRemaining: 4, validDays: 7, startsOn: '2026-11-21', endsOn: '2026-11-27',
+    recognizedValue: null, unrecognizedValue: null, refundedValue: null, status: 'active',
+    uses: [{ useId: 'use', usedAt: '2026-11-21T15:00:00', settlementId: 'settlement' }],
+  }] }}><MemberMoneySection memberId="M-0001" detailRef={{ featureId: 'members' }} /></MemberMoneyProvider>, { store });
+  await userEvent.click(screen.getByRole('button', { name: '사용 취소하기' }));
+  expect(backend.callsTo('POST', /\/uses\//u)).toHaveLength(0);
+  await userEvent.click(screen.getByRole('button', { name: '사용 취소 확인' }));
+  expect(backend.callsTo('POST', '/memberships/pass/uses/use/cancel').map(call => call.body)).toEqual([{ confirmed: true }]);
+});
+
+// FIX leftover (gate r1a T-17, W08 K9): a refused use cancellation says what was refused and what to do, not only "원거래에서 사용 취소를 확인해 주세요".
+it('says what was refused and what to do when a use cancellation is refused', async () => {
+  const backend = fakeBackend();
+  const page = { items: [], nextCursor: null, asOf: '2026-11-21T06:00:00Z', sourceRevision: 1 };
+  for (const path of ['/customers', '/membership-products', '/pos/member-accounts']) backend.on('GET', path, () => page);
+  backend.on('GET', '/memberships', () => ({ ...page, items: [{ membershipId: 'pass', memberId: 'M-0001', productId: 'product',
+    startsOn: '2026-11-21', endsOn: '2026-11-27', terms: { kind: 'count', name: '검증 5회권', totalUses: 5, soldPrice: 10000 }, status: 'active', revision: 1 }] }));
+  backend.on('GET', '/memberships/pass/uses', () => ({ ...page, items: [{ useId: 'use', membershipId: 'pass', usedAt: '2026-11-21T06:00:00Z', settlementId: 'settlement', canceledAt: null }] }));
+  backend.on('POST', '/memberships/pass/uses/use/cancel', () => reply(409, { code: 'CONFLICT', reason: 'USE_NOT_CANCELABLE' }));
+  const store = createWidgetDataStore();
+  const port = createRealPort({ store, source: domain => domain === 'members' ? 'http' : 'fixture', adapters: autoloadedAdapters(), fetch: backend.fetch });
+  store.bindReal(port);
+  await port.load('members');
+  const fixture = binding();
+  renderWithKit(<MemberMoneyProvider binding={{ ...fixture, memberships: [{
+    membershipId: 'pass', memberId: 'M-0001', productLabel: '검증 5회권', kind: 'count', soldPrice: 10000,
+    totalUses: 5, usesRemaining: 4, validDays: 7, startsOn: '2026-11-21', endsOn: '2026-11-27',
+    recognizedValue: null, unrecognizedValue: null, refundedValue: null, status: 'active',
+    uses: [{ useId: 'use', usedAt: '2026-11-21T15:00:00', settlementId: 'settlement' }],
+  }] }}><MemberMoneySection memberId="M-0001" detailRef={{ featureId: 'members' }} /></MemberMoneyProvider>, { store });
+  await userEvent.click(screen.getByRole('button', { name: '사용 취소하기' }));
+  await userEvent.click(screen.getByRole('button', { name: '사용 취소 확인' }));
+  expect(await screen.findByText('실행하지 못했어요 · 현재 상태에선 진행할 수 없어요. 최신 내용을 확인해 주세요')).toBeVisible();
 });
 
 it('disables collection with zero debt and keeps original transactions available for reversals', async () => {

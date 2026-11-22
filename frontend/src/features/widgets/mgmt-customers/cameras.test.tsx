@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { renderWithKit } from '../../../ui/test-utils';
-import { createWidgetDataStore, selectCameras } from '../../../data/widget-data';
 import { CustomerAnalysisDetail, CustomerAnalysisPanel } from './customer-analysis';
 const host = { layer: 'management' as const, resetPreview: vi.fn(), openLinked: vi.fn(), openDetail: vi.fn(), notify: vi.fn(), acknowledgeBriefing: vi.fn(), openClosing: vi.fn(() => true) };
 const common = { featureId:'customer-analysis' as const, condition:{kind:'default' as const}, host };
@@ -19,8 +18,8 @@ it('shows the café playback and keeps the camera status and analysis in the exa
  expect(container.querySelector('.mc-camera-stills')).not.toBeInTheDocument();
  // 연결 상태·작동 상태 are 28-high status chips (colour + icon + words), words follow AC-1074 (녹화 중).
  const grid = screen.getByRole('grid', { name: 'CCTV 상태' });
- const cameras = selectCameras(createWidgetDataStore().getSnapshot(), {});
- expect(within(grid).getAllByText('연결됨').map(el => el.closest('.ui-status-chip'))).toHaveLength(cameras.length);
+ expect(grid.compareDocumentPosition(container.querySelector('video')!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+ expect(within(grid).getAllByText('연결됨').map(el => el.closest('.ui-status-chip'))).toHaveLength(1);
  for (const chip of within(grid).getAllByText('녹화 중').map(el => el.closest('.ui-status-chip'))) expect(chip).toHaveAttribute('data-semantic', 'done');
  expect(within(grid).queryByText('작동 중')).toBeNull();
 });
@@ -34,7 +33,15 @@ it('on a 2x2 panel the camera warning rides on the headcount label (never droppe
  expect(rank(screen.getByText(/^방문 감지 \d+건$/))).toBeGreaterThan(rank(screen.getByText(/카메라 \d+대 정상/)));
  expect(rank(screen.getByText(/카메라 \d+대 정상/))).toBeGreaterThan(rank(screen.getByText('지금 숫자')));
 });
-it('counts the working cameras on the panel chip instead of a fixed number',()=>{renderWithKit(<CustomerAnalysisPanel {...common} width={1} height={1} shape="Q" presetId="A" editing={false}/>);expect(screen.getByText(`카메라 ${selectCameras(createWidgetDataStore().getSnapshot(),{}).length}대 정상`)).toBeInTheDocument();});
+it.each([
+ ['ko', '카메라 1대 정상'],
+ ['en', '1 camera is working'],
+ ['zh-Hans', '1 台摄像头正常'],
+ ['zh-Hant', '1 台攝影機正常'],
+] as const)('describes a single example camera in %s', (locale, label) => {
+ renderWithKit(<CustomerAnalysisPanel {...common} width={1} height={1} shape="Q" presetId="A" editing={false}/>, { locale });
+ expect(screen.getByText(label)).toBeInTheDocument();
+});
 it('names the disconnected camera and keeps the count without displaying footage or boxes', () => {
  renderWithKit(<CustomerAnalysisDetail {...common} detailRef={{ featureId: 'customer-analysis' }} />, { preview: { family: 'normal', overrides: { 'customer-analysis': 'camera-disconnected' } } });
  const grid = screen.getByRole('grid', { name: 'CCTV 상태' });

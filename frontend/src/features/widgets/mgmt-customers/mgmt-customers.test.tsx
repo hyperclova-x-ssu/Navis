@@ -122,7 +122,7 @@ describe('CCTV 손님분석 (AC-250·251)', () => {
     expect(q.container).toHaveTextContent(`방문 감지 ${m.totalVisits}건`);
     q.unmount();
     const w = panel('customer-analysis', { width: 2, height: 1 });
-    expect(w.container).toHaveTextContent('붐빈 시간과 근무');
+    expect(w.container).not.toHaveTextContent('붐빈 시간과 근무');
     expect(w.container.querySelector(`[data-row-id="h${peak.hour}-visits"]`)).toHaveTextContent(`${peak.hour}시대 방문${peak.visits}건`);
     expect(w.container.querySelector(`[data-row-id="h${peak.hour}-staff"]`)).toHaveTextContent(`${peak.hour}시대 근무${peak.staff}명`);
     w.unmount();
@@ -252,25 +252,19 @@ describe('음성 예약확정 (AC-227·256·257)', () => {
     expect(summaryOf(container)).toHaveTextContent(`${before.count - 1}건`);
     expect(container.querySelector(`[data-grid-row="${OVER}"]`)).toHaveTextContent('제안함');
   });
-  it('call summary shows the connection (sample), the extracted values and no recording', async () => {
-    const call = modelOfBooking('needs-confirmation').calls.find((c) => c.callId === overRow().callId)!;
+  it('has no call summary at all: no call content exists, so a phone booking shows only its booking facts (AC-1600)', async () => {
     const { container } = detail('voice-booking', { preview: needs });
     await userEvent.click(container.querySelector(`[data-grid-row="${OVER}"] [data-grid-column-id="guest"]`)!);
-    const summary = within(screen.getByRole('region', { name: `${overRow().time} · ${guestOf(overRow())}` })).getByRole('region', { name: '통화 요약' });
-    expect(summary).toHaveTextContent('전화 연결됨(예시)');
-    expect(summary).toHaveTextContent('녹음은 보관하지 않고 요약만 남겨요');
-    expect(summary.querySelector('.mc-call__summary')).toHaveTextContent('예약을 원해요');
-    // the extracted values follow the booking (the sample's one-line summary still names 17:00 / 20명: reported to the data owner)
-    expect(summary.querySelector('.mc-extracted')).toHaveTextContent(call.extracted.time);
-    expect(summary.querySelector('.mc-extracted')).toHaveTextContent(`${call.extracted.party}명`);
-    expect(summary.querySelector('audio')).toBeNull();
+    const panel = within(screen.getByRole('region', { name: `${overRow().time} · ${guestOf(overRow())}` }));
+    expect(panel.queryByRole('region', { name: '통화 요약' })).toBeNull();
+    expect(screen.queryByText(/전화 연결됨\(예시\)|녹음은 보관하지 않고|예약을 원해요/u)).toBeNull();
+    expect(document.querySelector('audio')).toBeNull();
   });
-  it('direct bookings have no call; a confirmed booking before the time cannot be marked no-show, after it can', async () => {
+  it('a confirmed booking before the time cannot be marked no-show, after it can', async () => {
     const future = todayOf().rows.find((r) => r.status === 'confirmed')!;
     const { container } = detail('voice-booking');
     await userEvent.click(container.querySelector(`[data-grid-row="${future.reservationId}"] [data-grid-column-id="guest"]`)!);
     const later = within(screen.getByRole('region', { name: `${future.time} · ${guestOf(future)}` }));
-    expect(later.getByRole('region', { name: '통화 요약' })).toHaveTextContent('전화 통화 없이 직접 넣었어요');
     expect(later.getByRole('button', { name: new RegExp(`${guestOf(future)}, ${future.time} 예약을 오지 않음으로 바꾸기`) })).toBeDisabled();
     cleanup();
     // the 13:49 booking, set back to confirmed, is a confirmed booking whose time has passed
@@ -287,7 +281,7 @@ describe('음성 예약확정 (AC-227·256·257)', () => {
     cleanup();
     const off = panel('voice-booking', { preview: previewOf('voice-booking', 'phone-disconnected') });
     expect(off.container).toHaveTextContent('전화 연결이 필요해요');
-    await userEvent.click(screen.getByRole('button', { name: /연결하기\(예시\)/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^연결하기, 예약$/ }));
     expect(off.host.resetPreview).toHaveBeenCalledTimes(1);
   });
 });

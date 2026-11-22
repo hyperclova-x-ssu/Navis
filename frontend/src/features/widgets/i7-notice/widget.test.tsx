@@ -16,9 +16,9 @@ const format = createTranslator('ko').format;
 /** The editor needs the kit providers (calendar popover, grid); one fake DB for the whole file, as the editors only use their own fake port. */
 const store = createWidgetDataStore();
 const render = (ui: Parameters<typeof renderWithKit>[0]) => renderWithKit(ui, { store });
-const view = { status: 'ready' as const, unsentCount: 1, nextClosure: { eventId: 'closure', title: '11/02 임시 휴무' }, closures: [{ eventId: 'closure', title: '11/02 임시 휴무' }], drafts: [], sent: [], groups: [] };
+const view = { status: 'ready' as const, unsentCount: 1, nextClosure: { eventId: 'closure', title: '11/02 임시 휴무' }, closures: [{ eventId: 'closure', title: '11/02 임시 휴무' }], drafts: [], sent: [], scheduled: [], groups: [] };
 const preview = { previewId: 'p1', draftRevision: 1, contentClass: 'informational' as const, recipientCount: 126, excludedCount: 0, renderedBody: '하루 쉬어요', adMarker: false, optOutText: '', sendAllowed: true, reasons: [] };
-const makePort = () => ({ importClosure: vi.fn(async () => ({ ok: true as const, draft: { noticeId: 'n1', revision: 1, kind: 'temporary_closure' as const, title: '휴무 안내', body: '하루 쉬어요', startDate: '2026-11-02', endDate: '2026-11-02', closureEventId: 'closure', audience: 'all_contactable' as const, groupIds: [] } })), saveDraft: vi.fn(async () => ({ ok: true as const, noticeId: 'n1', revision: 1 })), deleteDraft: vi.fn(async () => ({ ok: true as const })), preview: vi.fn<NoticePort['preview']>(async () => ({ ok: true as const, preview })), send: vi.fn<NoticePort['send']>(async () => ({ ok: true as const })), retry: vi.fn() });
+const makePort = () => ({ importClosure: vi.fn(async () => ({ ok: true as const, draft: { noticeId: 'n1', revision: 1, kind: 'temporary_closure' as const, title: '휴무 안내', body: '하루 쉬어요', startDate: '2026-11-02', endDate: '2026-11-02', closureEventId: 'closure', audience: 'all_contactable' as const, groupIds: [] } })), saveDraft: vi.fn(async () => ({ ok: true as const, noticeId: 'n1', revision: 1 })), cancelSchedule: vi.fn(async () => ({ ok: true as const })), deleteDraft: vi.fn(async () => ({ ok: true as const })), preview: vi.fn<NoticePort['preview']>(async () => ({ ok: true as const, preview })), send: vi.fn<NoticePort['send']>(async () => ({ ok: true as const })), retry: vi.fn() });
 const makeMemory = () => { let kept: NoticeDraftInput | null = null; return { read: () => kept, write: (draft: NoticeDraftInput | null) => { kept = draft; } } satisfies NoticeDraftMemory; };
 const sentRows = [
   { sentId: 's2', title: '저녁 좌석 안내', kind: 'other', recipientCount: 460, sentAt: `${TODAY}T15:45` },
@@ -31,7 +31,7 @@ describe('notice editor', () => {
     const { container } = renderBare(<NoticePanel view={view} width={1} height={1} onOpen={open} onRetry={() => {}} />);
     expect(screen.queryByText('11/02 임시 휴무')).toBeNull();
     expect(container.querySelector('.i7-notice-metric-line button')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /공지 보내기/ }));
+    fireEvent.click(screen.getByRole('button', { name: /공지 쓰기/ }));
     expect(open).toHaveBeenCalledOnce();
   });
   it('shows the source closure count in every panel size', () => {
@@ -55,7 +55,7 @@ describe('notice editor', () => {
     expect(screen.getByLabelText('공지 제목')).toHaveFocus();
     expect(port.preview).not.toHaveBeenCalled();
   });
-  it('places the compact calendar button on the wrapping notice type row', () => {
+  it('keeps the notice type and draft tools in separate rows', () => {
     const { container } = render(<NoticeEditor view={view} port={makePort()} />);
     const style = document.createElement('style');
     style.textContent = ['src/ui/tokens.css', 'src/features/widgets/i7-notice/widget.css']
@@ -64,7 +64,7 @@ describe('notice editor', () => {
     const types = screen.getByRole('radiogroup', { name: '공지 종류' });
     const load = screen.getByRole('button', { name: '캘린더에서 불러오기' });
     const toolbar = load.parentElement!;
-    expect(types.parentElement).toBe(toolbar);
+    expect(types.parentElement).toBe(toolbar.parentElement);
     expect(getComputedStyle(toolbar).display).toBe('flex');
     expect(getComputedStyle(toolbar).flexWrap).toBe('wrap');
     expect(load).toHaveClass('ui-button--secondary');
@@ -91,7 +91,7 @@ describe('notice editor', () => {
     expect(port.send).toHaveBeenCalledTimes(1);
     await act(async () => finish({ ok: true }));
     vi.useRealTimers();
-    expect(await screen.findByText('보냈어요(예시)')).toBeTruthy();
+    expect(await screen.findByText('보냈어요')).toBeTruthy();
     // Sent: the form starts empty again and the status points at the history.
     expect(screen.getByLabelText('공지 제목')).toHaveValue('');
     fireEvent.click(screen.getByRole('button', { name: '보낸 기록 보기' }));
@@ -128,7 +128,10 @@ describe('notice editor', () => {
     const slot = document.createElement('div'); document.body.append(slot);
     const port = makePort();
     render(<DetailFooterContext.Provider value={{ slot, claim: () => {} }}><NoticeEditor view={view} port={port} /></DetailFooterContext.Provider>);
-    for (const name of ['임시 저장하기', '임시 저장 지우기', '미리보기', '공지 보내기']) expect(within(slot).getByRole('button', { name })).toBeInTheDocument();
+    for (const name of ['임시 저장하기', '미리보기', '공지 보내기']) expect(within(slot).getByRole('button', { name })).toBeInTheDocument();
+    expect(within(slot).queryByRole('button', { name: '임시 저장 지우기' })).not.toBeInTheDocument();
+    expect(within(slot).getByRole('button', { name: '미리보기' })).not.toHaveClass('ui-button--secondary');
+    expect(within(slot).getByRole('button', { name: '공지 보내기' })).toBeDisabled();
     expect(screen.getByRole('tab', { name: '공지 작성' }).closest('.i7-notice-detail')!.contains(slot)).toBe(false);
     fireEvent.click(within(slot).getByRole('button', { name: '미리보기' }));
     expect(await screen.findByText('공지 제목을 넣어 주세요')).toBeInTheDocument();
@@ -178,7 +181,7 @@ describe('notice editor', () => {
     fireEvent.click(screen.getByRole('button', { name: '공지 보내기' }));
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     vi.useRealTimers();
-    expect(await screen.findByText('보냈어요(예시)')).toBeInTheDocument();
+    expect(await screen.findByText('보냈어요')).toBeInTheDocument();
     expect(memory.read()).toBeNull();
   });
   it('drops a kept draft id that no longer exists among the saved drafts', () => {
@@ -214,4 +217,18 @@ describe('notice editor', () => {
     fireEvent.click(screen.getByRole('button', { name: /다시 시도하기/ }));
     expect(port.retry).toHaveBeenCalledOnce();
   });
+});
+
+it('shows the scheduled time and recipients and asks before cancelling', async () => {
+  const port = makePort();
+  const row = { sentId: 'scheduled-1', noticeId: 'n1', title: '휴무 안내', recipientCount: 126, sendAt: `${addDays(TODAY, 1)}T08:00`, cancellable: true };
+  render(<NoticeEditor view={{ ...view, scheduled: [row] }} port={port} />);
+  fireEvent.click(screen.getByRole('tab', { name: '예약한 공지' }));
+  expect(screen.getByText(row.title)).toBeTruthy();
+  expect(screen.getByText(/08:00.*126명/u)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '예약 취소' }));
+  expect(port.cancelSchedule).not.toHaveBeenCalled();
+  fireEvent.click(within(screen.getByRole('form', { name: '발송 예약을 취소할까요?' })).getByRole('button', { name: '예약 취소' }));
+  expect(port.cancelSchedule).toHaveBeenCalledExactlyOnceWith(row.sentId);
+  expect(await screen.findByText('발송 예약을 취소했어요')).toBeTruthy();
 });

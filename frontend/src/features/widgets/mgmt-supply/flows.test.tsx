@@ -59,7 +59,7 @@ describe('receive flow (AC-236·237·238·239)', () => {
     expect(k('calendar')).toBe(String(calendarBefore));
 
     // 우유 → 발주 보기 → 발주 주문 상세
-    const milkRow = within(detail('inventory-booking')).getByRole('grid', { name: '원자재' }).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
+    const milkRow = within(detail('inventory-booking')).getByRole('grid', { name: '재료' }).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
     expect(milkRow).toHaveTextContent('품절');
     expect(within(milkRow).getByRole('gridcell', { name: /현재 재고/ })).toHaveTextContent('0 mL');
     fireEvent.click(within(milkRow).getByRole('button', { name: '발주 보기' }));
@@ -80,7 +80,7 @@ describe('receive flow (AC-236·237·238·239)', () => {
     expect(k('calendar')).toBe(String(calendarBefore));
     expect(screen.getByLabelText('briefing')).toHaveTextContent('restock:1;');
     const row = within(detail('suppliers')).getByRole('grid', { name: '발주 내역' }).querySelector(`[data-grid-row="${poId}"]`) as HTMLElement;
-    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent(`${FIRST} / ${REST} L`);
+    expect(within(row).getByRole('gridcell', { name: /받은·남은 수량/ })).toHaveTextContent(`${FIRST} L / ${REST} L`);
     // AC-239: an expense candidate (8 L × the milk's purchase price) that does not change the confirmed total.
     const ledgerBefore = readModel(store.getSnapshot(), 'ledger');
     const price = store.getSnapshot().tables.purchaseItem.find((p) => p.itemId === MILK)!.unitPrice;
@@ -95,7 +95,7 @@ describe('receive flow (AC-236·237·238·239)', () => {
 
     // Back to 재고: the view comes back with milk at 8,000 mL.
     fireEvent.click(screen.getByRole('button', { name: '돌아가기' }));
-    const restored = within(detail('inventory-booking')).getByRole('grid', { name: '원자재' }).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
+    const restored = within(detail('inventory-booking')).getByRole('grid', { name: '재료' }).querySelector(`[data-grid-row="${MILK}"]`) as HTMLElement;
     expect(within(restored).getByRole('gridcell', { name: /현재 재고/ })).toHaveTextContent('8,000 mL');
     expect(k('inventory-booking')).toBe('1');
 

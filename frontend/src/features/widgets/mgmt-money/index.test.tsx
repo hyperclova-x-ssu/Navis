@@ -1,6 +1,6 @@
 import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CellSpan, ContentShape, DetailRef, FeatureId, Locale, PreviewSelection, QueryCondition, WidgetHost } from '../../../contracts';
 import { baseBundles, createTranslator, findDuplicateKeys, findKoGaps, type MessageBundle } from '../../../i18n';
@@ -150,13 +150,14 @@ describe('key numbers come from the data (1x1, Korean)', () => {
     expect(slot('briefing.metric.label')).toHaveTextContent('중요 알림');
     expect(slot('briefing.metric.value')).toHaveTextContent(`${alerts.count}개`);
   });
-  it('tax 1x2 lists the open item only; the tall 1x3 and 1x4 also list the data sources the model has (T-063)', () => {
+  it('tax tall panels show review items and payments without the old connection chips', () => {
     panel('tax', 1, 2);
     const short = within(slot('tax.list') as HTMLElement).getAllByRole('listitem').length;
     cleanup();
     panel('tax', 1, 3);
     const tall = within(slot('tax.list') as HTMLElement).getAllByRole('listitem').length;
-    expect(tall).toBeGreaterThan(short);
+    expect(tall).toBe(short);
+    expect(slot('tax.list')).not.toHaveTextContent(/연결됨|예시/);
     cleanup();
     panel('tax', 1, 4);
     expect(within(slot('tax.list') as HTMLElement).getAllByRole('listitem')).toHaveLength(tall);
@@ -356,32 +357,39 @@ const grantIds = () => {
 };
 
 describe('tax detail', () => {
-  it('checks every open item, the count drops to 0 and the estimate appears', () => {
+  it('checks every open item, the count drops to 0 and the estimate appears', async () => {
     const store = createWidgetDataStore();
-    const open = taxReviewCount();
-    expect(open).toBeGreaterThan(1);
+    const taxView = () => selectWidget(store.getSnapshot(), 'tax', normal, 'normal');
+    const before = taxView();
+    if (before.status !== 'ready') throw new Error('Tax fixture must be available');
+    const open = before.model.items.filter((i) => i.status === 'needs-check').map((i) => i.refId);
+    expect(open.length).toBeGreaterThan(1);
+    // One press costs a whole detail re-render (~50 ms, 39 open items = the 5 s timeout under load). The press is only `tax.markChecked`, so check all but the last two
+    // through the same command up front and press those two in the UI: selection moving to the next open item, the notice per press and the end state stay covered.
+    const PRESSES = 2;
+    for (const refId of open.slice(0, -PRESSES)) store.dispatch({ type: 'tax.markChecked', refId });
     const { host } = detail('tax', { store });
     expect(slot('tax.estimate')).toHaveTextContent('모두 확인하면');
-    // each press checks the selected item and the next open one is selected
-    for (let i = 0; i < open; i++) fireEvent.click(screen.getByRole('button', { name: '확인 완료로 표시하기' }));
+    const item = () => within(slot('tax.item') as HTMLElement);
+    // Wait for each check to settle before pressing the next selected item.
+    for (let i = 0; i < PRESSES; i++) {
+      await act(async () => {
+        fireEvent.click(item().getByText('확인 완료로 표시하기'));
+      });
+    }
     expect(host.calls.notify[0]).toMatchObject({ messageKey: 'data.notice.taxChecked' });
-    expect(host.calls.notify).toHaveLength(open);
-    expect(screen.queryByRole('button', { name: '확인 완료로 표시하기' })).toBeNull();
+    expect(host.calls.notify).toHaveLength(PRESSES);
+    expect(item().queryByText('확인 완료로 표시하기')).toBeNull();
+    const after = taxView();
+    expect(after.status === 'ready' && after.model.reviewCount).toBe(0);
     expect(slot('tax.kpi.estimate')).not.toBeNull();
     expect(slot('tax.estimate')).toHaveTextContent('기준일');
     expect(slot('tax.estimate')).toHaveTextContent('부가세 10%');
   });
-  it('export shows the preview then 내보냈어요(예시) without a file', () => {
-    const { host } = detail('tax');
-    expect(slot('tax.export')).toHaveTextContent('증빙 없음');
-    fireEvent.click(screen.getByRole('button', { name: '세무사에게 보낼 자료 내보내기' }));
-    expect(slot('tax.export')).toHaveTextContent('내보냈어요(예시)');
-    expect(host.calls.notify[0]).toMatchObject({ messageKey: 'data.notice.exported' });
-  });
   it('without a period the export is disabled and the sentence asks for one', () => {
     detail('tax', { preview: only('tax', 'missing-data') });
     expect(text()).toContain('자료 기간을 선택해 주세요');
-    expect(screen.getByRole('button', { name: '세무사에게 보낼 자료 내보내기' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '세무사 자료 받기' })).toBeDisabled();
   });
 });
 

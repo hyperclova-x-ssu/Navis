@@ -1,5 +1,5 @@
 /** 출근·퇴근 화면은 공용 브리핑 selector가 만든 같은 snapshot을 사용한다. */
-import { useContext, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { QueryCondition, WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../../contracts';
 import { useWidgetDataStore, useWidgetView } from '../../../data/react';
 import { TODAY, posFacts, resolveDataText, type BriefingModel } from '../../../data/widget-data';
@@ -14,6 +14,10 @@ import { ValueSlot } from './value-slot';
 import { keepDots } from './fit';
 import { briefingBundle } from '../../../screens/briefing/messages';
 import { accountingForPeriod, SalesDepositSplitCard, useAccountingPresentation } from './ledger';
+import { briefingIsReal, recordBriefingAcknowledgement } from '../../../data/reality/12/ack';
+import { sectionWithheld, withheldNote, type SectionId } from '../../../data/reality/12/overlay';
+import { kstLocal } from '../../../data/reality/02/clock';
+import { SourcesCard, WithheldLines, type BriefingCopy } from '../../../screens/briefing/real';
 
 const ID = 'briefing' as const;
 function useBriefingMoneyT(): T {
@@ -21,6 +25,10 @@ function useBriefingMoneyT(): T {
   return Object.assign((key: string, params?: Parameters<T>[1]) => pos.has(key) ? keepDots(pos.t(key as keyof typeof posDataBundle.ko | keyof typeof posBundle.ko | keyof typeof briefingBundle.ko, params)) : base(key, params), { format: base.format, locale: base.locale });
 }
 const groupName = (t: T, id: string) => t(`widget.briefing.${id}`);
+/** The text a screen hands to the shared source components (the widget and the arrival card translate with different bundle sets). */
+const copyOf = (t: T): BriefingCopy => ({ t: (key, params) => t(key, params), date: (iso, style) => t.format.date(iso, style), time: hhmm => t.format.time(hhmm) });
+/** In place of a value whose section the service cannot vouch for (not connected, or could not be read). */
+const withheldValue = (t: T, model: BriefingModel, section: SectionId): string | null => { const note = withheldNote(model, section); return note ? t(`briefing.state.${note.state}`) : null; };
 type Alert = BriefingModel['importantAlerts']['groups'][number]['items'][number];
 /** The value or status that sits at the right end of an alert row (SCR-226 G-13: no row without one). */
 interface Trailing { readonly kind: 'value' | 'chip'; readonly text: string; readonly semantic?: 'waiting' | 'warning' }
@@ -76,10 +84,19 @@ export function BriefingPanel(props: WidgetPanelProps) {
   if (view.status !== 'ready') return <ViewState view={view} ctx={ctx} host={props.host} featureId={ID} t={t} />;
   const { importantAlerts } = view.model;
   const groupRows: RowData[] = importantAlerts.groups.map(group => ({ id: group.id, name: groupName(t, group.id), value: group.items.map(alertText).join('\u00a0·\u00a0'), semanticValue: JSON.stringify(group.items.map(alertText.meaning)) }));
+  /** D-333: from 3x3 up each summary row also lists what it counts (today's entries, the reservation times, the order-pickup follow-ups), as the detail window does. */
+  const large = ctx.shape === 'L' && ctx.width >= 3 && ctx.height >= 3;
+  const { schedules, reservations, custom } = view.model;
+  /** The items already hold dots (‘17:30 1건 · 3명’), so the lists are separated by commas. */
+  const dot = ', ';
+  const scheduleDetail = schedules.todayEntries.map(entry => `${entry.time ? `${t.format.time(entry.time)} ` : ''}${resolveDataText(t, entry.title)}`).join(dot);
+  const reservationDetail = [...reservations.timeGroups.map(group => t('widget.briefing.timeGroup', { time: group.time, count: group.count, people: group.partyTotal })), ...(reservations.completedCount > 0 ? [t('data.pos.completedVisits', { n: reservations.completedCount })] : []), ...(reservations.changes > 0 ? [t('widget.briefing.changes', { n: reservations.changes })] : [])].join(dot);
+  const customDetail = custom.summary.approvalPending > 0 || custom.summary.todayNotComplete > 0 ? t('briefing.customPending', { n: custom.summary.approvalPending, m: custom.summary.todayNotComplete }) : '';
+  const heldSchedule = withheldValue(t, view.model, 'schedule'), heldReservations = withheldValue(t, view.model, 'reservations'), heldPickups = withheldValue(t, view.model, 'pickups');
   const rows: RowData[] = ctx.shape === 'S' || ctx.shape === 'L' ? [
-    { id: 'schedules', name: t('widget.briefing.schedule'), value: `${t('widget.briefing.todaySchedule', { n: view.model.schedules.todayCount })} · ${t(view.model.staff.today.nextHandoffAt ? 'briefing.staffHandoff' : 'briefing.staffCount', { n: view.model.staff.today.workingCount, time: view.model.staff.today.nextHandoffAt ?? '' })}`, semanticValue: `${view.model.schedules.todayCount}/${view.model.staff.today.workingCount}/${view.model.staff.today.nextHandoffAt ?? ''}` },
-    { id: 'reservations', name: t('widget.briefing.reservations'), value: t('widget.briefing.todayReservations', { count: view.model.reservations.count, people: view.model.reservations.partyTotal }), semanticValue: `${view.model.reservations.count}/${view.model.reservations.partyTotal}` },
-    { id: 'pickups', name: t('widget.custom-order.title'), value: t('briefing.pickupToday', { n: view.model.custom.summary.todayPickup }), semanticValue: view.model.custom.summary.todayPickup },
+    { id: 'schedules', name: t('widget.briefing.schedule'), value: heldSchedule ?? `${t('widget.briefing.todaySchedule', { n: view.model.schedules.todayCount })} · ${t(view.model.staff.today.nextHandoffAt ? 'briefing.staffHandoff' : 'briefing.staffCount', { n: view.model.staff.today.workingCount, time: view.model.staff.today.nextHandoffAt ?? '' })}`, semanticValue: heldSchedule ?? `${view.model.schedules.todayCount}/${view.model.staff.today.workingCount}/${view.model.staff.today.nextHandoffAt ?? ''}`, detail: large && !heldSchedule && scheduleDetail ? scheduleDetail : undefined },
+    { id: 'reservations', name: t('widget.briefing.reservations'), value: heldReservations ?? t('widget.briefing.todayReservations', { count: view.model.reservations.count, people: view.model.reservations.partyTotal }), semanticValue: heldReservations ?? `${view.model.reservations.count}/${view.model.reservations.partyTotal}`, detail: large && !heldReservations && reservationDetail ? reservationDetail : undefined },
+    { id: 'pickups', name: t('widget.custom-order.title'), value: heldPickups ?? t('briefing.pickupToday', { n: view.model.custom.summary.todayPickup }), semanticValue: heldPickups ?? view.model.custom.summary.todayPickup, detail: large && !heldPickups && customDetail ? customDetail : undefined },
     ...groupRows,
   ] : groupRows;
   return <MoneyPanel spec={{ slot: ID, label: t('widget.briefing.alerts'), value: importantAlerts.count ? String(importantAlerts.count) : t('data.state.briefing.none'), semanticValue: importantAlerts.count, unit: importantAlerts.count ? t('widget.briefing.unit', { n: importantAlerts.count }) : undefined, textValue: !importantAlerts.count, inlineUnit: true, rows, status: <NoteLine notes={view.notes} t={t} /> }} ctx={ctx} />;
@@ -114,15 +131,18 @@ function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailP
   const alertText = useAlertText(t);
   const tax = useWidgetView('tax');
   const { schedules, reservations, importantAlerts } = model;
-  const { workingCount, nextHandoffAt } = model.staff.today;
+  const { workingCount } = model.staff.today;
   const weekEnd = addIsoDays(TODAY, 7);
   const ahead = schedules.monthEntries.filter(entry => entry.date > TODAY && PLANNED_SOURCES.has(entry.source)).sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? ''));
   const planned = ahead.filter(entry => entry.date <= weekEnd).slice(0, 3);
-  const nextTax = tax.status === 'ready' ? tax.model.payments.filter(p => p.status === 'unpaid' && p.dueOn > TODAY).sort((a, b) => a.dueOn.localeCompare(b.dueOn))[0] : undefined;
+  // Over HTTP the schedule never borrows a tax payment the service has no tax source for (the seed would still hold one).
+  const nextTax = tax.status === 'ready' && !sectionWithheld(model, 'tax') ? tax.model.payments.filter(p => p.status === 'unpaid' && p.dueOn > TODAY).sort((a, b) => a.dueOn.localeCompare(b.dueOn))[0] : undefined;
   const later = ahead.filter(entry => entry.date > weekEnd).slice(0, nextTax ? 2 : 3);
+  const copy = copyOf(t), heldSchedule = sectionWithheld(model, 'schedule'), heldReservations = sectionWithheld(model, 'reservations'), heldPickups = sectionWithheld(model, 'pickups');
   return <>
     <section className="mm-card mm-briefing-card">
       <h3 className="mm-card__title">{t('widget.briefing.schedule')}</h3>
+      {heldSchedule ? <WithheldLines copy={copy} model={model} sections={['schedule']} /> : <>
       <h4 className="mm-card__subtitle">{t('widget.briefing.scheduleToday')}</h4>
       <ul className="mm-briefing-list" role="list">
         <SourceRow host={host} target={{ featureId: 'calendar' }}>
@@ -130,10 +150,16 @@ function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailP
             {t('widget.briefing.todaySchedule', { n: schedules.todayCount })}
           </ValueSlot>
         </SourceRow>
-        <BriefingRow lang="ko">{t(nextHandoffAt ? 'briefing.staffHandoff' : 'briefing.staffCount', { n: workingCount, time: nextHandoffAt ?? '' })}</BriefingRow>
-        {schedules.todayEntries.map(entry => (
-          <BriefingRow key={entry.id}>{t.format.date(entry.date, 'short')} {resolveDataText(t, entry.title)}</BriefingRow>
-        ))}
+        <BriefingRow lang="ko">{t('briefing.staffCount', { n: workingCount })}</BriefingRow>
+        {schedules.todayEntries.map(entry => {
+          const label = `${entry.time ? `${t.format.time(entry.time)} ` : ''}${resolveDataText(t, entry.title)}`;
+          // A due date from another service (tax, grant) arrives with only a generic title: it gets its status chip and a link to its source (G-13).
+          if (entry.source !== 'deadline' || !entry.ref) return <BriefingRow key={entry.id}>{label}</BriefingRow>;
+          const payment = entry.sourceFeatureId === 'tax' && tax.status === 'ready' && !sectionWithheld(model, 'tax') ? tax.model.payments.find(p => p.taxPaymentId === entry.sourceId) : undefined;
+          return <SourceRow key={entry.id} host={host} target={entry.ref} trailing={{ kind: 'chip', semantic: 'waiting', text: t('widget.briefing.dueToday') }}>
+            {payment ? t('widget.briefing.taxItem', { name: resolveDataText(t, payment.type), amount: t.format.money(payment.amount, 'compact'), date: t.format.date(payment.dueOn, 'short') }) : label}
+          </SourceRow>;
+        })}
       </ul>
       {planned.length ? <>
         <h4 className="mm-card__subtitle">{t('widget.briefing.scheduleUpcoming')}</h4>
@@ -148,10 +174,12 @@ function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailP
           {later.map(entry => <BriefingRow key={entry.id}>{t.format.date(entry.date, 'short')} {resolveDataText(t, entry.title)}</BriefingRow>)}
         </ul>
       </> : null}
+      </>}
     </section>
     <section className="mm-card mm-briefing-card">
       <h3 className="mm-card__title">{t('widget.briefing.reservations')}</h3>
       <ul className="mm-briefing-list" role="list">
+        {heldReservations ? null : <>
         <SourceRow host={host} target={{ featureId: 'voice-booking' }}>
           <ValueSlot slotId="briefing.detail.reservations" featureId={ID} scope="detail" semanticValue={`${reservations.count}/${reservations.partyTotal}`}>
             {t('widget.briefing.todayReservations', { count: reservations.count, people: reservations.partyTotal })}
@@ -162,10 +190,11 @@ function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailP
           <ValueSlot slotId="briefing.detail.changes" featureId={ID} scope="detail" semanticValue={reservations.changes}>
             {t('widget.briefing.changes', { n: reservations.changes })}
           </ValueSlot>
-        </BriefingRow>
+        </BriefingRow></>}
+        {heldPickups ? null : <>
         <SourceRow host={host} target={{ featureId: 'voice-booking' }}>{t('briefing.pickupToday', { n: model.custom.summary.todayPickup })}</SourceRow>
-        <BriefingRow lang="ko">{t('briefing.customPending', { n: model.custom.summary.approvalPending, m: model.custom.summary.todayNotComplete })}</BriefingRow>
-        {reservations.timeGroups.map(group => (
+        <BriefingRow lang="ko">{t('briefing.customPending', { n: model.custom.summary.approvalPending, m: model.custom.summary.todayNotComplete })}</BriefingRow></>}
+        {heldReservations ? null : reservations.timeGroups.map(group => (
           <BriefingRow key={group.time}>
             <ValueSlot slotId={`briefing.detail.time.${group.time}`} featureId={ID} scope="detail" semanticValue={`${group.count}/${group.partyTotal}`}>
               {t('widget.briefing.timeGroup', { time: group.time, count: group.count, people: group.partyTotal })}
@@ -173,6 +202,7 @@ function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailP
           </BriefingRow>
         ))}
       </ul>
+      <WithheldLines copy={copy} model={model} sections={['reservations', 'pickups']} />
     </section>
     <section className="mm-card mm-briefing-card">
       <h3 className="mm-card__title">
@@ -194,8 +224,30 @@ function Arrival({ model, host, t }: { model: BriefingModel; host: WidgetDetailP
           </ul>
         </div>
       ))}
+      <WithheldLines copy={copy} model={model} sections={['purchasing', 'stock', 'tax', 'tasks']} />
     </section>
+    {model.real ? <SourcesCard copy={copy} real={model.real} /> : null}
   </>;
+}
+/**
+ * The explicit press over HTTP: one request while pending, the host (run flag, arrival gate) follows only once the service holds the receipt,
+ * and a failure leaves the press available with its reason. The same helper serves the Navis card path, so one key per business day reaches the service.
+ */
+function useAcknowledge(host: WidgetDetailProps['host'], store: ReturnType<typeof useWidgetDataStore>) {
+  const [state, setState] = useState<{ readonly pending: boolean; readonly error: string | null }>({ pending: false, error: null });
+  const locked = useRef(false), active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  const press = () => {
+    if (locked.current) return;
+    locked.current = true;
+    setState({ pending: true, error: null });
+    void recordBriefingAcknowledgement(store).then(result => {
+      locked.current = false;
+      if (!result || result.ok) host.acknowledgeBriefing();
+      if (active.current) setState({ pending: false, error: result && !result.ok ? result.messageKey : null });
+    });
+  };
+  return { ...state, press };
 }
 /** A host without a run (previews, tests): nothing to follow. */
 const NOT_TRACKED = { subscribe: () => () => undefined, getSnapshot: () => false };
@@ -211,11 +263,15 @@ export function BriefingDetail({ condition, host, detailRef }: WidgetDetailProps
   // The run's briefing flag wins over this component's own press: the chat can acknowledge while this detail is open (D-327).
   const tracked = host.briefingAcknowledged ?? NOT_TRACKED;
   const acknowledgedInRun = useSyncExternalStore(tracked.subscribe, tracked.getSnapshot, tracked.getSnapshot);
-  const acknowledged = pressed || acknowledgedInRun;
+  // REAL-PLAN F12: over HTTP only the service's record counts (a closed arrival card is not a confirmation) and the press waits for its receipt.
+  const real = briefingIsReal(store), ack = useAcknowledge(host, store);
+  const serverAck = snapshot.tables.realBriefing?.acknowledgement ?? null;
+  const acknowledged = real ? serverAck !== null : pressed || acknowledgedInRun;
   if (view.status !== 'ready') return <div className="mm-detail" data-widget={ID}><DetailViewState view={view} host={host} t={t} /></div>;
   const model = view.model, sales = splitMoney(t, model.closingSummary.salesSnapshot.net), profit = splitMoney(t, model.closingSummary.netProfit);
   const accounting = accountingForPeriod(presentation, { start: TODAY, end: TODAY });
   const tomorrow = model.tomorrowReservations;
+  const copy = copyOf(t), heldClosing = sectionWithheld(model, 'closing'), heldSchedule = sectionWithheld(model, 'schedule'), heldReservations = sectionWithheld(model, 'reservations'), heldPickups = sectionWithheld(model, 'pickups');
   return <div className="mm-detail mm-briefing-detail" data-widget={ID}>
     <DetailTabs value={tab} onValueChange={setTab} label={t('widget.briefing.tabs')} tabs={[{ value: 'arrival', label: t('widget.briefing.tabArrival') }, { value: 'closing', label: t('widget.briefing.tabClosing') }]} />
     <NoteLine notes={view.notes} t={t} />
@@ -223,12 +279,13 @@ export function BriefingDetail({ condition, host, detailRef }: WidgetDetailProps
       <Arrival model={model} host={host} t={t} />
       {tab === 'closing' ? <section className="mm-card mm-briefing-card" data-slot="briefing.closing">
         <h3 className="mm-card__title">{t('widget.briefing.closingTitle')}</h3>
-        {accounting && <SalesDepositSplitCard view={accounting} onRetry={presentation?.onRetry} />}
-        <div className="mm-kpis">
+        {accounting && !heldClosing && <SalesDepositSplitCard view={accounting} onRetry={presentation?.onRetry} />}
+        {heldClosing ? <WithheldLines copy={copy} model={model} sections={['closing']} /> : <div className="mm-kpis">
           {!accounting && <Kpi slot="briefing.kpi.sales" label={t('widget.ledger.todaySales')} value={sales.value} unit={sales.unit} semanticValue={model.closingSummary.salesSnapshot.net} />}
           <Kpi slot="briefing.kpi.remaining" label={t('widget.briefing.profit')} value={profit.value} unit={profit.unit} semanticValue={model.closingSummary.netProfit} />
-        </div>
+        </div>}
         <ul className="mm-briefing-list" role="list">
+          {heldClosing ? null : <>
           <BriefingRow>
             <ValueSlot slotId="briefing.detail.closing.status" featureId={ID} scope="detail" semanticValue={model.closingSummary.status}>{t(model.closingSummary.status === 'closed' ? 'widget.briefing.closed' : 'widget.briefing.notClosed')}</ValueSlot>
           </BriefingRow>
@@ -243,18 +300,22 @@ export function BriefingDetail({ condition, host, detailRef }: WidgetDetailProps
             <BriefingRow key={method}>
               <span>{t(`widget.ledger.method.${method === 'easy_pay' ? 'easyPay' : method}`)} <ValueSlot slotId={`briefing.detail.closing.method.${method}`} featureId={ID} scope="detail" semanticValue={model.closingSummary.salesSnapshot.byMethod[method]}>{t.format.money(model.closingSummary.salesSnapshot.byMethod[method], 'compact')}</ValueSlot></span>
             </BriefingRow>
-          )) : null}
+          )) : null}</>}
+          {heldSchedule ? null : <>
           <SourceRow host={host} target={{ featureId: 'calendar' }}>{t('widget.briefing.tomorrowSchedule')}</SourceRow>
-          {model.schedules.entries.filter(entry => entry.date === addIsoDays(TODAY, 1)).map(entry => <BriefingRow key={entry.id}>{resolveDataText(t, entry.title)}</BriefingRow>)}
-          <SourceRow host={host} target={{ featureId: 'voice-booking', date: addIsoDays(TODAY, 1) }}>
+          {model.schedules.entries.filter(entry => entry.date === addIsoDays(TODAY, 1)).map(entry => <BriefingRow key={entry.id}>{resolveDataText(t, entry.title)}</BriefingRow>)}</>}
+          {heldReservations ? null : <SourceRow host={host} target={{ featureId: 'voice-booking', date: addIsoDays(TODAY, 1) }}>
             <ValueSlot slotId="briefing.detail.tomorrow.reservations" featureId={ID} scope="detail" semanticValue={`${tomorrow.count}/${tomorrow.partyTotal}`}>{t('widget.briefing.tomorrowReservations', { count: tomorrow.count, people: tomorrow.partyTotal })}</ValueSlot>
-          </SourceRow>
-          <BriefingRow lang="ko">{t('briefing.pickupTomorrow', { n: model.custom.summary.tomorrowPickup })}</BriefingRow>
+          </SourceRow>}
+          {heldPickups ? null : <BriefingRow lang="ko">{t('briefing.pickupTomorrow', { n: model.custom.summary.tomorrowPickup })}</BriefingRow>}
         </ul>
         <ActionButton id="briefing.closing" data-focus-key="briefing.closing" variant="secondary" onClick={() => host.openClosing('briefing.closing')}>{t('widget.briefing.closingAction')}</ActionButton>
       </section> : null}
-      <ActionButton disabled={acknowledged} onClick={() => { setPressed(true); host.acknowledgeBriefing(); }}>{t('widget.briefing.done')}</ActionButton>
+      <ActionButton disabled={acknowledged || ack.pending} onClick={() => { if (real) ack.press(); else { setPressed(true); host.acknowledgeBriefing(); } }}>{t('widget.briefing.done')}</ActionButton>
       {acknowledged ? <p role="status">{t('widget.briefing.acknowledged')}</p> : null}
+      {serverAck ? <p className="briefing-ack-status">{t('briefing.ack.at', { time: t.format.time(kstLocal(serverAck.acknowledgedAt).slice(11, 16)) })}</p> : null}
+      {ack.pending ? <p role="status">{t('briefing.ack.pending')}</p> : null}
+      {ack.error ? <p role="alert">{t(ack.error)}</p> : null}
     </div>
   </div>;
 }

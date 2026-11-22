@@ -63,7 +63,7 @@ function NumberRows({ view, model, live }: RowsProps) {
 interface PanelCtx extends WidgetPanelProps { readonly model: CustomerAnalysisModel | null; /** Soft note of the day record (e.g. no roster), already translated. */ readonly note: string | null; readonly mode: CctvMode; readonly onMode: (m: CctvMode) => void }
 
 /** Shared frame: head (toggle · ⋯) for every size but 1×1 — on the shell's title row (CSS), except T which has no room — body, and the 1×1 toggle at the bottom (PanelAction's place). */
-function Frame({ ctx, menu, children, status, action }: { readonly ctx: PanelCtx; readonly menu: boolean | { readonly reconnect: () => void; readonly resetZones: () => void; readonly canResetZones: boolean }; readonly children: ReactNode; readonly status?: { readonly text: string; readonly polite: boolean } | null; readonly action?: ReactNode }) {
+function Frame({ ctx, menu, children, status, action }: { readonly ctx: PanelCtx; readonly menu: boolean | { readonly reconnect: () => void; readonly resetZones: () => void; readonly canResetZones: boolean }; readonly children: ReactNode; readonly status?: { readonly text: string; readonly unavailable?: boolean } | null; readonly action?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useFitDrop(ref);
   const shape = panelShape(ctx.width, ctx.height);
@@ -77,7 +77,9 @@ function Frame({ ctx, menu, children, status, action }: { readonly ctx: PanelCtx
     <div ref={ref} className={`mc-root cc-root cc-root--${shape}`} data-slot={`${ID}.card`} data-widget={ID} data-mode={ctx.mode}>
       {q ? null : head}
       <div className="cc-body">{children}</div>
-      {status ? <p className="cc-status" data-slot={`${ID}.state.message`} data-drop={shape === 'Q' ? DROP.sub : undefined} role={status.polite ? 'status' : undefined}>{status.text}</p> : null}
+      {status ? <p className="cc-status" data-slot={`${ID}.state.message`} data-drop={q && !status.unavailable ? DROP.sub : undefined} role="status">
+        {q && status.unavailable && <span data-slot={`${ID}.metric.value`} aria-hidden="true">—</span>}{status.text}
+      </p> : null}
       {action}
       {q ? toggle : null}
       <span className="cc-sr" role="status">{said}</span>
@@ -170,15 +172,18 @@ function LivePanel({ ctx, autoOpen, onAutoDone }: { readonly ctx: PanelCtx; read
 
   const menu = { reconnect: () => open('setup'), resetZones: () => open('zones'), canResetZones: view.connection === 'live' || view.connection === 'reconnecting' };
   const hideAll = status !== null && !status.keepNumbers;
+  const unavailable = view.connection === 'server-down';
+  const message = status && t(status.textKey as never);
   const body = big
     ? <>
-      {hideAll ? <div className="cc-video cc-video--off" /> : <div className="cc-video"><CctvStage view={view} overlay={BOXES} variant="panel" /></div>}
+      {unavailable ? <div className="cc-video mc-camera-unavailable" role="status" data-slot={`${ID}.state.message`}>{message}</div>
+        : hideAll ? <div className="cc-video cc-video--off" /> : <div className="cc-video"><CctvStage view={view} overlay={BOXES} variant="panel" /></div>}
       <Band view={hideAll ? { ...nums, inStore: null } : nums} unit={unit} />
     </>
     : <Numbers ctx={ctx} view={hideAll ? { ...nums, inStore: null } : nums} unit={unit} live />;
   return (
     <Frame ctx={ctx} menu={menu}
-      status={status ? { text: t(status.textKey as never), polite: true } : null}
+      status={message && !(big && unavailable) ? { text: message, unavailable } : null}
       action={status?.action ? <PanelButton ctx={ctx} labelKey={status.action.labelKey} run={() => run(status.action!.run)} /> : null}>
       {body}
     </Frame>

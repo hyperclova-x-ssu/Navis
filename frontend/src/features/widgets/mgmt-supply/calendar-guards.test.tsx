@@ -3,7 +3,12 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createWidgetDataStore, TODAY } from '../../../data/widget-data';
+import { createInitialClosure, createLegacyNoticeSeed } from '../../../data/iteration7/notices/seed';
+import { selectDraftClosureLink } from '../../../data/iteration7/notices/selectors';
 import { renderWithKit } from '../../../ui/test-utils';
+import { createAgentActions } from '../../assistant/agent-actions';
+import { createProposalSession } from '../../assistant/navis-conversation';
+import { AgentReplyControls } from '../../assistant/proposal-card';
 import { DetailStack } from './testing';
 import { LATER_DAY, PAST_DAY, SAMPLE_EVENT, pickDate } from './testing-cafe';
 
@@ -52,6 +57,63 @@ describe('GD-2 calendar write guards (handler)', () => {
     expect(store.dispatch({ type: 'calendar.updateEvent', eventId, memo: '메모만 고침' }).ok).toBe(true);
     expect(store.dispatch({ type: 'calendar.updateEvent', eventId, time: '13:30' }).ok).toBe(true);
   });
+});
+
+it('confirms store closure deletion, warns about its linked notice draft, and supports undo', () => {
+  const store = createWidgetDataStore();
+  expect(store.dispatch({
+    type: 'calendar.addEvent', title: '정비 임시 휴무', date: LATER_DAY, memo: '정비로 하루 쉬어요',
+    storeClosure: { kind: 'temporary', endDate: LATER_DAY },
+  }).ok).toBe(true);
+  const closure = events(store).find(event => 'raw' in event.title && event.title.raw === '정비 임시 휴무')!;
+  expect(store.dispatch({ type: 'notice.importClosure', eventId: closure.eventId, idempotencyKey: 'calendar-delete-test' }).ok).toBe(true);
+  const before = store.getSnapshot();
+  const draft = before.tables.noticeDraft.find(row => row.closureEventId === closure.eventId)!;
+  const { container } = renderWithKit(<DetailStack root={{ featureId: 'calendar', view: 'day', date: LATER_DAY, itemId: closure.eventId }} events={{}} />, { store });
+  const item = within(container.querySelector<HTMLElement>(`[data-row-id="direct:${closure.eventId}"]`)!);
+  const remove = item.getByRole('button', { name: '정비 임시 휴무 지우기' });
+  fireEvent.click(remove);
+  expect(store.getSnapshot()).toBe(before);
+  expect(item.getByText('연결된 공지 초안에서 휴무 연결이 끊겨요')).toBeInTheDocument();
+  const cancel = item.getByRole('button', { name: '그대로 두기' });
+  expect(cancel).toHaveFocus();
+  fireEvent.click(cancel);
+  expect(remove).toHaveFocus();
+  expect(store.getSnapshot()).toBe(before);
+
+  fireEvent.click(remove);
+  fireEvent.click(item.getByRole('button', { name: '휴무 지우기' }));
+  expect(events(store).some(event => event.eventId === closure.eventId)).toBe(false);
+  expect(selectDraftClosureLink(store.getSnapshot(), draft)).toBe('removed');
+  fireEvent.click(screen.getByRole('button', { name: '되돌리기' }));
+  expect(selectDraftClosureLink(store.getSnapshot(), draft)).toBe('current');
+});
+
+it.each([
+  ['ko', '연결된 공지 초안에서 휴무 연결이 끊겨요'],
+  ['en', 'Linked notice drafts will lose their connection to this closure.'],
+] as const)('shows the Navis closure warning on both confirmation steps in %s', (locale, warning) => {
+  const closure = createInitialClosure();
+  const { noticeDraft } = createLegacyNoticeSeed();
+  const store = createWidgetDataStore({ calendarEvent: [closure], noticeDraft });
+  const before = store.getSnapshot();
+  const handle = 'selected-closure';
+  const prepared = createAgentActions(store).prepare({
+    proposalId: 'delete-closure', command: 'calendar.deleteEvent', args: { eventId: { handle } },
+    layer: 'management', runId: before.runId!, snapshotRevision: before.revision, tier: 'extra-confirm',
+  }, { navisLocale: locale }, before, undefined, new Map([[handle, { kind: 'event', id: closure.eventId }]]));
+  if (prepared.kind !== 'proposal') throw Error(prepared.kind);
+  const session = createProposalSession(prepared.proposal, undefined, () => true, () => {}, '임시 휴무');
+  renderWithKit(<AgentReplyControls reply={{ answer: '', panels: [], locale, proposalSession: session }}
+    onContinue={() => {}} onNotice={() => {}} />, { store, locale });
+
+  expect(screen.getByText(warning)).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: '삭제 내용 확인하기' }));
+  expect(screen.getByText(warning)).toBeVisible();
+  expect(store.getSnapshot()).toBe(before);
+  fireEvent.click(screen.getByRole('button', { name: '11/02(월) 임시 휴무 지우기' }));
+  expect(events(store)).toHaveLength(0);
+  expect(selectDraftClosureLink(store.getSnapshot(), noticeDraft[0])).toBe('removed');
 });
 
 describe('GD-2 calendar form answers', () => {

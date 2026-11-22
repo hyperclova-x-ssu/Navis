@@ -70,7 +70,8 @@ it('cancels from the panel danger slot, says what was cancelled, and undo brings
   expect(danger).not.toBeNull();
   expect(danger.parentElement!.lastElementChild).toBe(danger);
   expect(danger.nextElementSibling).toBeNull();
-  expect(within(panel).getByRole('region', { name: '통화 요약' }).compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // no call summary exists (AC-1600): the panel holds the booking and its actions, and the cancel is still last
+  expect(within(panel).queryByRole('region', { name: '통화 요약' })).toBeNull();
   const before = selectReservations(store.getSnapshot(), { date: TODAY }).count;
   await userEvent.click(cancel);
   const notice = localHost.notify.mock.calls.at(-1)![0];
@@ -140,7 +141,7 @@ it('opens a reservation panel from the grid and returns focus on close and Escap
   for (const name of ['방문 완료로 바꾸기', '예약 취소하기', /오지 않음으로 바꾸기/]) {
     expect(panel.getByRole('button', { name })).toBeEnabled();
   }
-  expect(panel.getByRole('region', { name: '통화 요약' })).toBeInTheDocument();
+  expect(panel.queryByRole('region', { name: '통화 요약' })).toBeNull();
   await user.click(panel.getByRole('button', { name: '닫기' }));
   expect(screen.queryByRole('region', { name: title })).not.toBeInTheDocument();
   expect(row).not.toHaveAttribute('aria-selected', 'true');
