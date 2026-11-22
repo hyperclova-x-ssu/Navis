@@ -2,6 +2,7 @@ import '../../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
 import { UiProvider } from '../../../ui';
 import { screenPresets } from '../../../layout/presets';
 import { WidgetDataProvider } from '../../../data/react';
@@ -14,13 +15,14 @@ import { fakeBackend } from '../../../data/reality/00/testing';
 import { createPosBridge } from '../../../data/reality/02/bridge';
 import { createPosRemote } from '../../../data/reality/02/remote';
 import { forgetConnectOrders } from '../../../connect-kiosk/channel';
-import { OrderStatus } from '../status/OrderStatus';
+import { OrderScreen } from '..';
+import { ReversalReceipt, type ReversalReceiptEntry } from '../ReversalReceipt';
 
 const day = POS_BUSINESS_DATE;
 const line = { orderLineId: 'l1', allocationId: 'a1', menuId: 'm-americano', name: '아메리카노', qty: 1, basePrice: 3000, baseCost: 800, optionPrice: 0, optionCost: 0, recipeVersion: 'v1', options: [], gross: 3000, discount: 0, amount: 3000 };
 const page = (items: unknown[]) => ({ items, nextCursor: null, asOf: `${day}T06:45:00.000Z`, sourceRevision: 1 });
 const receipt = {
-  paymentId: 'p1', settlementId: 's1', billId: 'b1', storeName: '시험 카페', orderNos: [1], transactionNo: 'TX-1', approvalNo: 'CASH', at: `${day}T01:00:00.000Z`, channel: 'cash_record', terminal: null,
+  paymentId: 'p1', settlementId: 's1', billId: 'b1', storeName: '시험 카페', orderNos: [1], transactionNo: `거래-${day.replaceAll('-', '')}-0001`, approvalNo: 'CASH', at: `${day}T01:00:00.000Z`, channel: 'cash_record', terminal: null,
   amount: 3000, gross: 3000, discount: 0, remaining: 3000, status: 'paid', splits: [{ method: 'cash', amount: 3000 }],
   lines: [{ orderLineId: 'l1', menuId: 'm-americano', name: '아메리카노', qty: 1, options: [], request: '', gross: 3000, discount: 0, amount: 3000 }],
   currentPrepared: false, reversalLines: [{ allocationId: 'a1', orderLineId: 'l1', menuId: 'm-americano', name: '아메리카노', quantity: 1, prepared: false }], corrections: [],
@@ -41,8 +43,9 @@ describe('F02 order status over HTTP', () => {
     backend.on('GET', /receipt$/, () => receipt);
     backend.on('POST', '/pos/orders/o1/preparation', () => { preparation = 'preparing'; return { resourceId: 'o1', revision: 2, receiptId: 'r1', affectedSources: ['pos.orders'] }; });
     await bridge.sync();
+    h.pos.setTab('status');
     render(<UiProvider screenPreset={screenPresets.A} reducedMotion><WidgetDataProvider store={h.data} preview={h.run.getState().preview}><PosProvider value={h.pos}><PosBridgeProvider value={bridge}>
-      <OrderStatus onRetry={() => {}} onNotice={() => {}} onOpenReceipt={() => {}}/>
+      <OrderScreen run={h.run} onOpenReceipt={() => {}}/>
     </PosBridgeProvider></PosProvider></WidgetDataProvider></UiProvider>);
     expect(await screen.findByText('#1')).toBeInTheDocument();
     await screen.findByText('네이버 N1');
@@ -80,13 +83,23 @@ describe('F02 order status over HTTP', () => {
       items: [{ productOrderId: links.smartstoreProductOrderId, productOrderStatus: 'DELIVERED' }], unavailable: [],
     }));
     await bridge.sync();
+    h.pos.setTab('status');
+    function Flow() {
+      const [entry, setEntry] = useState<ReversalReceiptEntry>();
+      return <>
+        <OrderScreen run={h.run} onOpenReceipt={setEntry}/>
+        {entry && <ReversalReceipt paymentId={entry.paymentId} initialView={entry.view} onClose={() => setEntry(undefined)}/>}
+      </>;
+    }
     render(<UiProvider screenPreset={screenPresets.A} reducedMotion><WidgetDataProvider store={h.data}><PosProvider value={h.pos}><PosBridgeProvider value={bridge}>
-      <OrderStatus onRetry={() => {}} onNotice={() => {}} onOpenReceipt={() => {}}/>
+      <Flow/>
     </PosBridgeProvider></PosProvider></WidgetDataProvider></UiProvider>);
     const orderNumber = screen.getByText('#1');
     const row = within(orderNumber.closest('tr')!);
     expect(row.getByText(links.source === 'connect' ? '포장 · 커넥트' : '포장')).toBeInTheDocument();
     fireEvent.click(orderNumber);
+    const detail = screen.getByRole('region', { name: /^#1 ·/ });
+    expect(within(detail).getByRole('group', { name: new RegExp(receipt.transactionNo) })).toBeInTheDocument();
     if (links.source === 'naver') {
       expect(await screen.findByText('아직 정산 전이에요')).toBeInTheDocument();
       expect(await screen.findByText('배송 완료')).toBeInTheDocument();
@@ -100,5 +113,8 @@ describe('F02 order status over HTTP', () => {
       expect(backend.callsTo('GET', /\/npay\//)).toHaveLength(0);
       expect(backend.callsTo('POST', /\/smartstore\//)).toHaveLength(0);
     }
+    fireEvent.click(within(detail).getByRole('button', { name: '영수증 보기' }));
+    const transactionTerm = await within(screen.getByRole('dialog')).findByText('거래번호');
+    expect(transactionTerm.nextElementSibling).toHaveTextContent(receipt.transactionNo);
   });
 });

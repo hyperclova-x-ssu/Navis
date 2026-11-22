@@ -1,3 +1,4 @@
+import { formatMaskedCustomer } from '../../../data/customer-display';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { PosMemberRead, PosLoyaltyCommand, PosLoyaltyQuote, PosReadSnapshot, PosResult, PosCommandValue } from '../../../contracts/pos';
 import type { ListPage } from '../../../data/reality/00/port';
@@ -41,7 +42,7 @@ export function MemberSearch({ read, execute, onApplied, source }: {
   const rows = source ? current?.page?.items.map(projectMemberChoice).map(member => ({
     id: member.memberId, label: `${member.name} · ${member.phoneMasked}`, select: () => { source.onSelect(member); onApplied(); },
   })) : local?.ok ? local.rows.map(member => ({
-    id: member.memberId, label: `${payName(t, member.name)} · ${member.phone} · ${t(`pay.${member.grade}`)}`,
+    id: member.memberId, label: `${formatMaskedCustomer(payName(t, member.name), member.memberId, member.memberCode)} · ${member.phone} · ${t(`pay.${member.grade}`)}`,
     select: () => { if (execute({ type: 'bill.member', memberId: member.memberId }).ok) onApplied(); },
   })) : undefined;
   return <div className="pay-tools__stack"><TextField inputRef={input} type={source ? 'search' : 'text'} name={source ? 'member-search' : 'member-phone-suffix'} label={source ? '이름 또는 전화번호 끝 네 자리' : t('pay.phoneSuffix')} value={query} onValueChange={value => { setQuery(source ? value.slice(0, 80) : value); setCursor(undefined); }} inputMode={source ? 'text' : 'numeric'} error={local && !local.ok ? t('pay.phoneInvalid') : undefined}/>

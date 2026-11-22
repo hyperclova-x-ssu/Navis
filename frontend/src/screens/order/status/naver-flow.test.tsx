@@ -15,18 +15,62 @@ import { getPaymentBillId, quotePaymentBill } from '../../../pos/loyalty';
 import { PosProvider } from '../../../pos/react';
 import { PosBridgeProvider } from '../../../pos/remote-context';
 import { orderStatusRuntime } from '../../../pos/runtime';
+import { selectOrderSummary } from '../../../pos/status';
 import { UiProvider } from '../../../ui';
+import { OrderScreen } from '../index';
 import { OrderStatus } from './OrderStatus';
+import { useNaverOrders } from './useNaverOrders';
 
 afterEach(cleanup);
+
+it('counts the same open NAVER orders before and after opening the status tab', async () => {
+  vi.stubEnv('VITE_NAVIS_DATA_SOURCE', 'http');
+  try {
+    const h = setup(), backend = fakeBackend();
+    const bridge = createPosBridge({ remote: createPosRemote({ transport: createPortTransport(backend.fetch) }), read: h.pos.read, commit: h.actions.commit });
+    backend.on('GET', '/pos/naver/orders', () => ({
+      items: [
+        naverOrder('order-01'),
+        { ...naverOrder('N2026112207'), status: 'preparing' },
+        { ...naverOrder('order-03'), status: 'picked-up' },
+      ],
+      nextCursor: null, status: 'ready',
+    }));
+    render(<UiProvider screenPreset={screenPresets.A} reducedMotion><WidgetDataProvider store={h.data}>
+      <PosProvider value={h.pos}><PosBridgeProvider value={bridge}>
+        <OrderScreen run={h.run} onOpenReceipt={() => {}}/>
+      </PosBridgeProvider></PosProvider>
+    </WidgetDataProvider></UiProvider>);
+
+    const tab = await screen.findByRole('tab', { name: '주문 현황, 진행 중 2건' });
+    fireEvent.click(tab);
+    expect(screen.getByRole('region', { name: '오늘 주문' })).toHaveTextContent(/2\s*건/u);
+    expect(screen.getByRole('region', { name: '진행 중' })).toHaveTextContent(/2\s*건/u);
+    expect(screen.getByRole('radio', { name: '진행 중 2' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '전체 3' })).toBeInTheDocument();
+    const row = screen.getByText('네이버 주문 1', { exact: true });
+    expect(screen.getByText('네이버 N2026112207')).toBeInTheDocument();
+    fireEvent.click(row);
+    expect(screen.getByRole('region', { name: '네이버 주문 1 · 접수' })).toBeInTheDocument();
+    expect(screen.getByRole('main')).not.toHaveTextContent('order-01');
+    expect(backend.callsTo('GET', '/pos/naver/orders')).toHaveLength(1);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
 
 function mount(backend: ReturnType<typeof fakeBackend>) {
   const h = setup();
   const bridge = createPosBridge({ remote: createPosRemote({ transport: createPortTransport(backend.fetch) }), read: h.pos.read, commit: h.actions.commit });
   const notice = vi.fn();
+  function Status() {
+    const naver = useNaverOrders(bridge.remote.naver, notice);
+    const openCount = selectOrderSummary(h.pos.read()).counts.open + naver.rows.open.length;
+    return <OrderStatus naver={naver} openCount={openCount} onRetry={() => {}} onNotice={notice} onOpenReceipt={() => {}}/>;
+  }
   render(<UiProvider screenPreset={screenPresets.A} reducedMotion>
     <WidgetDataProvider store={h.data} preview={h.run.getState().preview}><PosProvider value={h.pos}><PosBridgeProvider value={bridge}>
-      <OrderStatus onRetry={() => {}} onNotice={notice} onOpenReceipt={() => {}}/>
+      <Status/>
     </PosBridgeProvider></PosProvider></WidgetDataProvider>
   </UiProvider>);
   return notice;
@@ -96,7 +140,7 @@ it('explains missing provider links inside the existing order detail', async () 
   mount(backend);
   fireEvent.click(await screen.findByText('네이버 N1'));
   expect(await screen.findByText('아직 연결된 Npay 결제가 없어요')).toBeInTheDocument();
-  expect(screen.getByText('아직 연결된 스마트스토어 주문이 없어요')).toBeInTheDocument();
+  expect(screen.queryByText('스마트스토어 주문 상태')).not.toBeInTheDocument();
   expect(screen.queryByRole('textbox', { name: '결제 번호' })).not.toBeInTheDocument();
   expect(backend.callsTo('GET', /npay/)).toHaveLength(0);
   expect(backend.callsTo('POST', /smartstore/)).toHaveLength(0);
@@ -117,7 +161,7 @@ it('shows the linked payment and Smart Store status in the open NAVER order deta
   }));
   const approval = {
     paymentId: 'PN09SETTLED01', payHistId: 'PN09SETTLED01-A', kind: 'approval', settleType: '정산',
-    settleCompleteDate: '20261121', paySettleAmount: 4500, totalCommissionAmount: -90, status: 'settled',
+    payDate: '20261120', settleCompleteDate: '20261121', paySettleAmount: 4500, totalCommissionAmount: -90, status: 'settled',
   };
   backend.on('GET', settlementPath, call => call.query.page === '1' ? {
     page: { currentPage: 1, responseCount: 2, totalPageCount: 2 },
@@ -133,12 +177,16 @@ it('shows the linked payment and Smart Store status in the open NAVER order deta
   backend.on('POST', smartStorePath, () => ({ items: [{ productOrderId, productOrderStatus: 'DELIVERING' }], unavailable: [] }));
   mount(backend);
   const row = await screen.findByText('네이버 N1');
-  expect(backend.callsTo('GET', settlementPath)).toHaveLength(0);
+  const orderRow = row.closest('tr')!;
+  expect(await within(orderRow).findByText('결제 11/20(금)')).toBeInTheDocument();
+  expect(within(orderRow).getByText('4,500원')).toBeInTheDocument();
   expect(backend.callsTo('POST', smartStorePath)).toHaveLength(0);
   fireEvent.click(row);
   const detail = screen.getByRole('region', { name: /네이버 N1/ });
-  expect(await within(detail).findByText('PN09SETTLED01')).toBeInTheDocument();
   expect(await within(detail).findByText('승인')).toBeInTheDocument();
+  expect(within(detail).queryByText('PN09SETTLED01')).not.toBeInTheDocument();
+  expect(within(detail).queryByText('결제 번호')).not.toBeInTheDocument();
+  expect(within(detail).getByText('11/21(토)')).toHaveAttribute('datetime', '2026-11-21');
   expect(within(detail).getByText('4,500원')).toBeInTheDocument();
   expect(within(detail).getByText('정산일')).toBeInTheDocument();
   expect(within(detail).getByText('정산 수수료')).toBeInTheDocument();
@@ -156,7 +204,7 @@ it('shows the linked payment and Smart Store status in the open NAVER order deta
   expect(await within(detail).findByText('−200원')).toBeInTheDocument();
   fireEvent.click(within(detail).getByRole('button', { name: '이전 페이지' }));
   expect(await within(detail).findByText('승인')).toBeInTheDocument();
-  expect(backend.callsTo('GET', settlementPath).map(call => call.query.page)).toEqual(['1', '2', '1']);
+  expect(backend.callsTo('GET', settlementPath).map(call => call.query.page)).toEqual(['1', '2']);
   expect(backend.callsTo('POST', smartStorePath)).toHaveLength(1);
   expect(backend.callsTo('POST', /\/(prepare|pickup)$/)).toHaveLength(0);
 });
@@ -210,10 +258,10 @@ it.each([
   expect(h.pos.beginApproval({ billId, quoteRevision: quote.revision, splits: [{ method: 'easy_pay', amount: quote.payable }], meta: h.meta() }).ok).toBe(true);
   expect(h.finish().ok).toBe(true);
   const order = h.pos.read().pos.orders.at(-1)!;
-  orderStatusRuntime(h.pos).selectStatus('open', order.orderId);
+  orderStatusRuntime(h.pos).openPos({ tab: 'status', orderId: order.orderId });
   render(<I18nProvider locale={locale}><UiProvider screenPreset={screenPresets.A} reducedMotion>
     <WidgetDataProvider store={h.data}><PosProvider value={h.pos}>
-      <OrderStatus onRetry={() => {}} onNotice={() => {}} onOpenReceipt={() => {}}/>
+      <OrderScreen run={h.run} onOpenReceipt={() => {}}/>
     </PosProvider></WidgetDataProvider>
   </UiProvider></I18nProvider>);
   expect(screen.getByText('포장 · 커넥트')).toBeInTheDocument();

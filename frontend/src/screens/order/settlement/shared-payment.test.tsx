@@ -43,7 +43,7 @@ describe('shared controlled POS payment', () => {
   it('submits mixed real methods once and blocks close while approval is pending', () => {
     renderWithKit(<Harness />);
     fireEvent.click(screen.getByRole('button', { name: '결제 받기' }));
-    fireEvent.click(screen.getByRole('button', { name: '여러 수단으로 내기' }));
+    fireEvent.click(screen.getByRole('button', { name: '복합 결제' }));
     fireEvent.change(screen.getByLabelText('카드'), { target: { value: '45000' } });
     fireEvent.change(screen.getByLabelText('현금'), { target: { value: '20000' } });
     fireEvent.click(screen.getByRole('button', { name: '결제하기' }));

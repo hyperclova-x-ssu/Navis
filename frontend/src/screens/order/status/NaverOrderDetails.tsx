@@ -5,8 +5,9 @@ import { useBundle } from '../../../i18n';
 import { ActionButton, PosMoney, PosStatusChip, posClasses } from '../../../ui';
 import { naverBundle } from './naver-copy';
 import { useNaverRead } from './useNaverRead';
+import type { NpayRead } from './useNaverOrders';
 
-export function NaverOrderDetails({ links, remote }: { links: PosProviderLinks; remote?: NaverPosRemote }) {
+export function NaverOrderDetails({ links, remote, settlement }: { links: PosProviderLinks; remote?: NaverPosRemote; settlement?: NpayRead }) {
   const { t, locale } = useBundle(naverBundle);
   const { source, naverPayPaymentId, smartstoreProductOrderId } = links;
   return <>
@@ -14,33 +15,30 @@ export function NaverOrderDetails({ links, remote }: { links: PosProviderLinks; 
       <h4>{t('npayPayment')}</h4>
       {naverPayPaymentId
         ? remote
-          ? <NpayDetails key={naverPayPaymentId} remote={remote} paymentId={naverPayPaymentId}/>
+          ? <NpayDetails key={naverPayPaymentId} remote={remote} paymentId={naverPayPaymentId} firstPage={settlement}/>
           : <p>{t('unavailable')}</p>
         : <p>{t(source === 'connect' ? 'terminalSettlementUnavailable' : 'paymentUnlinked')}</p>}
     </section>}
-    {(source === 'naver' || smartstoreProductOrderId) && <section lang={locale}>
+    {smartstoreProductOrderId && <section lang={locale}>
       <h4>{t('commerce')}</h4>
-      {smartstoreProductOrderId
-        ? remote
-          ? <SmartStoreDetails remote={remote} productOrderId={smartstoreProductOrderId}/>
-          : <p>{t('unavailable')}</p>
-        : <p>{t('commerceUnlinked')}</p>}
+      {remote ? <SmartStoreDetails remote={remote} productOrderId={smartstoreProductOrderId}/> : <p>{t('unavailable')}</p>}
     </section>}
   </>;
 }
 
-function NpayDetails({ remote, paymentId }: { remote: NaverPosRemote; paymentId: string }) {
+function NpayDetails({ remote, paymentId, firstPage }: { remote: NaverPosRemote; paymentId: string; firstPage?: NpayRead }) {
   const { t, format } = useBundle(naverBundle);
   const [page, setPage] = useState({ number: 1, total: 1 });
   const load = useCallback((signal: AbortSignal) => remote.settlement('payments', paymentId, page.number, signal), [remote, paymentId, page.number]);
-  const { result, error, refresh } = useNaverRead(load);
+  const [retryFirstPage, setRetryFirstPage] = useState(false);
+  const cached = page.number === 1 && !retryFirstPage ? firstPage : undefined;
+  const { result: loaded, error: loadError, refresh } = useNaverRead(cached ? undefined : load);
+  const result = cached?.status === 'ready' ? cached.data : loaded;
+  const error = cached?.status === 'error' || !!loadError;
   const total = result?.page.totalPageCount ?? page.total;
   const approval = result?.items.find(row => row.kind === 'approval');
 
   return <>
-    <dl className={posClasses.receipt}>
-      <div><dt>{t('paymentId')}</dt><dd translate="no">{paymentId}</dd></div>
-    </dl>
     <div aria-live="polite">
       {error ? <p>{t('settlementFailed')}</p> : !result ? <p>{t('loading')}</p> : <>
         {!result.items.length && <p>{t('noSettlement')}</p>}
@@ -49,23 +47,25 @@ function NpayDetails({ remote, paymentId }: { remote: NaverPosRemote; paymentId:
           const status = row.kind === 'approval' ? t('paymentApproved') : row.kind === 'cancellation'
             ? partial ? t('paymentPartiallyCanceled', { amount: format.money(row.paySettleAmount, 'full').replace(/^-/, '−') }) : t('paymentCanceled')
             : null;
-          const settledAt = row.status === 'settled' ? row.settleCompleteDate.replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : null;
-          return <div key={row.payHistId}>
+          const settledAt = row.status === 'settled'
+            ? row.settleCompleteDate.match(/^(\d{4})-?(\d{2})-?(\d{2})$/u)?.slice(1).join('-') : undefined;
+          return <section key={row.payHistId} className="order-status__npay-record">
+            {row.kind === 'cancellation' && <h5>{status}</h5>}
             <dl className={posClasses.receipt}>
-              {status && <div><dt>{t('paymentStatus')}</dt><dd>{status}</dd></div>}
+              {status && row.kind !== 'cancellation' && <div><dt>{t('paymentStatus')}</dt><dd>{status}</dd></div>}
               <div><dt>{t('paySettleAmount')}</dt><dd><PosMoney amount={row.paySettleAmount}/></dd></div>
               <div><dt>{t('settleType')}</dt><dd lang="ko">{row.settleType}</dd></div>
               {settledAt && <>
-                <div><dt>{t('settleCompleteDate')}</dt><dd><time dateTime={settledAt}>{settledAt}</time></dd></div>
-                <div><dt>{t('totalCommissionAmount')}</dt><dd><PosMoney amount={row.totalCommissionAmount}/></dd></div>
+                <div><dt>{t('settleCompleteDate')}</dt><dd><time dateTime={settledAt}>{format.date(settledAt, 'short')}</time></dd></div>
+                <div><dt>{t('totalCommissionAmount')}</dt><dd><PosMoney amount={row.totalCommissionAmount} sign={row.totalCommissionAmount > 0 ? 'plus' : undefined}/></dd></div>
               </>}
             </dl>
             {!settledAt && <p>{t('noSettlement')}</p>}
-          </div>;
+          </section>;
         })}
       </>}
     </div>
-    {error && <ActionButton variant="secondary" onClick={refresh}>{t('retry')}</ActionButton>}
+    {error && <ActionButton variant="secondary" onClick={() => cached ? setRetryFirstPage(true) : refresh()}>{t('retry')}</ActionButton>}
     {total > 1 && <div className={posClasses.summaryRow}>
       <ActionButton variant="secondary" disabled={page.number === 1} onClick={() => setPage({ number: page.number - 1, total })}>{t('prevPage')}</ActionButton>
       <span>{t('page', { n: page.number })}</span>

@@ -22,7 +22,8 @@ it('opens an account-only settlement receipt without a payment or approval numbe
   };
   const confirmed: MoneyReversalQuote[] = [];
   renderWithKit(<PosProvider value={h.pos}><ReversalReceipt settlementId="settlement-1" initialView="receipt" onClose={() => undefined} money={{ receipt: selectMoneyReceipt(money, { settlementId: 'settlement-1' }), phase: { status: 'ready' }, quoteReversal: input => quoteMoneyReversal(money, input), onConfirm: quote => { confirmed.push(quote); return true; }, onReset: () => undefined }}/></PosProvider>, { reducedMotion: true });
-  expect(screen.getByText('정산 거래번호')).toBeInTheDocument();
+  expect(screen.queryByText('정산 거래번호')).not.toBeInTheDocument();
+  expect(screen.getByRole('dialog')).not.toHaveTextContent('bill-1');
   expect(screen.getByText('충전금 사용')).toBeInTheDocument();
   expect(screen.getByText('실제 입금')).toBeInTheDocument();
   expect(screen.queryByText('승인번호')).not.toBeInTheDocument();

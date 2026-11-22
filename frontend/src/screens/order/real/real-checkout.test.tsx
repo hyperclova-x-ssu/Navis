@@ -27,7 +27,7 @@ const receipt = (method: 'cash' | 'card') => ({
   currentPrepared: false, reversalLines: [{ allocationId: 'a1', orderLineId: 'l1', menuId: 'm-americano', name: '아메리카노', quantity: 1, prepared: false }], corrections: [],
 });
 
-function mount(method: 'cash' | 'card' = 'cash') {
+function mount(method: 'cash' | 'card' = 'cash', qty = 1) {
   const h = setup(), backend = fakeBackend(), transport = createPortTransport(backend.fetch);
   const bridge = createPosBridge({ remote: createPosRemote({ transport, sleep: async () => {}, delaysMs: [0] }), read: h.pos.read, commit: h.actions.commit, reload: () => {}, schedule: () => 0, cancel: () => {} });
   let paid = false;
@@ -38,7 +38,7 @@ function mount(method: 'cash' | 'card' = 'cash') {
   backend.on('POST', '/pos/bills', () => ({ resourceId: 'b1', revision: 1, receiptId: 'r1', affectedSources: [], quote: { quoteRevision: 1, lines: [line], gross: 3000, discount: 0, payable: 3000 } }));
   backend.on('POST', '/pos/bills/b1/payments', () => { paid = true; return { resourceId: 'p1', revision: 1, receiptId: 'r2', affectedSources: [], billId: 'b1', orderId: 'o1', paymentId: 'p1', settlementId: 's1' }; });
   const menu = h.pos.read().data.catalog.items.find(item => item.menuId === 'm-americano')!;
-  expect(h.pos.execute({ type: 'cart.add', menuId: 'm-americano', qty: 1, optionIds: menu.groups.filter(group => group.required).map(group => group.options[0].optionId), meta: h.meta() }).ok).toBe(true);
+  expect(h.pos.execute({ type: 'cart.add', menuId: 'm-americano', qty, optionIds: menu.groups.filter(group => group.required).map(group => group.options[0].optionId), meta: h.meta() }).ok).toBe(true);
   const onClose = vi.fn(), onComplete = vi.fn();
   render(<UiProvider screenPreset={screenPresets.A} reducedMotion><PosProvider value={h.pos}><PosBridgeProvider value={bridge}>
     <LoyaltyCheckout open billId={getPaymentBillId(h.pos.read())} summary="아메리카노 1" returnFocusRef={{ current: null }} onClose={onClose} onComplete={onComplete}/>
@@ -55,9 +55,10 @@ describe('F02 real checkout dialog', () => {
     const { h, backend, onComplete } = mount();
     expect(screen.getByRole('dialog', { name: '결제' })).toBeInTheDocument();
     fireEvent.click(dialog().getByRole('button', { name: '현금' }));
+    expect(dialog().getByText('남은 금액')).toHaveTextContent('3,000원');
     expect(backend.callsTo('POST', '/pos/bills')).toHaveLength(0);
     expect(dialog().getByText('현금으로 받은 금액을 매출로 기록해요')).toBeInTheDocument();
-    const confirm = dialog().getByRole('button', { name: /현금 .*3,000.* 받았어요/ });
+    const confirm = dialog().getByRole('button', { name: /현금 .*3,000.* 기록하기/ });
     fireEvent.click(confirm);
     fireEvent.click(confirm);
     await waitFor(() => expect(dialog().getByText(/결제했어요 · 주문 #1/)).toBeInTheDocument());
@@ -103,7 +104,7 @@ describe('F02 real checkout dialog', () => {
     const { h, backend } = mount();
     backend.on('POST', '/pos/bills', () => reply(409, { ok: false, code: 'CONFLICT', reason: 'DAY_CLOSED' }));
     fireEvent.click(dialog().getByRole('button', { name: '현금' }));
-    fireEvent.click(dialog().getByRole('button', { name: /현금 .* 받았어요/ }));
+    fireEvent.click(dialog().getByRole('button', { name: /현금 .* 기록하기/ }));
     expect(await dialog().findByText('오늘 영업을 마감했어요. 마감을 되돌린 뒤 기록해 주세요')).toBeInTheDocument();
     expect(h.pos.read().pos.cart.lines).toHaveLength(1);
     await act(async () => {});
@@ -111,14 +112,56 @@ describe('F02 real checkout dialog', () => {
 
   it('searches masked members without writes and links the selected member only on checkout confirmation', async () => {
     const { backend } = mount();
-    backend.on('GET', '/customers', () => page([{ memberId: 'member-1', name: '박회원', phoneMasked: '010-****-4444' }]));
+    backend.on('GET', '/customers', () => page([{ memberId: 'member-1', memberCode: 'M-0008', name: '박회원', phoneMasked: '010-****-4444' }]));
     backend.on('POST', '/pos/bills/b1/member-quote', () => ({ quoteRevision: 72, accountRevision: 0, amountDue: 3000, realAmount: 3000, canSubmit: true, issues: [] }));
     backend.on('POST', '/pos/bills/b1/member-payments', () => ({ resourceId: 'p1', revision: 1, receiptId: 'r2', affectedSources: ['members'], billId: 'b1', orderId: 'o1', paymentId: 'p1', settlementId: 's1' }));
     fireEvent.click(dialog().getByRole('button', { name: '회원 찾기' }));
-    fireEvent.click(await dialog().findByRole('button', { name: /박○원.*4444/ }));
+    fireEvent.click(await dialog().findByRole('button', { name: /박○○.*M-0008.*4444/ }));
     fireEvent.click(dialog().getByRole('button', { name: '현금' }));
     expect(backend.callsTo('POST', '/pos/bills')).toHaveLength(0);
-    fireEvent.click(dialog().getByRole('button', { name: /현금 .*3,000.* 받았어요/ }));
+    fireEvent.click(dialog().getByRole('button', { name: /현금 .*3,000.* 기록하기/ }));
     await waitFor(() => expect(backend.callsTo('POST', '/pos/bills/b1/member-payments')[0].body).toMatchObject({ memberId: 'member-1', allocations: [{ kind: 'method', method: 'cash', amount: 3000 }] }));
+  });
+
+  it.each([{ qty: 1, cash: 0 }, { qty: 2, cash: 3000 }])('records one pass use and only the remaining tender for $qty items', async ({ qty, cash }) => {
+    const { backend } = mount('cash', qty);
+    const billLine = { ...line, qty, gross: qty * 3000, amount: qty * 3000 };
+    let recorded = false;
+    backend.on('GET', '/customers', () => page([{ memberId: 'member-1', name: '박회원', phoneMasked: '010-****-4444' }]));
+    backend.on('GET', '/memberships', () => page([{ membershipId: 'pass-1', memberId: 'member-1', status: 'active',
+      startsOn: day, endsOn: day, usesLeft: 2, terms: { kind: 'count', name: '아메리카노 횟수권', menuIds: [line.menuId] } }]));
+    backend.on('POST', '/pos/bills', () => ({ resourceId: 'b1', revision: 1, receiptId: 'r1', affectedSources: [], quote: {
+      quoteRevision: 1, lines: [billLine], gross: billLine.gross, discount: 0, payable: billLine.amount,
+    } }));
+    backend.on('POST', '/pos/bills/b1/member-quote', () => ({ quoteRevision: 72, accountRevision: 0, amountDue: cash, realAmount: cash, canSubmit: true, issues: [] }));
+    backend.on('POST', '/pos/bills/b1/member-payments', () => {
+      recorded = true;
+      return { resourceId: 's1', revision: 1, receiptId: 'r2', affectedSources: ['memberships'], billId: 'b1', orderId: 'o1', settlementId: 's1',
+        ...(cash ? { paymentId: 'p1' } : {}) };
+    });
+    backend.on('GET', '/pos/orders', () => page(recorded ? [{ ...order, paymentId: cash ? 'p1' : null, lines: [billLine] }] : []));
+    expect(dialog().queryByRole('button', { name: '회원권 1회 사용' })).toBeNull();
+    fireEvent.click(dialog().getByRole('button', { name: '회원 찾기' }));
+    fireEvent.click(await dialog().findByRole('button', { name: /박○○.*4444/ }));
+    await dialog().findByRole('button', { name: '회원권 1회 사용' });
+    fireEvent.click(dialog().getByRole('button', { name: '회원 찾기' }));
+    fireEvent.click(await dialog().findByRole('button', { name: /박○○.*4444/ }));
+    fireEvent.click(await dialog().findByRole('button', { name: '회원권 1회 사용' }));
+    expect(backend.callsTo('GET', '/memberships')[0].query).toMatchObject({ memberId: 'member-1', status: 'active' });
+    if (cash) {
+      expect(dialog().getByRole('button', { name: '회원권 1회 사용 기록하기' })).toBeDisabled();
+      fireEvent.click(dialog().getByRole('button', { name: '현금' }));
+    }
+    expect(backend.callsTo('POST', /^\/pos\//u)).toHaveLength(0);
+    const confirm = dialog().getByRole('button', { name: cash ? '회원권 1회 사용 · 현금 3,000원 기록하기' : '회원권 1회 사용 기록하기' });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(dialog().getByText(/결제했어요 · 주문 #1/)).toBeInTheDocument());
+    expect(backend.callsTo('POST', '/pos/bills/b1/member-payments').map(call => call.body)).toEqual([{
+      memberId: 'member-1', quoteRevision: 72, accountRevision: 0,
+      allocations: [{ kind: 'membership_count', membershipId: 'pass-1', allocationId: 'a1', quantity: 1 },
+        ...(cash ? [{ kind: 'method', method: 'cash', amount: cash }] : [])],
+    }]);
+    expect(backend.callsTo('POST', '/pos/bills/b1/payments')).toHaveLength(0);
   });
 });

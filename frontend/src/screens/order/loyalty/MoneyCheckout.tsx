@@ -82,8 +82,9 @@ export function MoneyLoyaltyCheckout(props: CheckoutProps & { readonly port: Set
   if (!quote) return null;
   const toolTitle = tool === 'member' ? t('pay.memberSearch') : tool === 'discount' ? t('pos.discount') : t('pay.split');
   const tools = <div className="pay-tools__stack">
-    {member && <ActionButton variant="ghost" disabled={busy || locked} onClick={() => { if (http) http.unlink(); else execute({ type: 'bill.member', memberId: null }); }}>{t('pay.unlink')}</ActionButton>}
+    {member && <ActionButton className="pay-tools__unlink" variant="outline" disabled={busy || locked} onClick={() => { if (http) http.unlink(); else execute({ type: 'bill.member', memberId: null }); }}>{t('pay.unlink')}</ActionButton>}
     {http?.coupon && <p>{http.coupon.couponName} <PosMoney amount={http.coupon.discount} sign="minus"/></p>}
+    {http?.passNotice}
     {bill.discounts.filter(row => row.source !== 'membership').map(discount => <p key={discount.discountId}>{t('pay.' + discount.source)} <PosMoney amount={discount.amount} sign="minus"/></p>)}
     <div className="pay-tools__row pay-tools__toolbar">{(['member', 'discount', 'split'] as const).filter(next => !http || next === 'member' || next === 'discount' && !!http.discountTool).map(next => <ActionButton key={next} ref={button => { toolButtons.current[next] = button; }} variant="secondary" disabled={busy || done || locked && next !== 'split' || next === 'split' && (bill.received > 0 || bill.payable === 0)} onClick={() => openTool(next)}>{t(next === 'member' ? 'pay.memberSearch' : next === 'discount' ? 'pos.discount' : 'pay.split')}</ActionButton>)}</div>
     {locked && <p className="pay-tools__reason">{t('pay.splitLocked')}</p>}
@@ -98,7 +99,7 @@ export function MoneyLoyaltyCheckout(props: CheckoutProps & { readonly port: Set
     {error && <p role="alert">{error}</p>}
   </section> } : undefined;
   return <SharedPosPaymentDialog<CheckoutQuote> mode="money" open={open} target={quote.target} summary={summary} quote={quote} phase={phase} member={member} returnFocusRef={returnFocusRef}
-    tools={tools} subview={subview} review={http?.review} result={http?.result ?? (done && state.completion ? !state.completion.settled ? { title: t('pay.shareDone'), description: t('pay.partial', { amount: formatPosMoney(state.completion.remaining) }), action: t('pay.nextShare') } : state.completion.orderNo !== undefined ? { title: t('pos.done', { n: state.completion.orderNo }) } : undefined : undefined)}
+    tools={tools} subview={subview} review={http?.review} passChoices={http?.passChoices} result={http?.result ?? (done && state.completion ? !state.completion.settled ? { title: t('pay.shareDone'), description: t('pay.partial', { amount: formatPosMoney(state.completion.remaining) }), action: t('pay.nextShare') } : state.completion.orderNo !== undefined ? { title: t('pos.done', { n: state.completion.orderNo }) } : undefined : undefined)}
     onAllocationsChange={change} onApprove={current => {
       if (http) return http.approve(current);
       if (!port || !('sourceFingerprint' in current)) return false;

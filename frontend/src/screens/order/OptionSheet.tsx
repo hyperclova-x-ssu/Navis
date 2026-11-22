@@ -68,7 +68,7 @@ export function OptionSheet({ open, item, editing, selected, request, requestLim
     footer={item && prices ? <div className="order-option__footer">
       <div role="group" aria-label="합계" className="order-option__total">
         {picked ? <span className="order-option__picked">{picked}</span> : null}
-        <span className="order-option__sum">{`기본 ${formatPosMoney(prices.base)}${prices.option ? ` + 옵션 ${formatPosMoney(prices.option)}` : ''}`}</span>
+        {prices.option !== 0 ? <span className="order-option__sum">기본 {formatPosMoney(prices.base)} + 옵션 {formatPosMoney(prices.option)}</span> : null}
         <PosMoney className="order-option__amount" size="control" amount={prices.unit} aria-live="polite" aria-atomic="true"/>
       </div>
       <div className="order-option__actions">

@@ -89,7 +89,12 @@ export function Composer({ onCheckout, onRetryCatalog, onAddMenu, onNotice, head
   }, []);
   // D-353: five fixed tabs (전체·커피·티·음료·디저트); legacy `drink` is 음료. Filtering is by tab, not by the raw catalog category.
   const allMenu = selectPosMenu(read, 'all');
-  const catalog = { ...allMenu, items: allMenu.items.filter(item => (category === 'all' || posMenuTab(item.category) === category) && item.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) };
+  const categoryRank = (value: string) => {
+    const tab = posMenuTab(value);
+    return tab ? POS_MENU_TABS.indexOf(tab) : POS_MENU_TABS.length;
+  };
+  const catalog = { ...allMenu, items: allMenu.items.filter(item => (category === 'all' || posMenuTab(item.category) === category) && item.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+    .sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || a.name.localeCompare(b.name, 'ko')) };
   const announce = (message: string, undoToken?: string) => {
     if (noticeFrame.current !== undefined) cancelAnimationFrame(noticeFrame.current);
     noticeFrame.current = undefined;
@@ -168,7 +173,8 @@ export function Composer({ onCheckout, onRetryCatalog, onAddMenu, onNotice, head
         // One polite result for a burst of adds; no independent local toast/live region.
         if (noticeFrame.current !== undefined) cancelAnimationFrame(noticeFrame.current);
         const name = quoteCart(next).lines.find(line => line.lineId === changed.lineId)?.name ?? '';
-        noticeFrame.current = requestAnimationFrame(() => { noticeFrame.current = undefined; onNotice?.({ message: `${name} ${changed.qty}개`, undoToken: result.undoToken }); });
+        const notice = `${name} ${changed.qty}개${input.type === 'cart.add' ? ' 담았어요' : ''}`;
+        noticeFrame.current = requestAnimationFrame(() => { noticeFrame.current = undefined; onNotice?.({ message: notice, undoToken: result.undoToken }); });
       }
     }
     return true;
@@ -276,9 +282,8 @@ export function Composer({ onCheckout, onRetryCatalog, onAddMenu, onNotice, head
             </CartLine>;
           })}
         </AnimatePresence>
-        {!quote.lines.length ? <div className="order-composer__empty">메뉴를 눌러 담아 주세요</div> : null}
       </div>
-      {memoOpen ? <div><Textarea label="주문 메모" value={memo} onValueChange={value => { setMemoLimit([...value].length > 100); setMemo([...value].slice(0, 100).join('')); }} hint={`${[...memo].length}/100`} error={memoLimit ? '100자까지 쓸 수 있어요' : undefined}/><ActionButton onClick={() => { if (dispatch({ type: 'cart.note', text: memo })) setMemoOpen(false); }}>저장하기</ActionButton><ActionButton variant="secondary" onClick={() => setMemoOpen(false)}>닫기</ActionButton></div> : <ActionButton variant="ghost" onClick={() => { setMemo(read.pos.cart.memo); setMemoOpen(true); }}>{read.pos.cart.memo ? `주문 메모: ${read.pos.cart.memo}` : '주문 메모'}</ActionButton>}
+      {memoOpen ? <div><Textarea label="주문 메모" value={memo} onValueChange={value => { setMemoLimit([...value].length > 100); setMemo([...value].slice(0, 100).join('')); }} hint={`${[...memo].length}/100`} error={memoLimit ? '100자까지 쓸 수 있어요' : undefined}/><ActionButton onClick={() => { if (dispatch({ type: 'cart.note', text: memo })) setMemoOpen(false); }}>저장하기</ActionButton><ActionButton variant="secondary" onClick={() => setMemoOpen(false)}>닫기</ActionButton></div>  : <ActionButton variant="outline" onClick={() => { setMemo(read.pos.cart.memo); setMemoOpen(true); }}>{read.pos.cart.memo ? `주문 메모: ${read.pos.cart.memo}` : '주문 메모'}</ActionButton>}
       <div className={posClasses.summary}><div>총 수량 {summary.totalQty}개</div><div className={posClasses.summaryRow}><span>상품 금액</span><PosMoney amount={summary.gross}/></div><div className={posClasses.summaryRow}><span>할인</span><PosMoney amount={summary.discount}/></div><div className={posClasses.summaryTotal}><PosMoney amount={summary.payable} size="display" aria-live="polite"/><span>결제 금액</span></div></div>
       {beforeAction}
       <PosActionButton reason={checkoutReason} onBlocked={announce} onAction={() => onCheckout?.()}>{checkoutLabel}</PosActionButton>

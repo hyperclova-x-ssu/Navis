@@ -22,6 +22,7 @@ import { Composer, type ComposerNotice } from './Composer';
 import { lineLabel } from './option-text';
 import { PaymentDialog } from './payment';
 import { OrderStatus } from './status/OrderStatus';
+import { useNaverOrders } from './status/useNaverOrders';
 import { selectOrderSummary } from '../../pos/status';
 import { selectPosPreferences, selectTableMap, selectUnpaidBills, tablesEnabled, tableTransferReason, transferredDiscountsMatch, type TableTransferKind } from '../../pos/tables';
 import { dataBundles } from '../../data/widget-data';
@@ -61,13 +62,16 @@ export function OrderScreen({ run, onOpenReceipt, linkedTables }: { readonly run
   const cartPayment = quotePaymentBill(read, getPaymentBillId(read));
   const opener = useRef<HTMLElement | null>(null), serial = useRef(0);
   const tab = read.posUi.tab === 'tables' && (!map.enabled || !preferences.showTables) || read.posUi.tab === 'status' && !preferences.showStatus && !read.posUi.forceStatusVisible ? 'order' : read.posUi.tab;
-  const summary = selectOrderSummary(read), counts = summary.counts;
+  const summary = selectOrderSummary(read);
   const closed = read.data.dayClosed;
   const returnFocus = { get current() {
     return opener.current?.isConnected && !opener.current.matches('[disabled],[aria-disabled="true"]') && runtime.read().pos.cart.lines.length
       ? opener.current : document.querySelector<HTMLElement>('[data-menu-card]:not([aria-disabled="true"])') ?? document.getElementById('pos-order-panel');
   } };
   const notice = ({ message, undoToken }: ComposerNotice) => run.actions.showNotice({ kind: 'complete', messageKey: 'pos.notice', params: { message }, ...(undoToken ? { undo: { target: 'pos', token: undoToken } } : {}) });
+  const statusVisible = preferences.showStatus || read.posUi.forceStatusVisible;
+  const naver = useNaverOrders(statusVisible && read.scenario !== 'error' ? bridge?.remote.naver : undefined, notice);
+  const openCount = summary.counts.open + naver.rows.open.length;
   const retry = () => run.actions.setPosPreview('normal');
   const openPayment = () => {
     if (checkout?.open) return;
@@ -188,7 +192,7 @@ export function OrderScreen({ run, onOpenReceipt, linkedTables }: { readonly run
   const heading = deferred && selectedTable ? t('pos.tableOrder', { n: selectedTable.number }) : deferred && selectedBill ? t('pos.billNumber', { n: selectedBill.originOrderNo }) : undefined;
   const reservation = deferred ? selectedTable?.reservation : null;
   const context = <>{read.pos.cart.lock ? <div className="pay-tools__paying" role="status"><Icon name="warning"/><strong>{payText.t('pay.paying', { amount:formatPosMoney(cartPayment.remaining) })}</strong><ActionButton variant="ghost" onClick={() => { opener.current=document.activeElement instanceof HTMLElement?document.activeElement:null; setCancelPartial(true); }}>{payText.t('pay.cancelPartial')}</ActionButton></div> : null}{!deferred ? cartPayment.discounts.map(d=><div key={d.discountId} className={posClasses.summaryRow}><span>{payText.t(`pay.${d.source}`)}</span><PosMoney amount={d.amount} sign="minus"/></div>) : null}{reservation ? <p className={posClasses.lineDetail}>{t('pos.reservationHeader', { time: reservation.time, name: typeof reservation.name === 'string' ? reservation.name : t(reservation.name.key), n: reservation.partySize })}</p> : null}{deferred && existing ? <details className="pos-existing-orders"><summary>{t('pos.existingOrders', { n: existing.orderIds.length, amount: formatPosMoney(existing.remaining) })}</summary>{existing.lines.map(line => <div key={line.lineId}>{line.name} {line.options.map(option => option.name).join(' · ')} {line.qty} · <PosMoney amount={line.gross}/></div>)}</details> : null}</>;
-  const tabs: readonly PosTab[] = ['order', ...(preferences.showStatus || read.posUi.forceStatusVisible ? ['status' as const] : []), ...(map.enabled && preferences.showTables ? ['tables' as const] : [])];
+  const tabs: readonly PosTab[] = ['order', ...(statusVisible ? ['status' as const] : []), ...(map.enabled && preferences.showTables ? ['tables' as const] : [])];
   const registerMember = () => {
     setCheckout(null);
     run.actions.openDetailRef({ featureId: 'members', view: 'register', focus: 'action' }, 'pos-tab-order');
@@ -199,12 +203,12 @@ export function OrderScreen({ run, onOpenReceipt, linkedTables }: { readonly run
     <SkipLink targetId={`pos-${tab}-panel`}/>
     <LayerHeader labelKey="app.layer.orders"><ActionButton data-focus-key="settings" variant="outline" disabled={read.posUi.approval?.status === 'pending'} onClick={run.actions.openSettings}>{shell.t('common.settings')}</ActionButton></LayerHeader>
     <div lang="ko" className={posClasses.content}>
-      <div className={posClasses.tabs} role="tablist" aria-label={t('pos.tabs')}>{tabs.map((value, index) => <ActionButton id={`pos-tab-${value}`} key={value} variant="ghost" role="tab" aria-controls={`pos-${value}-panel`} aria-selected={tab === value} tabIndex={tab === value ? 0 : -1} aria-label={value === 'status' ? t('pos.statusTab', { n: counts.open }) : t(value === 'tables' ? 'pos.tables' : 'pos.order')} className={posClasses.tab} onKeyDown={event => {
+      <div className={posClasses.tabs} role="tablist" aria-label={t('pos.tabs')}>{tabs.map((value, index) => <ActionButton id={`pos-tab-${value}`} key={value} variant="ghost" role="tab" aria-controls={`pos-${value}-panel`} aria-selected={tab === value} tabIndex={tab === value ? 0 : -1} aria-label={value === 'status' ? t('pos.statusTab', { n: openCount }) : t(value === 'tables' ? 'pos.tables' : 'pos.order')} className={posClasses.tab} onKeyDown={event => {
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();
         const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
         document.getElementById(`pos-tab-${tabs[next]}`)?.focus();
-      }} onClick={() => { setTableSelection(null); setSeparateBillId(null); runtime.setTab(value); }}>{t(value === 'order' ? 'pos.order' : value === 'tables' ? 'pos.tables' : 'pos.status')}{value === 'status' ? <CountBadge tone={summary.missingCount ? 'missing' : 'neutral'} count={counts.open} aria-hidden="true"/> : null}</ActionButton>)}</div>
+      }} onClick={() => { setTableSelection(null); setSeparateBillId(null); runtime.setTab(value); }}>{t(value === 'order' ? 'pos.order' : value === 'tables' ? 'pos.tables' : 'pos.status')}{value === 'status' ? <CountBadge tone={summary.missingCount ? 'missing' : 'neutral'} count={openCount} aria-hidden="true"/> : null}</ActionButton>)}</div>
       {sync?.status === 'error' ? <div className="order-closed-band ui-glass-card" role="alert"><Icon name="warning"/><strong>{payText.t('pay.real.loadError')}</strong><ActionButton variant="secondary" onClick={() => { void bridge?.sync({ force: true }); }}>{payText.t('pay.real.loadRetry')}</ActionButton></div>
         : sync?.status === 'loading' ? <div className="order-closed-band ui-glass-card" role="status"><Spinner/><strong>{payText.t('pay.real.loading')}</strong></div>
         : sync && !sync.complete ? <div className="order-closed-band ui-glass-card" role="status"><Icon name="warning"/><span>{payText.t('pay.real.partial')}</span></div> : null}
@@ -216,7 +220,7 @@ export function OrderScreen({ run, onOpenReceipt, linkedTables }: { readonly run
             headerAction={postpaid && !tablesEnabled(read.settings) ? <ActionButton ref={billAnchor} variant="secondary" aria-expanded={billList} onClick={() => setBillList(!billList)}>{t('pos.billCount', { n: unpaid.length })}</ActionButton> : undefined}
             beforeAction={deferred && existing && read.pos.cart.lines.length ? <ActionButton variant="secondary" disabled={submitting || orderUncertain} onClick={() => openBillPayment(existing.billId)}>{t('pos.calculate')}</ActionButton> : undefined}
             onCheckout={checkoutAction} onRetryCatalog={retry} onAddMenu={() => { retry(); run.actions.openDetailRef({ featureId: 'menu', view: 'register' }, 'pos-tab-order'); }} onNotice={notice}/>
-          : <OrderStatus onRetry={retry} onNotice={notice} onOpenReceipt={onOpenReceipt}/>}
+          : <OrderStatus naver={naver} openCount={openCount} onRetry={retry} onNotice={notice} onOpenReceipt={onOpenReceipt}/>}
       </div>
     </div>
     {tab === 'tables' ? <><div className="pos-tables-detail-host"><TableDetail linkedTables={linkedTables} onTransfer={bridge ? undefined : startTransfer} table={checkout?.open || tableSelection || separateBillId ? null : map.tables.find(table => table.tableId === detailId) ?? null} onClose={() => setDetailId(null)} onAdd={startOrder} onPay={openBillPayment} onNotice={notice}/></div>{!bridge && !checkout?.open && !tableSelection && !separateBillId && run.getState().overlay.type === 'none' ? <VisitPrompt onNotice={notice}/> : null}</> : null}

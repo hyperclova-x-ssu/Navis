@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PosReversalInput, PosReversalQuote } from '../../contracts/pos';
 import { dataBundles, resolveDataText } from '../../data/widget-data';
+import { formatMaskedCustomer } from '../../data/customer-display';
 import { useBundle } from '../../i18n';
 import { receiptBundle } from './messages';
 import { posBundle } from '../../i18n/messages/pos';
@@ -169,18 +170,19 @@ function OrderReceipt({ paymentId, initialView, onClose, fromMemberLedger, retur
           <dd><PosMoney amount={line.amount}/></dd>
         </div>)}
         <div className={posClasses.lineDetail}><dt>{t('pos.discount')}</dt><dd>{source && receipt.discount > 0 && !receipt.discounts.length ? <PosMoney amount={receipt.discount} sign="minus"/> : t('pos.discountComposition', { membership: format.money(receipt.discounts.find(d => d.source === 'membership')?.amount ?? 0, 'full'), coupon: format.money(receipt.discounts.find(d => d.source === 'coupon')?.amount ?? 0, 'full'), direct: format.money(receipt.discounts.find(d => d.source === 'direct')?.amount ?? 0, 'full') })}</dd></div>
-        <div><dt>{t('receipt.amountPaid')}</dt><dd><PosMoney amount={receipt.amount} size="metric"/></dd></div>
-        {receipt.splits.map(split => <div key={split.method}><dt>{t('receipt.paymentMethod')} · {t(`pos.${split.method}`)}</dt><dd><PosMoney amount={split.amount}/></dd></div>)}
+        {receipt.splits.length === 1 && receipt.splits[0]?.amount === receipt.amount
+          ? <div><dt>{t('receipt.amountPaid')} · {t(`pos.${receipt.splits[0].method}`)}</dt><dd><PosMoney amount={receipt.amount} size="metric"/></dd></div>
+          : <><div><dt>{t('receipt.amountPaid')}</dt><dd><PosMoney amount={receipt.amount} size="metric"/></dd></div>
+            {receipt.splits.map(split => <div key={split.method}><dt>{t('receipt.paymentMethod')} · {t(`pos.${split.method}`)}</dt><dd><PosMoney amount={split.amount}/></dd></div>)}</>}
         {source?.memberAllocations?.map((row, index) => row.kind === 'method' ? null : <div key={`${row.kind}:${index}`}><dt>{row.kind === 'charge' ? '충전 잔액' : row.kind === 'receivable' ? '외상' : '회원권'}</dt><dd><PosMoney amount={row.amount}/></dd></div>)}
         <div className={posClasses.lineDetail}><dt>{t('pos.paymentStatus')}</dt><dd>{t(`pos.${receipt.status}`)}</dd></div>
         {!bridge || receipt.approvalNo ? <div className={posClasses.lineDetail}><dt>{t(bridge ? 'receipt.approvalReal' : 'receipt.approval')}</dt><dd>{receipt.approvalNo}</dd></div> : null}
-        {receipt.member ? <div className={posClasses.lineDetail}><dt>{t('receipt.member')}</dt><dd>{typeof receipt.member.name === 'string' ? receipt.member.name : resolveDataText(t, receipt.member.name)} · {receipt.member.phone}</dd></div> : null}
+        {receipt.member ? <div className={posClasses.lineDetail}><dt>{t('receipt.member')}</dt><dd>{formatMaskedCustomer(typeof receipt.member.name === 'string' ? receipt.member.name : resolveDataText(t, receipt.member.name), receipt.member.memberId, receipt.member.memberCode)} · {receipt.member.phone}</dd></div> : null}
         {receipt.cashReceipt?.status === 'issued' ? <div className={posClasses.lineDetail}><dt>{t('receipt.cashReceipt')}</dt><dd>{receipt.cashReceipt.kind === 'income' ? t('receipt.income') : t('receipt.business')} · {receipt.cashReceipt.maskedIdentifier} · <PosMoney amount={receipt.cashReceipt.cashAmount}/></dd></div> : null}
         {receipt.corrections.map(correction => <div key={correction.correctionId} className="ui-pos-inline-error"><dt>{t(`receipt.${correction.kind}Status`)} · {receiptTime(correction.at)}</dt><dd><PosMoney amount={correction.amount} sign="minus"/></dd></div>)}
       </dl>
-      {bridge ? null : <ActionButton variant="secondary" onClick={() => runReceipt('receipt.showAgain')}>{t('receipt.showAgain')}</ActionButton>}
       {bridge ? null : receipt.cashReceipt?.status === 'issued' ? <ActionButton variant="ghost" onClick={() => runReceipt('cashReceipt.cancel')}>{t('receipt.cancelIssue')}</ActionButton> : receipt.canIssueCashReceipt ? <ActionButton onClick={() => setIssuing(true)}>{t('receipt.issue')}</ActionButton> : null}
-      {!providerPayment && receipt.remaining > 0 ? <ActionButton variant="ghost" disabled={read.data.dayClosed} onClick={() => { setScope('all'); setView(correctionKind); }}>{correctionKind === 'cancel' ? t('receipt.cancel') : t('receipt.refund')}</ActionButton> : null}
+      {!providerPayment && receipt.remaining > 0 ? <ActionButton variant="destructive" disabled={read.data.dayClosed} onClick={() => { setScope('all'); setView(correctionKind); }}>{correctionKind === 'cancel' ? t('receipt.cancel') : t('receipt.refund')}</ActionButton> : null}
       {error ? <p role="alert">{error}</p> : null}
     </>}
   </PosDialog>;

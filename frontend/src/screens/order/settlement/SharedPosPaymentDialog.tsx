@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import type { CustomMethodAllocation, CustomSettlementQuote } from '../../../data/iteration7/custom-orders';
 import type { SettlementAllocation, SettlementQuote, SettlementTarget as MoneyTarget } from '../../../data/iteration7/accounting/types';
+import { useBundle } from '../../../i18n';
+import { membershipPosBundle } from '../../../i18n/messages/membership-pos';
 import { ActionButton, ErrorPanel, NumberField, PosDialog, PosMoney, ResultPanel, Spinner, posClasses } from '../../../ui';
 import { settlementIssue } from './copy';
 import './settlement.css';
@@ -34,6 +36,10 @@ interface PaymentReview<Q> {
   readonly failure?: { readonly title: string; readonly description?: string; readonly retryLabel: string; readonly canChangeMethod: boolean };
   readonly onRetry: (quote: Q) => void;
 }
+export interface PaymentPassChoice {
+  readonly allocation: SettlementAllocation;
+  readonly label: string;
+}
 export interface SharedPosPaymentDialogProps extends CommonProps {
   readonly mode?: 'real'; readonly target: SettlementTarget; readonly quote: SettlementPaymentQuote;
   readonly onAllocationsChange: (allocations: readonly RealAllocation[]) => SettlementPaymentQuote;
@@ -48,6 +54,7 @@ export interface MoneyPaymentDialogProps<Q extends MoneyPaymentQuote = MoneyPaym
   readonly subview?: { readonly title: string; readonly content: ReactNode; readonly onBack: () => void };
   readonly result?: { readonly title: string; readonly description?: string; readonly action?: string };
   readonly review?: PaymentReview<Q>;
+  readonly passChoices?: readonly PaymentPassChoice[];
 }
 export const realMethods: readonly RealMethod[] = ['card', 'easy_pay', 'cash'];
 export const realMethodLabels: Record<RealMethod, string> = { card: '카드', easy_pay: '간편결제', cash: '현금' };
@@ -72,6 +79,7 @@ function PaymentPresentation<Q extends MoneyPaymentQuote>(props: CommonProps & {
   readonly mode: 'real' | 'money'; readonly target: MoneyTarget; readonly quote: Q; readonly member?: SettlementMember | null;
   readonly onAllocationsChange: (allocations: readonly SettlementAllocation[]) => Q; readonly onApprove: (quote: Q) => boolean; readonly tools?: ReactNode;
   readonly subview?: MoneyPaymentDialogProps['subview']; readonly result?: MoneyPaymentDialogProps['result']; readonly review?: PaymentReview<Q>;
+  readonly passChoices?: readonly PaymentPassChoice[];
 }) {
   const { quote, phase } = props;
   const [mixed, setMixed] = useState(false);
@@ -87,8 +95,12 @@ function PaymentPresentation<Q extends MoneyPaymentQuote>(props: CommonProps & {
   };
   const reset = () => { submitted.current = false; props.onReset(); };
   const accountRows = quote.allocations.filter(row => row.kind !== 'method');
+  const pass = accountRows.find(row => row.kind === 'membership_count' || row.kind === 'membership_period');
+  const reviewedDue = quote.amountDue - (pass?.amount ?? 0);
   const realDue = quote.amountDue - accountRows.reduce((sum, row) => sum + row.amount, 0);
   const zero = quote.amountDue === 0;
+  const cashTopUp = props.mode === 'money' && props.target.purpose === 'charge_topup';
+  const cashSelected = cashTopUp && !mixed && quote.allocations.length === 1 && quote.allocations[0]?.method === 'cash';
   const title = props.mode === 'money' ? titleFor(props.target.purpose) : '결제';
   return <PosDialog open={props.open} kind="pay" title={props.subview?.title ?? title} description={props.summary} returnFocusRef={props.returnFocusRef} initialFocusRef={first}
     busy={busy} headerAction={props.subview ? <ActionButton variant="ghost" onClick={props.subview.onBack}>결제로 돌아가기</ActionButton> : undefined}
@@ -101,24 +113,25 @@ function PaymentPresentation<Q extends MoneyPaymentQuote>(props: CommonProps & {
             {props.review?.failure?.canChangeMethod !== false && <ActionButton variant="secondary" onClick={() => { reset(); change(props.review ? [] : accountRows); setMixed(false); }}>다른 결제 수단</ActionButton>}</>} />
         : <>
           {props.mode === 'money' && <>
-            {props.member && <p className="pay-tools__member">{!props.review && `${props.member.memberId} `}{props.member.label}{props.member.accountBalancesAvailable !== false && <> · 충전금 잔액 <PosMoney amount={props.member.chargeBalance}/></>}</p>}
+            {props.member && <p className="pay-tools__member">{props.member.label}{props.member.accountBalancesAvailable !== false && <>{props.member.label ? ' · ' : ''}충전금 잔액 <PosMoney amount={props.member.chargeBalance}/></>}</p>}
             {props.tools}
-            <SettlementAllocationFields target={props.target} quote={quote} member={props.member} disabled={blocked} wholeTender={!!props.review} onChange={change}/>
+            <SettlementAllocationFields target={props.target} quote={quote} member={props.member} disabled={blocked} wholeTender={!!props.review} passChoices={props.passChoices} onChange={change}/>
             <MembershipSettlementEffects quote={quote}/>
             {!!quote.collectionSources?.length && <section aria-label="수금할 외상 내역"><p lang="ko">{collectionLine(quote.collectionSources, props.member)}</p></section>}
           </>}
-          {!zero && <>
-            <div className={posClasses.methods} role="group" aria-label="실제 결제 수단">{realMethods.map((method, index) => <ActionButton key={method} ref={index === 0 ? first : undefined} className={posClasses.method} disabled={blocked || (props.review ? quote.amountDue : realDue) <= 0} aria-busy={!props.review && busy && !mixed && quote.allocations.some(row => row.kind === 'method' && row.method === method) || undefined}
+          {!zero && (!props.review || reviewedDue > 0) && <>
+            <div className={posClasses.methods} role="group" aria-label="실제 결제 수단">{realMethods.map((method, index) => <ActionButton key={method} ref={index === 0 ? first : undefined} className={posClasses.method} disabled={blocked || (props.review ? reviewedDue : realDue) <= 0} aria-busy={!props.review && busy && !mixed && quote.allocations.some(row => row.kind === 'method' && row.method === method) || undefined}
               onKeyDown={event => { if (blocked || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return; event.preventDefault(); const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('button'); buttons?.[(index + (event.key === 'ArrowRight' ? 1 : -1) + realMethods.length) % realMethods.length]?.focus(); }}
               aria-pressed={props.review ? quote.allocations.some(row => row.kind === 'method' && row.method === method) : undefined}
-              onClick={() => { if (submitted.current || blocked) return; setMixed(false); const next = change([...(props.review ? [] : accountRows), { kind: 'method', method, amount: props.review ? quote.amountDue : realDue }]); if (!props.review) approve(next); }}>{!props.review && busy && !mixed && quote.allocations.some(row => row.kind === 'method' && row.method === method) ? <><Spinner />승인 중이에요</> : realMethodLabels[method]}</ActionButton>)}</div>
-            {!props.review && <ActionButton variant="secondary" aria-expanded={mixed} disabled={blocked || realDue <= 0} onClick={() => { setMixed(!mixed); change(accountRows); }}>여러 수단으로 내기</ActionButton>}
+              onClick={() => { if (submitted.current || blocked) return; setMixed(false); const next = change([...(props.review ? pass ? [pass] : [] : accountRows), { kind: 'method', method, amount: props.review ? reviewedDue : realDue }]); if (!props.review && !(cashTopUp && method === 'cash')) approve(next); }}>{!props.review && busy && !mixed && quote.allocations.some(row => row.kind === 'method' && row.method === method) ? <><Spinner />승인 중이에요</> : realMethodLabels[method]}</ActionButton>)}</div>
+            {cashSelected && !props.review ? <ActionButton loading={busy} disabled={!quote.canSubmit} onClick={() => approve()}>받은 현금 기록하기</ActionButton> : null}
+            {!props.review && <ActionButton variant="secondary" aria-expanded={mixed} disabled={blocked || realDue <= 0} onClick={() => { setMixed(!mixed); change(accountRows); }}>복합 결제</ActionButton>}
           </>}
-          {mixed && realDue > 0 ? <section className="shared-settlement__mixed" aria-label="여러 수단으로 내기">{realMethods.map(method => <div key={method} className="pay-tools__row"><NumberField label={realMethodLabels[method]} min={0} unit="원" disabled={blocked} value={quote.allocations.find(row => row.kind === 'method' && row.method === method)?.amount ?? null} onValueChange={amount => change([...quote.allocations.filter(row => row.kind !== 'method' || row.method !== method), ...(amount !== null && amount > 0 ? [{ kind: 'method' as const, method, amount }] : [])])} /><ActionButton variant="ghost" disabled={blocked} aria-label={`${realMethodLabels[method]} 남은 금액 넣기`} onClick={() => {
+          {mixed && realDue > 0 ? <section className="shared-settlement__mixed" aria-label="복합 결제">{realMethods.map(method => <div key={method} className="pay-tools__row"><NumberField label={realMethodLabels[method]} min={0} unit="원" disabled={blocked} value={quote.allocations.find(row => row.kind === 'method' && row.method === method)?.amount ?? null} onValueChange={amount => change([...quote.allocations.filter(row => row.kind !== 'method' || row.method !== method), ...(amount !== null && amount > 0 ? [{ kind: 'method' as const, method, amount }] : [])])} /><ActionButton variant="ghost" disabled={blocked} aria-label={`${realMethodLabels[method]} 남은 금액 넣기`} onClick={() => {
             const amount = Math.max(0, realDue - quote.allocations.filter(row => row.kind === 'method' && row.method !== method).reduce((sum, row) => sum + row.amount, 0));
             change([...quote.allocations.filter(row => row.kind !== 'method' || row.method !== method), ...(amount > 0 ? [{ kind: 'method' as const, method, amount }] : [])]);
           }}>남은 금액 넣기</ActionButton></div>)}</section> : null}
-          {props.mode === 'money' || mixed ? <p role="status">남은 금액 <PosMoney amount={quote.remaining}/></p> : null}
+          {props.mode === 'money' || mixed ? <p role="status">남은 금액 <PosMoney amount={props.review ? reviewedDue : quote.remaining}/></p> : null}
           {!!issues.length && <p role="alert">{issues.map(issue => settlementIssue(issue.reason ?? '', issue.details)).join(' · ')}</p>}
           {props.review ? quote.allocations.length > 0 && <div className="pay-tools__stack">{props.review.fields}
             <ActionButton size="primary" disabled={blocked || !quote.canSubmit} aria-busy={busy || undefined} onClick={() => approve()}>{busy ? <><Spinner />{props.review.pendingLabel}</> : props.review.label}</ActionButton>
@@ -129,24 +142,36 @@ function PaymentPresentation<Q extends MoneyPaymentQuote>(props: CommonProps & {
 }
 
 /** Account sources stay outside the three method buttons, including for each split share. */
-export function SettlementAllocationFields({ target, quote, member, disabled, wholeTender = false, onChange }: {
+export function SettlementAllocationFields({ target, quote, member, disabled, wholeTender = false, passChoices = [], onChange }: {
   readonly target: MoneyTarget; readonly quote: MoneyPaymentQuote; readonly member?: SettlementMember | null; readonly disabled: boolean; readonly wholeTender?: boolean;
+  readonly passChoices?: readonly PaymentPassChoice[];
   readonly onChange: (allocations: readonly SettlementAllocation[]) => unknown;
 }) {
+  const { t } = useBundle(membershipPosBundle);
+  const [memberHint, setMemberHint] = useState(false);
   if (target.purpose !== 'sale' && target.purpose !== 'custom_order') return null;
   const replace = (kind: 'charge' | 'receivable', amount: number | null) => onChange([
     ...quote.allocations.filter(row => row.kind !== kind && row.kind !== 'method'),
     ...(amount !== null && amount > 0 ? [{ kind, amount }] : []),
   ]);
   const available = (kind: 'charge' | 'receivable') => Math.max(0, quote.amountDue - quote.allocations.filter(row => row.kind !== 'method' && row.kind !== kind).reduce((sum, row) => sum + row.amount, 0));
-  // UXP-11: a walk-in has nothing to settle against, so the two disabled number fields and their buttons are not drawn at all;
-  // one muted line says how to unlock them. They appear (full group) once a member is linked.
-  if (!member) return <p className="shared-settlement__note">충전금·외상 정산은 회원을 먼저 연결해 주세요</p>;
+  if (!member) return <div className="shared-settlement__member-hint">
+    <ActionButton variant="secondary" disabled={disabled} aria-expanded={memberHint} onClick={() => setMemberHint(!memberHint)}>충전금·외상 쓰기</ActionButton>
+    {memberHint ? <p className="shared-settlement__note" role="status">회원을 먼저 연결해 주세요</p> : null}
+  </div>;
+  const pass = quote.allocations.find(row => row.kind === 'membership_count' || row.kind === 'membership_period');
+  const due = quote.amountDue - (pass?.amount ?? 0);
+  const chooseTender = (kind: 'charge' | 'receivable') => onChange([...(pass ? [pass] : []), { kind, amount: due }]);
   if (wholeTender) return <section role="group" aria-label="정산 유형" className="shared-settlement__mixed">
     <h3>정산 유형</h3>
     <div className="pay-tools__row">
-      <ActionButton variant="secondary" disabled={disabled || member.accountBalancesAvailable === false || member.chargeBalance < quote.amountDue} aria-pressed={quote.allocations[0]?.kind === 'charge'} onClick={() => onChange([{ kind: 'charge', amount: quote.amountDue }])}>충전 잔액</ActionButton>
-      <ActionButton variant="secondary" disabled={disabled} aria-pressed={quote.allocations[0]?.kind === 'receivable'} onClick={() => onChange([{ kind: 'receivable', amount: quote.amountDue }])}>외상</ActionButton>
+      <ActionButton variant="secondary" disabled={disabled || due <= 0 || member.accountBalancesAvailable === false || member.chargeBalance < due} aria-pressed={quote.allocations.some(row => row.kind === 'charge')} onClick={() => chooseTender('charge')}>충전 잔액</ActionButton>
+      <ActionButton variant="secondary" disabled={disabled || due <= 0} aria-pressed={quote.allocations.some(row => row.kind === 'receivable')} onClick={() => chooseTender('receivable')}>외상</ActionButton>
+      {passChoices.map(({ allocation, label }) => {
+        const selected = pass?.allocationId === allocation.allocationId;
+        return <ActionButton key={allocation.allocationId} variant="secondary" disabled={disabled} aria-pressed={selected}
+          onClick={() => onChange(selected ? [] : [allocation])}>{t('membershipPos.choose')}{passChoices.length > 1 ? ` · ${label}` : ''}</ActionButton>;
+      })}
     </div>
     {member.accountBalancesAvailable !== false && <p>현재 외상 <PosMoney amount={member.receivableBalance}/></p>}
   </section>;

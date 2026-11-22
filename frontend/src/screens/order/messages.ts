@@ -24,7 +24,7 @@ const ko = {
   'pay.paid':'냄', 'pay.nextShare':'다음 몫', 'pay.remaining':'남은 금액 {amount}', 'pay.shareDone':'몫을 냈어요',
   'pay.partial':'부분 결제 · 남은 {amount}', 'pay.paying':'결제 중 · 남은 {amount}',
   'pay.splitLocked':'나눈 뒤에는 할인을 바꿀 수 없어요', 'pay.quantityInvalid':'모든 메뉴의 수량을 빠짐없이 나눠 주세요',
-  'pay.mixed':'여러 수단으로 내기', 'pay.fillRemaining':'남은 금액 넣기', 'pay.methodRemaining':'{method} 남은 금액 넣기',
+  'pay.mixed':'복합 결제', 'pay.fillRemaining':'남은 금액 넣기', 'pay.methodRemaining':'{method} 남은 금액 넣기',
   'pay.mixedShort':'남은 금액 {amount}을 나눠 주세요', 'pay.mixedOver':'결제 금액보다 {amount} 많아요', 'pay.amountMatches':'금액이 맞아요',
   'pay.cancelPartial':'결제 취소하기', 'pay.cancelTitle':'결제를 취소할까요?', 'pay.cancelAmount':'취소할 금액 {amount}',
   'pay.cancelShares':'낸 몫 {n}개를 모두 취소해요', 'pay.unlockCart':'주문 내역은 다시 고칠 수 있어요',
@@ -32,7 +32,7 @@ const ko = {
   'pay.cancelError':'취소 승인이 안 됐어요. 다시 시도해 주세요',
   // REAL-PLAN F02: the owner records a cash sale or a payment already made on the store's own terminal. Nothing is approved here.
   'pay.real.title':'결제 기록', 'pay.real.pickMethod':'받은 방법을 골라 주세요',
-  'pay.real.cashHelp':'현금으로 받은 금액을 매출로 기록해요', 'pay.real.cashConfirm':'현금 {amount} 받았어요',
+  'pay.real.cashHelp':'현금으로 받은 금액을 매출로 기록해요', 'pay.real.cashConfirm':'현금 {amount} 기록하기',
   'pay.real.terminalHelp':'가게 단말기에서 결제한 뒤 영수증의 번호를 적어 주세요',
   'pay.real.approvalNo':'승인번호', 'pay.real.receiptNo':'영수증 번호', 'pay.real.terminalAt':'단말기 결제 시각(시:분)',
   'pay.real.terminalConfirm':'{method} {amount} 결제 기록하기',

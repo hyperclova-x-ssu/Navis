@@ -41,7 +41,7 @@ export function selectReceipt(read: PosReadSnapshot, { paymentId }: { readonly p
     orderNos: read.pos.orders.filter(o => o.lines.some(l => shares.some(s => s.orderLineId === l.orderLineId))).map(o => o.orderNo),
     transactionNo: payment.transactionNo, approvalNo: payment.approvalNo, amount: payment.amount, gross: shares.reduce((n, s) => n + s.gross, 0), discount: shares.reduce((n, s) => n + s.discount, 0), remaining: balance.remaining,
     status: payment.status === 'canceled' ? 'canceled' : refunded ? balance.remaining === 0 ? 'refunded' : 'partially_refunded' : canceled ? 'partially_canceled' : 'paid',
-    splits: payment.splits, lines, discounts, member: member && memberName ? { memberId: member.memberId, name: memberName, phone: member.phone.includes('*') ? member.phone : maskReceiptIdentifier('income', member.phone) } : null,
+    splits: payment.splits, lines, discounts, member: member && memberName ? { memberId: member.memberId, memberCode: member.memberCode, name: memberName, phone: member.phone.includes('*') ? member.phone : maskReceiptIdentifier('income', member.phone) } : null,
     cashReceipt, canIssueCashReceipt: !!balance.methods.find(m => m.method === 'cash' && m.amount > 0) && cashReceipt?.status !== 'issued', corrections });
   reads.set(paymentId, result); return result;
 }

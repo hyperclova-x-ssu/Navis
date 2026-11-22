@@ -37,7 +37,7 @@ describe('M3 controlled settlement allocations', () => {
   it('fills the card remainder after charge and another real method without losing account rows', () => {
     renderWithKit(<Harness/>, { reducedMotion: true });
     fireEvent.change(screen.getByRole('spinbutton', { name: '충전금 사용' }), { target: { value: '3000' } });
-    fireEvent.click(screen.getByRole('button', { name: '여러 수단으로 내기' }));
+    fireEvent.click(screen.getByRole('button', { name: '복합 결제' }));
     fireEvent.change(screen.getByRole('spinbutton', { name: '현금' }), { target: { value: '500' } });
     fireEvent.click(screen.getByRole('button', { name: '카드 남은 금액 넣기' }));
     expect(screen.getByRole('spinbutton', { name: '카드' })).toHaveValue(1000);
@@ -59,9 +59,10 @@ describe('M3 controlled settlement allocations', () => {
 
   it('requires a member and explains the charge balance limit', () => {
     const rendered = renderWithKit(<Harness memberId={null}/>);
-    // UXP-11: a walk-in gets one muted line instead of two disabled number fields; the fields come with a linked member.
     expect(screen.queryByRole('spinbutton', { name: '충전금 사용' })).not.toBeInTheDocument();
     expect(screen.queryByRole('spinbutton', { name: '외상 정산' })).not.toBeInTheDocument();
+    expect(screen.queryByText('회원을 먼저 연결해 주세요')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '충전금·외상 쓰기' }));
     expect(screen.getByText(/회원을 먼저 연결해 주세요/)).toBeInTheDocument();
     rendered.unmount();
     renderWithKit(<Harness balance={2000}/>);
@@ -87,7 +88,7 @@ describe('M3 controlled settlement allocations', () => {
     renderWithKit(<Harness target={target}/>);
     expect(screen.getByRole('dialog', { name: title })).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: '정산 유형' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '여러 수단으로 내기' }));
+    fireEvent.click(screen.getByRole('button', { name: '복합 결제' }));
     fireEvent.change(screen.getByRole('spinbutton', { name: '카드' }), { target: { value: '3000' } });
     fireEvent.change(screen.getByRole('spinbutton', { name: '현금' }), { target: { value: '1500' } });
     fireEvent.click(screen.getByRole('button', { name: '결제하기' }));

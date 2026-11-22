@@ -90,6 +90,10 @@ it('SCR-248 restores show-again, cash issuance, masked status and issue cancella
   const original = pay(h, getPaymentBillId(h.pos.read()), 'cash');
   const paymentId = h.actions.money.receipt({ settlementId: original.settlementId })!.paymentId!;
   const mounted = receiptHost(h, { paymentId, view: 'receipt' });
+  const payment = h.pos.read().pos.payments.find(row => row.paymentId === paymentId)!;
+  expect(payment.transactionNo).toMatch(/^거래-\d{8}-\d{4}$/u);
+  expect(screen.getByText('정산 거래번호').nextElementSibling).toHaveTextContent(payment.transactionNo);
+  expect(screen.getByRole('dialog')).not.toHaveTextContent(original.billId!);
   fireEvent.click(screen.getByRole('button', { name: '영수증 다시 보기' }));
   expect(screen.getByRole('status')).toHaveTextContent('영수증을 다시 보여 드렸어요');
   fireEvent.click(screen.getByRole('button', { name: '현금영수증 발행하기' }));

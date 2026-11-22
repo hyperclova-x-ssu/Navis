@@ -17,6 +17,9 @@
 .order-status__grid .ui-data-grid__table th:first-child .ui-data-grid__sort { justify-content:flex-start; text-align:left; }
 .order-status__grid .ui-data-grid__table :is(th,td):last-child { padding-inline-end:var(--surface-padding); }
 .order-status__detail-actions { display:flex; flex-direction:column; gap:var(--space-3); }
+.order-status .ui-pos-complete.ui-button { width:max-content; min-width:var(--pos-complete-width); white-space:nowrap; }
+.order-status__npay-record + .order-status__npay-record { margin-block-start:var(--space-4); padding-block-start:var(--space-3); border-block-start:var(--stroke-hairline) solid var(--border); }
+.order-status__npay-record h5 { margin:0 0 var(--space-2); font-size:var(--type-body); }
 .pos-missing-alert-anchor { --pos-alert-bottom:var(--layout-margin); position:absolute; z-index:var(--layer-toast); left:calc(var(--layout-margin) + var(--grid-width)/2); bottom:var(--pos-alert-bottom); transform:translateX(-50%); width:max-content; max-width:var(--toast-max-width); }
 .pos-missing-alert-anchor[data-location="order"] { --pos-alert-bottom:calc(var(--layout-margin) * 2); left:calc(var(--pos-content-x) + var(--pos-menu-area-width)/2); }
 .pos-missing-alert-anchor[data-location="tables"] { --pos-alert-bottom:calc(var(--layout-margin) * 2); left:calc(var(--pos-content-x) + var(--pos-content-width)/2); }

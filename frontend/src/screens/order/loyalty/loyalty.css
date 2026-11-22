@@ -2,6 +2,8 @@
 .pay-tools__stack h3,.pay-tools__stack p { margin:0; }
 .pay-tools__stack section { display:flex; flex-direction:column; gap:var(--space-2); }
 .pay-tools__row { display:flex; align-items:center; justify-content:space-between; gap:var(--space-2); flex-wrap:wrap; min-width:0; }
+.shared-settlement :is(.shared-settlement__member-hint,.pay-tools__unlink) { align-self:flex-start; }
+.shared-settlement [aria-label="정산 유형"] .pay-tools__row { justify-content:flex-start; }
 .pay-tools__toolbar { justify-content:flex-start; }
 .pay-tools__list,.pay-tools__shares { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:var(--space-2); }
 .pay-tools__list>li,.pay-tools__shares>li { min-height:var(--space-16); padding:var(--space-2); border-radius:var(--radius-md); overflow-wrap:anywhere; }

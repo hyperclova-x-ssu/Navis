@@ -47,8 +47,9 @@ export function MoneyReversalReceipt({ settlementId, initialView, money, onClose
   const focus = returnFocusRef ?? localFocus, receipt = money.receipt;
   if (!receipt || receipt.settlementId !== settlementId) return <PosDialog open kind="receipt" title="영수증" returnFocusRef={focus} onClose={onClose}><ErrorPanel title="결제 정보를 불러오지 못했어요" actions={<ActionButton onClick={onClose}>닫기</ActionButton>}/></PosDialog>;
   const lines = receipt.reversalLines.filter(line => line.quantity > 0);
-  // K-E 10: the on-screen number is the order's own number (B-029), never the internal settlement id. A charge or collection that belongs to no order has none, so the row is left out.
-  const orderNo = receipt.billId ?? (settlementId.startsWith('seed:') ? settlementId.slice('seed:'.length) : null);
+  const paymentReceipt = receipt.paymentId ? selectReceipt(read, { paymentId: receipt.paymentId }) : null;
+  const legacyOrderNumber = receipt.billId ?? settlementId.replace(/^seed:/u, '');
+  const transactionNumber = paymentReceipt?.transactionNo || (/^B-\d+$/u.test(legacyOrderNumber) ? legacyOrderNumber : null);
   const cancelable = lines.some(line => !line.prepared), refundable = lines.some(line => line.prepared);
   const mixedPreparation = cancelable && refundable;
   if (view !== 'receipt' && 'quoteReversal' in money) {
@@ -84,8 +85,7 @@ export function MoneyReversalReceipt({ settlementId, initialView, money, onClose
       selection={selection} onAmountChange={effectiveScope === 'amount' && amountScope ? setAmount : undefined}/>;
   }
   const reversible = receipt.remainingRefundable > 0 || receipt.membershipEffects.some(use => !use.canceledAt);
-  const paymentReceipt = !recorded && receipt.paymentId ? selectReceipt(read, { paymentId: receipt.paymentId }) : null;
-  const cashReceipt = paymentReceipt?.cashReceipt;
+  const cashReceipt = recorded ? null : paymentReceipt?.cashReceipt;
   const runReceipt = (command: 'receipt.showAgain' | 'cashReceipt.issue' | 'cashReceipt.cancel') => {
     const meta = { runId: read.runId, idempotencyKey: `money-receipt:${crypto.randomUUID()}` };
     const paymentId = receipt.paymentId;
@@ -111,11 +111,13 @@ export function MoneyReversalReceipt({ settlementId, initialView, money, onClose
         <ActionButton variant="secondary" onClick={() => { setIssuing(false); setIdentifier(''); setReceiptError(''); }}>{t('receipt.close')}</ActionButton>
       </> : <>
       <dl className={posClasses.receipt}>
-        {orderNo && <div><dt>정산 거래번호</dt><dd>{orderNo}</dd></div>}
+        {transactionNumber && <div><dt>정산 거래번호</dt><dd>{transactionNumber}</dd></div>}
         <div><dt>거래 일시</dt><dd>{receiptTime(receipt.at)}</dd></div>
-        <div><dt>정산 금액</dt><dd><PosMoney amount={receipt.amount}/></dd></div>
-        <div><dt>실제 입금</dt><dd><PosMoney amount={receipt.payment?.amount ?? 0}/></dd></div>
-        {receipt.payment?.splits.map(row => <div key={row.method}><dt>{realMethodLabels[row.method]}</dt><dd><PosMoney amount={row.amount}/></dd></div>)}
+        {receipt.payment?.splits.length === 1 && receipt.payment.amount === receipt.amount && receipt.payment.splits[0]?.amount === receipt.amount
+          ? <div><dt>정산 금액 · {realMethodLabels[receipt.payment.splits[0].method]}</dt><dd><PosMoney amount={receipt.amount}/></dd></div>
+          : <><div><dt>정산 금액</dt><dd><PosMoney amount={receipt.amount}/></dd></div>
+            <div><dt>실제 입금</dt><dd><PosMoney amount={receipt.payment?.amount ?? 0}/></dd></div>
+            {receipt.payment?.splits.map(row => <div key={row.method}><dt>{realMethodLabels[row.method]}</dt><dd><PosMoney amount={row.amount}/></dd></div>)}</>}
         {recorded?.approvalNo && <div><dt>승인 번호</dt><dd>{recorded.approvalNo}</dd></div>}
         {recorded?.receiptNo && <div><dt>영수증 번호</dt><dd>{recorded.receiptNo}</dd></div>}
         {receipt.allocations.filter(row => row.kind !== 'method').map((row, index) => <div key={row.allocationId ?? index}><dt>{row.kind === 'method' ? '' : allocationLabels[row.kind]}</dt><dd><PosMoney amount={row.amount}/></dd></div>)}
@@ -123,13 +125,12 @@ export function MoneyReversalReceipt({ settlementId, initialView, money, onClose
       </dl>
       {cashReceipt && <p>{cashReceipt.status === 'issued' ? `${t('receipt.cashReceipt')} ${t(cashReceipt.kind === 'income' ? 'receipt.income' : 'receipt.business')} · ${cashReceipt.maskedIdentifier}` : t('receipt.canceledIssue')}</p>}
       {!!receipt.corrections.length && <section aria-label="취소·환불 내역">{receipt.corrections.map(correction => <div key={correction.correctionId}><p>{correction.kind === 'refund' ? '환불' : '결제 취소'} · {receiptTime(correction.at)} · <PosMoney amount={correction.amount} sign="minus"/></p>{correction.realMethodReturns.map(row => <p key={row.method}>{realMethodLabels[row.method]} <PosMoney amount={row.amount} sign="minus"/></p>)}<ReversalAccountEffects quote={correction}/></div>)}</section>}
-      {!recorded && <ActionButton variant="secondary" onClick={() => runReceipt('receipt.showAgain')}>{t('receipt.showAgain')}</ActionButton>}
       {cashReceipt?.status === 'issued' ? <ActionButton variant="ghost" onClick={() => runReceipt('cashReceipt.cancel')}>{t('receipt.cancelIssue')}</ActionButton> : paymentReceipt?.canIssueCashReceipt ? <ActionButton onClick={() => { setNotice(''); setIssuing(true); }}>{t('receipt.issue')}</ActionButton> : null}
       {receiptError && <p role="alert">{receiptError}</p>}
       {recorded ? <>
         {recorded.note && <p>{recorded.note}</p>}
-        {reversible && onRecordedRefund && <ActionButton variant="ghost" onClick={onRecordedRefund}>{t('receipt.refund')}</ActionButton>}
-      </> : reversible && correctionKinds.map(kind => <ActionButton key={kind} variant="ghost" onClick={() => openReversal(kind)}>{t(kind === 'refund' ? 'receipt.refund' : 'receipt.cancel')}</ActionButton>)}
+        {reversible && onRecordedRefund && <ActionButton variant="destructive" onClick={onRecordedRefund}>{t('receipt.refund')}</ActionButton>}
+      </> : reversible && correctionKinds.map(kind => <ActionButton key={kind} variant="destructive" onClick={() => openReversal(kind)}>{t(kind === 'refund' ? 'receipt.refund' : 'receipt.cancel')}</ActionButton>)}
       </>}
     </div>
   </PosDialog>;

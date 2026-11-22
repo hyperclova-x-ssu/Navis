@@ -1,25 +1,30 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import type { SettlementAllocation } from '../../../data/iteration7/accounting/types';
 import { projectCheckoutQuote } from '../../../data/reality/02/checkout-view';
 import type { CheckoutOutcome } from '../../../data/reality/02/bridge';
-import type { PosMemberChoice } from '../../../data/reality/02/dto';
+import type { PosMemberChoice, PosQuoteDto } from '../../../data/reality/02/dto';
+import type { CheckoutInput } from '../../../data/reality/02/remote';
+import type { MemberPassDto } from '../../../data/reality/05/dto';
 import { terminalBody } from '../../../data/reality/02/requests';
 import { PortError } from '../../../data/reality/00/port';
 import type { CheckoutCoupon, CouponQuote } from '../../../data/reality/14/dto';
 import { useOptionalWidgetDataStore } from '../../../data/react';
+import { useBundle } from '../../../i18n';
+import { membershipPosBundle } from '../../../i18n/messages/membership-pos';
 import { getPaymentBillId, quotePaymentBill } from '../../../pos/loyalty';
 import type { PosBridge } from '../../../data/reality/02/bridge';
 import { usePosSnapshot } from '../../../pos/react';
 import { POS_NOW_TIME } from '../../../pos/clock';
 import { ActionButton, Spinner, TextField, formatPosMoney } from '../../../ui';
 import { usePayText } from './Tools';
+import { PassHandoff } from './pass-handoff';
 import type { CheckoutProps } from './Checkout';
 import type { MoneyPaymentDialogProps, MoneyPaymentQuote, SettlementPaymentPhase } from '../settlement/SharedPosPaymentDialog';
 
 type Phase =
   | { readonly status: 'ready' }
   | { readonly status: 'pending' }
-  | { readonly status: 'done'; readonly orderNo: number | undefined }
+  | { readonly status: 'done'; readonly orderNo: number | undefined; readonly description: string }
   | { readonly status: 'changed'; readonly payable: number }
   | { readonly status: 'failed'; readonly reason: string; readonly outcomeUnknown: boolean };
 
@@ -27,14 +32,18 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export function useHttpCheckout(bridge: PosBridge | null, { open, billId, onRegisterMember }: CheckoutProps) {
   const read = usePosSnapshot(), { t } = usePayText();
+  const { t: passText } = useBundle(membershipPosBundle);
   const existingBill = billId !== getPaymentBillId(read);
-  const quote = quotePaymentBill(read, billId), amount = bridge?.bill(billId)?.quote.payable ?? (quote.remaining || quote.payable);
+  const quote = quotePaymentBill(read, billId);
+  const handoff = useContext(PassHandoff);
   const data = useOptionalWidgetDataStore();
   const couponAvailable = !!bridge && !existingBill && !quote.discount && data?.real?.mode('coupons') === 'http';
   const [phase, setPhase] = useState<Phase>({ status: 'ready' });
-  const [rows, setRows] = useState<readonly SettlementAllocation[]>([]);
-  const [member, setMember] = useState<PosMemberChoice>();
+  const [rows, setRows] = useState<readonly SettlementAllocation[]>();
+  const [member, setMember] = useState<PosMemberChoice | undefined>(() => bridge ? handoff?.member : undefined);
   const [balance, setBalance] = useState<{ memberId: string; charge: number; receivable: number }>();
+  const [passes, setPasses] = useState<{ memberId: string; items?: readonly MemberPassDto[] }>();
+  const [passReload, setPassReload] = useState(0);
   const [approvalNo, setApprovalNo] = useState(''), [receiptNo, setReceiptNo] = useState(''), [at, setAt] = useState(POS_NOW_TIME);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState('');
@@ -45,10 +54,12 @@ export function useHttpCheckout(bridge: PosBridge | null, { open, billId, onRegi
   const attempt = useRef<string>(undefined), created = useRef(existingBill ? billId : undefined), pressing = useRef(false);
   const alive = useRef(true);
   const [frozenPayable, setFrozenPayable] = useState<number>();
-  const [repriced, setRepriced] = useState<number>();
+  const [repriced, setRepriced] = useState<{ payable: number; quote?: PosQuoteDto }>();
+  const serverQuote = repriced?.quote ?? bridge?.bill(billId)?.quote;
+  const amount = serverQuote?.payable ?? (quote.remaining || quote.payable);
   const couponFingerprint = JSON.stringify([quote.lines.map(line => [line.menuId, line.gross, line.qty, line.options.map(option => option.optionId)]), member?.customerId, couponCode.trim()]);
   const coupon = couponAvailable && couponPreview?.fingerprint === couponFingerprint ? couponPreview : undefined;
-  const payable = frozenPayable ?? repriced ?? (amount - (coupon?.discount ?? 0));
+  const payable = frozenPayable ?? repriced?.payable ?? (amount - (coupon?.discount ?? 0));
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const memberId = member?.memberId;
   useEffect(() => {
@@ -59,10 +70,42 @@ export function useHttpCheckout(bridge: PosBridge | null, { open, billId, onRegi
     }).catch(() => {});
     return () => request.abort();
   }, [bridge, memberId, open]);
+  useEffect(() => {
+    if (!bridge || !memberId || !open) return;
+    const request = new AbortController();
+    void bridge.remote.memberPasses(memberId, request.signal).then(
+      items => { if (!request.signal.aborted) setPasses({ memberId, items }); },
+      () => { if (!request.signal.aborted) setPasses({ memberId }); },
+    );
+    return () => request.abort();
+  }, [bridge, memberId, open, passReload]);
+
+  const passLines = serverQuote?.lines.map(({ allocationId, amount, qty, menuId, name }, index) => ({
+    menuId, name, coverage: Math.floor(amount / qty), line: existingBill ? { allocationId } : { index },
+  })) ?? (existingBill ? [] : quote.lines.map(({ menuId, name, unitPrice }, index) => ({
+    menuId, name, coverage: unitPrice, line: { index },
+  })));
+  const currentPasses = passes?.memberId === memberId ? passes : undefined;
+  const passChoices = (couponAvailable && couponCode.trim() ? [] : currentPasses?.items ?? [])
+    .filter(pass => pass.memberId === memberId && pass.status === 'active' && pass.usesLeft !== 0 &&
+      pass.startsOn <= read.pos.businessDate && pass.endsOn >= read.pos.businessDate)
+    .flatMap(pass => passLines.flatMap(({ menuId, name, coverage, line }, index) => {
+      if (!pass.terms.menuIds?.includes(menuId) || coverage > payable) return [];
+      const kind = pass.terms.kind === 'count' ? 'membership_count' as const : 'membership_period' as const;
+      const allocation = { kind, membershipId: pass.membershipId, allocationId: `${pass.membershipId}:${index}`, amount: coverage };
+      const request: NonNullable<CheckoutInput['pass']> = { kind, membershipId: pass.membershipId, line, expectedCoverage: coverage };
+      return [{ allocation, request, label: `${pass.terms.name} · ${name}` }];
+    }));
+  const handoffPass = memberId === handoff?.member.memberId ? passChoices.find(choice => choice.allocation.membershipId === handoff?.membershipId) : undefined;
+  const selectedRows = rows ?? (handoffPass ? [handoffPass.allocation] : []);
+  const selectedChoice = passChoices.find(choice => selectedRows.some(row => row.allocationId === choice.allocation.allocationId));
+  const tenderRows = selectedRows.filter(row => row.kind === 'method' || row.kind === 'charge' || row.kind === 'receivable');
 
   const reasonText = (reason: string) => {
     if (reason === 'CHARGE_BALANCE_EXCEEDED') return '충전 잔액이 부족해요';
     if (reason === 'MEMBER_NOT_FOUND') return '회원을 다시 선택해 주세요';
+    if (reason === 'MEMBERSHIP_DAILY_LIMIT') return t('pay.usedToday');
+    if (reason.startsWith('MEMBERSHIP_')) return passText('membershipPos.unavailable');
     if (reason === 'COUPON_MEMBER_REQUIRED') return '쿠폰을 받은 회원을 선택해 주세요';
     if (reason === 'COUPON_HOURS') return '지금은 이 쿠폰을 쓸 수 있는 시간이 아니에요';
     if (reason === 'COUPON_PAUSED') return '일시 중지된 쿠폰이에요';
@@ -108,7 +151,7 @@ export function useHttpCheckout(bridge: PosBridge | null, { open, billId, onRegi
     canRecord: !couponChecking && (!couponAvailable || !couponCode.trim() || !!coupon),
     chargeBalance: currentBalance?.charge,
   });
-  const current = makeQuote(rows);
+  const current = makeQuote([...(selectedChoice ? [selectedChoice.allocation] : []), ...tenderRows]);
   const change = (selection: readonly SettlementAllocation[]) => {
     setFieldError(null);
     setRows(selection);
@@ -126,9 +169,10 @@ export function useHttpCheckout(bridge: PosBridge | null, { open, billId, onRegi
   };
   const record = async (quoted: MoneyPaymentQuote) => {
     if (!bridge || pressing.current || phase.status === 'done' || couponCheckingRef.current || !quoted.canSubmit) return;
-    const tender = quoted.allocations[0];
-    if (tender.kind !== 'method' && tender.kind !== 'charge' && tender.kind !== 'receivable') return;
-    const allocation = tender.kind, method = tender.method ?? 'cash';
+    const pass = selectedChoice?.request;
+    const tender = quoted.allocations.find(row => row.kind === 'method' || row.kind === 'charge' || row.kind === 'receivable');
+    if (!tender && (!pass || !member)) return;
+    const allocation = tender?.kind === 'charge' || tender?.kind === 'receivable' ? tender.kind : 'method', method = tender?.method ?? 'cash';
     let terminal: { approvalNo?: string; receiptNo?: string; at: string } | undefined;
     if (allocation === 'method' && method !== 'cash') {
       if (!TIME.test(at)) { setFieldError(t('pay.real.timeInvalid')); return; }
@@ -146,30 +190,37 @@ export function useHttpCheckout(bridge: PosBridge | null, { open, billId, onRegi
     attempt.current ??= crypto.randomUUID();
     const outcome: CheckoutOutcome = await bridge.checkout({ attemptId: attempt.current, method, terminal, expectedPayable: quoted.amountDue, billId: created.current,
       ...(member ? { member: { memberId: member.memberId, allocation } } : {}),
+      ...(pass ? { pass } : {}),
       ...(coupon ? { coupon: { code: coupon.code, customerId: coupon.customerId, discount: coupon.discount } } : {}) });
     pressing.current = false;
     if (!alive.current) return;
     if (outcome.status === 'paid') {
-      setPhase({ status: 'done', orderNo: outcome.orderNo });
+      setPhase({ status: 'done', orderNo: outcome.orderNo, description: [pass && passLabel, paymentLabel].filter(Boolean).join(' · ') });
     } else if (outcome.status === 'quote-changed') {
       created.current = outcome.billId;
       setFrozenPayable(undefined);
-      setRepriced(outcome.payable);
+      setRepriced({ payable: outcome.payable, quote: outcome.quote });
       setPhase({ status: 'changed', payable: outcome.payable });
     } else {
       setPhase({ status: 'failed', reason: outcome.reason, outcomeUnknown: outcome.outcomeUnknown });
     }
   };
   const busy = phase.status === 'pending';
-  const selected = current.allocations[0], method = selected?.method ?? 'cash';
+  const selected = current.allocations.find(row => row.kind === 'method' || row.kind === 'charge' || row.kind === 'receivable');
+  const method = selected?.method ?? 'cash';
+  const tenderAmount = selected?.amount ?? 0;
   const methodLabel = t(`pos.${method}`);
   const allocationLabel = selected?.kind === 'charge' ? '충전 잔액' : selected?.kind === 'receivable' ? '외상' : methodLabel;
+  const passLabel = passText('membershipPos.choose');
+  const paymentLabel = selected ? `${allocationLabel} ${formatPosMoney(tenderAmount)}` : '';
   const paymentPhase: SettlementPaymentPhase = phase.status === 'done' ? { status: 'succeeded' }
     : phase.status === 'failed' || phase.status === 'changed' ? { status: 'failed', reason: phase.status === 'failed' ? phase.reason : 'QUOTE_CHANGED' }
     : phase;
   const review: NonNullable<MoneyPaymentDialogProps['review']> = {
-    label: selected?.kind !== 'method' ? `${allocationLabel} ${formatPosMoney(payable)} 기록하기` :
-      method === 'cash' ? t('pay.real.cashConfirm', { amount: formatPosMoney(payable) }) : t('pay.real.terminalConfirm', { method: methodLabel, amount: formatPosMoney(payable) }),
+    label: selectedChoice ? (selected ? passText('membershipPos.recordWithTender', { method: allocationLabel, amount: formatPosMoney(tenderAmount) })
+      : passText('membershipPos.record')) :
+      selected?.kind !== 'method' ? `${allocationLabel} ${formatPosMoney(tenderAmount)} 기록하기` :
+      method === 'cash' ? t('pay.real.cashConfirm', { amount: formatPosMoney(tenderAmount) }) : t('pay.real.terminalConfirm', { method: methodLabel, amount: formatPosMoney(tenderAmount) }),
     pendingLabel: t('pay.real.recording'),
     onRetry: quoted => { void record(quoted); },
     failure: phase.status === 'changed' ? { title: t('pay.real.quoteChanged'), description: t('pay.real.quoteChangedHelp', { amount: formatPosMoney(phase.payable) }),
@@ -177,14 +228,15 @@ export function useHttpCheckout(bridge: PosBridge | null, { open, billId, onRegi
       phase.status === 'failed' ? { title: t('pay.real.failed'), description: reasonText(phase.reason),
         retryLabel: t('pay.real.retry'), canChangeMethod: !phase.outcomeUnknown } : undefined,
     fields: <>
-      {selected?.kind === 'charge' ? <p>회원의 충전 잔액에서 차감해요</p> :
+      {selectedChoice && <p>{selectedChoice.label} · {passText(selectedChoice.allocation.kind === 'membership_count' ? 'membershipPos.countHelp' : 'membershipPos.periodHelp')}</p>}
+      {selected && (selected.kind === 'charge' ? <p>회원의 충전 잔액에서 차감해요</p> :
         selected?.kind === 'receivable' ? <p>받을 금액을 회원 외상에 기록해요</p> :
         method === 'cash' ? <p>{t('pay.real.cashHelp')}</p> : <>
           <p>{t('pay.real.terminalHelp')}</p>
           <TextField name="terminal-approval-no" label={t('pay.real.approvalNo')} value={approvalNo} onValueChange={setApprovalNo} disabled={busy}/>
           <TextField name="terminal-receipt-no" label={t('pay.real.receiptNo')} value={receiptNo} onValueChange={setReceiptNo} disabled={busy}/>
           <TextField name="terminal-at" label={t('pay.real.terminalAt')} value={at} onValueChange={setAt} inputMode="numeric" disabled={busy}/>
-        </>}
+        </>)}
       {fieldError && <p role="alert">{fieldError}</p>}
     </>,
   };
@@ -201,14 +253,18 @@ export function useHttpCheckout(bridge: PosBridge | null, { open, billId, onRegi
     quote: current, phase: paymentPhase, review, reset, change,
     closeBlocked: pressing.current || phase.status === 'failed' && phase.outcomeUnknown,
     approve: (quoted: MoneyPaymentQuote) => { void record(quoted); return false; },
-    result: phase.status === 'done' ? { title: t('pos.done', { n: phase.orderNo ?? '' }), description: `${allocationLabel} ${formatPosMoney(payable)}` } : undefined,
+    result: phase.status === 'done' ? { title: t('pos.done', { n: phase.orderNo ?? '' }), description: phase.description } : undefined,
     orderNo: phase.status === 'done' ? phase.orderNo : undefined,
     member: member && { memberId: member.memberId, label: `${member.name} · ${member.phoneMasked}`,
       chargeBalance: currentBalance?.charge ?? 0, receivableBalance: currentBalance?.receivable ?? 0, accountBalancesAvailable: !!currentBalance },
     unlink: () => { setMember(undefined); setBalance(undefined); change([]); },
     memberSource: { remote: bridge.remote, onSelect: (value: PosMemberChoice) => {
-      setBalance(undefined); setMember(value); change([]);
+      if (value.memberId !== memberId) { setBalance(undefined); setPasses(undefined); }
+      setMember(value);
+      change([]);
     }, onRegister: onRegisterMember },
+    passChoices,
+    passNotice: currentPasses && !currentPasses.items ? <p role="alert">{passText('membershipPos.loadError')} <ActionButton variant="ghost" onClick={() => { setPasses(undefined); setPassReload(value => value + 1); }}>{t('pay.real.loadRetry')}</ActionButton></p> : null,
     discountTool,
     coupon,
   } : null;
