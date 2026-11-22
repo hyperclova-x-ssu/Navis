@@ -1,0 +1,36 @@
+services:
+  marketing:
+    environment:
+      NAVIS_SEOUL_PUBLIC_DATA_MODE: live
+      NAVIS_SEOUL_OPENAPI_KEY_FILE: /run/secrets/SEOUL_OPENAPI_KEY
+      NODE_USE_ENV_PROXY: "1"
+      HTTP_PROXY: http://seoul-openapi-egress:3128
+      NO_PROXY: localhost,127.0.0.1,account,customer,inventory,pos,marketing,insight,naver-virtual
+    secrets:
+      - SEOUL_OPENAPI_KEY
+    networks: [seoul-provider-api]
+    depends_on:
+      seoul-openapi-egress: {condition: service_started}
+
+  seoul-openapi-egress:
+    image: node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    command: [node, /app/egress.mjs]
+    environment: {NAVIS_PUBLIC_DATA_EGRESS: seoul}
+    volumes:
+      - type: bind
+        source: ./services/marketing/reality/13/public-data-egress.mjs
+        target: /app/egress.mjs
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [seoul-provider-api, seoul-provider-egress]
+
+secrets:
+  SEOUL_OPENAPI_KEY:
+    file: ${NAVIS_PUBLIC_DATA_SECRET_DIR:-${HOME}/.navis-ncp/secrets}/SEOUL_OPENAPI_KEY
+
+networks:
+  seoul-provider-api: {internal: true}
+  seoul-provider-egress: {}

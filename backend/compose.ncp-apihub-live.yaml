@@ -1,0 +1,21 @@
+# Opt-in Marketing API Hub binding for local Compose.
+services:
+  marketing:
+    environment:
+      NAVIS_NCP_APIHUB_PROVIDER: live
+      NAVIS_NCP_SEARCH_STORE_ID: ${NAVIS_NCP_SEARCH_STORE_ID:-c05409a6-f082-5964-a787-c1ed3184988b}
+    volumes:
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_APIHUB_CLIENT_ID
+        target: /run/navis-ncp/apihub/NCP_APIHUB_CLIENT_ID
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_APIHUB_CLIENT_SECRET
+        target: /run/navis-ncp/apihub/NCP_APIHUB_CLIENT_SECRET
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [navis-live-egress]
+
+networks:
+  navis-live-egress: {}

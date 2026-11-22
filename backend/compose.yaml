@@ -80,11 +80,13 @@ services:
 
   insight-navis:
     build: { <<: *build, target: insight-navis }
-    networks: [navis-api]
+    networks: [navis-api, talktalk-draft-api]
     read_only: true
     tmpfs: ["/tmp:rw,nosuid,nodev,size=128m,mode=1777"]
     environment:
       NAVIS_ALLOWED_ORIGINS: ${NAVIS_BROWSER_API_ORIGIN:-http://127.0.0.1:18180}
+      NAVIS_TALKTALK_DRAFT_TOKEN_FILE: /run/secrets/talktalk_draft_token
+    secrets: [talktalk_draft_token]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/readyz', {signal: AbortSignal.timeout(4000)}).then(r => { if (!r.ok) process.exitCode = 1 }, () => { process.exitCode = 1 })"]
       interval: 5s
@@ -309,12 +311,16 @@ services:
   marketing:
     <<: *provider
     build: { <<: *build, target: marketing }
-    networks: [api, workloads, data, cache, naver-virtual-api]
+    networks: [api, workloads, data, cache, naver-virtual-api, talktalk-draft-api]
     environment:
       <<: [*runtime-db-env, *phase3]
+      NAVIS_NCP_APIHUB_PROVIDER: ${NAVIS_NCP_APIHUB_PROVIDER:-off}
+      NAVIS_NCP_MAPS_PROVIDER: off
       NAVIS_TALKTALK_STORE_ID: ${NAVIS_TALKTALK_STORE_ID:-c05409a6-f082-5964-a787-c1ed3184988b}
       NAVIS_TALKTALK_WEBHOOK_TOKEN: ${NAVIS_TALKTALK_WEBHOOK_TOKEN:-}
       NAVIS_TALKTALK_SEND_KEY: ${NAVIS_TALKTALK_SEND_KEY:-}
+      NAVIS_TALKTALK_DRAFT_URL: http://insight-navis:8787
+      NAVIS_TALKTALK_DRAFT_TOKEN_FILE: /run/secrets/talktalk_draft_token
       NAVIS_NAVER_VIRTUAL_ORIGIN: http://naver-virtual:3000
       NAVIS_NAVER_VIRTUAL_TOKEN_FILE: /run/secrets/nvirtual_marketing_token
       NAVIS_MARKETING_CUSTOMER_SMS_TOKEN_FILE: /run/secrets/marketing_customer_sms_token
@@ -342,6 +348,7 @@ services:
       NAVIS_FIXTURE_SMS_KEY_FILE: /run/secrets/fixture_sms_key
     secrets:
       - marketing_run_password
+      - talktalk_draft_token
       - marketing_redis_password
       - marketing_community_account_token
       - marketing_customer_read_token
@@ -676,6 +683,7 @@ networks:
   web: { internal: true }
   api: { internal: true }
   navis-api: { internal: true }
+  talktalk-draft-api: { internal: true }
   workloads: { internal: true }
   data: { internal: true }
   cache: { internal: true }
@@ -863,6 +871,7 @@ configs:
           "accountId": "ansungjalbu-cafe",
           "tokenFile": "/run/secrets/nvirtual_marketing_token",
           "operations": [
+            "pn01.hours.read",
             "pn03.reviews.list",
             "pn03.reviews.get",
             "pn03.stats.read",
@@ -1225,6 +1234,7 @@ secrets:
   marketing_customer_read_token: { file: ./.secrets/local/marketing_customer_read_token }
   marketing_customer_token: { file: ./.secrets/local/marketing_customer_token }
   marketing_inventory_token: { file: ./.secrets/local/marketing_inventory_token }
+  talktalk_draft_token: { file: ./.secrets/local/talktalk_draft_token }
   marketing_pos_token: { file: ./.secrets/local/marketing_pos_token }
   insight_marketing_read_token: { file: ./.secrets/local/insight_marketing_read_token }
   marketing_redis_password: { file: ./.secrets/local/marketing_redis_password }

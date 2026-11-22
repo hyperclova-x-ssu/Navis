@@ -50,6 +50,7 @@ write_secret .secrets/local/inventory_account_token openssl rand -hex 32
 write_secret .secrets/local/marketing_worker_inventory_token openssl rand -hex 32
 write_secret .secrets/local/marketing_customer_sms_token openssl rand -hex 32
 write_secret .secrets/local/marketing_sms_worker_token openssl rand -hex 32
+write_secret .secrets/local/talktalk_draft_token openssl rand -hex 32
 
 write_secret .secrets/local/gateway_pos_token openssl rand -hex 32
 write_secret .secrets/local/gateway_customer_token openssl rand -hex 32

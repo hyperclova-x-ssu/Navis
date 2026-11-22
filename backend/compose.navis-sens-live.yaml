@@ -1,0 +1,46 @@
+# Explicit live test-recipient SENS configuration. Pair with compose.yaml.
+services:
+  account:
+    environment:
+      NAVIS_NCP_SENS_STORE_ID: c05409a6-f082-5964-a787-c1ed3184988b
+  inventory:
+    environment:
+      NAVIS_NCP_SENS_PROVIDER: live
+  marketing:
+    environment:
+      NAVIS_NCP_SENS_PROVIDER: live
+  marketing-worker:
+    environment:
+      NAVIS_PHASE3_FIXTURES: "1"
+      NAVIS_NCP_SENS_PROVIDER: live
+      NAVIS_NCP_SECRETS_DIR: /run/navis-ncp-sens
+    volumes:
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_ACCESS_KEY
+        target: /run/navis-ncp-sens/NCP_ACCESS_KEY
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_SECRET_KEY
+        target: /run/navis-ncp-sens/NCP_SECRET_KEY
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_SENS_SMS_SERVICE_ID
+        target: /run/navis-ncp-sens/NCP_SENS_SMS_SERVICE_ID
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_SENS_SENDER_NUMBER
+        target: /run/navis-ncp-sens/NCP_SENS_SENDER_NUMBER
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_SENS_TEST_RECIPIENTS
+        target: /run/navis-ncp-sens/NCP_SENS_TEST_RECIPIENTS
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [navis-sens-egress]
+
+networks:
+  navis-sens-egress: {}

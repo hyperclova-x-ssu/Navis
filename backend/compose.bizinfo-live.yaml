@@ -1,0 +1,38 @@
+services:
+  insight:
+    environment:
+      NAVIS_BIZINFO_MODE: live
+      NAVIS_BIZINFO_A6_APPROVED: ${NAVIS_BIZINFO_A6_APPROVED:?set NAVIS_BIZINFO_A6_APPROVED=1 when approved}
+      NAVIS_BIZINFO_TERMS_ACCEPTED: ${NAVIS_BIZINFO_TERMS_ACCEPTED:?set NAVIS_BIZINFO_TERMS_ACCEPTED=1 when accepted}
+      NAVIS_BIZINFO_KEY_FILE: /run/secrets/BIZINFO_API_KEY
+      NODE_USE_ENV_PROXY: "1"
+      HTTPS_PROXY: http://bizinfo-egress:3128
+      NO_PROXY: localhost,127.0.0.1,account,customer,inventory,pos,marketing,insight,naver-virtual
+    secrets:
+      - BIZINFO_API_KEY
+    networks: [bizinfo-provider-api]
+    depends_on:
+      bizinfo-egress: {condition: service_started}
+
+  bizinfo-egress:
+    image: node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    command: [node, /app/egress.mjs]
+    environment: {NAVIS_PUBLIC_DATA_EGRESS: bizinfo}
+    volumes:
+      - type: bind
+        source: ./services/marketing/reality/13/public-data-egress.mjs
+        target: /app/egress.mjs
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [bizinfo-provider-api, bizinfo-provider-egress]
+
+secrets:
+  BIZINFO_API_KEY:
+    file: ${NAVIS_PUBLIC_DATA_SECRET_DIR:-${HOME}/.navis-ncp/secrets}/BIZINFO_API_KEY
+
+networks:
+  bizinfo-provider-api: {internal: true}
+  bizinfo-provider-egress: {}

@@ -1,0 +1,55 @@
+# Optional real promo generation. Keep the worker on internal networks and send HTTPS through the promo allowlist.
+services:
+  relay:
+    environment:
+      NAVIS_PHASE3_FIXTURES: "1"
+
+  insight:
+    environment:
+      NAVIS_PROMO_INSIGHT_TOKEN_FILE: /run/secrets/promo_insight_token
+
+  marketing-worker:
+    environment:
+      NAVIS_PHASE3_FIXTURES: "1"
+      NAVIS_PROMO_SCENE_PROVIDER: claude-api
+      NAVIS_PROMO_CLAUDE_API_APPROVED: ${NAVIS_PROMO_CLAUDE_API_APPROVED:?export NAVIS_PROMO_CLAUDE_API_APPROVED=true for live promo generation}
+      NAVIS_PROMO_HCX_PILOT: "true"
+      CLOVASTUDIO_API_KEY_FILE: /run/navis-promo/CLOVASTUDIO_API_KEY
+      ANTHROPIC_API_KEY_FILE: /run/navis-promo/ANTHROPIC_API_KEY
+      NODE_USE_ENV_PROXY: "1"
+      HTTPS_PROXY: http://promo-egress:3128
+    volumes:
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/CLOVASTUDIO_API_KEY
+        target: /run/navis-promo/CLOVASTUDIO_API_KEY
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/ANTHROPIC_API_KEY
+        target: /run/navis-promo/ANTHROPIC_API_KEY
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [promo-provider-api]
+    depends_on:
+      promo-egress: {condition: service_started}
+
+  promo-egress:
+    profiles: [phase3]
+    image: node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    command: [node, /app/egress.mjs]
+    environment:
+      NAVIS_PROMO_CLAUDE_API_APPROVED: ${NAVIS_PROMO_CLAUDE_API_APPROVED:?live promo generation needs approval}
+    volumes:
+      - type: bind
+        source: ./workers/marketing-worker/promo/egress.mjs
+        target: /app/egress.mjs
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [promo-provider-api, promo-provider-egress]
+
+networks:
+  promo-provider-api: {internal: true}
+  promo-provider-egress: {}

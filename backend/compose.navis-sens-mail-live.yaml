@@ -1,0 +1,14 @@
+# Optional Mailer credentials. Apply after compose.navis-sens-live.yaml.
+services:
+  marketing-worker:
+    volumes:
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_SENS_MAIL_SERVICE_ID
+        target: /run/navis-ncp-sens/NCP_SENS_MAIL_SERVICE_ID
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_SENS_MAIL_SENDER_ADDRESS
+        target: /run/navis-ncp-sens/NCP_SENS_MAIL_SENDER_ADDRESS
+        read_only: true
+        bind: {create_host_path: false}

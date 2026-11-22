@@ -1,0 +1,26 @@
+# Explicit live NCP Object Storage. Pair with compose.yaml.
+services:
+  account:
+    environment:
+      NAVIS_NCP_OBJECT_STORAGE_PROVIDER: live
+      NAVIS_NCP_SECRETS_DIR: /run/navis-ncp-storage
+    volumes:
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_ACCESS_KEY
+        target: /run/navis-ncp-storage/NCP_ACCESS_KEY
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_SECRET_KEY
+        target: /run/navis-ncp-storage/NCP_SECRET_KEY
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${HOME:?HOME is required}/.navis-ncp/secrets/NCP_OBJECT_STORAGE_BUCKET
+        target: /run/navis-ncp-storage/NCP_OBJECT_STORAGE_BUCKET
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [navis-object-storage-egress]
+
+networks:
+  navis-object-storage-egress: {}

@@ -138,7 +138,14 @@ COPY --from=workload-source /runtime/services/marketing/ ./services/marketing/
 COPY --from=workload-source /runtime/packages/naver/ ./packages/naver/
 COPY --from=workload-source /runtime/workers/marketing-worker/ ./workers/marketing-worker/
 USER root
-RUN install -d -o node -g node /var/lib/navis/fake-sens
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium ffmpeg fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/* \
+    && install -d -o node -g node /var/lib/navis/fake-sens
+# Match the browser client version already used by the app. The renderer imports it from /app/frontend/server.
+RUN --mount=type=cache,target=/root/.npm,id=navis-backend-npm,sharing=locked \
+    npm install --prefix /app --no-package-lock --ignore-scripts --no-audit --no-fund playwright-core@1.64.1
+ENV HOME=/tmp
 USER node
 CMD ["node", "workers/marketing-worker/index.ts"]
 
@@ -202,6 +209,11 @@ RUN --mount=type=bind,target=/source \
         mkdir /build \
         && cp -R /source/frontend/package.json /source/frontend/package-lock.json /source/frontend/index.html \
                  /source/frontend/vite.config.ts /source/frontend/src /source/frontend/public /source/frontend/server /source/frontend/shared /build/ \
+        && mkdir -p /backend/services/marketing/reality/13 \
+        && cp -R /source/backend/services/marketing/reality/13/data \
+                 /source/backend/services/marketing/reality/13/trend-menu-match.ts \
+                 /source/backend/services/marketing/reality/13/trend-recommendations.ts \
+                 /backend/services/marketing/reality/13/ \
         && cd /build \
         && npm ci --no-audit --no-fund \
         && npm run build -- --outDir /site \
