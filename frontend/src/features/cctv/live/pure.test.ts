@@ -11,12 +11,12 @@ describe('config (VITE_CNN_SERVER_URL)', () => {
     expect(parseBaseUrl(undefined)).toBeNull();
     expect(parseBaseUrl('')).toBeNull();
     expect(parseBaseUrl('   ')).toBeNull();
-    expect(parseBaseUrl('moa:8443')).toBeNull();
+    expect(parseBaseUrl('gpu-server:8443')).toBeNull();
   });
   it('trims the trailing slash and maps https → wss', () => {
-    const b = parseBaseUrl('https://moa.example.ts.net:8443/');
-    expect(b).toBe('https://moa.example.ts.net:8443');
-    expect(socketUrl(b!, '/ws/view')).toBe('wss://moa.example.ts.net:8443/ws/view');
+    const b = parseBaseUrl('https://gpu-server.example.ts.net:8443/');
+    expect(b).toBe('https://gpu-server.example.ts.net:8443');
+    expect(socketUrl(b!, '/ws/view')).toBe('wss://gpu-server.example.ts.net:8443/ws/view');
     expect(socketUrl('http://localhost:8000', '/ws/view')).toBe('ws://localhost:8000/ws/view');
   });
 });

@@ -8,7 +8,7 @@ const textMessages = [
   { role: 'user', content: '오늘 등록된 메뉴가 몇 개인지 알려줘.' },
 ];
 // Synthetic 16×16 solid-color PNG. These samples contain no store or customer data.
-// HCX-005 accepts dataUri.data only as a data URL: bare base64 returned HTTP 400 / 40001 on moa (2026-11-21).
+// HCX-005 accepts dataUri.data only as a data URL: bare base64 returned HTTP 400 / 40001 on the GPU server (2026-11-21).
 const syntheticPng = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGPwnplKEmIY1TCqYfhqAADOiUkQ+vHcCQAAAABJRU5ErkJggg==';
 const cases = [
   { mode: 'text', model: 'HCX-005', body: { messages: textMessages } },
