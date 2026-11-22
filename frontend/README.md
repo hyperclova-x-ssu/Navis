@@ -45,6 +45,7 @@ src/
 │   ├── onboarding/              //   업종 선택과 시작 위젯 고르기, 테이블 배치 편집
 │   ├── briefing/                //   출근·퇴근 브리핑 카드
 │   ├── settings/                //   설정: 언어, 테마, 글자 크기, 주문 방식, CCTV 연결
+│   ├── layer-header/            //   레이어 공통 머리줄 (가게 이름·오늘 날짜)
 │   └── layer-placeholder/       //   준비 중 레이어 안내
 │
 ├── features/
@@ -62,7 +63,7 @@ src/
 │   │   ├── i7-notice/           //   공지 발송
 │   │   ├── mkt-local/           //   동네 변화, 상권분석, 로컬 트렌드, 커뮤니티, AI 응답(리뷰 답글)
 │   │   ├── mkt-coupon/          //   빈 시간 쿠폰, 마감 쿠폰, 쿠폰 현황, 단골 관리
-│   │   └── mkt-promo/           //   오늘 할 홍보, AI 홍보 영상, 마케팅 성과
+│   │   └── mkt-promo/           //   오늘 할 홍보, AI 홍보 영상 (카페 사진으로 만든 갤러리)
 │   ├── assistant/               // Navis AI 비서
 │   │   ├── conversation.tsx     //   대화창 UI (스트리밍 답, 멈추기, 다시 묻기)
 │   │   ├── provider.ts          //   /api/navis/chat SSE 연결과 오류·대기 처리
@@ -71,7 +72,7 @@ src/
 │   │   ├── proposal-card.tsx    //   위젯 후보·확인 카드 (누르거나 끌어서 실행)
 │   │   ├── agent-actions.ts     //   "재고 위젯 추가해줘" 같은 명령을 놓기 동작으로 연결
 │   │   ├── domains/             //   도메인별 질문 처리 (메뉴·재고·예약·쿠폰·회원·공지 등)
-│   │   └── media/               //   마이크 음성 입력
+│   │   └── media/               //   마이크 음성 입력 (CLOVA Speech 단문 인식)
 │   └── cctv/                    // CCTV
 │       ├── playback/            //   예시 영상 재생과 사람·컵 상자 그리기
 │       ├── live/                //   실시간 분석 서버(WebSocket) 연결
@@ -87,6 +88,7 @@ src/
 │   ├── iteration7/              //   직원·공지·매장 환경·주문제작·충전금·회원권·회계 도메인
 │   ├── cctv/                    //   CCTV 탐지 결과 읽기, 자리 상태, 음료 대기 판정
 │   ├── backend-catalog/         //   백엔드 HTTP 메뉴 조회 어댑터
+│   ├── reality/                 //   실제 서버 모드: 위젯별 백엔드 API 연결 (00 공용 포트 ~ 19)
 │   └── messages/                //   데이터 계층 문구 (4개 언어)
 │
 ├── pos/                         // 결제 도메인 로직
@@ -102,6 +104,8 @@ src/
 │   ├── index.ts                 //   좌표 검증, 가장 가까운 빈 자리 찾기, 정확한 밀어내기 탐색
 │   ├── layout.worker.ts         //   탐색을 화면 입력과 분리하는 Web Worker
 │   └── presets.ts               //   업종별 시작 배치
+│
+├── connect-kiosk/               // Npay 커넥트 미니 키오스크 (/connect): 기기 틀, 메뉴 담기, 결제, 분할 화면
 │
 ├── catalog/                     // 위젯 등록부, 관리 템플릿, 위젯 모듈 자동 등록
 ├── contracts/                   // 화면·데이터·POS가 공유하는 타입 계약 (세션, 좌표, 결제)
@@ -135,7 +139,7 @@ server/
 │   └── menu · inventory · booking · coupons · members · money · notices ...
 ├── widget-drafts.mjs            // 리뷰 답글·매뉴얼·정부지원 신청서 초안, 테스트 문자 확인 단계
 ├── sens-sms.mjs                 // SENS 문자 발송 (허용 목록 번호만, 기본 꺼짐)
-├── media/                       // 영수증 OCR·음성 인식 중계 (기본은 가짜 응답)
+├── media/                       // CLOVA OCR 영수증 읽기 · CLOVA Speech 음성 인식 중계 (키 없으면 가짜 응답)
 ├── promo/                       // AI 홍보 영상
 │   ├── pipeline.mjs             //   사진 분석 → 대본(HCX-007) → 장면 코드 → 검사 → 녹화
 │   ├── jobs.mjs                 //   작업 큐, 동시 실행 제한, 취소
