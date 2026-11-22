@@ -182,7 +182,7 @@ const SKIPPED = [
 ];
 
 // All prices are exact integer KRW per ERD order unit; package labels remain in
-// content. Commander-approved cans use pcs with mL per can on each order line.
+// content. Owner-approved cans use pcs with mL per can on each order line.
 function purchaseTerms(item) {
   const perBase = { g: { g: 1, kg: 1000 }, mL: { mL: 1, L: 1000 }, pcs: { pcs: 1 } }[item.base_unit];
   let unit = Object.hasOwn(perBase ?? {}, item.purchase_unit) ? item.purchase_unit : null;

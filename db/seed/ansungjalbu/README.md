@@ -5,18 +5,18 @@
 저장소 루트에서 실행합니다.
 
 ```sh
-node 04_app/db/seed/ansungjalbu/generate.mjs
+node db/seed/ansungjalbu/generate.mjs
 ```
 
 기본값은 생성기 옆 `content.json`, 종료일 **2026-11-17**, **90일**, seed **42**, 생성기 옆 `out/`입니다. 종료일은 현재 시각과 무관하게 고정해 두었습니다. 기본 기간은 **2026-08-20~2026-11-17**, 양 끝을 포함합니다. 날짜가 바뀌면 `--end`를 명시합니다.
 
 ```sh
-node 04_app/db/seed/ansungjalbu/generate.mjs \
-  --content 04_app/db/seed/ansungjalbu/content.json \
+node db/seed/ansungjalbu/generate.mjs \
+  --content db/seed/ansungjalbu/content.json \
   --end 2026-11-17 --days 90 --seed 42 \
-  --out 04_app/db/seed/ansungjalbu/out/
+  --out db/seed/ansungjalbu/out/
 
-node --test 04_app/db/seed/ansungjalbu/generate.test.mjs
+node --test db/seed/ansungjalbu/generate.test.mjs
 ```
 
 | 옵션 | 뜻 |
@@ -103,3 +103,42 @@ ERD v1은 v0의 추적 여부/단위/스냅샷, 할인 원본, 정정 줄과 CCT
 - 복합 FK/RLS 제약, DDL, PostgreSQL 적재, DB/서버 선택, 외부 연동, 앱 어댑터와 Navis 연동은 후속 작업입니다.
 
 DB/서버 설정, PostgreSQL 적재 검증, 앱 데이터 소스 교체, 미정 지표의 Navis 연결은 후속 작업입니다. 이 생성기를 실행해도 현재 앱 화면의 목업 숫자는 바뀌지 않습니다.
+
+### Disposable A-3 replay dates and archive fixtures
+
+Standard FAKE replay uses **2026-11-17 15:45 Asia/Seoul**. For a reviewed
+alternate clock, use a timezone-qualified instant and set
+`VITE_NAVIS_REPLAY_INSTANT` before Vite loads the app modules. Keep the
+existing hosted demo flags for live clocks. If an alternate replay also sets
+`VITE_NAVIS_FIXTURE_END_DATE`, use the instant's Seoul calendar date.
+
+| Replay instant | Seoul fixture end | Service business date |
+| --- | --- | --- |
+| `2026-11-17T15:45:00+09:00` | 2026-11-17 | 2026-11-17 |
+| `2026-10-26T15:45:00+09:00` | 2026-10-26 | 2026-10-26 |
+| `2026-11-22T04:59:00+09:00` | 2026-11-22 | 2026-11-21 |
+| `2026-11-22T05:00:00+09:00` | 2026-11-22 | 2026-11-22 |
+
+For a local REAL replay, migrate Account, Inventory, POS and the NAVER virtual
+database on a fresh Compose volume. Connect the one-shot tools container to
+the service data network and the virtual data network with their migration
+roles. Run the command below there with the selected instant and, for S8-176,
+the variant as the last argument. The seed installs the café demo owner,
+boots the selected business day in Inventory and POS, and seeds the local
+virtual server with the same instant. It verifies the stored rows after the
+seed transactions finish. Use the same arguments with `--verify-replay` to
+re-read that setup in a new process, for example after restarting PostgreSQL.
+
+```sh
+NAVIS_DISPOSABLE_REPLAY_SEED=1 node --experimental-transform-types test/compose/naver-virtual-seed-clock.mjs --install-replay 2026-11-22T04:59:00+09:00 S8-176/3
+```
+
+Run each variant on its own fresh volume, including after a setup failure. The
+installer refuses a volume that already contains an Account store. S8-176/1
+archives the café cold brew, /2 archives vanilla latte, /3 adds an already
+archived financier, and /4 adds an already archived croissant. The synthetic
+archive IDs belong only to their respective fixtures and are absent from the
+active POS catalog. Replay through the local gateway with outbound providers
+disabled and check approval independently from fixture installation. A
+different runtime clock or an unsupported scenario precondition requires a
+matching replay configuration before scoring.
