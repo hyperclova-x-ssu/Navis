@@ -56,15 +56,16 @@ export async function products(tx: CustomerTx, query: unknown) {
   return page(rows, take, row => row.productId, tx, await sourceRevision(tx));
 }
 
-type Membership = { membershipId: string; memberId: string; productId: string; startsOn: string; endsOn: string;
+type Membership = { membershipId: string; memberId: string; memberCode: string; productId: string; startsOn: string; endsOn: string;
   usesLeft: number | null; status: 'active' | 'ended' | 'refunded'; terms: Product; saleSettlementId: string; revision: number };
-const passFields = `membership_id AS "membershipId", member_id AS "memberId", product_id AS "productId",
+const passFields = `p.membership_id AS "membershipId", p.member_id AS "memberId", m.member_code AS "memberCode", p.product_id AS "productId",
     starts_on::text AS "startsOn", ends_on::text AS "endsOn", CASE WHEN sold_terms->>'kind'='count' THEN uses_left END AS "usesLeft",
-    CASE WHEN status='archived' THEN 'refunded' WHEN ends_on<$2::date THEN 'ended' ELSE 'active' END AS status,
+    CASE WHEN p.status='archived' THEN 'refunded' WHEN ends_on<$2::date THEN 'ended' ELSE 'active' END AS status,
     sold_terms AS terms, sale_settlement_id AS "saleSettlementId", version AS revision`;
+const passMembers = 'FROM customer.membership p JOIN customer.member m USING (store_id,member_id)';
 export async function readPass(tx: CustomerTx, membershipId: string, memberId: string, requestKey?: string) {
-  const { rows: [row] } = await tx.db.query<Membership>(`SELECT ${passFields} FROM customer.membership
-    WHERE store_id=$1 AND membership_id=$3 AND member_id=$4`, [tx.storeId, tx.day, membershipId, memberId]);
+  const { rows: [row] } = await tx.db.query<Membership>(`SELECT ${passFields} ${passMembers}
+    WHERE p.store_id=$1 AND p.membership_id=$3 AND p.member_id=$4`, [tx.storeId, tx.day, membershipId, memberId]);
   if (!row) throw new MemberError(404, 'MEMBERSHIP_NOT_FOUND');
   const { rows: [count] } = await tx.db.query<{ pending: boolean; daily: number; ownHold: boolean }>(`SELECT
     COALESCE(bool_or(state='held'),false) AS pending,
@@ -84,8 +85,8 @@ export async function memberships(tx: CustomerTx, query: unknown) {
     throw new MemberError(400, 'INVALID_REQUEST');
   }
   const { rows } = await tx.db.query<Membership>(`SELECT * FROM (
-    SELECT ${passFields} FROM customer.membership WHERE store_id=$1 AND member_id IS NOT NULL
-      AND ($3::uuid IS NULL OR member_id=$3) AND ($4::uuid IS NULL OR membership_id>$4)
+    SELECT ${passFields} ${passMembers} WHERE p.store_id=$1
+      AND ($3::uuid IS NULL OR p.member_id=$3) AND ($4::uuid IS NULL OR p.membership_id>$4)
     ) p WHERE ($5::text IS NULL OR status=$5) ORDER BY "membershipId" LIMIT $6`,
   [tx.storeId, tx.day, memberId, cursor, input.status ?? null, take + 1]);
   return page(rows, take, row => row.membershipId, tx, await sourceRevision(tx));

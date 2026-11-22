@@ -80,12 +80,11 @@ async function recognize(db: PoolClient, event: StreamEnvelope) {
   await settleClaim(db, storeId, claim, { status: 'committed', sale });
   if (claim.kind !== 'membership_use') return;
 
-  // The fixture applies a count use to whole allocations of one settlement.
   const original = quantities(payload.lines, 1);
   const covered = payload.membershipContributions === undefined ? original : quantities(payload.membershipContributions, 1);
   const sold = new Map(original.map(row => [row.allocationId, row.quantity]));
-  if (covered.some(row => sold.get(row.allocationId) !== row.quantity)) {
-    // A partial allocation needs POS to identify which units a correction actually returns.
+  // Operating member sales use full corrections. Fixture sales support partial returns and require whole allocations.
+  if (covered.some(row => claim.operating ? row.quantity > (sold.get(row.allocationId) ?? 0) : sold.get(row.allocationId) !== row.quantity)) {
     throw new PermanentStreamError('UNSUPPORTED_MEMBERSHIP_CONTRIBUTION');
   }
   await registerContributions(db, storeId, claim.claimId, covered);

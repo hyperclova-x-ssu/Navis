@@ -5,11 +5,11 @@ import { apply, confirm, event, id, integer, limit, MemberError, memberSources, 
 const grades = ['regular', 'frequent', 'occasional', 'inactive'] as const;
 const nameCharacters = new Intl.Segmenter();
 type Grade = typeof grades[number];
-type Member = { memberId: string; name: string; phone: string; gradeOverride: Grade | null; contactAllowed: boolean;
+type Member = { memberId: string; memberCode: string; name: string; phone: string; gradeOverride: Grade | null; contactAllowed: boolean;
   marketingAllowed: boolean; revision: number; archivedAt: Date | null };
 type Note = { noteId: string; body: string; revision: number; updatedAt: Date; archivedAt: Date | null };
 type Inverse = { kind: 'member' | 'note'; memberId: string; targetId: string; previous: Member | Note | null };
-const fields = `member_id AS "memberId", name, phone, grade_override AS "gradeOverride", contact_allowed AS "contactAllowed",
+const fields = `member_id AS "memberId", member_code AS "memberCode", name, phone, grade_override AS "gradeOverride", contact_allowed AS "contactAllowed",
   marketing_allowed AS "marketingAllowed", revision, archived_at AS "archivedAt"`;
 const noteFields = `note_id AS "noteId", body, revision, updated_at AS "updatedAt", archived_at AS "archivedAt"`;
 
@@ -23,13 +23,22 @@ async function assertPhone({ db, storeId }: CustomerTx, phone: string, memberId:
   const { rows: [duplicate] } = await db.query<Member>(`SELECT ${fields} FROM customer.member
     WHERE store_id=$1 AND phone=$2 AND archived_at IS NULL AND member_id IS DISTINCT FROM $3`, [storeId, phone, memberId]);
   if (duplicate) throw new MemberError(409, 'DUPLICATE_MEMBER_PHONE',
-    { memberId: duplicate.memberId, name: Array.from(duplicate.name)[0] + '**', phone: masked(duplicate.phone) }, 'phone');
+    { memberId: duplicate.memberId, memberCode: duplicate.memberCode, name: Array.from(duplicate.name)[0] + '**', phone: masked(duplicate.phone) }, 'phone');
 }
 export async function getMember({ db, storeId }: CustomerTx, memberId: string, archived = false) {
   const { rows: [row] } = await db.query<Member>(`SELECT ${fields} FROM customer.member
     WHERE store_id=$1 AND member_id=$2 AND ($3 OR archived_at IS NULL)`, [storeId, memberId, archived]);
   if (!row) throw new MemberError(404, 'MEMBER_NOT_FOUND');
   return row;
+}
+
+export async function memberCodes({ db, storeId }: CustomerTx, input: unknown) {
+  if (!Array.isArray(input) || input.length > 200) throw new MemberError(400, 'INVALID_REQUEST');
+  const ids = input.map(id);
+  const { rows } = await db.query<{ memberId: string; memberCode: string }>(`
+    SELECT member_id AS "memberId", member_code AS "memberCode"
+    FROM customer.member WHERE store_id=$1 AND member_id=ANY($2::uuid[])`, [storeId, ids]);
+  return { items: rows };
 }
 
 export async function members(tx: CustomerTx, query: unknown, memberId?: string) {
@@ -57,7 +66,8 @@ export async function members(tx: CustomerTx, query: unknown, memberId?: string)
       ) v
       WHERE store_id=$1 AND archived_at IS NULL AND ($2::uuid IS NULL OR member_id=$2)
         AND ($3::uuid IS NULL OR member_id>$3)
-        AND ($4='' OR strpos(lower(name),lower($4))>0 OR ($4 ~ '^[0-9]{1,4}$' AND right(phone,length($4))=$4))
+        AND ($4='' OR member_code=upper($4) OR strpos(lower(name),lower($4))>0
+          OR ($4 ~ '^[0-9]{1,4}$' AND right(phone,length($4))=$4))
         AND (NOT $5::boolean OR (contact_allowed AND marketing_allowed))
     )
     SELECT s.*, COALESCE((

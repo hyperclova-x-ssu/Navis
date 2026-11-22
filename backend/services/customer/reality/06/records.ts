@@ -48,36 +48,43 @@ export async function clearVisitUndoPhones({ db, storeId }: Scope, reservationId
       AND inverse #>> '{before,guestPhone}' IS NOT NULL`, [storeId, reservationId]);
 }
 
-export function publicVisit({ guestPhone, firstOrderId: _firstOrder, preferredTableId: _preferred, ...visit }: LocalVisit, memberName?: string | null) {
+type VisitMember = { memberName: string | null; memberCode: string | null };
+const visitMemberJoin = 'LEFT JOIN customer.member m ON (m.store_id, m.member_id) = (r.store_id, r.member_id)';
+const visitMemberFields = 'CASE WHEN m.archived_at IS NULL THEN m.name END AS "memberName", m.member_code AS "memberCode"';
+
+export function publicVisit({ guestPhone, firstOrderId: _firstOrder, preferredTableId: _preferred, ...visit }: LocalVisit,
+  { memberName, memberCode }: VisitMember) {
   return {
     ...visit, kind: 'visit' as const, guestName: memberName ?? visit.guestName, phone: guestPhone && retainsVisitPhone(visit.status) ? maskPhone(guestPhone) : null,
+    ...(memberCode && { memberCode }),
     nameKey: visit.source === 'phone_ai' ? 'data.management.phoneBooking' : 'data.management.guest',
     requestKey: null, callId: visit.source === 'phone_ai' ? visit.reservationId : null, variant: null,
   };
 }
 
 export async function readLocalVisit({ db, storeId }: Scope, id: string, lock = false) {
-  const { rows: [row] } = await db.query<LocalVisit & { memberName: string | null }>(`
-    SELECT ${reservationFields}, m.name AS "memberName" FROM customer.reservation r
-    LEFT JOIN customer.member m ON (m.store_id, m.member_id) = (r.store_id, r.member_id) AND m.archived_at IS NULL
+  const { rows: [row] } = await db.query<LocalVisit & VisitMember>(`
+    SELECT ${reservationFields}, ${visitMemberFields} FROM customer.reservation r
+    ${visitMemberJoin}
     WHERE r.store_id = $1 AND r.reservation_id = $2 AND starts_at IS NOT NULL ${lock ? 'FOR UPDATE OF r' : ''}`, [storeId, id]);
   return row ?? null;
 }
 
 export async function readLocalVisits({ db, storeId }: Scope, { limit, cursor, start, end, status, memberId, q }: ReturnType<typeof visitList>) {
   if (cursor?.startsWith(naverPrefix)) return [];
-  const { rows } = await db.query<LocalVisit & { memberName: string | null }>(`
-    SELECT ${reservationFields}, m.name AS "memberName" FROM customer.reservation r
-    LEFT JOIN customer.member m ON (m.store_id, m.member_id) = (r.store_id, r.member_id) AND m.archived_at IS NULL
+  const { rows } = await db.query<LocalVisit & VisitMember>(`
+    SELECT ${reservationFields}, ${visitMemberFields} FROM customer.reservation r
+    ${visitMemberJoin}
     WHERE r.store_id = $1 AND starts_at IS NOT NULL AND ($2::uuid IS NULL OR r.reservation_id > $2)
       AND ${dateBounds('starts_at', 3, 4)}
       AND ($5::text IS NULL OR (${currentStatus}) = $5)
       AND ($6::uuid IS NULL OR r.member_id = $6)
-      AND ($7::text IS NULL OR strpos(lower(COALESCE(r.guest_name, m.name, '')), lower($7)) > 0
+      AND ($7::text IS NULL OR m.member_code = upper($7)
+        OR strpos(lower(COALESCE(r.guest_name, CASE WHEN m.archived_at IS NULL THEN m.name END, '')), lower($7)) > 0
         OR ((${currentStatus}) IN ('confirmed', 'needs-check', 'proposed')
-          AND $7 ~ '^[0-9]{1,4}$' AND right(COALESCE(r.guest_phone, m.phone), length($7)) = $7))
+          AND $7 ~ '^[0-9]{1,4}$' AND right(COALESCE(r.guest_phone, CASE WHEN m.archived_at IS NULL THEN m.phone END), length($7)) = $7))
     ORDER BY r.reservation_id LIMIT $8`, [storeId, cursor, start, end, status, memberId, q, limit + 1]);
-  return rows.map(({ memberName, ...row }) => publicVisit(row, memberName));
+  return rows.map(({ memberName, memberCode, ...row }) => publicVisit(row, { memberName, memberCode }));
 }
 
 export async function assertMember({ db, storeId }: Scope, memberId: string) {

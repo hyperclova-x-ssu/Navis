@@ -74,7 +74,8 @@ export function createCustomerApp(pool: Pool, {
   if (!gatewayToken) return app;
   if (!pos) throw new Error('Customer claim routes require a POS client');
   if (briefingToken) allowWorkloadReads(app, gatewayToken, briefingToken, root, briefingReadPaths.customer, [privateToken, aicall?.token, closureToken]);
-  if (closureToken) allowWorkloadReads(app, gatewayToken, closureToken, root, ['/calendar/events/:id'], [privateToken, aicall?.token]);
+  if (closureToken) allowWorkloadReads(app, gatewayToken, closureToken, root,
+    ['/calendar/events/:id', '/calendar/events', '/booking-products'], [privateToken, aicall?.token]);
   if (couponToken) allowWorkloadReads(app, gatewayToken, couponToken, root, couponReadPaths.customer,
     [privateToken, aicall?.token, closureToken, briefingToken]);
   if (smsRecipientToken) registerSmsRecipientRoute(app, pool, {

@@ -66,6 +66,24 @@ const request = (store: string, method: 'GET' | 'POST' | 'PATCH', tail: string, 
 });
 const visit = (name: string, time = '15:00') => ({ guest: { name }, date: day, time, partySize: 4, tableChoice: 'auto' });
 
+it('includes the member code in booking reads and omits it from guest visits', async () => {
+  const store = randomUUID(), memberId = randomUUID();
+  await withCustomerStore(pool, store, db => db.query(
+    'INSERT INTO customer.member (store_id, member_id, name, phone, created_at) VALUES ($1,$2,$3,$4,$5)',
+    [store, memberId, '가상 회원', '01000000001', now()],
+  ));
+  const { guest: _guest, ...booking } = visit('가상 회원');
+  const member = await request(store, 'POST', '/reservations', { ...booking, memberId });
+  const guest = await request(store, 'POST', '/reservations', visit('가상 손님', '18:00'));
+  expect(member.statusCode, member.body).toBe(201);
+  expect(guest.statusCode, guest.body).toBe(201);
+  const list = (await request(store, 'GET', '/reservations?source=local')).json().items;
+  expect(list.find((item: { memberId: string }) => item.memberId === memberId)).toMatchObject({ memberCode: 'M-0001' });
+  expect(list.find((item: { memberId: string | null }) => item.memberId === null)).not.toHaveProperty('memberCode');
+  expect((await request(store, 'GET', '/reservations/' + member.json().reservationId)).json())
+    .toMatchObject({ memberId, memberCode: 'M-0001' });
+});
+
 it('returns only reservation facts to the authenticated briefing workload', async () => {
   const store = randomUUID();
   const payload = { ...visit('Fixture Guest'), guest: { name: 'Fixture Guest', phone: '01012345678' } };

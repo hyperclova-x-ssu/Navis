@@ -29,8 +29,8 @@ export async function seed(pool: Pool, context = createSeedContext()) {
   });
   await withCustomerStore(pool, storeId, async db => {
     await db.query(`
-      INSERT INTO customer.member (store_id, member_id, name, phone, marketing_allowed, created_at)
-      SELECT $1, member_id, '손님 ' || member_code, phone, consent_sms,
+      INSERT INTO customer.member (store_id, member_id, member_code, name, phone, marketing_allowed, created_at)
+      SELECT $1, member_id, member_code, '손님 ' || member_code, phone, consent_sms,
         joined_on::timestamp AT TIME ZONE 'Asia/Seoul'
       FROM jsonb_to_recordset($2) AS input(member_id uuid, member_code text, phone text,
         consent_sms boolean, joined_on date)

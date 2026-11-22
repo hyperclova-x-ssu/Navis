@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { ClaimError, reserveClaim, withCustomerStore } from '../../claims.ts';
 import { isUuid, type PosClient, type PrivateMemberResponse } from '../../pos-client.ts';
-import { changeMember, changeNote, createMember, getMember, members, undoArchiveTarget, undoMember } from './members.ts';
+import { changeMember, changeNote, createMember, getMember, memberCodes, members, undoArchiveTarget, undoMember } from './members.ts';
 import { createProduct, memberships, passMember, passUseSource, products, readPass, readProduct, uses } from './passes.ts';
 import { confirm, id, integer, key, MemberError, object, type CustomerTx } from './wire.ts';
 
@@ -71,6 +71,15 @@ export function registerMemberRoutes(app: FastifyInstance, pool: Pool, { gateway
   };
   route('GET', '/customers', req => tx(req, actor(req), scope => members(scope, req.query)));
   route('GET', '/customers/:id', req => tx(req, actor(req), scope => members(scope, {}, id(req.params.id))));
+  route('GET', '/member-codes', req => {
+    const { memberIds } = object(req.query, ['memberIds']);
+    if (typeof memberIds !== 'string') throw new MemberError(400, 'INVALID_REQUEST');
+    return tx(req, actor(req), scope => memberCodes(scope, memberIds.split(',')));
+  });
+  route('POST', '/member-codes', req => {
+    const { memberIds } = object(req.body, ['memberIds']);
+    return tx(req, '', scope => memberCodes(scope, memberIds));
+  }, true);
   route('POST', '/customers', req => tx(req, actor(req), scope => createMember(scope, requestKey(req), req.body)));
   route('PATCH', '/customers/:id', req => tx(req, actor(req), scope => changeMember(scope, requestKey(req), id(req.params.id), req.body, 'profile')));
   route('PATCH', '/customers/:id/consents', req => tx(req, actor(req), scope =>
@@ -126,7 +135,7 @@ export function registerMemberRoutes(app: FastifyInstance, pool: Pool, { gateway
     const memberId = id(input.memberId);
     return tx(req, '', async scope => {
       const member = await getMember(scope, memberId);
-      return { memberId, active: true, product: input.productId ? await readProduct(scope, id(input.productId)) : null,
+      return { memberId, memberCode: member.memberCode, active: true, product: input.productId ? await readProduct(scope, id(input.productId)) : null,
         pass: input.membershipId ? await readPass(scope, id(input.membershipId), memberId,
           input.requestKey === undefined ? undefined : key(input.requestKey)) : null, revision: member.revision };
     }, privateDay(input.businessDate));

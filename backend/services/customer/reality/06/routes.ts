@@ -125,8 +125,8 @@ export function registerBookingRoutes(app: FastifyInstance, pool: Pool, { gatewa
     }
     const row = await transaction(scope, ctx => readLocalVisit(ctx, id));
     if (!row) throw missing('reservationId');
-    const { memberName, ...visit } = row;
-    return publicVisit(visit, memberName);
+    const { memberName, memberCode, ...visit } = row;
+    return publicVisit(visit, { memberName, memberCode });
   });
   route('GET', '/reservation-changes', (scope, req) => transaction(scope, async ctx => {
     const options = scopedPage(req.query, ['reservationId']);

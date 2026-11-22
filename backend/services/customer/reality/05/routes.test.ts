@@ -42,14 +42,34 @@ it('replays a member receipt and masks the list while allowing store-scoped deta
   expect((await request(store, 'POST', '/customers', { ...input, name: '다른 이름' }, key)).statusCode).toBe(409);
   expect((await request(store, 'POST', '/customers', input)).json()).toMatchObject({ reason: 'DUPLICATE_MEMBER_PHONE' });
   const list = await request(store, 'GET', '/customers?query=0123');
-  expect(list.json()).toMatchObject({ items: [{ memberId: receipt.resourceId, phoneMasked: '010-****-0123',
+  expect(list.json()).toMatchObject({ items: [{ memberId: receipt.resourceId, memberCode: 'M-0001', phoneMasked: '010-****-0123',
     consent: { contactAllowed: true, marketingAllowed: false } }], sourceRevision: 1, nextCursor: null });
   expect(list.body).not.toContain(input.phone);
   const path = `/customers/${receipt.resourceId}`;
-  expect((await request(store, 'GET', path)).json().phone).toBe(input.phone);
+  expect((await request(store, 'GET', path)).json()).toMatchObject({ phone: input.phone, memberCode: 'M-0001' });
+  expect((await request(store, 'GET', '/customers?query=m-0001')).json()).toMatchObject({
+    items: [{ memberId: receipt.resourceId, memberCode: 'M-0001' }],
+  });
   expect((await request(randomUUID(), 'GET', path)).statusCode).toBe(404);
   expect((await request(store, 'GET', path, undefined, key, 'staff')).statusCode).toBe(403);
   expect((await pool.query('SELECT member_id FROM customer.member')).rows).toEqual([]);
+});
+
+it('allocates codes once per member under concurrent creation, independently in each store', async () => {
+  const store = randomUUID(), otherStore = randomUUID();
+  const [first, second, other] = await Promise.all([
+    request(store, 'POST', '/customers', { name: '첫 회원', phone: '01000000201' }),
+    request(store, 'POST', '/customers', { name: '둘째 회원', phone: '01000000202' }),
+    request(otherStore, 'POST', '/customers', { name: '다른 매장', phone: '01000000201' }),
+  ]);
+  expect([first.statusCode, second.statusCode, other.statusCode]).toEqual([200, 200, 200]);
+  const ids = [first.json().resourceId, second.json().resourceId, other.json().resourceId];
+  const response = await app.inject({ method: 'POST', url: `/internal/v1/customer/stores/${store}/member-codes`,
+    headers: { authorization: `Bearer ${privateToken}`, 'x-navis-store-id': store }, payload: { memberIds: ids } });
+  expect(response.statusCode, response.body).toBe(200);
+  expect(response.json().items.map((item: { memberCode: string }) => item.memberCode).sort()).toEqual(['M-0001', 'M-0002']);
+  expect(response.json().items.map((item: { memberId: string }) => item.memberId).sort()).toEqual(ids.slice(0, 2).sort());
+  expect((await request(otherStore, 'GET', '/customers/' + ids[2])).json().memberCode).toBe('M-0001');
 });
 
 it('revokes live audience eligibility and restores an edited note once through its receipt', async () => {
