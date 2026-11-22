@@ -73,8 +73,16 @@ test('menu edits stay out of the POS board', () => {
 test('recipe preflight needs the scoped existing recipe and archive needs extra confirmation', () => {
   const recipe = editAdapter('menu.setRecipe');
   const args = { menuId: target, lines: { slot: 'recipeLines' } };
-  const input = draft('menu.setRecipe', args, ['target', 'recipeLines']);
+  const scopedMenu = { ...lookup().args, matches: [liveMatch] };
+  const input = { ...draft('menu.setRecipe', args, ['target', 'recipeLines']), searches: [scopedMenu] };
   assert.deepEqual(recipe.lookups(input), [lookup(), { name: 'get_recipe', args: { menuId: target } }]);
+  for (const searches of [
+    [],
+    [{ ...scopedMenu, querySlot: 'other' }],
+    [{ ...scopedMenu, matches: [{ ...liveMatch, handle: 'menu-2' }] }],
+    [{ ...scopedMenu, nextCursor: 'more' }],
+    [{ ...scopedMenu, matches: [{ ...liveMatch, fields: { ...liveMatch.fields, kind: 'retail' } }] }],
+  ]) assert.deepEqual(recipe.lookups({ ...input, searches }), [lookup()]);
   assert.deepEqual(recipe.prepare({ input, reads: [result(liveMatch), { status: 'unavailable', facts: [] }] }),
     { outcome: 'refused', reason: 'unavailable' });
   assert.deepEqual(recipe.prepare({ input, reads: [result(liveMatch), { status: 'missing', facts: [] }] }),

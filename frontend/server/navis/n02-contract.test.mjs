@@ -174,7 +174,7 @@ group('S3-198 S4-150 S7-171 S7-172 S7-173 S7-174 S7-175 S7-176 S8-057 S8-058 S8-
   if (id === 'S7-172') {
     fake.tick(10_000);
     const expired = await fake.decision('undo', { ...unavailable(n02.resolution), featureId });
-    assert.ok(expired.text.includes('위젯'));
+    assert.match(expired.text, /되돌리기 시간이 지났어요/u);
   } else if (id === 'S7-175') {
     await fake.decision('undo', { type: 'choose', choices: [
       { type: 'undo', receiptId: 'data-receipt', target: 'data' },

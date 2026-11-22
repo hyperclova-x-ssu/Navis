@@ -24,6 +24,8 @@ test('the default registry allows a scoped local schedule and excludes supplier 
   const ctx = { input: input(command, orderArgs), reads: [ready(item)] };
   assert.deepEqual(existing.lookups(ctx.input), [lookup('purchaseItem')]);
   assert.deepEqual(existing.prepare(ctx), { outcome: 'ready', args: orderArgs });
+  const zeroPrice = record('purchase', { ...item.fields, unitPrice: 0 });
+  assert.deepEqual(existing.prepare({ ...ctx, reads: [ready(zeroPrice)] }), { outcome: 'refused', reason: 'unavailable' });
   const disabled = createSupplierAdapters({ allowLocalScheduling: false }).find(adapter => adapter.command === command);
   assert.deepEqual(disabled.prepare(ctx), { outcome: 'refused', reason: 'widget_only' });
   assert.equal(validateAgentRequest({ ...ctx.input, allowLocalScheduling: true }), false);
@@ -41,6 +43,8 @@ test('purchase line projections carry only operational fields and require an ope
   assert.deepEqual(adapter.lookups(request), [lookup('purchaseOrderLine')]);
   assert.deepEqual(adapter.prepare({ input: request, reads: [ready(line)] }), { outcome: 'ready', args });
   assert.deepEqual(adapter.prepare({ input: request, reads: [ready(record('line', { ...line.fields, remaining: 0 }))] }), { outcome: 'refused', reason: 'invalid_target' });
+  const belowReceiptMinimum = record('line', { ...line.fields, status: 'partial', remaining: 0.5 });
+  assert.deepEqual(adapter.prepare({ input: request, reads: [ready(belowReceiptMinimum)] }), { outcome: 'refused', reason: 'invalid_target' });
   assert.deepEqual(adapter.prepare({ input: request, reads: [ready(record('wrong', line.fields))] }), { outcome: 'refused', reason: 'invalid_target' });
   assert.deepEqual(adapter.prepare({ input: request, reads: [ready(line, record('other', line.fields))] }), { outcome: 'ambiguous', lookupIndex: 0, field: 'polId' });
 });
@@ -53,7 +57,8 @@ test('supplier dates can change on open orders while a cancellation remains extr
   assert.deepEqual(cancel.prepare({ input: input(cancel.command, args), reads: [ready(order)] }), { outcome: 'ready', args });
   const change = registry.get('suppliers.changeDueDate');
   const draft = { ...args, date: slot('date') };
-  assert.deepEqual(change.prepare({ input: input(change.command, draft), reads: [ready(record('order', { date: '2026-11-18', status: 'complete', open: false }))] }),
+  const request = { ...input(change.command, draft), slots: [...base.slots, 'date'] };
+  assert.deepEqual(change.prepare({ input: request, reads: [ready(record('order', { date: '2026-11-18', status: 'complete', open: false }))] }),
     { outcome: 'refused', reason: 'invalid_target' });
   assert.equal(validateAgentToolArgs('propose_action', { command: change.command, args: { ...draft, time: slot('time') } }), false);
 });
@@ -72,6 +77,37 @@ test('purchase registration reuses stock lookup and checks the purchase-item and
   assert.deepEqual(adapter.prepare({ input: request, reads: [ready(stock), ready(item), ready(supplier)] }), { outcome: 'refused', reason: 'duplicate' });
 });
 
+test('scheduling from a widget suggestion keeps both lookup proofs before a proposal', () => {
+  const command = 'suppliers.createOrder';
+  const args = { ...orderArgs, suggestionItemId: handle('stock') };
+  const request = input(command, args);
+  const adapter = createAgentDomainRegistry().get(command);
+  const widget = { name: 'get_widget', args: { featureId: 'suppliers', condition: { kind: 'default' } } };
+  assert.deepEqual(adapter.lookups(request), [widget, lookup('purchaseItem'), lookup('stock')]);
+  const candidate = record('purchase', { ...item.fields, suggested: true });
+  const widgetRead = { status: 'ready', facts: [] };
+  const stock = record('stock', { kind: 'ingredient', unit: 'L' });
+  assert.deepEqual(adapter.prepare({ input: request, reads: [widgetRead, ready(candidate), ready(stock)] }), { outcome: 'ready', args });
+  assert.deepEqual(adapter.prepare({ input: request, reads: [widgetRead, ready(item), ready(stock)] }), { outcome: 'refused', reason: 'invalid_target' });
+  assert.deepEqual(adapter.prepare({ input: request, reads: [widgetRead, ready(candidate, record('other', item.fields)), ready(stock)] }),
+    { outcome: 'ambiguous', lookupIndex: 1, field: 'purchaseItemId' });
+  assert.deepEqual(adapter.prepare({ input: request, reads: [widgetRead, ready(candidate), ready(record('other', stock.fields))] }),
+    { outcome: 'refused', reason: 'invalid_target' });
+});
+
+test('a supplier rename requires a complete lookup for the replacement name', () => {
+  const command = 'suppliers.updateSupplier';
+  const args = { supplierId: handle('supplier'), patch: { name: slot('name') } };
+  const request = { ...input(command, args), slots: [...base.slots, 'target'], intent: { kind: 'command', command, querySlot: 'target', args } };
+  const adapter = createAgentDomainRegistry().get(command);
+  const target = ready(record('supplier', { referenced: false }));
+  assert.deepEqual(adapter.lookups(request), [lookup('supplier', 'target'), lookup('supplier', 'name')]);
+  assert.deepEqual(adapter.prepare({ input: request, reads: [target] }), { outcome: 'refused', reason: 'unavailable' });
+  assert.deepEqual(adapter.prepare({ input: request, reads: [target, { ...ready(), nextCursor: 'more' }] }), { outcome: 'refused', reason: 'unavailable' });
+  assert.deepEqual(adapter.prepare({ input: request, reads: [target, ready(record('other', {}))] }), { outcome: 'refused', reason: 'duplicate' });
+  assert.deepEqual(adapter.prepare({ input: request, reads: [target, ready()] }), { outcome: 'ready', args });
+});
+
 test('an estimate converts units, honors minimum and step and exposes an existing delivery', async () => {
   const { prepareSupplierEstimate } = await import('./suppliers.mjs');
   const args = { item: item.fields, qty: 10_000, sourceUnit: 'mL', businessDate: base.businessDate, hasOpenOrder: true };
@@ -80,6 +116,7 @@ test('an estimate converts units, honors minimum and step and exposes an existin
   });
   assert.deepEqual(prepareSupplierEstimate({ ...args, qty: 500 }), { outcome: 'clarify', field: 'minimumQty' });
   assert.deepEqual(prepareSupplierEstimate({ ...args, qty: 4500 }), { outcome: 'clarify', field: 'orderStep' });
+  assert.deepEqual(prepareSupplierEstimate({ ...args, item: { ...args.item, unitPrice: 0 } }), { outcome: 'refused', reason: 'unavailable' });
   assert.deepEqual(prepareSupplierEstimate({ ...args, sourceUnit: 'kg' }), { outcome: 'clarify', field: 'unit' });
   assert.deepEqual(prepareSupplierEstimate({ ...args, dueDate: '2026-11-16' }), { outcome: 'refused', reason: 'invalid_target' });
 });

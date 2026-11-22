@@ -1,4 +1,5 @@
 import { loadEnv } from 'vite';
+import { bridgeOptionsFromEnv } from './bridge-env.mjs';
 import { createBridge } from './bridge.mjs';
 import { createMediaService } from './media/middleware.mjs';
 import { parseAllowedOrigins } from './private-origin.mjs';
@@ -9,25 +10,7 @@ export function readBridgeEnv({ root, envDir, mode }, readEnv = loadEnv) {
   const clova = readEnv(mode, directory, 'CLOVASTUDIO_');
   const navis = readEnv(mode, directory, 'NAVIS_');
   const sens = readEnv(mode, directory, ['SENS_SMS_', 'NCP_APIGW_KEY']);
-  return {
-    apiKey: clova.CLOVASTUDIO_API_KEY,
-    baseUrl: clova.CLOVASTUDIO_BASE_URL,
-    model: clova.CLOVASTUDIO_MODEL,
-    agentMode: navis.NAVIS_AGENT_MODE,
-    agentModel: navis.NAVIS_AGENT_MODEL,
-    allowedOrigins: navis.NAVIS_ALLOWED_ORIGINS,
-    widgets: {
-      mode: navis.NAVIS_WIDGET_MODE,
-      sendEnabled: navis.NAVIS_REPLY_SEND_ENABLED,
-      testTargets: navis.NAVIS_REPLY_TEST_TARGETS,
-      sens: {
-        serviceId: sens.SENS_SMS_SERVICE_ID,
-        accessKey: sens.NCP_APIGW_KEY_ID,
-        secretKey: sens.NCP_APIGW_KEY,
-        senderNumber: sens.SENS_SMS_SENDER_NUMBER,
-      },
-    },
-  };
+  return bridgeOptionsFromEnv({ ...clova, ...navis, ...sens });
 }
 
 export function navisPlugin(options = {}) {

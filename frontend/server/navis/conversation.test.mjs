@@ -23,6 +23,26 @@ test('typed agreement and a read preserve the card for a single card confirmatio
   assert.deepEqual(conversation.resolve(scope, click), { type: 'unavailable', reason: 'pending_missing' });
 });
 
+test('a period follow-up retains ordered compiled reads and the unrelated pending card', () => {
+  const conversation = createAgentConversation();
+  const input = { ...scope, businessDate: '2026-10-26' };
+  const compiled = { kind: 'read', reads: [
+    { name: 'get_widget', args: { featureId: 'ledger' } },
+    { name: 'get_source', args: { sourceId: 'pos' } },
+  ] };
+  conversation.remember(input, { proposal });
+  conversation.remember(input, { read: compiled });
+  const expected = { kind: 'dateRange', start: '2026-10-25', end: '2026-10-25' };
+  assert.deepEqual(conversation.resolve(input, control('repeat_read', { period: 'yesterday' })), {
+    type: 'read', intent: { kind: 'read', reads: [
+      { name: 'get_widget', args: { featureId: 'ledger', condition: expected } },
+      { name: 'get_source', args: { sourceId: 'pos', condition: expected } },
+    ] },
+  });
+  assert.deepEqual(conversation.resolve(input, control('confirm', { pendingId: proposal.proposalId })),
+    { type: 'confirm', pendingId: proposal.proposalId });
+});
+
 test('stale confirmation requires a new proposal and discards the old authorization', () => {
   const conversation = createAgentConversation();
   conversation.remember(scope, { proposal });

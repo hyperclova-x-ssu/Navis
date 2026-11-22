@@ -42,7 +42,8 @@ function prepare({ input: { intent: { command, args } }, reads }) {
   const fields = match.fields ?? {};
 
   if (command === 'manuals.setPublished') {
-    if (fields.published === undefined) return refused('unavailable');
+    if (fields.section === undefined || fields.published === undefined) return refused('unavailable');
+    if (fields.section !== 'handover') return refused('invalid_target');
     if (!fields.published) return refused('duplicate');
   }
   if (command === 'manuals.toggleStep') {

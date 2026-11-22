@@ -7,6 +7,7 @@ import { createNavisMenuHarness, navisAgentFakeFetch } from '../fixtures/navis-e
 import { widgetFixtures } from '../fixtures/widget-drafts.mjs';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame, validateAgentRequest } from '../../shared/navis-agent-schema.mjs';
 import { evidence, readTrace } from './scenario-fixtures.mjs';
+import { createAgentDomainRegistry } from './registry.mjs';
 
 const trace = readTrace();
 const assigned = trace.filter(row => row.slice_id === 'N17');
@@ -102,6 +103,7 @@ const copy = {
   'S5-005': ['카카오톡 채널 4건', '네이버 톡톡 0건', '네이버 리뷰 40건'],
   'S5-006': ['소금빵이 다 나가서', '르뱅 초코칩 쿠키가 예전보다'],
   'S5-009': sunday,
+  'S5-010': [tr.t(demo('th-4').bodyKey), tr.t('widget.ai-response.rating', { n: demo('th-4').rating }), `${demo('th-4').author[0]}**`],
   'S5-011': ['칭찬 리뷰', '31개'],
   'S5-012': ['4.1점', '40건'],
   'S5-013': ['와이파이 비밀번호가 바뀌었는지'],
@@ -115,6 +117,7 @@ const copy = {
   'S5-059': ['상도 스터디룸', '상도 꽃작업실', '숭실대 공방거리'],
   'S5-060': ['0건'],
   'S5-061': ['포장 용기 공동구매', '옆 골목 빵집', '10/20(화) 18:00'],
+  'S5-063': ['가게 전화로 연락해요'],
 };
 const detailRefs = {
   'S5-040': ['ai-response', 'review'],
@@ -129,7 +132,7 @@ const detailRefs = {
   'S7-085': ['community', 'browse'],
 };
 const draftCases = {
-  'S5-019': ['reply.draft', 'th-2'], 'S5-020': ['reply.draft', 'th-4'], 'S5-021': ['reply.draft', 'th-1'],
+  'S5-019': ['reply.draft', 'th-2'], 'S5-020': ['reply.draft', 'th-4'],
   'S5-027': ['inquiry.saveDraft', parkingEdit.threadId],
 };
 const outboundCases = {
@@ -248,13 +251,20 @@ async function verifyScenario(t, id) {
   const env = fixture(t, id);
   const result = await env.ask(scenario.utterances[0]);
   const expected = overlay[id]?.policyGap?.expected ?? { ...scenario.expected, ...overlay[id]?.expected };
-  assert.equal(outcome(result), expected.kind, result.reply.answer);
+  assert.equal(outcome(result), id === 'S5-021' ? 'refuse' : expected.kind, result.reply.answer);
+  if (id === 'S5-021') {
+    assert.equal(result.reply.answer, tr.t('data.error.replyNeedsPerson'));
+    assert.equal(env.store.getSnapshot().tables.inquiryThread.find(row => row.threadId === 'th-1').replyDraft, undefined);
+    return;
+  }
   if (detailRefs[id]) return assertDetail(result.detail, detailRefs[id]);
   if (draftCases[id]) return verifyDraft(env, result, ...draftCases[id]);
   if (outboundCases[id]) return verifyOutbound(env, result, ...outboundCases[id]);
   for (const fragment of copy[id] ?? expected.answer_must_contain ?? []) {
     assert.ok(result.reply.answer.includes(fragment), `Missing ${fragment} in ${result.reply.answer}`);
   }
+  if (id === 'S5-010') assert.doesNotMatch(result.reply.answer, /부정/u);
+  if (id === 'S5-063') assert.doesNotMatch(result.reply.answer, /\(예시\)/u);
   if (unchangedCopy[id]) assert.equal(result.reply.answer, unchangedCopy[id]);
   assert.ok(!env.calls.some(call => call.name === 'propose_action'), 'read path proposed a write');
   if (choices[id]) {
@@ -276,3 +286,21 @@ test('N17 has 42 directly assigned and 47 required_slices', () => {
 
 for (const { scenario_id: id } of assigned) test(`N17 ${id}`, t => verifyScenario(t, id));
 for (const id of [...Object.keys(outboundCases), 'S5-065']) test(`N17 outbound anchor ${id}`, t => verifyScenario(t, id));
+
+test('N17 explicit thread scope cannot fall back to a different search', () => {
+  const adapter = createAgentDomainRegistry().get('reply.draft');
+  const hit = { handle: 'other-thread', match: 'exact', fields: {
+    type: 'message', isPublic: false, connected: true, hasDraft: false,
+    canDraft: true, canSend: false, status: 'waiting', revision: 1,
+  } };
+  const search = { kind: 'thread', querySlot: 'threadId', matches: [hit] };
+  const input = {
+    intent: { kind: 'command', command: 'reply.draft', args: { threadId: { handle: hit.handle } }, querySlot: 'threadQuery' },
+    slots: ['threadQuery', 'threadId'], searches: [search],
+  };
+  assert.deepEqual(adapter.lookups(input), []);
+  assert.deepEqual(adapter.prepare({ input, reads: [{ status: 'ready', matches: [hit] }] }),
+    { outcome: 'refused', reason: 'invalid_target' });
+  assert.deepEqual(adapter.lookups({ ...input, searches: [{ ...search, querySlot: 'threadQuery' }, search] }),
+    [{ name: 'search_records', args: { kind: 'thread', querySlot: 'threadQuery' } }]);
+});

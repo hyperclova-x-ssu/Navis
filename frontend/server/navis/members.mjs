@@ -46,13 +46,13 @@ function prepare({ input: { intent: { command, args } }, reads }) {
     if (otherRead.nextCursor || otherRead.matches.some(match => match.handle !== member.match.handle)) return refused('duplicate');
   }
   if (args.noteId) {
+    if (otherRead?.matches?.some(match => match.fields?.ownerHandle !== member.match.handle)) return refused('invalid_target');
     const note = checkedTarget(otherRead, args.noteId, 'noteId', 1);
     if (!note.match) return note;
-    if (note.match.fields?.ownerHandle !== member.match.handle) return refused('invalid_target');
   }
   if (command === 'members.delete') {
     const blocked = member.match.fields?.deleteBlocked;
-    if (blocked === undefined) return refused('unavailable');
+    if (typeof blocked !== 'boolean') return refused('unavailable');
     if (blocked) return refused('invalid_target');
   }
   return ready;

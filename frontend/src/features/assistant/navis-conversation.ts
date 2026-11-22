@@ -1,9 +1,10 @@
 import type { FeatureId } from '../../contracts';
 import type { DataSnapshot } from '../../data/db/types';
 import type { AgentActionProposal, AgentActionReceipt, LocalAgentProposal, MenuDraft, MenuProposalEdit } from './agent-actions';
-import { isMenuPrice } from './agent-actions';
-import { navisMoneySpans, normalizeNavisInput, parseNavisMoney, parsePendingResponse } from './navis-input';
+import { isMenuPrice } from './domains/menu';
+import { navisDirective, navisMoneySpans, normalizeNavisInput, parseNavisMoney, parsePendingResponse } from './navis-input';
 import type { AgentSuggestion, AgentTurnInput, AssistantReply } from './types';
+import type { ChatReceiptIdentity } from '../../state';
 
 export const NAVIS_INPUT_LIMIT = 4000;
 
@@ -16,13 +17,13 @@ export function conversationPrice(text: string): number | undefined {
 }
 
 type Control =
-  | { kind: 'confirm' }
+  | { kind: 'confirm'; named?: true }
   | { kind: 'edit'; field?: 'price'; price?: number }
   | { kind: 'retarget'; query?: string }
-  | { kind: 'undo'; target?: string; command?: 'staff.saveSchedule' | 'localChanges.acknowledge' }
+  | { kind: 'undo'; target?: string; command?: 'menu.create' | 'staff.saveSchedule' | 'localChanges.acknowledge' }
   | { kind: 'cancel' | 'cancel-last' | 'hold' | 'repeat-answer' | 'repeat-command' };
 
-const affirm = /^(?:응+|ᄋ{2,}|ᄋᄏ|그래|좋아|해\s*줘|추가해(?:\s*줘)?|네|예|맞아|고고|확인(?:해\s*줘)?|yes|ok(?:ay)?|👍)$/iu;
+const affirm = /^(?:응+|ᄋ{2,}|ᄋᄏ|그래|좋아|해\s*줘|(?:추가|진행)해(?:\s*줘)?|네|예|맞아|고고|확인(?:해\s*줘)?|yes|ok(?:ay)?|👍)$/iu;
 const deny = /^(?:아니(?:요|야|다)?|아냐|ᄂ{2,}|싫어|안\s*할래|하지\s*마|no|취소(?:해\s*줘|할래)?|그만(?:둘래(?:\s*안\s*할래)?)?|됐어|없던\s*걸로|👎)$/iu;
 
 export function readConversationControl(text: string, hasPendingProposal = false): Control | undefined {
@@ -32,6 +33,9 @@ export function readConversationControl(text: string, hasPendingProposal = false
     return { kind: 'undo', command: 'localChanges.acknowledge' };
   }
   if (/^아까 넣은 근무 취소(?:해\s*줘)?$/u.test(value)) return { kind: 'undo', command: 'staff.saveSchedule' };
+  if (/^(?:(?:방금|아까)\s*)?(?:메뉴\s*(?:추가|넣|등록)(?:한|은)\s*(?:거|것)|만든\s*메뉴)\s*(?:취소(?:해\s*줘)?|되돌려(?:\s*줘)?|없던\s*걸로(?:\s*해\s*줘)?)$/u.test(value)) {
+    return { kind: 'undo', command: 'menu.create' };
+  }
   const words = value.split(/[\s,.!?。！？]+/u).filter(Boolean);
   const yes = words.some(word => word !== '해줘' && affirm.test(word));
   const no = words.some(word => deny.test(word));
@@ -65,7 +69,7 @@ export function readConversationControl(text: string, hasPendingProposal = false
   if (affirm.test(value) || parsed === 'yes' || words.length > 1 && words.every(word => affirm.test(word))) return { kind: 'confirm' };
   if (deny.test(value) || parsed === 'no' || parsed === 'cancel') return { kind: 'cancel' };
   if (parsed === 'edit' || /^(?:잠깐\s*)?(?:수정\s*좀\s*할게|바꿀게\s*잠깐|수정할래)$/u.test(value)) return { kind: 'edit' };
-  if (/^.+?\s*(?:(?:삭제|제거|변경)\s*확인(?:해\s*줘)?|확정(?:해\s*줘)?)$/u.test(value)) return { kind: 'confirm' };
+  if (/^.+?\s*(?:(?:삭제|제거|변경)\s*확인(?:해\s*줘)?|확정(?:해\s*줘)?)$/u.test(value)) return { kind: 'confirm', named: true };
 }
 
 export function prepareConversationText(text: string):
@@ -75,8 +79,11 @@ export function prepareConversationText(text: string):
   const value = normalizeNavisInput(text);
   if (!value) return { kind: 'empty' };
   if (/^(?:안녕(?:하세요)?|ᄒᄋ|고마워(?:요)?|수고했어|잘 자|😀|hi|hello|你好)[.!?。！？]*$/iu.test(value)) return { kind: 'greeting' };
-  if (/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(value) || /^(?:pouvez-vous|bonjour)\b/iu.test(value)) return { kind: 'unsupportedLanguage' };
-  if (/(?:자동으로|알아서|(?:떨어지|없으|모자라)면).*(?:품절|바꿔|발송)/u.test(value)) return { kind: 'automation' };
+  const directive = navisDirective(value);
+  if (/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(directive) || /^(?:pouvez-vous|bonjour)\b/iu.test(directive)) return { kind: 'unsupportedLanguage' };
+  const automaticTable = /(?:테이블|좌석)\s*(?:을|를)?\s*자동(?:으로\s*바꿔|\s*배정)/u.test(directive)
+    && !/(?:매일|항상|앞으로|마다|생기면|없으면)/u.test(directive);
+  if (!automaticTable && /(?:자동으로|알아서|(?:떨어지|없으|모자라)면).*(?:품절|바꿔|발송)/u.test(directive)) return { kind: 'automation' };
   if (/^(?:[\p{P}\p{N}\s]+|[ᄀ-ᇿ]{3,}|asdf(?:asdf)*|이 멍청한 봇아|야 쓸모없네|꺼져|너 진짜 바보냐)$/iu.test(value) ||
     /^(?:<[^>]+>|\{\{|['`];)/u.test(value)) return { kind: 'unclear' };
   return { kind: 'text', text: value };
@@ -100,11 +107,14 @@ export interface AgentProposalPreview {
   readonly fields: readonly { readonly label: string; readonly before: string; readonly after: string }[];
 }
 
-export function proposalPreview(preview: unknown): AgentProposalPreview | undefined {
-  const text = (value: unknown) => typeof value === 'string' && value.trim().length > 0 && value.length <= 1000;
+const noticeBodyRows = new Set(['공지 내용', 'Notice text', '通知内容', '通知內容']);
+
+export function proposalPreview(preview: unknown, command?: LocalAgentProposal['command']): AgentProposalPreview | undefined {
+  const text = (value: unknown, fullNoticeBody = false) => typeof value === 'string' && value.trim().length > 0 && (fullNoticeBody || value.length <= 1000);
   if (!preview || typeof preview !== 'object' || !('title' in preview) || !text(preview.title) || !('target' in preview) || !text(preview.target)
     || !('fields' in preview) || !Array.isArray(preview.fields) || preview.fields.length < 1 || preview.fields.length > 30) return undefined;
-  if (!preview.fields.every(field => field && text(field.label) && text(field.before) && text(field.after))) return undefined;
+  if (!preview.fields.every(field => field && text(field.label) && text(field.before)
+    && text(field.after, command === 'notice.send' && noticeBodyRows.has(field.label)))) return undefined;
   return preview as AgentProposalPreview;
 }
 
@@ -117,46 +127,83 @@ export type ProposalState = Readonly<{
   feedback?: AgentActionReceipt;
   reproposed?: boolean;
   refreshFailed?: boolean;
+  closed?: boolean;
+  receiptIdentity?: ChatReceiptIdentity;
 }>;
 
 export function createProposalSession(initial: LocalAgentProposal, menu: AgentActionProposal | undefined,
   canCommit: () => boolean, onApplied: (receipt: AgentActionReceipt, label: string) => void, fallbackLabel: string) {
-  let state: ProposalState = { proposal: initial, menu, preview: proposalPreview(initial.preview) };
+  let state: ProposalState = { proposal: initial, menu, preview: proposalPreview(initial.preview, initial.command) };
   const listeners = new Set<() => void>();
   const update = (next: ProposalState) => {
     state = next;
     listeners.forEach(listener => listener());
   };
   const replace = (proposal: LocalAgentProposal, menu: AgentActionProposal | undefined, reproposed = false) => {
-    update({ proposal, menu, preview: proposalPreview(proposal.preview), reproposed });
+    update({ proposal, menu, preview: proposalPreview(proposal.preview, proposal.command), reproposed });
   };
   const label = () => state.menu?.preview.after.name ?? state.preview?.target;
-  const isPending = () => !!(state.menu || state.preview) && state.proposal.isCurrent() && (!state.proposal.getReceipt() || !!state.edit);
+  const isPending = () => !state.closed && !!(state.menu || state.preview) && state.proposal.isCurrent() && (!state.proposal.getReceipt() || !!state.edit);
   const refresh = () => {
     const menu = state.menu?.refresh() ?? undefined;
     const candidate = state.menu ? menu : state.proposal.refresh();
-    const proposal = candidate && (menu || proposalPreview(candidate.preview)) ? candidate : undefined;
+    const proposal = candidate && (menu || proposalPreview(candidate.preview, candidate.command)) ? candidate : undefined;
     if (proposal) replace(proposal, menu, true);
     else update({ ...state, refreshFailed: true });
     return !!proposal;
+  };
+  const previewEdit = (draft: MenuDraft) => {
+    const menu = state.edit?.preview(draft);
+    if (!menu) return false;
+    replace(menu, menu);
+    return true;
+  };
+
+  /** F17: the authoritative receipt of a real press arrives here, whether or not the card is still on screen. */
+  const settleReal = (proposal: LocalAgentProposal, final: AgentActionReceipt, onSettled?: (receipt: AgentActionReceipt) => void) => {
+    if (state.proposal === proposal) {
+      if (final.frame.outcome === 'conflict' && refresh()) { onSettled?.(final); return; }
+      update({ ...state, feedback: final, reproposed: false,
+        ...(final.frame.outcome === 'applied' && { receiptIdentity: { proposalId: proposal.id } }) });
+      if (final.frame.outcome === 'applied') onApplied(final, label() ?? fallbackLabel);
+    }
+    onSettled?.(final);
   };
 
   return {
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     getSnapshot: () => state,
     isPending,
-    confirm(currentStore: Parameters<LocalAgentProposal['confirm']>[0], proposalId: string, acknowledgeExtra = false) {
+    /**
+     * A fixture command answers with its receipt. A real command answers with a `pending` receipt (shown on the card) and `onSettled`
+     * later gets the authoritative one. The session is the owner of that result, so a closed chat still ends with the right receipt.
+     */
+    confirm(currentStore: Parameters<LocalAgentProposal['confirm']>[0], proposalId: string, acknowledgeExtra = false, onSettled?: (receipt: AgentActionReceipt) => void) {
       const proposal = state.proposal;
       if (proposal.id !== proposalId || !isPending() || state.edit) return undefined;
       if (!canCommit()) return 'finishEditing' as const;
-      const receipt = proposal.confirm(currentStore, acknowledgeExtra ? proposalId : undefined);
+      const receipt = proposal.confirm(currentStore, acknowledgeExtra && state.feedback?.requiresExtraConfirmation ? proposalId : undefined,
+        final => settleReal(proposal, final, onSettled));
+      if (receipt.pending) {
+        update({ ...state, feedback: receipt, reproposed: false });
+        return receipt;
+      }
       if (receipt.requiresExtraConfirmation) {
         update({ ...state, feedback: receipt, reproposed: false });
         return receipt;
       }
       if (receipt.frame.outcome === 'conflict' && refresh()) return receipt;
-      update({ ...state, feedback: receipt, reproposed: false });
+      update({ ...state, feedback: receipt, reproposed: false,
+        ...(receipt.frame.outcome === 'applied' && { receiptIdentity: { proposalId } }) });
       if (receipt.frame.outcome === 'applied') onApplied(receipt, label() ?? fallbackLabel);
+      return receipt;
+    },
+    /** After an unknown outcome of a real command: ask the server again with the same key. */
+    recheck(currentStore: Parameters<LocalAgentProposal['confirm']>[0], proposalId: string, onSettled?: (receipt: AgentActionReceipt) => void) {
+      const proposal = state.proposal;
+      if (proposal.id !== proposalId || state.closed || state.edit || !state.feedback?.recheckable) return undefined;
+      const receipt = proposal.recheck(currentStore, final => settleReal(proposal, final, onSettled));
+      if (receipt.pending) update({ ...state, feedback: receipt, reproposed: false });
       return receipt;
     },
     cancel() {
@@ -166,8 +213,21 @@ export function createProposalSession(initial: LocalAgentProposal, menu: AgentAc
       update({ ...state, edit: undefined, feedback, reproposed: false });
       return feedback;
     },
+    back() {
+      if (state.edit) return previewEdit(state.edit.draft);
+      if (!state.feedback?.requiresExtraConfirmation) return false;
+      update({ ...state, feedback: undefined });
+      return true;
+    },
+    retireForClose() {
+      if (state.closed || state.proposal.getReceipt() && !state.edit) return false;
+      state.edit?.cancel();
+      const feedback = state.proposal.cancel();
+      update({ ...state, edit: undefined, feedback, closed: true, reproposed: false });
+      return true;
+    },
     edit(field?: 'price', price?: number) {
-      if (!state.menu || !state.menu.isCurrent()) return false;
+      if (state.closed || !state.menu || !state.menu.isCurrent()) return false;
       const edit = state.edit ?? state.menu.edit();
       if (!edit) return false;
       const menu = price === undefined ? undefined : edit.preview({ ...edit.draft, price });
@@ -175,12 +235,7 @@ export function createProposalSession(initial: LocalAgentProposal, menu: AgentAc
       else update({ proposal: state.proposal, menu: state.menu, edit, editField: field });
       return true;
     },
-    preview(draft: MenuDraft) {
-      const menu = state.edit?.preview(draft);
-      if (!menu) return false;
-      replace(menu, menu);
-      return true;
-    },
+    preview: previewEdit,
   };
 }
 
@@ -189,26 +244,40 @@ export type ProposalSession = ReturnType<typeof createProposalSession>;
 export function conversationMemory() {
   let scope: string | undefined;
   let lastRead: { reply: AssistantReply; turn?: AgentTurnInput } | undefined;
+  let previousRead: typeof lastRead;
   let confirmed: { command: string; label: string; menu?: MenuDraft } | undefined;
   let records: { choices: readonly AgentSuggestion[]; revision: number } | undefined;
+  const recentMenus = new Map<string, string>();
 
   return {
     scope(runId: string | undefined) {
       if (scope === runId) return false;
       scope = runId;
       lastRead = undefined;
+      previousRead = undefined;
       confirmed = undefined;
       records = undefined;
+      recentMenus.clear();
       return true;
     },
     confirmed: () => confirmed,
     rememberCommand(command: string, label: string, menu?: MenuDraft) { confirmed = { command, label, menu }; },
     lastRead: () => lastRead,
+    previousRead: () => previousRead,
     rememberRead(reply: AssistantReply, turn?: AgentTurnInput) {
       if (reply.turn?.kind !== 'read' || !reply.answer) return;
+      previousRead = lastRead;
       lastRead = { reply, turn };
     },
     rememberRecords(choices: readonly AgentSuggestion[], revision: number) { records = { choices, revision }; },
+    rememberMenus(menus: readonly { id: string; name: string }[]) {
+      for (const { id, name } of menus) {
+        recentMenus.delete(id);
+        recentMenus.set(id, name);
+      }
+      for (const key of [...recentMenus.keys()].slice(0, Math.max(0, recentMenus.size - 5))) recentMenus.delete(key);
+    },
+    recentMenus: () => [...recentMenus],
     records(snapshot: DataSnapshot) {
       return records?.revision === snapshot.revision ? records.choices : [];
     },
@@ -217,6 +286,10 @@ export function conversationMemory() {
 
 export function followupBoardQuestion(text: string): boolean {
   return /(?:첫\s*번째|두\s*번째|세\s*번째|맨\s*위|그\s*(?:위젯|패널)).*(?:추가|올려|놔|넣어)/u.test(text);
+}
+
+export function referencesMenuPrice(text: string): boolean {
+  return /^(?:아까\s*)?(?:그\s*(?:거|메뉴)|말한\s*메뉴)\s*(?:가격|판매가)(?:을|를)?\s*(?:좀\s*)?(?:올려|올리|내려|내리|바꿔|변경|고쳐|낮춰|높여)/u.test(text);
 }
 
 export function readOrdinal(text: string): number | undefined {

@@ -10,11 +10,19 @@ import { TOMORROW } from '../../data/widget-data';
 import { inventoryIngredientKey } from './inventory-ingredients';
 import { normalizeNavisName } from './navis-input';
 import { navisTranslator } from './messages';
+import { salesRead } from './navis-conversation';
 import { conditionsOf, localizeFact, type SnapshotFact, type WidgetFactSource } from './snapshot';
 import type { AssistantReply, Candidate } from './types';
 
 import { norm, has, matchWidget, isPosQuestion, CUSTOMERS, TOMORROW_WORDS, EVENT_WORDS, PAST_WORDS, WEEK_WORDS, STOCK_MERGED_WORDS, REMOVED_WORDS } from './question';
 export { norm, matchWidget, isPosQuestion } from './question';
+
+export function menuAddAnswer(text: string, locale: Locale): string | undefined {
+  if (!/메뉴/u.test(text) || !/추가|등록/u.test(text)) return;
+  const key = /어디|어떻게|방법|순서|단계/u.test(text) ? 'navis.simple.menuHelp'
+    : /(?:추가|등록)해\s*줄\s*수\s*있/u.test(text) && !/\d/u.test(text) ? 'navis.simple.menuAsk' : undefined;
+  if (key) return navisTranslator(locale).t(key);
+}
 
 const size = (width: number, height: number) => ({ width: width as CellSpan, height: height as CellSpan });
 
@@ -37,14 +45,21 @@ export function simpleReply(input: { readonly text: string; readonly locale: Loc
   const base = { mode: 'simple' as const, locale };
   const noData = (): AssistantReply => ({ ...base, answer: tr.t('common.navis.noData'), panels: [] });
   if (has(key, REMOVED_WORDS)) return { ...base, answer: tr.t('navis.simple.removed'), panels: [] };
+  const menuAnswer = menuAddAnswer(text, locale);
+  if (menuAnswer) return { ...base, answer: menuAnswer, panels: [] };
   if (has(key, CUSTOMERS) && has(key, TOMORROW_WORDS)) {
-    const facts = (source.readSource?.('demand') ?? []).filter((f) => f.date === TOMORROW && (f.key === 'demand.expected.total' || f.key === 'demand.expected.band'));
-    if (!facts.length) return noData();
-    return { ...base, answer: tr.t('navis.simple.demand', { facts: facts.map((f) => localizeFact(f, locale).display).join(', ') }), panels: [] };
+    const total = source.readSource?.('demand').find(f => f.date === TOMORROW && f.key === 'demand.expected.total');
+    if (!total) return noData();
+    return { ...base, answer: tr.t('navis.simple.demand', { total: localizeFact(total, locale).display }), panels: [] };
   }
   if (isPosQuestion(text)) {
     const facts = source.readSource?.('pos') ?? [];
     const value = (key: string) => facts.find(f => f.key === key)?.value;
+    const today = facts.find(fact => fact.key === 'orders.today.count');
+    if (today && /오늘.*주문.*(?:몇|건수)/u.test(text) && !/누락|진행/u.test(text)) {
+      const fact = localizeFact(today, locale);
+      return { ...base, answer: `${fact.label} ${fact.display}`, panels: [] };
+    }
     const count = value('orders.missing.count'), open = value('orders.open.count');
     if (typeof count !== 'number' || typeof open !== 'number') return noData();
     const missing = count > 0 ? tr.t('data.pos.navisMissing', { count, no: value('orders.missing.no') ?? '', time: value('orders.missing.orderedAt') ?? '', item: value('orders.missing.content') ?? '', n: value('orders.missing.elapsed.minutes') ?? '', open }) : tr.t('data.pos.navisNone', { open });
@@ -68,12 +83,21 @@ export function simpleReply(input: { readonly text: string; readonly locale: Loc
   const localized = selected.map((f) => localizeFact(f, locale));
   const specific = id === 'members' && has(key, ['단골']) ? localized.filter((f) => f.key === 'members.regular.count') : id === 'menu' ? selected.filter((f) => (f.key === 'menu.cost' || f.key === 'menu.marginRate') && normalizeNavisName(localizeFact(f, 'ko').label) === '카페라테').map((f) => localizeFact(f, locale)) : id === 'tax' ? localized.filter((f) => f.key === 'tax.payment') : [];
   if ((id === 'menu' || (id === 'members' && has(key, ['단골']))) && !specific.length) return noData();
-  const shown = milk ? localized : specific.length ? specific : pickFacts(id, localized);
-  const joined = shown.map((f) => f.key === 'tax.payment' && f.date ? tr.t('navis.simple.taxDue', { name: f.label, amount: f.display, date: tr.format.date(f.date, 'monthDay') }) : `${f.label} ${f.display}`).join(locale === 'ko' || locale === 'en' ? ', ' : '，');
+  const onlySales = id === 'ledger' && salesRead(text) && !/입금|deposit|到账|到帳/iu.test(text);
+  const shown = onlySales ? localized.filter(fact => fact.key === 'ledger.sales.net')
+    : milk ? localized : specific.length ? specific : pickFacts(id, localized);
+  if (!shown.length) return noData();
+  const displayFacts = shown.map(f => {
+    const metric = f.key === 'menu.cost' ? 'navis.fact.menuCost' : f.key === 'menu.marginRate' ? 'navis.fact.menuMargin' : undefined;
+    return metric ? { ...f, label: `${f.label} ${tr.t(metric)}` } : f;
+  });
+  const joined = displayFacts.map((f) => f.key === 'tax.payment' && f.date ? tr.t('navis.simple.taxDue', { name: f.label, amount: f.display, date: tr.format.date(f.date, 'monthDay') }) : `${f.label} ${f.display}`).join(locale === 'ko' || locale === 'en' ? ', ' : '，');
   const merged = id === 'inventory-booking' && has(key, STOCK_MERGED_WORDS) ? `${locale==='ko'?'. ':' '}${tr.t('navis.simple.stockMerged', { name })}` : '';
   const panel: Candidate = {
     featureId: id, condition, size: id === 'staff-schedule' || id === 'custom-order' ? size(3, 2) : id === 'store-environment' || id === 'notice-send' || id === 'credit-receivable' ? size(2, 2) : id === 'ledger' && condition.kind === 'dateRange' ? size(2, 1) : size(1, 1),
-    reason: tr.t('navis.simple.reason', { name }), preview: view, placement: registration.layer === layer ? 'current-layer' : 'other-layer',
+    reason: tr.t('navis.simple.reason', { name }), preview: view,
+    summary: id === 'voice-booking' && displayFacts[0]?.key.startsWith('pickup.') ? null : displayFacts[0],
+    placement: registration.layer === layer ? 'current-layer' : 'other-layer',
   };
   const location = id === 'voice-booking' && has(key, ['예약메뉴']) ? `${locale==='ko'?'. ':' '}${tr.t('navis.simple.bookingLocation')}` : '';
   return { ...base, answer: `${tr.t('navis.simple.answer', { name, facts: joined })}${merged}${location}`, panels: [panel] };

@@ -14,11 +14,13 @@ import { screenPresets } from '../../../layout';
 import { classifyNavigation, createNavisNavigation, prepareNavigationRequest } from '../../../screens/dashboard/navis-navigation';
 import { createRunStore } from '../../../state';
 import { timePolicy } from '../../../ui';
-import { createWidgetDataStore, deriveStock, readModel, selectMenus, TODAY } from '../../../data/widget-data';
+import { createWidgetDataStore, deriveStock, readModel, resolveDataText, selectMenus, TODAY } from '../../../data/widget-data';
+import { projectMenuTables } from '../../../data/reality/01/menu-dto';
 import { validateAgentDetailRef, validateAgentRequest, type AgentNavigationAction, type AgentRequest } from '../../../../shared/navis-agent-schema.mjs';
 import { createAssistantProvider } from '../provider';
 import type { AssistantReply } from '../types';
 import { createAgentActions } from '../agent-actions';
+import { navisTranslator } from "../messages";
 import { menuAgentDomain as menuDomain, projectMenuWidget } from './menu';
 
 it('resolves known menu aliases without putting local names on a write projection', () => {
@@ -27,8 +29,33 @@ it('resolves known menu aliases without putting local names on a write projectio
   const read = { snapshot, locale: 'ko' as const, query: '아메리까노', privateLookup: false };
   const [match] = reader.search(read);
   const americano = selectMenus(snapshot, {}).rows.find(row => row.menuId === 'm-americano')!;
-  expect(match).toMatchObject({ label: '아메리카노', price: americano.price, match: 'exact' });
+  expect(match).toMatchObject({ label: '아메리카노', price: americano.price, match: 'exact', category: 'coffee' });
   expect(reader.search({ ...read, privateLookup: true })[0]).toEqual({ handle: match.handle, match: 'exact' });
+});
+
+it('reads the seasonal marker separately from tea and keeps it out of private lookups', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  const reader = menuDomain.reads[0];
+  const query = { snapshot, locale: 'ko' as const, query: '고흥 유자 캐모마일 티', privateLookup: false };
+  expect(reader.search(query)[0]).toMatchObject({ category: 'tea', fields: { seasonal: true } });
+  expect(reader.search({ ...query, privateLookup: true })[0]).not.toHaveProperty('fields');
+  expect(projectMenuWidget(snapshot, 'menu', { kind: 'default' }, 'ko')).toMatchObject({ facts: expect.arrayContaining([
+    expect.objectContaining({ key: 'menu.row', label: query.query, display: expect.stringContaining('티 · 시즌') }),
+  ]) });
+});
+
+it('uses the HTTP menu price without attaching fixture sales to the read', () => {
+  const store = createWidgetDataStore();
+  store.hydrate(projectMenuTables([{
+    menuId: '11111111-1111-4111-8111-111111111111', name: '검증 라떼', category: 'drink', price: 4100,
+    memo: null, prepMin: 3, saleStatus: 'selling', photoKey: null, photoFileId: null, groups: [],
+    recipeLines: [], recipeVersion: null, unitCost: 1000, revision: 7,
+  }], '2026-11-21T09:00:00Z'));
+  const snapshot = store.getSnapshot();
+  const projection = projectMenuWidget(snapshot, 'menu', { kind: 'default' }, 'ko');
+  expect(projection).toMatchObject({ facts: expect.arrayContaining([
+    expect.objectContaining({ key: 'menu.row', label: '검증 라떼', value: 4100, display: '4,100원 · 음료 · 판매 중' }),
+  ]) });
 });
 
 it('projects the entire active recipe against its turn-scoped menu handle', () => {
@@ -199,6 +226,36 @@ function contractRig() {
   return { ...offline, store, provider, ask };
 }
 
+it.each([
+  ['메뉴 우리 뭐뭐 있지?', undefined],
+  ['우리 메뉴 뭐 뭐 있어?', undefined],
+  ['메뉴 다 알려줘', undefined],
+  ['메뉴판 보여줘', undefined],
+  ['메뉴 우리 뭐뭐 있지?', '카페라떼 마진 얼마야?'],
+])('lists all 24 names and prices for %s after %s', async (text, previous) => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    if (previous) expect((await rig.ask(previous, { locale: 'ko' })).turn?.kind).toBe('read');
+    const reply = await rig.ask(text, { locale: 'ko' });
+    expect(reply.turn?.kind).toBe('read');
+    expect(rig.tools.at(-1)).toMatchObject({ name: 'get_widget', arguments: { featureId: 'menu', condition: { kind: 'default' } } });
+    const rows = selectMenus(before, {}).rows;
+    expect(rows).toHaveLength(24);
+    expect(reply.answer).toContain('24개');
+    const tr = navisTranslator('ko');
+    for (const row of rows) {
+      const label = resolveDataText(tr.t, row.name ?? { key: row.nameKey });
+      expect(reply.answer).toContain(`${label} ${tr.format.money(row.price, 'full')}`);
+    }
+    expect(reply.answer).not.toMatch(/원가|마진|이익률|팔면 얼마/u);
+    expect(rig.proposalFrames).toEqual([]);
+    expect(rig.store.getSnapshot()).toBe(before);
+  } finally {
+    rig.close();
+  }
+});
+
 it.each(['카페라테 레시피에서 우유 250mL로 줄여줘', '카페라테 레시피에서 우유 250밀리로 바꿔줘'])('carries %s through the browser provider and native fake bridge', async text => {
   const rig = contractRig();
   try {
@@ -211,6 +268,7 @@ it.each(['카페라테 레시피에서 우유 250mL로 줄여줘', '카페라테
       title: '카페라떼', fields: [
         { label: '목장 1등급 우유', before: '260 mL', after: '250 mL' },
         { label: '원가', before: '1,278원', after: '1,249원' },
+        { label: '마진율', before: '66.4%', after: '67.1%' },
       ],
     });
     expect(JSON.stringify(rig.requests[0].intent)).not.toContain('i-milk');
@@ -421,12 +479,293 @@ it('applies a relative price increase with an intervening modifier to the curren
   } finally { rig.close(); }
 });
 
-it('routes a politely phrased sold-out request to a proposal before any store change', async () => {
+it.each(['아메리카노 품절로 바꿔줄 수 있어?', '아메리카노 품절로 해줄 수 있어요?'])(
+  'routes a politely phrased sold-out request to a proposal before any store change for %s', async text => {
+    const rig = contractRig();
+    try {
+      const original = rig.store.getSnapshot();
+      const reply = await rig.ask(text);
+      expect(reply.turn).toMatchObject({ kind: 'proposal', proposal: { command: 'menu.setSaleStatus' } });
+      expect(rig.store.getSnapshot()).toBe(original);
+    } finally { rig.close(); }
+  },
+);
+
+it.each(['라테 얼마야?', '라떼 가격 알려줘', 'ㄹㅌ 가격'])('offers scoped price choices for %s', async text => {
   const rig = contractRig();
   try {
-    const original = rig.store.getSnapshot();
-    const reply = await rig.ask('아메리카노 품절로 바꿔줄 수 있어?');
-    expect(reply.turn).toMatchObject({ kind: 'proposal', proposal: { command: 'menu.setSaleStatus' } });
-    expect(rig.store.getSnapshot()).toBe(original);
+    const before = rig.store.getSnapshot();
+    const reply = await rig.ask(text);
+    expect(reply.turn).toMatchObject({ kind: 'ambiguity', choices: expect.arrayContaining([
+      expect.objectContaining({ label: '카페라떼', detail: '3,800원' }),
+      expect.objectContaining({ label: '딥 초코 라떼', detail: '4,300원' }),
+    ]) });
+    expect(rig.store.getSnapshot()).toBe(before);
   } finally { rig.close(); }
+});
+
+it.each([
+  ['라테 가격 5,000원으로 바꿔줘', '5,000원'],
+  ['라떼 가격 올려줘 5천원', '8,800원'],
+  ['라테 4,800원으로 변경', '4,800원'],
+])('keeps the requested price change through menu selection for %s', async (text, price) => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    const reply = await rig.ask(text);
+    const turn = reply.turn;
+    expect(turn).toMatchObject({ kind: 'clarification', field: 'menuId' });
+    if (turn?.kind !== 'clarification') return;
+    const choice = turn.choices.find(item => item.label === '카페라떼');
+    expect(choice?.detail).toContain('커피 · 3,800원');
+    const next = await rig.ask('', { continuation: { clarificationId: turn.id, choiceId: choice!.id } });
+    expect(next.turn).toMatchObject({ kind: 'proposal', proposal: { command: 'menu.update', preview: {
+      title: '카페라떼', fields: [{ label: '판매가', before: '3,800원', after: price }],
+    } } });
+    expect(rig.store.getSnapshot()).toBe(before);
+  } finally { rig.close(); }
+});
+
+it('asks which latte before drafting the shorthand recipe change', async () => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    expect(menuDomain.route('라떼 우유 양 250으로', before, 'ko')).toMatchObject({
+      kind: 'clarification', field: 'menuId', choices: expect.arrayContaining([expect.objectContaining({ label: '카페라떼' })]),
+    });
+    const reply = await rig.ask('라떼 우유 양 250으로');
+    const turn = reply.turn;
+    expect(['ambiguity', 'clarification']).toContain(turn?.kind);
+    if (turn?.kind !== 'ambiguity' && turn?.kind !== 'clarification') return;
+    const choice = turn.choices.find(item => item.label === '카페라떼');
+    expect(choice, JSON.stringify(turn)).toBeDefined();
+    const next = await rig.ask('', { continuation: { clarificationId: turn.id, choiceId: choice!.id } });
+    expect(next.turn).toMatchObject({ kind: 'proposal', proposal: {
+      command: 'menu.setRecipe', preview: { title: '카페라떼', fields: [
+        { label: '목장 1등급 우유', before: '260 mL', after: '250 mL' },
+        { label: '원가', before: '1,278원', after: '1,249원' },
+        { label: '마진율', before: '66.4%', after: '67.1%' },
+      ] },
+    } });
+    expect(rig.store.getSnapshot()).toBe(before);
+    await rig.ask('응');
+    expect(rig.store.getSnapshot()).toBe(before);
+    if (next.turn?.kind !== 'proposal') return;
+    const receipt = next.turn.proposal.confirm(rig.store);
+    expect(receipt.frame.outcome).toBe('applied');
+    const applied = rig.store.getSnapshot();
+    expect(selectMenus(applied, {}).rows.find(row => row.menuId === 'm-cafe-latte')?.cost).toBe(1249);
+    expect(readModel(applied, 'margin').menus.find(row => row.menuId === 'm-cafe-latte')?.unitCost).toBe(1249);
+    expect(next.turn.proposal.confirm(rig.store).frame).toEqual(receipt.frame);
+    expect(rig.store.getSnapshot()).toBe(applied);
+    expect(rig.store.undo(receipt.undoToken!).ok).toBe(true);
+    expect(rig.store.getSnapshot().tables.recipeLine).toEqual(before.tables.recipeLine);
+  } finally { rig.close(); }
+});
+
+it('projects the named menu cost and margin rate from its current recipe', async () => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    const cost = await rig.ask('카페라테 원가');
+    const both = await rig.ask('카페라테 재료값이랑 마진 얼마?');
+    expect(cost.answer).toContain('1,278원');
+    expect(both.answer).toContain('1,278원');
+    expect(both.answer).toContain('66.4%');
+    expect(rig.store.getSnapshot()).toBe(before);
+  } finally { rig.close(); }
+});
+
+it('simulates a named price question without changing the price and asks again for invalid input', async () => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    const invalid = await rig.ask('아메리카노 마이너스 천원 받으면?');
+    expect(invalid.turn).toMatchObject({ kind: 'clarification', field: 'price' });
+    const result = await rig.ask('아메리카노 오천원 받으면 마진율 얼마야');
+    expect(result.answer).toContain('4,476원');
+    expect(rig.store.getSnapshot()).toBe(before);
+  } finally { rig.close(); }
+});
+
+it('does not confuse deleting a menu memo with archiving the menu', async () => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    const reply = await rig.ask('아메리카노 메뉴 메모 삭제해줘');
+    expect(reply.turn?.kind === 'proposal' ? reply.turn.proposal.command : reply.answer).not.toBe('menu.delete');
+    expect(rig.store.getSnapshot()).toBe(before);
+  } finally { rig.close(); }
+});
+
+it('does not draft a menu archive for deleting a named menu’s sales history', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  expect(menuDomain.route('아메리카노 판매 내역 삭제해줘', snapshot, 'ko')).toBeUndefined();
+});
+
+it('resolves the named menu and ingredient before adding a recipe line', async () => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    const reply = await rig.ask('카페라테에 바닐라 시럽 10mL 추가해줘');
+    expect(reply.turn).toMatchObject({ kind: 'proposal', proposal: { command: 'menu.setRecipe' } });
+    expect(rig.store.getSnapshot()).toBe(before);
+    const missing = await rig.ask('바닐라라테에 참치 10그램 넣어줘');
+    expect(missing.turn).toMatchObject({ kind: 'refusal', reason: 'invalid_target' });
+    expect(rig.store.getSnapshot()).toBe(before);
+  } finally { rig.close(); }
+});
+
+it.each(['우리 메뉴 가격 전부 불러줘', '메뉴 가격표', '오늘 제일 많이 팔린 메뉴가 뭐야?'])(
+  'reads menu facts without opening a screen for %s', async text => {
+    const rig = contractRig();
+    try {
+      const before = rig.store.getSnapshot();
+      const reply = await rig.ask(text);
+      expect(reply.turn?.kind).toBe('read');
+      expect(rig.tools.map(tool => tool.name)).toContain('get_widget');
+      expect(reply.answer).toContain('아메리카노');
+      expect(rig.store.getSnapshot()).toBe(before);
+    } finally { rig.close(); }
+  },
+);
+
+it.each([
+  "아메리카노 메모에 '샷 추가 가능'이라고 남겨줘",
+  '아메리카노 메모 바꿔줘: 샷 추가 가능',
+  '아메리카노 메모는 샷 추가 가능으로',
+])('keeps a memo edit scoped to the named menu for %s', async text => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    const reply = await rig.ask(text);
+    expect(reply.turn).toMatchObject({ kind: 'proposal', proposal: {
+      command: 'menu.update', preview: { fields: [{ after: '샷 추가 가능' }] },
+    } });
+    expect(rig.store.getSnapshot()).toBe(before);
+  } finally { rig.close(); }
+});
+
+it('uses menu price lookup for a retail size and never updates stock', async () => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    const reply = await rig.ask('원두 200그램 가격');
+    expect(reply.turn?.kind).toBe('read');
+    expect(rig.requests.map(request => request.intent)).toEqual([
+      { kind: 'read', recordKind: 'menu', querySlot: 'name' },
+    ]);
+    expect(rig.store.getSnapshot()).toBe(before);
+  } finally { rig.close(); }
+});
+
+it('never drafts a card for an ambiguous rename to a name another menu already has', async () => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    const reply = await rig.ask('라떼 이름 바닐라라테로');
+    // The domain route carries both lookups. Until the provider sends them before asking which latte,
+    // the owner still sees choices and no card.
+    expect(['ambiguity', 'clarification', 'refusal']).toContain(reply.turn?.kind);
+    expect(reply.turn?.kind).not.toBe('proposal');
+    expect(rig.store.getSnapshot()).toBe(before);
+  } finally { rig.close(); }
+});
+
+it.each(['아메리카노 공짜로 해줘', '아메리카노 사천 오천 원 중에 알아서'])(
+  'asks for an exact positive price before any proposal for %s', async text => {
+    const rig = contractRig();
+    try {
+      const before = rig.store.getSnapshot();
+      const reply = await rig.ask(text);
+      expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'price' });
+      expect(rig.requests).toEqual([]);
+      expect(rig.store.getSnapshot()).toBe(before);
+    } finally { rig.close(); }
+  },
+);
+
+it('answers that every matching menu is already selling for an ambiguous resume without a card or request', async () => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    const route = menuDomain.route('라떼 판매 재개', before, 'ko');
+    expect(route).toMatchObject({ kind: 'answer', answer: expect.stringContaining('이미') });
+    expect(route).toMatchObject({ answer: expect.stringContaining('판매 중') });
+    const reply = await rig.ask('라떼 판매 재개');
+    expect(reply.turn).toBeUndefined();
+    expect(reply.answer).toContain('이미');
+    expect(rig.requests).toEqual([]);
+    expect(rig.store.getSnapshot()).toBe(before);
+    // One sold-out latte makes the target ambiguous again, so the owner chooses.
+    rig.store.dispatch({ type: 'menu.setSaleStatus', menuId: 'm-chestnut-latte', status: 'sold_out' });
+    const mixed = await rig.ask('라떼 판매 재개');
+    expect(['ambiguity', 'clarification']).toContain(mixed.turn?.kind);
+    expect(rig.store.getSnapshot().tables.menuItem.find(row => row.menuId === 'm-chestnut-latte')?.saleStatus).toBe('sold_out');
+  } finally { rig.close(); }
+});
+
+it('treats a stated price after 그대로 as the target price and reports a same-value request without a card', async () => {
+  const rig = contractRig();
+  try {
+    const before = rig.store.getSnapshot();
+    const current = selectMenus(before, {}).rows.find(row => row.menuId === 'm-americano')!.price;
+    const other = current === 4500 ? 4700 : 4500;
+    const changed = await rig.ask(`아메리카노 가격 그대로 ${other.toLocaleString('ko-KR')}원`);
+    expect(changed.turn).toMatchObject({ kind: 'proposal', proposal: { command: 'menu.update' } });
+    expect(rig.tools.map(call => call.name)).toEqual(['search_records', 'propose_action']);
+    expect(rig.store.getSnapshot()).toBe(before);
+    const same = await rig.ask(`아메리카노 가격 그대로 ${current.toLocaleString('ko-KR')}원`);
+    expect(same.turn).toBeUndefined();
+    expect(same.answer).toContain('이미 같은 값');
+  } finally { rig.close(); }
+});
+
+it.each(['카페라테를 바닐라 라테로 이름 변경', '카페라테 이름을 바닐라라테로 바꿔줘'])('routes %s as a scoped rename with both lookups', text => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  const route = menuDomain.route(text, snapshot, 'ko');
+  expect(route).toMatchObject({
+    intent: { kind: 'command', command: 'menu.update', querySlot: 'name' },
+    lookups: [{ kind: 'menu', querySlot: 'name', selected: 'menu-3' }, { kind: 'menu', querySlot: 'newName' }],
+  });
+  expect(route).toMatchObject({ slots: { newName: expect.stringMatching(/^바닐라\s?라테$/u) } });
+});
+
+it('sends an ambiguous rename to an existing name through the agent so the duplicate is refused before any choice', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  expect(menuDomain.route('라떼 이름 바닐라라테로', snapshot, 'ko')).toMatchObject({
+    intent: { kind: 'command', command: 'menu.update', querySlot: 'name' },
+    lookups: [{ kind: 'menu', querySlot: 'name' }, { kind: 'menu', querySlot: 'newName' }],
+  });
+});
+
+it('answers a repeated delete of an already archived menu without a card, request or write', async () => {
+  const rig = contractRig();
+  try {
+    expect(rig.store.dispatch({ type: 'menu.delete', menuId: 'm-coldbrew' }).ok).toBe(true);
+    const before = rig.store.getSnapshot();
+    const reply = await rig.ask('콜드브루 삭제해줘');
+    expect(reply.turn).toBeUndefined();
+    expect(reply.answer).toBe('이미 삭제된 메뉴예요');
+    expect(rig.requests).toEqual([]);
+    expect(rig.store.getSnapshot()).toBe(before);
+    // An active single delete keeps its card and the second confirmation.
+    expect(menuDomain.route('아메리카노 삭제해줘', rig.store.getSnapshot(), 'ko')).toMatchObject({
+      intent: { kind: 'command', command: 'menu.delete' },
+    });
+  } finally { rig.close(); }
+});
+
+it('projects a typed named margin rate for each menu and keeps the trend inside the wire cap', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  const projection = projectMenuWidget(snapshot, 'margin', { kind: 'default' }, 'ko');
+  if (!projection || !('facts' in projection)) throw new Error('Margin projection is missing');
+  const rates = projection.facts.filter(item => item.key === 'margin.menu.rate');
+  const latte = rates.find(item => item.label === '카페라떼');
+  expect(latte).toMatchObject({ unit: 'percent', display: '66.4%', value: expect.any(Number) });
+  expect(rates).toHaveLength(projection.facts.filter(item => item.key === 'margin.menu.row').length);
+  expect(projection.facts.length).toBeLessThanOrEqual(128);
+  expect(projection.facts.filter(item => item.key === 'margin.rate.daily')).toHaveLength(7);
+  expect(projection.facts.filter(item => item.key === 'margin.menu.row')).toHaveLength(24);
+  expect(projection.facts.find(item => item.key === 'margin.menu.row' && item.label === '카페라떼')?.display).toContain('66.4%');
 });

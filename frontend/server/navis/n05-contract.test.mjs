@@ -49,7 +49,7 @@ const queryMatches = (snapshot, ids) => ids.map((id, index) => {
   return { handle: `stock-${index + 1}`, row };
 });
 
-async function run(command, args, extra, fake = navisAgentFakeFetch) {
+async function run(command, args, extra, fake = navisAgentFakeFetch, expectedStatus = 200) {
   const input = navigationRequest(command, args, { catalog, ...extra });
   assert.ok(validateAgentRequest(input), JSON.stringify(input.intent));
   const calls = [];
@@ -70,7 +70,8 @@ async function run(command, args, extra, fake = navisAgentFakeFetch) {
     const done = new Promise(resolve => res.once('finish', resolve));
     await bridge(req, res);
     await done;
-    assert.equal(status, 200, raw);
+    assert.equal(status, expectedStatus, raw);
+    if (expectedStatus !== 200) return { calls };
     const frames = [...raw.matchAll(/event: ([^\n]+)\ndata: (.+)\n\n/gu)].map(([, event, value]) => ({ event, value: JSON.parse(value) }));
     assert.ok(frames.every(({ event, value }) => validateAgentFrame(event, value)), raw);
     assert.equal(frames.at(-1)?.event, 'done', raw);
@@ -94,6 +95,28 @@ const readStock = searches => run(undefined, undefined, {
 });
 const handles = (snapshot, ...ids) => stockRecord(queryMatches(snapshot, ids));
 const storeInventory = snapshot => data.readModel(snapshot, stockFeature);
+
+test('accepts an advertised stock source date and rejects an unadvertised missing frame', async () => {
+  const condition = { kind: 'snapshot', asOf: '2026-11-21' };
+  const intent = { kind: 'read', featureId: stockFeature, condition };
+  const stock = qtyFact('product.channelBalance.retail.online', 40, 'pcs', '원두 200g · 온라인', condition.asOf);
+  const ready = await run(undefined, undefined, {
+    intent, catalog: [{ ...catalog[0], conditions: [condition] }],
+    snapshot: [{ featureId: stockFeature, condition, facts: [stock] }],
+  });
+  assert.equal(ready.outcome, 'reply');
+  assert.equal(ready.calls[0]?.name, 'get_widget');
+  assert.equal(ready.proposal, undefined);
+
+  const missing = { featureId: stockFeature, condition, status: 'missing' };
+  const unavailable = await run(undefined, undefined, {
+    intent, catalog: [{ ...catalog[0], conditions: [condition] }], snapshot: [missing],
+  });
+  assert.equal(unavailable.outcome, 'reply');
+  assert.equal(unavailable.proposal, undefined);
+  const invalid = await run(undefined, undefined, { intent, snapshot: [missing] }, navisAgentFakeFetch, 400);
+  assert.deepEqual(invalid.calls, []);
+});
 
 async function checkRead(scenario, snapshot) {
   const { id, expected } = scenario;
@@ -414,15 +437,16 @@ async function checkMissingInventory(scenario, store) {
     result = await run(command, wire, { slots: ['name', ...numericFields], searches: [search] });
     assert.equal(expected.kind, 'refuse');
     assert.equal(result.outcome, 'refused');
-    assert.equal(result.refusal?.reason, 'invalid_target');
-    assert.equal(result.refusal?.alternative?.featureId, stockFeature);
+    // A3_BATCH2 B26 gives an invalid stock target fixed missing-target copy and no widget handoff.
+    assert.deepEqual(result.refusal, { reason: 'invalid_target' });
+    assert.equal(result.text, '해당 항목을 찾을 수 없어요. 이름이나 상태를 확인해 주세요.');
   } else {
     result = await readStock(search);
     assert.equal(expected.kind, 'answer');
     assert.equal(result.outcome, 'reply');
+    assert.deepEqual([result.text], expected.answer_must_contain);
   }
   assert.deepEqual(result.calls, expected.tools);
-  assert.deepEqual([result.text], expected.answer_must_contain);
   assert.equal(result.proposal, undefined);
   assert.equal(store.getSnapshot(), before);
 }
@@ -433,6 +457,17 @@ test('N05 setting the stored cup count is unchanged', () => {
   const args = { itemId: cup, stock: row.raw };
   const target = { ...row, rawStock: row.raw };
   assert.deepEqual(prepareInventoryPreview('inventory.updateItem', args, { target }), { outcome: 'unchanged' });
+});
+
+test('N05 distinguishes package sizes from unit mismatches and preserves count units', () => {
+  for (const unit of ['box', 'pack', 'tray']) {
+    assert.deepEqual(inventoryQuantityInUnit(2, unit, 'pcs'), { field: 'packSize' });
+    assert.deepEqual(inventoryQuantityInUnit(2, unit, 'mL'), { field: 'unit' });
+  }
+  assert.deepEqual(inventoryQuantityInUnit(200, 'sheet', 'pcs'), { value: 200 });
+  assert.deepEqual(inventoryQuantityInUnit(200, 'sheet', 'mL'), { field: 'unit' });
+  assert.deepEqual(inventoryQuantityInUnit(2500, 'g', 'kg'), { value: 2.5 });
+  assert.deepEqual(inventoryQuantityInUnit(-3, 'L', 'mL'), { field: 'quantity' });
 });
 
 test('N05 server contracts for all 63 assigned inventory scenarios', async t => {

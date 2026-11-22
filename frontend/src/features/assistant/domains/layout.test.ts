@@ -8,12 +8,15 @@ import { addDays, TODAY } from '../../../data/db/time';
 import { createWidgetDataStore } from '../../../data/widget-data';
 import { samePanels, screenPresets } from '../../../layout';
 import { testTime } from '../../../layout/test-policy';
-import { createRunStore } from '../../../state';
+import { classifyNavigation } from '../../../screens/dashboard/navis-navigation';
+import { createRunStore, type ChatReceiptNoticeRequest } from '../../../state';
+import { planNavisLayout } from '../../../state/navis-layout';
 import { completeEmptyOnboarding } from '../../../state/test-fixtures';
+import { agentReceiptStatus, applyAgentReceiptUndo } from '../agent-actions';
 import { createAssistantProvider } from '../provider';
 import type { ProposalSession } from '../navis-conversation';
 import { createDomainRegistry } from './registry';
-import { layoutDomain, projectNavisBoard } from './layout';
+import { isNavisLayoutNavigationConflict, layoutDomain, projectNavisBoard } from './layout';
 // @ts-expect-error The trace loader is shared with the server contract tests.
 import { readTrace } from '../../../../server/navis/scenario-fixtures.mjs';
 
@@ -42,8 +45,8 @@ const nearFull = [
   ...(['store-environment', 'manuals', 'grants', 'staff-schedule', 'voice-booking'] as const).map((id, column) => panel(id, column, 3)),
 ];
 
-function fixture(id: string) {
-  const run = createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: testTime, theme: 'light', clock: () => 0 });
+function fixture(id: string, clock = () => 0) {
+  const run = createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: testTime, theme: 'light', clock });
   completeEmptyOnboarding(run);
   const empty = ['S5-079', 'S7-059', 'S7-060', 'S7-216'].includes(id);
   const first = id === 'S7-025' ? [panel('menu', 0, 0)] : ['S7-010', 'S7-049'].includes(id) ? full : template;
@@ -130,7 +133,8 @@ function assertApplied(id: string, state: RunState) {
     case 'S7-050': expect(lookup('inventory-booking')).toMatchObject(panel('inventory-booking', 0, 2, 3)); expect(lookup('menu')).not.toMatchObject({ column: 2, row: 2 }); break;
     case 'S7-051': expect(board.currentPage).toBe(1); expect(current).toEqual([]); expect(board.undo).toBeNull(); break;
     case 'S7-059': expect(current).toMatchObject([panel('ledger', 0, 0), panel('margin', 1, 0), panel('calendar', 2, 0)]); break;
-    case 'S7-060': expect(current).toHaveLength(8); expect(lookup('marketing-today')).toMatchObject(panel('marketing-today', 0, 0, 4)); break;
+    case 'S7-060': expect(current).toHaveLength(7); // D-365: the starting marketing board lost 마케팅 성과 (8 -> 7)
+       expect(lookup('marketing-today')).toMatchObject(panel('marketing-today', 0, 0, 4)); break;
     case 'S7-218': expect(lookup('briefing')).toMatchObject(panel('briefing', 0, 0, 3, 3));
       for (const id of ['ledger', 'margin', 'inventory-booking', 'menu'] as const) {
         const old = template.find(panel => panel.featureId === id)!;
@@ -141,14 +145,17 @@ function assertApplied(id: string, state: RunState) {
   }
 }
 
-async function evaluate(scenario: Scenario) {
+async function evaluate(scenario: Scenario, fullRegistry = false) {
   const run = fixture(scenario.id), before = run.getState();
   const store = createWidgetDataStore(undefined, { runId: before.runId });
   const requests: AgentRequest[] = [];
-  const provider = createAssistantProvider({ run, store, domains: createDomainRegistry([layoutDomain]), fetcher: transport(requests) });
+  const provider = createAssistantProvider({ run, store, domains: fullRegistry ? undefined : createDomainRegistry([layoutDomain]), fetcher: transport(requests) });
   const ask = (text: string) => provider.ask({ text, layer: before.activeBoard, locale: 'ko', signal: openSignal() });
   const beforeData = store.getSnapshot();
   try {
+    if (fullRegistry && !isNavisLayoutNavigationConflict(scenario.utterances[0])) {
+      expect(classifyNavigation(scenario.utterances[0], before, beforeData)).toBeUndefined();
+    }
     const reply = await ask(scenario.utterances[0]);
     const session = reply.proposalSession;
     expect(run.getState()).toBe(before);
@@ -166,11 +173,16 @@ async function evaluate(scenario: Scenario) {
     }
     const kind = session ? 'proposal' : reply.turn?.kind === 'clarification' ? 'clarify' : reply.turn?.kind === 'refusal' ? 'refuse' : 'answer';
     const expected = scenario.expected;
-    expect(kind).toBe(expected.kind);
+    expect(kind, `${reply.answer} ${JSON.stringify(requests[0]?.intent)}`).toBe(expected.kind);
     if (reply.turn?.kind === 'clarification' && expected.ask?.length) expect(expected.ask).toContain(reply.turn.field);
     const preview = session?.getSnapshot().preview;
     const copy = [reply.answer, preview?.title, ...preview?.fields.flatMap(field => [field.label, field.before, field.after]) ?? []].join('\n');
-    for (const value of expected.answer_must_contain ?? []) expect(copy).toContain(value);
+    const isAddition = session?.getSnapshot().proposal.command === 'layout.add_widget' || session?.getSnapshot().proposal.command === 'layout.add_widgets';
+    for (const value of expected.answer_must_contain ?? []) {
+      // D-365: the corpus row S7-060 still says 8개; the marketing start layout has seven widgets now (corpus patch for B17: S7-060 -> 7개).
+      const wording = value === '어느 위젯' ? '어느 패널' : scenario.id === 'S7-060' && value === '8개' ? '7개' : isAddition ? value.replace(/^(\d+)x(\d+)$/u, '가로 $1칸, 세로 $2칸') : value;
+      expect(copy).toContain(wording);
+    }
     if (expected.tools.some(tool => tool.name === 'get_board')) {
       const request = requests[0];
       expect(request.intent).toMatchObject({ kind: 'read', tool: 'get_board' });
@@ -186,26 +198,35 @@ async function evaluate(scenario: Scenario) {
       expect(request.readings?.[1]).toMatchObject({ tool: 'get_board', args: { page: scenario.id === 'S7-036' ? 2 : 5 } });
     }
     const card = session.getSnapshot().proposal;
+    expect(session.confirm(store, 'another-card')).toBeUndefined();
     await ask('응, 실행해');
+    await ask('네');
     expect(run.getState()).toBe(before);
     const first = press(session, store, card.id);
     const removing = ['S7-020', 'S7-021', 'S7-025', 'S7-028'].includes(scenario.id);
+    let receipt = first;
     if (removing) {
       expect(first.requiresExtraConfirmation).toBe(true);
       expect(run.getState()).toBe(before);
-      expect(press(session, store, card.id, true).frame.outcome).toBe('applied');
-    } else expect(first.frame.outcome).toBe('applied');
+      receipt = press(session, store, card.id, true);
+    }
+    expect(receipt.frame.outcome).toBe('applied');
     const applied = run.getState();
     expect(applied.layoutRevision).toBe(before.layoutRevision + Number(scenario.id !== 'S7-051'));
     assertApplied(scenario.id, applied);
     session.confirm(store, card.id, true);
     expect(run.getState()).toBe(applied);
     if (scenario.id !== 'S7-051') {
-      const token = applied.notice?.undoToken;
-      expect(token).toBeTruthy();
-      await ask('되돌려줘');
-      expect(run.getState()).toBe(applied);
-      expect(run.actions.undo(token!).status).toBe('accepted');
+      const identity = session.getSnapshot().receiptIdentity;
+      if (!identity || !receipt.notice || !receipt.undoToken) throw new Error('Expected a reversible chat receipt');
+      const notice: ChatReceiptNoticeRequest = { ...receipt.notice, chatReceipt: identity };
+      run.actions.showNotice(notice);
+      run.actions.setChatReceiptVisible(identity, true);
+      const beforeUndo = run.getState();
+      expect((await ask('되돌려줘')).answer).toContain('영수증');
+      expect(run.getState()).toBe(beforeUndo);
+      expect(applyAgentReceiptUndo(run, store, identity, receipt.undoToken)).toBe(true);
+      expect(applyAgentReceiptUndo(run, store, identity, receipt.undoToken)).toBe(false);
       const original = before.boards[before.activeBoard];
       expect(run.getState().boards[before.activeBoard].pages.every((page, index) => samePanels(page.panels, original.pages[index].panels))).toBe(true);
     }
@@ -226,6 +247,109 @@ describe('N07 TRACE client contracts', () => {
     }
   });
   it('replays the S7-001 dependent placement anchor', () => evaluate(corpus.find(scenario => scenario.id === 'S7-001')!));
+  it.each(scenarios.filter(s => ['S7-016', 'S7-019', 'S7-020'].includes(s.id)).flatMap(s =>
+    s.utterances.map(text => [s.id, text, s] as const)))('%s routes %s through one bound card', (_id, text, s) =>
+    evaluate({ ...s, utterances: [text] }, true));
+
+  it('keeps an explicit detail open and supplier order on their own routes', async () => {
+    const run = fixture('S7-019'), before = run.getState();
+    const store = createWidgetDataStore(undefined, { runId: before.runId });
+    const provider = createAssistantProvider({ run, store, fetcher: transport([]) });
+    try {
+      const text = '최근 7일 기준으로 손익 자세히 보기 열어줘';
+      expect(isNavisLayoutNavigationConflict(text)).toBe(false);
+      expect(classifyNavigation(text, before, store.getSnapshot())).toMatchObject({ command: 'ui.openDetail' });
+      const order = await provider.ask({ text: '우유 5개 발주해줘', signal: openSignal() });
+      expect(order.proposalSession).toBeUndefined();
+      expect(run.getState()).toBe(before);
+    } finally { run.dispose(); }
+  });
+
+  it('keeps the S7-096 panel-finding request as navigation', () => {
+    const run = fixture('S7-096'), before = run.getState();
+    const store = createWidgetDataStore(undefined, { runId: before.runId });
+    const text = '재고 패널 어디야';
+    try {
+      expect(isNavisLayoutNavigationConflict(text)).toBe(false);
+      expect(classifyNavigation(text, before, store.getSnapshot())).toMatchObject({ command: 'ui.show_panel', args: { featureId: 'inventory-booking' } });
+    } finally { run.dispose(); }
+  });
+
+  it('expires the layout chat receipt at the original deadline', async () => {
+    let now = 0;
+    const run = fixture('S7-016', () => now), before = run.getState();
+    const store = createWidgetDataStore(undefined, { runId: before.runId });
+    const provider = createAssistantProvider({ run, store, fetcher: transport([]), clock: () => now });
+    const ask = (text: string) => provider.ask({ text, signal: openSignal() });
+    try {
+      const card = (await ask('발주랑 세무관리 둘 다 추가해줘')).proposalSession!;
+      const receipt = press(card, store, card.getSnapshot().proposal.id);
+      const identity = card.getSnapshot().receiptIdentity!;
+      const token = run.getState().boards.management.undo?.token;
+      if (!token) throw new Error('Expected the underlying layout undo token');
+      const notice: ChatReceiptNoticeRequest = {
+        ...receipt.notice!, chatReceipt: identity, layoutUndo: { layer: 'management', token },
+      };
+      run.actions.showNotice(notice);
+      run.actions.setChatReceiptVisible(identity, true);
+      const applied = run.getState();
+      expect(agentReceiptStatus(run, receipt, identity)).toBe('applied');
+      now += testTime.undoMs + 1;
+      expect((await ask('되돌려줘')).answer).toContain('시간이 지났어요');
+      expect(applyAgentReceiptUndo(run, store, identity, receipt.undoToken!)).toBe(false);
+      expect(agentReceiptStatus(run, receipt, identity)).toBe('expired');
+      const board = run.getState().boards.management;
+      expect(board.pages).toEqual(applied.boards.management.pages);
+      expect(board.undo).toBeNull();
+    } finally { run.dispose(); }
+  });
+
+  it.each([false, true])('rechecks whether page 3 still needs to be created (created meanwhile: %s)', async existing => {
+    const run = fixture('S7-038');
+    const store = createWidgetDataStore(undefined, { runId: run.getState().runId });
+    const requests: AgentRequest[] = [];
+    const provider = createAssistantProvider({ run, store, fetcher: transport(requests) });
+    const text = '재고를 3페이지로 보내줘';
+    const ask = () => provider.ask({ text, signal: openSignal() });
+    try {
+      const { turn } = await ask();
+      expect(turn).toMatchObject({ kind: 'clarification', field: 'confirmAddPage',
+        choices: [{ id: 'add-page', label: '페이지 추가하기' }] });
+      if (turn?.kind !== 'clarification') throw new Error('Expected a page clarification');
+      if (existing) expect(run.actions.addPage().ok).toBe(true);
+      const before = run.getState();
+      expect((await provider.ask({ text: '응', signal: openSignal() })).proposalSession).toBeUndefined();
+      const reply = await provider.ask({ text, signal: openSignal(), continuation: { clarificationId: turn.id, choiceId: 'add-page' } });
+      const command = existing ? 'layout.move_to_page' : 'layout.add_page';
+      expect(reply.proposalSession?.getSnapshot().proposal.command).toBe(command);
+      expect(requests.at(-1)?.intent).toMatchObject({ kind: 'command', command, args: existing
+        ? { featureId: 'inventory-booking', page: 1, destinationPage: 3 } : { layer: 'management' } });
+      expect(run.getState()).toBe(before);
+    } finally { run.dispose(); }
+  });
+
+  it('keeps the requested size when the owner names a missing widget', async () => {
+    const run = fixture('S7-220'), before = run.getState();
+    const store = createWidgetDataStore(undefined, { runId: before.runId });
+    const requests: AgentRequest[] = [];
+    const provider = createAssistantProvider({ run, store, fetcher: transport(requests) });
+    try {
+      const reply = await provider.ask({ text: '새 위젯 올리고 2x2로', signal: openSignal() });
+      expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'featureId' });
+      if (reply.turn?.kind !== 'clarification') throw new Error('Expected a widget question');
+      const next = await provider.ask({ text: '세무관리', signal: openSignal(),
+        continuation: { clarificationId: reply.turn.id, value: '세무관리' } });
+      expect(next.proposalSession?.getSnapshot().proposal.command).toBe('layout.add_widget');
+      expect(requests[0]?.intent).toMatchObject({ args: { featureId: 'tax', width: 2, height: 2 } });
+      expect(run.getState()).toBe(before);
+    } finally { run.dispose(); }
+  });
+  const boardVariants = ['S7-002', 'S7-003', 'S7-004', 'S7-005', 'S7-021', 'S7-022', 'S7-025', 'S7-028',
+    'S7-029', 'S7-030', 'S7-031', 'S7-032', 'S7-033', 'S7-034', 'S7-035', 'S7-036', 'S7-037', 'S7-038',
+    'S7-039', 'S7-040', 'S7-042', 'S7-043', 'S7-044', 'S7-045', 'S7-046', 'S7-047', 'S7-048', 'S7-050', 'S7-051', 'S7-052',
+    'S7-059', 'S7-060', 'S7-061', 'S7-182', 'S7-183', 'S7-184', 'S7-185', 'S7-186', 'S7-187', 'S7-216', 'S7-218', 'S7-219', 'S7-220'];
+  const variantCases = scenarios.filter(s => boardVariants.includes(s.id)).flatMap(s => s.utterances.slice(1).map(text => [s.id, text, s] as const));
+  it.each(variantCases)('%s resolves the board wording %s', (_id, text, s) => evaluate({ ...s, utterances: [text] }, true));
   it('projects occupied and open cells from the actual active preset', () => {
     const run = fixture('S7-184');
     const projection = projectNavisBoard(run.getState(), { layer: 'management', page: 1 }, 'ko');
@@ -236,4 +360,18 @@ describe('N07 TRACE client contracts', () => {
     ]) });
     run.dispose();
   });
+});
+
+it('can hold the layout success notice until the account write settles while retaining undo', () => {
+  const run = fixture('S7-001');
+  const prepared = planNavisLayout(run.getState(), 'management', [
+    { kind: 'layout', page: 0, intent: { type: 'add-tap', featureId: 'tax' } },
+  ]);
+  if (prepared.kind !== 'ready') throw new Error('Expected a layout plan');
+  expect(run.actions.commitNavisLayout(prepared.plan, { deferNotice: true }).status).toBe('accepted');
+  const board = run.getState().boards.management;
+  expect(board.notice).toBeNull();
+  expect(board.undo?.token).toBeTruthy();
+  expect(run.actions.undo(board.undo!.token).status).toBe('accepted');
+  expect(run.getState().boards.management.pages[0].panels.some(item => item.featureId === 'tax')).toBe(false);
 });

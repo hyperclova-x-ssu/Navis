@@ -12,7 +12,7 @@ const slot = slot => ({ slot });
 const handle = handle => ({ handle });
 const send = { noticeId: handle('draft'), draftRevision: slot('draftRevision') };
 const search = { kind: 'noticeDraft', querySlot: 'noticeQuery' };
-const draftFields = { revision: 1, sendAllowed: true, closureLink: 'current', alreadySent: false };
+const draftFields = { revision: 1, businessTime: '15:45', sendAllowed: true, closureLink: 'current', alreadySent: false };
 const sendIntent = { kind: 'command', command: 'notice.send', args: send, querySlot: search.querySlot };
 const searchCall = { name: 'search_records', args: search };
 const proposalCall = { name: 'propose_action', args: { command: 'notice.send', args: send } };
@@ -56,6 +56,14 @@ test('D-326 prepares a daytime notice schedule with a local time slot and blocks
   const blocked = await harness.run(request({ ...fields, scheduleAllowed: false }, intent));
   assert.equal(blocked.terminal?.refusal?.reason, 'invalid_target', blocked.raw);
   assert.deepEqual(blocked.calls, [searchCall]);
+});
+
+test('the server refuses an immediate send at 22:30 even if eligibility says it can send', async t => {
+  const harness = createNavisMenuHarness(createBridge, validateAgentFrame, navisAgentFakeFetch);
+  t.after(harness.close);
+  const result = await harness.run(request({ ...draftFields, businessTime: '22:30' }));
+  assert.equal(result.terminal?.refusal?.reason, 'invalid_target', result.raw);
+  assert.deepEqual(result.calls, [searchCall]);
 });
 
 test('the send adapter refuses stale, ineligible, unknown and already sent drafts', async t => {

@@ -18,7 +18,7 @@ import type { DomainAdapter, DomainRoute, LocalSlots, RunCommandAdapter, RunPref
 
 const copy = {
   ko: {
-    sample: '시연용 예시 상태', detailFullscreen: '전체 화면', compact: '기본 크기', on: '켜짐', off: '꺼짐',
+    sample: '예시 상태 보기', detailFullscreen: '전체 화면', compact: '기본 크기', on: '켜짐', off: '꺼짐',
     already: (value: string) => `이미 ${value}예요`,
     themeQuestion: '라이트와 다크 중 어느 화면으로 볼까요?',
     localeQuestion: '간체와 번체 중 어떤 언어로 볼까요?',
@@ -51,7 +51,7 @@ const copy = {
     refundByOwner: 'Refund the payment in Orders & Payments', payAfterReopen: 'Reopen the day to accept payments',
   },
   'zh-Hans': {
-    sample: '演示状态', detailFullscreen: '全屏', compact: '默认大小', on: '已开启', off: '已关闭',
+    sample: '查看示例状态', detailFullscreen: '全屏', compact: '默认大小', on: '已开启', off: '已关闭',
     already: (value: string) => `已设为${value}`,
     themeQuestion: '要用浅色还是深色模式？', localeQuestion: '要用简体中文还是繁体中文？',
     variantQuestion: (label: string, choices: string) => `请选择${label}状态\n${choices}`,
@@ -67,7 +67,7 @@ const copy = {
     refundByOwner: '请在订单与付款中退款', payAfterReopen: '撤销打烊后可以收款',
   },
   'zh-Hant': {
-    sample: '示範狀態', detailFullscreen: '全螢幕', compact: '預設大小', on: '已開啟', off: '已關閉',
+    sample: '查看範例狀態', detailFullscreen: '全螢幕', compact: '預設大小', on: '已開啟', off: '已關閉',
     already: (value: string) => `已設為${value}`,
     themeQuestion: '要用淺色還是深色模式？', localeQuestion: '要用簡體中文還是繁體中文？',
     variantQuestion: (label: string, choices: string) => `請選擇${label}狀態\n${choices}`,
@@ -344,7 +344,6 @@ function intentFor(input: string, locale: Locale): Intent | undefined {
   const empty = /비어|빈\s*상태|빈\s*화면|없(?:음|는)\s*상태/u.test(text);
   const error = /불러오기\s*실패|오류|에러/u.test(text);
   const partial = /일부.*(?:없|안\s*된)/u.test(text);
-  const noCouponUse = /쿠폰\s*사용.*없/u.test(text);
   const previewChange = /(?:(?:상태|걸|예시)로|비어\s*있음으로)\s*(?:(?:바꿔|변경해|설정해|전환해|해\s*(?:줘|주세요)|보여|되돌려|돌려).*)?[.!?]*$/u.test(text)
     || /비어\s*있게\s*해|(?:정상\s*으로|원래대로)\s*(?:(?:바꿔|해|되돌려|돌려).*)?[.!?]*$/u.test(text);
   const showVariant = /(?:오류|에러(?:\s*났을\s*때)?|실패(?:하는)?|비어\s*있는|빈|없(?:음|는|을\s*때)|특수(?:한)?|망가진)\s*(?:상태|화면|상황)\s*(?:보여|확인해\s*볼래|보고\s*싶)/u.test(text);
@@ -381,9 +380,14 @@ function intentFor(input: string, locale: Locale): Intent | undefined {
     }
   }
   const correction = text.split(/\s*말고\s*/u).at(-1)!;
+  const directThemeQuestion = /^(?:지금\s*)?(?:다크|라이트)\s*(?:야|인가요|인지|인가|맞(?:아|나요))[.!?？]*$/u;
+  if (directThemeQuestion.test(text)) return readUi('display', ['ui.theme']);
   const theme = /화면|모드|^(?:다크|라이트|ᄃᄏ|어둡게|밝게)(?:로|\s*(?:바꿔|해\s*줘|$))|다시\s*밝은|\b(?:light|dark)\s+mode\b/iu.test(text)
     ? themeOf(correction) : undefined;
-  if (theme && (asks || /이야\s*어두운/u.test(text))) return readUi('display', ['ui.theme']);
+  const themeQuestion = /(?:모드|화면)\s*(?:이?야|인가요|인(?:지|가)|(?:이|가)?\s*맞(?:아|나요))(?:\s|[.!?]|$)/u.test(text);
+  if (theme && (themeQuestion || /이야\s*어두운/u.test(text) || asks && !/바꿔|변경해|전환해|설정해|해\s*(?:줘|주세요)/u.test(correction))) {
+    return readUi('display', ['ui.theme']);
+  }
   if (theme) return change('settings.set_theme', { theme });
   if (/화면\s*모드|^모드\s*바꿔|밝기\s*좀\s*바꿔/u.test(text)) return asks ? readUi('display', ['ui.theme']) : { question: 'theme' };
   if (/큰\s*글자|글[자씨짜]|\blarge text\b/iu.test(text)) {
@@ -404,8 +408,9 @@ function intentFor(input: string, locale: Locale): Intent | undefined {
   if (previewRequest) {
     const t = translator(locale);
     const compact = text.toLowerCase().replace(/\s+/gu, '');
-    const feature = getRegistry('A').find(item => [item.label, widgetLabel(t, item.id)].some(label => compact.includes(label.toLowerCase().replace(/\s+/gu, ''))))?.id
-      ?? (/성과\s*위젯/u.test(text) ? 'marketing-performance' : undefined);
+    // D-365: 마케팅 성과 is gone, so a request about its preview must not turn into a change for every widget.
+    if (/마케팅\s*성과|성과\s*위젯/u.test(text)) return;
+    const feature = getRegistry('A').find(item => [item.label, widgetLabel(t, item.id)].some(label => compact.includes(label.toLowerCase().replace(/\s+/gu, ''))))?.id;
     if (feature && !/예시\s*상태\s*보기\s*(?:열어|띄워)/u.test(text)) {
       const opts = previewVariants(feature);
       if (!opts.length) return;
@@ -413,8 +418,7 @@ function intentFor(input: string, locale: Locale): Intent | undefined {
       if (error && opts.some(option => option.id === 'error')) return change('settings.set_preview_variant', { featureId: feature, variant: 'error' });
       const named = opts.find(option => text.includes(t.t(option.labelKey)) &&
         (option.id !== 'error' || error));
-      const variant = named?.id ?? (feature === 'inventory-booking' && partial ? 'partial-data' :
-        feature === 'marketing-performance' && noCouponUse ? 'no-redemptions' : undefined);
+      const variant = named?.id ?? (feature === 'inventory-booking' && partial ? 'partial-data' : undefined);
       if (variant) return change('settings.set_preview_variant', { featureId: feature, variant });
       if (empty) {
         const choices = opts.filter(option => option.family === 'empty');

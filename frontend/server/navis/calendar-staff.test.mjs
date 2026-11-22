@@ -68,6 +68,40 @@ test('N10 historical intent uses the dedicated local choice slot', async () => {
   assert.deepEqual(result.proposal?.args, chosen, result.raw);
 });
 
+test('N10 keeps date, clock and closure end bound to their own slots', async () => {
+  const base = { title: slot('title'), date: slot('date'), time: slot('time') };
+  const cases = [
+    ['date', { ...base, date: slot('time') }],
+    ['time', { ...base, time: slot('fromTime') }],
+    ['storeClosure', { ...base, storeClosure: { kind: 'temporary', endDate: slot('date') } }],
+  ];
+  for (const [field, args] of cases) {
+    const result = await command('calendar.addEvent', args);
+    assert.equal(result.terminal?.clarification?.field, field, result.raw);
+    assert.equal(result.proposal, undefined);
+  }
+});
+
+test('N10 reads the staff widget before moving a handoff', async () => {
+  const args = { date: slot('date'), fromTime: slot('fromTime'), toTime: slot('toTime') };
+  const result = await command('staff.moveHandoff', args);
+  assert.deepEqual(result.calls, [
+    { name: 'get_widget', args: { featureId: 'staff-schedule', condition } },
+    { name: 'propose_action', args: { command: 'staff.moveHandoff', args } },
+  ], result.raw);
+  assert.equal(result.proposal?.tier, 'normal', result.raw);
+});
+
+test('N10 creates a fresh staff card without emitting an empty lookup', async () => {
+  const args = { name: slot('name') };
+  const fresh = { kind: 'staff', querySlot: 'name', status: 'missing', matches: [] };
+  const created = await command('staff.create', args, [fresh]);
+  assert.deepEqual(created.calls, [{ name: 'propose_action', args: { command: 'staff.create', args } }], created.raw);
+  const duplicate = await command('staff.create', args, [search('staff', 'name', 'existing', {})]);
+  assert.equal(duplicate.proposal, undefined);
+  assert.equal(duplicate.terminal?.refusal?.reason, 'duplicate', duplicate.raw);
+});
+
 test('N10 allows direct event and shift deletion while computed events and staff profiles remain blocked', async () => {
   const args = { eventId: handle('event1') };
   const direct = await command('calendar.deleteEvent', args, [event('direct')]);

@@ -1,3 +1,4 @@
+/* global AbortController, Response, URL */
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -160,11 +161,6 @@ async function verifyProposal(assistant, reply, store, snapshot, id, observed) {
 
 const exceptions = {
   'S2-145': 'N21/N12/N18: the member rank read has no recipient-scoped SMS confirmation path.',
-  'S2-149': 'N12 R5: the expiring-pass fact omits the two stored uses remaining.',
-  'S2-152': 'N12 R5/N06: default domain routing can return Booking before the inactive member count.',
-  'S2-160': 'N12 R5: the ready model has zero matching inactive holders and Navis reports unavailable data.',
-  'S2-175': 'N12 R5: the same-phone request avoids a change but omits the exact unchanged acknowledgment.',
-  'S8-014': 'N02/N12 R5: the response offers a text clarification without member and staff option chips.',
 };
 
 async function verifyScenario(row, harness) {
@@ -373,7 +369,139 @@ test('S8-014 asks the owner to choose when the same name is both staff and a mem
   assert.equal(reply.turn?.kind, 'clarification');
   assert.equal(reply.turn.field, 'recordKind');
   assert.match(reply.answer, /회원.*직원/u);
+  const memberChoice = reply.turn.choices.find(choice => choice.label === '회원');
+  assert.ok(memberChoice);
+  assert.equal(reply.turn.choices.length, 2);
+  const memberReply = await assistant.ask({ text: '', signal: new AbortController().signal,
+    continuation: { clarificationId: reply.turn.id, choiceId: memberChoice.id } });
+  assert.equal(memberReply.turn?.kind, 'read');
+  assert.doesNotMatch(memberReply.answer, /01012345678/u);
   assert.equal(store.getSnapshot(), before);
+});
+
+test('S2-188/S2-194 select one owned note and verify the card before applying', async t => {
+  const harness = createNavisMenuHarness(createBridge, validateAgentFrame, navisAgentFakeFetch);
+  t.after(harness.close);
+  const run = createRun();
+  const store = prepareStore('S2-194', run);
+  const { assistant, replies } = makeProvider(run, store, harness);
+  const ask = (text, continuation) => assistant.ask({ text, continuation, signal: new AbortController().signal });
+  const before = store.getSnapshot();
+  const memberId = oldMember('M-0012');
+  const own = before.tables.memberNote.filter(note => note.memberId === memberId);
+  assert.equal(own.length, 2);
+
+  const wrong = await ask('김도현 "없는 메모" 메모 지워줘');
+  assert.equal(wrong.turn?.kind, 'refusal');
+  assert.equal(wrong.proposalSession, undefined);
+  assert.equal(store.getSnapshot(), before);
+
+  const request = await ask('김도현 메모 지워줘');
+  assert.equal(request.turn?.field, 'noteId');
+  assert.equal(request.turn.choices.length, 2);
+  const choice = request.turn.choices.find(option => option.label.includes('샷 연하게'));
+  assert.ok(choice);
+  const reply = await ask('', { clarificationId: request.turn.id, choiceId: choice.id });
+  const card = reply.proposalSession;
+  assert.ok(card?.isPending());
+  assert.equal(replies.at(-1).result.proposal.command, 'members.deleteNote');
+  assert.deepEqual(replies.at(-1).result.calls.map(call => call.name), ['search_records', 'search_records', 'propose_action']);
+  const { id } = card.getSnapshot().proposal;
+  await ask('지워 줘');
+  assert.equal(store.getSnapshot(), before);
+  assert.equal(card.confirm(store, id)?.requiresExtraConfirmation, true);
+  await ask('응');
+  assert.equal(store.getSnapshot(), before);
+  const receipt = card.confirm(store, id, true);
+  assert.equal(receipt?.frame.outcome, 'applied');
+  const after = store.getSnapshot();
+  assert.equal(after.revision, before.revision + 1);
+  assert.deepEqual(after.tables.memberNote, before.tables.memberNote.filter(note => note.noteId !== own[0].noteId));
+  card.confirm(store, id, true);
+  assert.equal(store.getSnapshot(), after);
+  assert.ok(receipt.undoToken);
+  accept(store.undo(receipt.undoToken));
+  assert.deepEqual(store.getSnapshot().tables.memberNote, before.tables.memberNote);
+});
+
+test('a note replacement containing another note body still changes the requested note', async t => {
+  const harness = createNavisMenuHarness(createBridge, validateAgentFrame, navisAgentFakeFetch);
+  t.after(harness.close);
+  const run = createRun();
+  const store = prepareStore('S2-188', run);
+  const before = store.getSnapshot();
+  const { assistant } = makeProvider(run, store, harness);
+  const reply = await assistant.ask({ text: '김도현 메모 "우유 알레르기 있음" -> "샷 연하게 추가 금지"로 바꿔줘',
+    signal: new AbortController().signal });
+  const card = reply.proposalSession;
+  assert.equal(card?.getSnapshot().proposal.command, 'members.updateNote');
+  assert.equal(store.getSnapshot(), before);
+  const receipt = card.confirm(store, card.getSnapshot().proposal.id);
+  assert.equal(receipt?.frame.outcome, 'applied');
+  assert.equal(store.getSnapshot().tables.memberNote.find(note => note.body.raw === '샷 연하게 추가 금지')?.noteId,
+    before.tables.memberNote.find(note => note.body.raw === '우유 알레르기 있음')?.noteId);
+  assert.ok(store.getSnapshot().tables.memberNote.some(note => note.body.raw === '샷 연하게'));
+});
+
+test('S2-188 retains the replacement text while asking which note to edit', async t => {
+  const harness = createNavisMenuHarness(createBridge, validateAgentFrame, navisAgentFakeFetch);
+  t.after(harness.close);
+  const run = createRun();
+  const store = prepareStore('S2-188', run);
+  const before = store.getSnapshot();
+  const { assistant } = makeProvider(run, store, harness);
+  const ask = (text, continuation) => assistant.ask({ text, continuation, signal: new AbortController().signal });
+  const reply = await ask(corpus.get('S2-188').utterances[1]);
+  assert.equal(reply.turn?.field, 'noteId');
+  const choice = reply.turn.choices.find(option => option.label.includes('샷 연하게'));
+  assert.ok(choice);
+  const proposal = await ask('', { clarificationId: reply.turn.id, choiceId: choice.id });
+  const card = proposal.proposalSession;
+  assert.equal(card?.getSnapshot().proposal.command, 'members.updateNote');
+  assert.equal(store.getSnapshot(), before);
+  const receipt = card.confirm(store, card.getSnapshot().proposal.id);
+  assert.equal(receipt?.frame.outcome, 'applied');
+  const previous = before.tables.memberNote.find(note => note.body.raw === '샷 연하게');
+  assert.equal(store.getSnapshot().tables.memberNote.find(note => note.noteId === previous.noteId)?.body.raw, '샷 세 번');
+  assert.ok(receipt.undoToken);
+  accept(store.undo(receipt.undoToken));
+  assert.deepEqual(store.getSnapshot().tables.memberNote, before.tables.memberNote);
+});
+
+test('a person mentioned inside a new note does not become its owner', async t => {
+  const harness = createNavisMenuHarness(createBridge, validateAgentFrame, navisAgentFakeFetch);
+  t.after(harness.close);
+  const run = createRun();
+  const store = prepareStore('S2-183', run);
+  const before = store.getSnapshot();
+  const { assistant } = makeProvider(run, store, harness);
+  const reply = await assistant.ask({ text: '메모에 김도현 동행이라고 적어줘', signal: new AbortController().signal });
+  assert.equal(reply.turn?.field, 'member');
+  assert.equal(reply.proposalSession, undefined);
+  assert.equal(store.getSnapshot(), before);
+});
+
+test('S2-197 refuses a stale archive card on the second press', async t => {
+  const harness = createNavisMenuHarness(createBridge, validateAgentFrame, navisAgentFakeFetch);
+  t.after(harness.close);
+  const run = createRun();
+  const store = prepareStore('S2-197', run);
+  const { assistant } = makeProvider(run, store, harness);
+  const before = store.getSnapshot();
+  const staged = before.tables.marketing.mktCustomer.find(row => row.name === '홍길동');
+  assert.ok(staged);
+  const member = before.tables.memberProfile.find(row => row.customerId === staged.customerId);
+  const reply = await assistant.ask({ text: '홍길동 회원 삭제해줘', signal: new AbortController().signal });
+  const card = reply.proposalSession;
+  assert.ok(card?.isPending());
+  const { id } = card.getSnapshot().proposal;
+  assert.equal(card.confirm(store, id)?.requiresExtraConfirmation, true);
+  accept(store.dispatch({ type: 'members.addNote', memberId: member.memberId, body: '보관보다 새 기록' }));
+  const changed = store.getSnapshot();
+  assert.notEqual(changed, before);
+  assert.equal(card.confirm(store, id, true)?.frame.outcome, 'conflict');
+  assert.equal(store.getSnapshot(), changed);
+  assert.equal(changed.tables.marketing.mktCustomer.find(row => row.customerId === staged.customerId).deletedAt, undefined);
 });
 
 test('a confirmed member edit refreshes both member and credit projections on the same revision', async t => {

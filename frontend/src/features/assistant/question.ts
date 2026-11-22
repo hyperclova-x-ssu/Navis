@@ -16,7 +16,6 @@ const RULES: readonly Rule[] = [
   ['notice-send', ['휴무', '공지', 'notices', 'closurenotice', '休业通知', '休業通知']],
   ['store-environment', ['매장환경', '온도', '습도', '음악', 'temperature', 'humidity', 'music', '温度', '溫度', '湿度', '濕度', '音乐', '音樂']],
   ['promo-video', ['영상', 'video', '视频', '影片', '視頻']],
-  ['marketing-performance', ['효과', '성과', 'performance', 'results', '效果', '成效', '成果', '績效']],
   ['expiry-coupon', ['크루아상', '할인', '소진', 'discount', 'croissant', 'sellout', '折扣', '可颂', '可頌', '打折']],
   ['slot-coupon', ['한산', '빈시간', '빈자리', 'quiet', 'slow', 'emptyslot', '空闲', '空閒', '闲时', '空檔', '冷清', '清闲', '清閒', '安静', '安靜']],
   ['members', ['단골몇명', '회원몇명']],
@@ -25,7 +24,7 @@ const RULES: readonly Rule[] = [
   ['marketing-today', ['홍보', 'promote', 'promotion', 'marketing', '推广', '推廣', '宣传', '宣傳']],
   ['menu', ['카페라테', '카페라떼', '메뉴원가']],
   ['ledger', ['매출', '입금', '수입', '가계부', '벌었', 'earn', 'imake', 'imade', 'sales', 'revenue', 'income', '销售', '銷售', '营业', '營業', '收入', '赚', '賺']],
-  ['inventory-booking', ['재고', '물품', ...STOCK_MERGED_WORDS, 'stock', 'inventory', '库存', '庫存']],
+  ['inventory-booking', ['재고', '물품', '유통기한', '소비기한', '폐기', ...STOCK_MERGED_WORDS, 'stock', 'inventory', '库存', '庫存']],
   ['staff-schedule', ['근무', '직원스케줄', '시간표', 'staffschedule', 'staffing', 'shiftroster', '排班', '班表']],
   ['calendar', ['일정', '달력', '캘린더', 'schedule', 'calendar', '日程', '日历', '日曆', '行程', '行事曆']],
   ['customer-analysis', CUSTOMERS],
@@ -54,7 +53,12 @@ export function matchWidget(text: string): FeatureId | null {
   const key = norm(text);
   if (has(key, CUSTOMERS) && has(key, TOMORROW_WORDS)) return null;
   if (has(key, ['우유', 'milk']) && has(key, ['사용', '썼', '쓴', 'used'])) return 'inventory-booking';
-  for (const [id, words] of normalizedRules) if (words.some((word) => key.includes(word))) return id;
+  // "재고 제일 적게 남은 재료" is about stock, not the promo video's materials, unless it also names a video or a promotion.
+  const stockAsk = has(key, ['재고', '유통기한', '소비기한', '폐기']) && !has(key, ['영상', '홍보', '릴스', '쇼츠', '사진']);
+  for (const [id, words] of normalizedRules) {
+    if (stockAsk && id === 'promo-video') continue;
+    if (words.some((word) => key.includes(word))) return id;
+  }
   return null;
 }
 

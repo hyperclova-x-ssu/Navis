@@ -5,10 +5,11 @@ import type { ProposalSession } from './navis-conversation';
 import type { AgentActionProposal, LocalAgentProposal } from './agent-actions';
 import type { LocalSlots, SlotValue } from './domains/registry';
 import type { AgentReadEvidence } from './snapshot';
+import type { WidgetHandoffStep } from './widget-handoff';
 
 export interface CandidateSize { readonly width: CellSpan; readonly height: CellSpan }
 /** `placement` says whether the widget lives in the layer the user is looking at (API-10 v4). */
-export interface Candidate { readonly featureId: FeatureId; readonly condition: QueryCondition; readonly size: CandidateSize; readonly reason: string; readonly preview: WidgetView<unknown>; readonly placement: 'current-layer' | 'other-layer' }
+export interface Candidate { readonly featureId: FeatureId; readonly condition: QueryCondition; readonly size: CandidateSize; readonly reason: string; readonly preview: WidgetView<unknown>; readonly placement: 'current-layer' | 'other-layer'; readonly summary?: { readonly label: string; readonly display: string } | null }
 export type ReplyStatus = 'stopped';
 /** Compatibility with the dashboard's price controls. */
 export type AgentClarification = {
@@ -33,6 +34,9 @@ export interface AgentHandoff {
   readonly featureId: string;
   readonly command?: string;
   readonly draft?: Readonly<Record<string, unknown>>;
+  /** Local widget entry that requires its own draft and confirmation. */
+  readonly step?: WidgetHandoffStep;
+  readonly itemId?: string;
 }
 
 export type AgentTurn =
@@ -75,10 +79,16 @@ export interface AskInput {
   readonly signal: AbortSignal;
   readonly locale?: Locale;
   readonly layer?: DashboardLayerId;
+  /** A successful response opened a supported stream. No answer text is implied. */
+  readonly onTransportAck?: () => void;
+  /** Fired once on the first validated non-blank server text, before terminal delivery. */
+  readonly onFirstText?: () => void;
   readonly onTextDelta?: (delta: string) => void;
   readonly simpleSignal?: AbortSignal;
   readonly continuation?: AgentContinuation;
   readonly agentTurn?: AgentTurnInput;
+  /** Later steps of an ordered plan arrive here as their own replies, once the owner's card for the step before has a receipt (B23). */
+  readonly onFollowUp?: (reply: AssistantReply) => void;
   readonly onNavigation?: (action: AgentNavigationAction) => void;
   readonly onStatus?: (frame: AgentFrameData['status']) => void;
 }
@@ -86,4 +96,6 @@ export interface AssistantProvider {
   ask(input: AskInput): Promise<AssistantReply>;
   /** Invalidates the pending write turn on close, layer change or run replacement. */
   discardAgentTurn?(): void;
+  /** F17: load the facts of every real-port domain before a projection reads them. Resolves when they are ready or the wait cap passed; never rejects. */
+  preloadFacts?(): Promise<void>;
 }

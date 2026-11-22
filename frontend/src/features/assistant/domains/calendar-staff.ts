@@ -4,15 +4,17 @@ import { resolveDataText, selectCalendar } from '../../../data/widget-data';
 import { handlers, type HandlerContext, type HandlerResult } from '../../../data/commands/handlers';
 import { guardCalendarWrite, type CalendarWrite } from '../../../data/commands/calendar-guard';
 import type { DataCommand } from '../../../data/commands/types';
-import { addDays, daysBetween, isIsoDate, isTime, NOW_TIME, TODAY, weekdayOf } from '../../../data/db/time';
+import { addDays, daysBetween, isIsoDate, isTime, TODAY, weekdayOf } from '../../../data/db/time';
 import type { DataSnapshot } from '../../../data/db/types';
 import { selectDraftClosureLink, selectStoreClosures } from '../../../data/iteration7/notices/selectors';
 import { findShiftConflicts, handoffTimes, selectStaffSchedule } from '../../../data/iteration7/staff/selectors';
+import { staffCalendarClock } from '../../../data/iteration7/staff/clock';
 import { validateAgentCommandArgs, validateAgentDraft, validateAgentPrefill, type AgentFact, type AgentWireArgs } from '../../../../shared/navis-agent-schema.mjs';
 import { createTranslator } from '../../../i18n';
 import { mgmtSupplyBundle } from '../../widgets/mgmt-supply/messages';
 import { navisTranslator } from '../messages';
 import { normalizeNavisInput, normalizeNavisName, parseNavisDate, parseNavisNumber, parseNavisPeriod, parseNavisTime } from '../navis-input';
+import { calendarStaffMessages } from './calendar-staff.messages';
 import type { CommandAdapter, DomainAdapter, DomainDetail, DomainLookup, DomainRoute, DomainTurnInput, LocalSlots, RecordAdapter, RecordSearch, RecordTargets } from './registry';
 
 const calendar = 'calendar' as const;
@@ -29,8 +31,9 @@ const commands: readonly Command[] = [
 const deleteCommands = new Set<Command>(['calendar.deleteEvent', 'staff.deleteSchedule']);
 const isObject = (value: unknown): value is Readonly<Record<string, unknown>> => !!value && typeof value === 'object' && !Array.isArray(value);
 const string = (value: unknown): value is string => typeof value === 'string' && !!value.trim() && value.length <= 1000;
-const dayOf = (snapshot: DataSnapshot) => snapshot.pos?.businessDate ?? TODAY;
-const currentTime = NOW_TIME;
+const dayOf = (snapshot: DataSnapshot) => snapshot.tables.staffCalendarAsOf
+  ? staffCalendarClock(snapshot.tables).date
+  : snapshot.pos?.businessDate ?? TODAY;
 const inLocale = (locale: Locale, ko: string, en: string, hans: string, hant: string) => ({ ko, en, 'zh-Hans': hans, 'zh-Hant': hant })[locale];
 const nameKey = (name: string) => name.normalize('NFKC').toLowerCase().replace(/[\s\p{P}]/gu, '');
 const activeStaff = (s: DataSnapshot) => s.tables.staff.filter(person => person.archivedAt === null);
@@ -92,7 +95,8 @@ const range = (s: DataSnapshot, c: QueryCondition) => c.kind === 'default' ? { s
 
 function calendarRows(snapshot: DataSnapshot, start: string, end: string) {
   const view = selectCalendar(snapshot, { date: dayOf(snapshot), start, end });
-  return [...view.entries, ...view.pickupEntries, ...view.staffEntries].sort((a, b) =>
+  return [...[...view.entries, ...view.pickupEntries].map(row => ({ ...row, staffShift: false })),
+    ...view.staffEntries.map(row => ({ ...row, staffShift: true }))].sort((a, b) =>
     a.date.localeCompare(b.date) || (a.time ?? '99:99').localeCompare(b.time ?? '99:99') || a.id.localeCompare(b.id));
 }
 
@@ -102,19 +106,25 @@ function projectWidget(s: DataSnapshot, feature: FeatureId, condition: QueryCond
   if (!period) return { status: 'unsupported_period' as const };
   const { start, end } = period, l = labels(locale), date = dayOf(s);
   if (feature === calendar) {
-    if (!s.tables.integration.calendar) return { status: 'unavailable' as const };
+    if (s.tables.calendarProjection === undefined && !s.tables.integration.calendar) return { status: 'unavailable' as const };
     const rows = calendarRows(s, start, end);
-    const events = rows.filter(row => row.kind === 'event');
+    const events = rows.filter(row => row.kind === 'event' && !row.staffShift && row.source !== 'pickup');
+    const shifts = rows.filter(row => row.staffShift);
+    const pickups = rows.filter(row => row.source === 'pickup');
     const todos = rows.filter(row => row.kind === 'todo');
     return { facts: [
-      count('calendar.entries.count', l.title, events.length, l, 'record', start),
+      count('calendar.entries.count', l.title, events.length + shifts.length + pickups.length, l, 'record', start),
+      count('calendar.scheduled.count', l.title, events.length, l, 'record', start),
+      count('calendar.shift.count', l.tr('근무 일정', 'Staff shifts', '员工班次', '員工班次'), shifts.length, l, 'record', start),
+      count('calendar.pickup.count', l.tr('픽업', 'Pickups', '自提', '自取'), pickups.length, l, 'record', start),
       count('calendar.todo.count', l.tr('할 일', 'To-dos', '待办', '待辦'), todos.length, l, 'record', start),
       ...rows.slice(0, 40).flatMap((row, index) => {
         const key = `calendar.entry.${index}`;
-        const rendered = entryLabel(row, l);
+        const entry = [l.format.date(row.date, 'monthDay'), row.time ?? (row.kind === 'event' ? l.allDay : ''), dataLabel(row.title, l)].filter(Boolean).join(' ');
+        const label = row.staffShift ? l.shift : row.kind === 'todo' ? l.tr('할 일', 'To-do', '待办', '待辦') : l.title;
         const source = sourceLabel(row.source, l);
         const closure = s.tables.calendarEvent.find(event => row.editable && event.eventId === row.sourceId)?.storeClosure;
-        return [fact(key, row.kind === 'todo' ? l.tr('할 일', 'To-do', '待办', '待辦') : l.title, rendered, rendered, 'text', row.date),
+        return [{ ...fact(key, label, entry, entry, 'text', row.date), ...(row.staffShift && { source: staffFeature }) },
           fact(`${key}.source`, l.tr('출처', 'Source', '来源', '來源'), row.source, source, 'text', row.date),
           fact(`${key}.category`, l.category, row.categoryId, categoryLabel(row.categoryId, l), 'text', row.date),
           fact(`${key}.kind`, l.tr('종류', 'Type', '类型', '類型'), row.kind,
@@ -128,6 +138,7 @@ function projectWidget(s: DataSnapshot, feature: FeatureId, condition: QueryCond
           [l.format.date(closure.startDate, 'short'), l.format.date(closure.endDate, 'short'), closure.title].join(' '), 'text', closure.startDate)),
     ] };
   }
+  const currentTime = staffCalendarClock(s.tables).time;
   const model = selectStaffSchedule(s, { startDate: start, endDate: end });
   const names = new Map(model.staff.map(person => [person.staffId, person.name]));
   const current = new Set(model.rows.filter(row => row.date === date && row.kind === 'work' && row.start! <= currentTime && currentTime < row.end!).map(row => row.staffId));
@@ -307,9 +318,20 @@ function previewChanges(command: CalendarStaffCommand, before: DataSnapshot, aft
       add(l.closure, closure(old), closure(row));
       const overlaps = row && closureOverlaps(before, row, l);
       if (overlaps) add(l.t('common.navis.agent.closureOverlaps'), overlaps, overlaps);
-      const drafts = a.noticeDraft.filter(draft => draft.closureEventId === id && selectDraftClosureLink(before, draft) === 'current');
+      const removesClosure = old?.storeClosure && !row?.storeClosure;
+      const drafts = a.noticeDraft.filter(draft => draft.closureEventId === id && (removesClosure || selectDraftClosureLink(before, draft) === 'current'));
       const stale = drafts.filter(draft => selectDraftClosureLink(after, draft) !== 'current');
-      if (stale.length) add(l.linked, count('x', l.linked, stale.length, l).display, l.tr('다시 가져와 주세요', 'Import again', '请重新导入', '請重新匯入'));
+      if (stale.length) {
+        const next = removesClosure ? count('x', l.linked, 0, l).display
+          : l.tr('다시 가져와 주세요', 'Import again', '请重新导入', '請重新匯入');
+        add(l.linked, count('x', l.linked, stale.length, l).display, next);
+        if (removesClosure) {
+          // The Korean card label carries the localized warning into the second step.
+          add('안내', undefined,
+            l.tr('연결된 공지 초안에서 휴무 연결이 끊겨요', 'Linked notice drafts will lose their connection to this closure.',
+              '相关通知草稿将解除与这条休息日程的关联。', '相關通知草稿將解除與這筆休息行程的連結。'));
+        }
+      }
     }
   } else if (command.type === 'staff.create' || command.type === 'staff.update') {
     title = l.staff;
@@ -380,6 +402,7 @@ function commandAdapter(type: Command, options: Options): CommandAdapter<Calenda
 }
 
 const datePhrase = /(?:(?:\d{4}\s*년\s*)?\d{1,2}\s*월\s*\d{1,2}\s*일|(?<!\d)(?:\d{4}[-./])?\d{1,2}[-./]\d{1,2}(?![\d/:])|(?:(?:이번|다음|지난|저번)\s*주\s*)?[월화수목금토일]요일|(?:이번|다음|지난|저번)\s*달\s*(?:말|초|\d{1,2}\s*일)|그저께|어제|오늘|내일|모레|글피)/gu;
+const dayOfMonthPhrase = /(?<!\S)(\d{1,2}|삼)\s*일(?=\s|에|로|$)/gu;
 const clockNumber = '[0-9]{1,2}|열\u0020?(?:한|두|세)?|한|두|세|네|다섯|여섯|일곱|여덟|아홉|일|이|삼|사|오|육|칠|팔|구|십[일이삼사오육칠팔구]?';
 const hourPhrase = new RegExp(`(?<![\\p{L}\\d])(?:(오전|오후|아침|새벽|낮|점심|저녁|밤)\\s*)?(?:(\\d{1,2}):(\\d{2})|(${clockNumber})\\s*시(?!간|대)(?:\\s*(반|(?:${clockNumber})\\s*분))?)`, 'gu');
 const relativeClock = /(?<![가-힣\d])([\d]+|한|두|세|네)\s*(시간|분)\s*(뒤|후|전)(?:에)?/u;
@@ -392,6 +415,11 @@ const addVerb = /넣|추가|등록|잡아|기록|하는\s*걸로|하기로/u;
 const openVerb = /열어|띄워|으로\s*가|보여|화면|상세|탭/u;
 const staffWords = /근무|직원|출근|퇴근|교대|휴게|쉬는\s*(?:날|시간)|누가\s*(?:언제\s*)?(?:일해|쉬어)|몇\s*명\s*일하고|스케줄표/u;
 const calendarWords = /일정|캘린더|달력|할\s*일|to-do/u;
+const appointment = /점검|촬영|세무사\s*상담/u;
+const filterHistory = /필터.*(?:청소.*(?:언제|마지막)|언제\s*청소)/u;
+const titleEdit = /(?:제목|이름)(?:을|은)?\s+.+으?로\s*[.!?]?$/u;
+const memoEdit = /일정(?:에|의)\s+(.+?)\s+메모\s*(?:추가|등록|수정|변경)/u;
+const calendarEdit = (text: string) => editVerb.test(text) || titleEdit.test(text) || memoEdit.test(text);
 const closureWords = /(?:임시|정기|매장|가게)\s*휴무|휴무\s*일정|쉬는\s*날로\s*일정/u;
 const negatedWrite = /(?:하지|남기지|넣지|옮기지|바꾸지|지우지)\s*(?:마|말)|\b(?:do not|don't|never)\b|不要|别|別/iu;
 function cleanText(value: string) {
@@ -402,7 +430,7 @@ function cleanText(value: string) {
 function dateFrom(text: string, today: string) {
   const direct = parseNavisDate(text, today);
   if (direct) return direct;
-  const single = /(?:^|\s)(\d{1,2}|삼)\s*일(?=\s|에|로|$)/u.exec(text);
+  const [single] = text.matchAll(dayOfMonthPhrase);
   if (!single || [...text.matchAll(datePhrase)].length) return;
   const day = String(parseNavisNumber(single[1])).padStart(2, '0');
   const current = `${today.slice(0, 7)}-${day}`;
@@ -489,6 +517,7 @@ function nameFrom(text: string, people: readonly Staff[]) {
 }
 function staffRoute(text: string, s: DataSnapshot, locale: Locale, options: Options): DomainRoute | undefined {
   const l = labels(locale), today = dayOf(s), date = dateFrom(text, today), actual = date ?? today;
+  const currentTime = staffCalendarClock(s.tables).time;
   const people = activeStaff(s), query = nameFrom(text, people), selected = query ? staffMatches(s, query, locale) : [];
   const person = selected.length === 1 && selected[0].match === 'exact' ? people.find(p => p.staffId === selected[0].id) : undefined;
   const times = staffClocks(text), start = times[0]?.time, last = times.at(-1);
@@ -514,13 +543,23 @@ function staffRoute(text: string, s: DataSnapshot, locale: Locale, options: Opti
     if (!handoffs.length) return answer(l.tr('교대 일정이 없어요.', 'There is no shift handoff.', '没有交班安排。', '沒有交班安排。'));
     if (!from) return clarification('fromTime', l.tr('어느 교대 시간이에요?', 'Which handoff time?', '是哪个交班时间？', '是哪個交班時間？'));
     if (times.length > 1 && !handoffs.includes(from)) return clarification('fromTime', l.tr('그 시간에 교대가 없어요.', 'There is no handoff at that time.', '该时间没有交班。', '該時間沒有交班。'));
-    const next = last && (/당겨/u.test(text) || last.time > from ? last.time : afternoon(last));
-    if (!next) return clarification('toTime', l.tr('몇 시로 바꿀까요?', 'What is the new time?', '改到几点？', '改到幾點？'));
+    const next = last && (/미뤄|미루|늦춰/u.test(text) ? afternoon(last) : last.time);
+    if (!next || !last) return clarification('toTime', l.tr('몇 시로 바꿀까요?', 'What is the new time?', '改到几点？', '改到幾點？'));
     const command = { type: 'staff.moveHandoff' as const, date: actual, fromTime: from, toTime: next, idempotencyKey: 'preview' };
+    const proposeHandoff = (toTime: string) => routedCommand(command.type, { date: actual, fromTime: from, toTime }, locale);
     const preview = simulate(command, s, 'handoff');
-    if (!preview.ok) return clarification('toTime', l.tr('퇴근 시각은 출근 시각보다 뒤여야 해요.', 'End time must be after start time.', '下班时间须晚于上班时间。', '下班時間須晚於上班時間。'));
+    if (!preview.ok) {
+      const issue = l.tr('퇴근 시각은 출근 시각보다 뒤여야 해요.', 'End time must be after start time.', '下班时间须晚于上班时间。', '下班時間須晚於上班時間。');
+      const alternate = afternoon(last);
+      if (alternate !== next && alternate !== from && simulate({ ...command, toTime: alternate }, s, 'handoff').ok) {
+        return { kind: 'clarification', field: 'toTime', answer: issue,
+          choices: [{ id: 'afternoon', label: calendarStaffMessages.moveHandoff(alternate) }],
+          resume: value => value === 'afternoon' ? proposeHandoff(alternate) : undefined };
+      }
+      return clarification('toTime', issue);
+    }
     if (from === next) return answer(l.tr('이미 그 시간이에요.', 'It is already at that time.', '已经是该时间。', '已經是該時間。'));
-    return routedCommand(command.type, { date: actual, fromTime: from, toTime: next }, locale);
+    return proposeHandoff(next);
   }
   if (/이름/u.test(text) && (change || remove || /빈칸/u.test(text))) {
     const next = /(?:→|->)\s*([^\s]+)|이름(?:을|은)?\s+(?:['‘“]([^'’”]+)['’”]|([^\s]+?))(?:으?로|\s*(?:고쳐|바꿔|수정))/u.exec(text);
@@ -546,8 +585,11 @@ function staffRoute(text: string, s: DataSnapshot, locale: Locale, options: Opti
     (remove || change || create || off && /해줘|걸로|처리/u.test(text) || !!rest && !/몇\s*분|얼마나/u.test(text) || times.length > 1 && (working || !!query));
   if (write && (working || off || rest !== undefined || times.length > 1)) {
     if (remove && !date) return clarification('scheduleId', l.tr('어느 날짜의 근무를 지울까요?', 'Which shift date?', '要删除哪一天的班次？', '要刪除哪一天的班次？'));
-    if (!off && times.length > 1 && start && (end! <= start || /다음\s*날/u.test(text))) {
-      return clarification('splitOvernight', l.tr('자정을 넘어요. 날짜별로 나눠 등록할까요?', 'This crosses midnight. Split it by date?', '班次跨过午夜。要按日期拆分吗？', '班次跨過午夜。要按日期拆分嗎？'));
+    if (!off && times.length > 1 && start && end && (end < start || /다음\s*날/u.test(text))) {
+      const nextDate = addDays(actual, 1);
+      const parts = [start < '23:59' ? `${l.format.date(actual, 'short')} ${start}~23:59` : null,
+        end > '00:00' ? `${l.format.date(nextDate, 'short')} 00:00~${end}` : null].filter(Boolean);
+      return clarification('splitOvernight', [calendarStaffMessages.overnight, ...parts].join('\n'));
     }
     if (!person) return query ? answer(missing) : askStaff();
     if (remove) {
@@ -615,7 +657,7 @@ function calendarTitle(text: string, times: readonly SpokenClock[]) {
     .replace(/이번\s*주말|(?:이번|다음)\s*주|(?:다음|이번)\s*달\s*초쯤|주말/gu, ' ')
     .replace(/세금[·\s]*행정|발주[·\s]*입고|매장\s*운영|세금\s*낼\s*거|부가세\s*낼/gu, token => /부가세/u.test(token) ? '부가세 납부' : /낼/u.test(token) ? '세금 납부' : ' ')
     .replace(/(?:^|\s)(?:오전|오후|아침|낮|점심때|저녁|종일|날짜로|있었다고|했다고|하는|같이|하나|새|로|에)(?:에|로|는)?(?=\s|$)/gu, ' ')
-    .replace(/\s*(?:캘린더|달력)(?:에|로|에서)?|\s*(?:일정|스케줄|할\s*일|to-do)(?:에|로|도)?|\s*분류로/giu, ' ')
+    .replace(/\s*(?:캘린더|달력)(?:에서|에|로)?|\s*(?:일정|스케줄|할\s*일|to-do)(?:에|로|도)?|\s*분류로/giu, ' ')
     .replace(/(?:^|\s)(?:에|로|는|을|를|으로|까지|부터|에다|어서|하나)(?=\s|$)/gu, ' ')
     .replace(/\([^()]*\)/gu, ' ')
     .replace(/\s*(?:추가|넣어|넣는|등록|기록|잡아|만들어|적어)(?:\s*(?:해|해줘|해주세요|줘|줘유|줘잉|줄래|해줘잉|해줘유))?\s*.*$/u, '')
@@ -624,7 +666,7 @@ function calendarTitle(text: string, times: readonly SpokenClock[]) {
 }
 const memoFrom = (text: string) => {
   const quoted = /메모(?:는|에|를)?\s*:?\s*['‘“]([^'’”]+)['’”]/u.exec(text);
-  return (quoted?.[1] ?? /메모(?:는|에|를)?\s*:?\s*(.+?)(?:이라고|라고|으로)?\s*(?:적어|바꿔|추가|달아|넣어)?(?:\s*(?:줘|해줘))?\s*$/u.exec(text)?.[1])?.trim();
+  return (quoted?.[1] ?? memoEdit.exec(text)?.[1] ?? /메모(?:는|에|를)?\s*:?\s*(.+?)(?:이라고|라고|으로)?\s*(?:적어|바꿔|추가|달아|넣어)?(?:\s*(?:줘|해줘))?\s*$/u.exec(text)?.[1])?.trim();
 };
 function eventIn(text: string, s: DataSnapshot, l: ReturnType<typeof labels>, includeAutomatic = true) {
   const day = dayOf(s);
@@ -640,6 +682,14 @@ function eventIn(text: string, s: DataSnapshot, l: ReturnType<typeof labels>, in
 }
 function directCandidate(s: DataSnapshot, text: string, date: string | undefined, l: ReturnType<typeof labels>) {
   const named = eventIn(text, s, l);
+  const shortTitle = !named.length && (calendarEdit(text) || deleteVerb.test(text))
+    ? /^(.+?)\s+(?:일정|할\s*일)/u.exec(text)?.[1].replace(datePhrase, '').trim() : undefined;
+  if (shortTitle) {
+    for (const event of s.tables.calendarEvent) {
+      const title = dataLabel(event.title, l);
+      if (matchName(shortTitle, title)) named.push({ row: directEntry(event), title });
+    }
+  }
   const direct = named.filter(item => item.row.editable);
   const eligible = direct.length ? direct : named;
   const dated = date && eligible.filter(item => item.row.date === date);
@@ -656,6 +706,7 @@ function automaticSource(text: string): FeatureId | undefined {
 }
 function calendarRoute(text: string, s: DataSnapshot, locale: Locale, options: Options): DomainRoute | undefined {
   const l = labels(locale), today = dayOf(s), date = dateFrom(text, today);
+  const currentTime = staffCalendarClock(s.tables).time;
   const timeValues = clocks(text), clock = timeValues.at(-1), time = clock?.time;
   const relative = relativeClock.exec(text);
   const rel = relative ? parseNavisTime(text, `${today}T${currentTime}`) : undefined;
@@ -676,14 +727,31 @@ function calendarRoute(text: string, s: DataSnapshot, locale: Locale, options: O
   };
   const ambiguousTime = l.tr('오전과 오후 중 언제예요?', 'Is that AM or PM?', '上午还是下午？', '上午還是下午？');
   const dateQuestion = l.tr('어느 날짜예요?', 'Which date?', '是哪一天？', '是哪一天？');
+  if (filterHistory.test(text)) {
+    const title = text.split(/언제|마지막/u)[0].trim();
+    const latest = eventMatches(s, title, locale).filter(({ fields }) => fields.source === 'direct' && fields.kind === 'event' &&
+      typeof fields.date === 'string' && (fields.date < today || fields.date === today &&
+        (typeof fields.time !== 'string' || fields.time <= currentTime))).sort((a, b) =>
+      String(b.fields.date).localeCompare(String(a.fields.date)) || String(b.fields.time ?? '').localeCompare(String(a.fields.time ?? '')))[0];
+    return answer(latest?.detail ?? missing);
+  }
   if (!date && /\d{1,2}\s*월\s*\d{1,2}\s*일/u.test(text) &&
     [...text.matchAll(datePhrase)].some(match => !parseNavisDate(match[0], today))) {
     return clarification('date', l.tr('그런 날짜는 없어요.', 'That date does not exist.', '该日期不存在。', '該日期不存在。'));
   }
-  const named = directCandidate(s, text, date, l);
-  const selected = date && deleteVerb.test(text) ? named.filter(item => item.row.date === date) : named;
+  const remove = deleteVerb.test(text), change = calendarEdit(text);
+  const dateChangeText = text.split(/메모/u)[0];
+  const movesDate = /옮|미뤄|미루|날짜|로\s*변경/u.test(dateChangeText);
+  const hasDestinationSuffix = (match: RegExpExecArray) => /^\s*으?로/u.test(dateChangeText.slice(match.index + match[0].length));
+  const destination = change && movesDate && (
+    [...dateChangeText.matchAll(datePhrase)].reverse().find(hasDestinationSuffix) ??
+    [...dateChangeText.matchAll(dayOfMonthPhrase)].reverse().find(hasDestinationSuffix)
+  );
+  const destinationDate = destination ? dateFrom(destination[0], today) : undefined;
+  const sourceDate = remove ? date : change ? dateFrom(dateChangeText.slice(0, destination ? destination.index : undefined), today) : undefined;
+  const named = directCandidate(s, text, change ? sourceDate : date, l);
+  const selected = sourceDate ? named.filter(item => item.row.date === sourceDate) : named;
   const target = selected.length === 1 ? selected[0] : undefined;
-  const remove = deleteVerb.test(text), change = editVerb.test(text);
   if (remove && (bulkDelete.test(text) || [...text.matchAll(datePhrase)].length > 1 ||
     text.split(listSeparator).filter(part => eventIn(part, s, l).length).length > 1)) {
     return { kind: 'refusal', reason: 'unsupported' };
@@ -714,7 +782,7 @@ function calendarRoute(text: string, s: DataSnapshot, locale: Locale, options: O
     if ((old?.storeClosure || off) && !options.allowClosureWrites || remove && !options.allowSingleDeletes) return refuse(calendar, ownCalendar);
     const lookup = [bound('event', 'name', 'eventId')], slots = { name: `${title}\n${row.date}` };
     if (remove) return routedCommand('calendar.deleteEvent', {}, locale, lookup, slots);
-    const dateChange = /옮|미뤄|미루|날짜|로\s*변경/u.test(text) ? date : undefined;
+    const dateChange = destinationDate ?? (movesDate ? date : undefined);
     const newName = /(?:제목|이름)(?:을|은)?\s*(?:['‘“]([^'’”]+)['’”]|(.+?))\s*(?:으?로(?:\s*(?:바꿔|고쳐|수정|변경))?|$)|(?:→|->)\s*(.+?)\s*(?:으?로)?\s*(?:제목\s*)?(?:수정|변경|$)/u.exec(text);
     const titleChange = newName?.slice(1).find(Boolean)?.trim();
     const memo = memoFrom(text);
@@ -742,6 +810,7 @@ function calendarRoute(text: string, s: DataSnapshot, locale: Locale, options: O
   const relativeDay = rel ? (relative?.[3] !== '전' && rel < currentTime ? addDays(today, 1)
     : relative?.[3] === '전' && rel > currentTime ? addDays(today, -1) : today) : undefined;
   const write = addVerb.test(text.split(/메모/u)[0]) ||
+    !!date && !!time && !!category && calendarWords.test(text) && /분류로\s*[.!?]?$/u.test(text) ||
     !!date && !openVerb.test(text) && /일정$/u.test(text) && (!!time || off || /달\s*(?:말|초)/u.test(text)) ||
     date && isTodo && !/알려|뭐|목록/u.test(text);
   if (write) {
@@ -753,36 +822,71 @@ function calendarRoute(text: string, s: DataSnapshot, locale: Locale, options: O
     if (off && !options.allowClosureWrites) return refuse(calendar, ownCalendar);
     if (!isTodo && !relativeDay && (!date || /다음\s*달\s*초|(?:이번\s*)?주말/u.test(text))) {
       const invalid = [...text.matchAll(datePhrase)].length > 0 && !date;
+      const nextWeek = /다음\s*주(?:에)?/u;
+      if (!invalid && nextWeek.test(text) && !/주말/u.test(text)) {
+        const monday = addDays(weekStart(today), 7);
+        const choices = Array.from({ length: 5 }, (_, day) => {
+          const id = addDays(monday, day);
+          return { id, label: calendarStaffMessages.weekday(id, day) };
+        });
+        return { kind: 'clarification', field: 'date', choices,
+          answer: l.tr('다음 주 무슨 요일이에요?', 'Which day next week?', '下周星期几？', '下週星期幾？'),
+          resume: value => calendarRoute(text.replace(nextWeek, value), s, locale, options) };
+      }
       return clarification('date', invalid ? l.tr('그런 날짜는 없어요.', 'That date does not exist.', '该日期不存在。', '該日期不存在。')
-        : /주말/u.test(text) ? l.tr('토요일과 일요일 중 언제예요?', 'Saturday or Sunday?', '周六还是周日？', '週六還是週日？')
-          : /다음\s*주/u.test(text) ? l.tr('다음 주 무슨 요일이에요?', 'Which day next week?', '下周星期几？', '下週星期幾？') : dateQuestion);
+        : /주말/u.test(text) ? l.tr('토요일과 일요일 중 언제예요?', 'Saturday or Sunday?', '周六还是周日？', '週六還是週日？') : dateQuestion);
     }
     const actual = date ?? relativeDay ?? today;
     const title = calendarTitle(text, timeValues);
     const inferred = /위생\s*점검|세무사|회의|촬영|필터\s*청소|회식/u.test(title);
     let chosenTime = time ?? rel;
-    if (clock?.ambiguous && !isTodo && !off) {
-      if (!inferred) return clarification('time', ambiguousTime);
-      if (clock.time < '08:00' || /회식/u.test(title)) chosenTime = afternoon(clock);
-    }
-    if (!chosenTime && !isTodo && /아침|오전|저녁|오후|점심때/u.test(text)) {
-      return clarification('time', l.tr('몇 시 일정이에요?', 'What time is the event?', '日程是几点？', '行程是幾點？'));
-    }
+    if (clock?.ambiguous && !isTodo && !off && inferred && (clock.time < '08:00' || /회식/u.test(title))) chosenTime = afternoon(clock);
     if (!string(title)) return clarification('title', l.tr('일정 제목을 넣어 주세요.', 'Enter an event title.', '请输入日程标题。', '請輸入行程標題。'));
-    const duplicate = s.tables.calendarEvent.some(event => event.date === actual && event.kind === (isTodo ? 'todo' : 'event') &&
-      nameKey(dataLabel(event.title, l)) === nameKey(title));
-    const draft = { title, ...(date || relativeDay || !isTodo ? { date: actual } : {}), ...!isTodo && chosenTime && { time: chosenTime },
-      ...memoFrom(text) && { memo: memoFrom(text) }, ...!isTodo && category && { categoryId: category },
+    const memo = memoFrom(text);
+    const base = { title, ...(date || relativeDay || !isTodo ? { date: actual } : {}),
+      ...memo && { memo }, ...!isTodo && category && { categoryId: category },
       ...off && { storeClosure: { kind: /정기/u.test(text) ? 'regular' : 'temporary', endDate: actual } } };
     const command = isTodo ? 'calendar.addTodo' : 'calendar.addEvent';
-    const proposeCreate = (confirmDuplicate = false) => {
-      const fields = { ...draft, ...(confirmDuplicate ? { confirmDuplicate: true } : {}) };
-      return requiresHistorical({ type: command, ...fields })
-        ? keepPast(() => routedCommand(command, { ...fields, dateIntent: 'historical' }, locale))
-        : routedCommand(command, fields, locale);
+    const prepareCreate = (scheduledTime: string | undefined): DomainRoute => {
+      const draft = { ...base, ...!isTodo && scheduledTime && { time: scheduledTime } };
+      // Show a matching row before asking whether the new entry is historical.
+      const duplicate = guardCalendarWrite(s.tables, { type: command, ...draft, dateIntent: 'historical' }, today);
+      const proposeCreate = (confirmDuplicate = false) => {
+        const fields = { ...draft, ...(confirmDuplicate ? { confirmDuplicate: true } : {}) };
+        return requiresHistorical({ type: command, ...fields })
+          ? keepPast(() => routedCommand(command, { ...fields, dateIntent: 'historical' }, locale))
+          : routedCommand(command, fields, locale);
+      };
+      if (duplicate?.ok === false && duplicate.reason === 'CALENDAR_DUPLICATE') {
+        const existing = s.tables.calendarEvent.find(event => event.eventId === duplicate.details?.eventId);
+        if (existing) return {
+          kind: 'clarification', field: 'duplicateChoice', answer: calendarStaffMessages.duplicate(entryLabel(directEntry(existing), l)),
+          choices: [{ id: 'keep', label: calendarStaffMessages.keepDuplicate }, { id: 'add', label: calendarStaffMessages.addDuplicate }],
+          resume: value => value === 'add' ? proposeCreate(true) : answer(calendarStaffMessages.keptDuplicate),
+        };
+      }
+      return proposeCreate();
     };
-    return duplicate ? clarification('duplicateChoice', l.tr('같은 날에 같은 일정이 있어요. 하나 더 넣을까요?', 'That event already exists on this date. Add another?', '这天已有相同日程。再添加一项吗？', '這天已有相同行程。再新增一項嗎？'),
-      value => /하나\s*더|그래도/u.test(value) && !negatedWrite.test(value) ? proposeCreate(true) : undefined) : proposeCreate();
+    if (clock?.ambiguous && !isTodo && !off && !inferred) {
+      const morning = clock.time.startsWith('12:') ? `00${clock.time.slice(2)}` : clock.time;
+      const evening = afternoon(clock);
+      const spoken = clock.time.replace(/^0/u, '');
+      return { kind: 'clarification', field: 'time', answer: ambiguousTime,
+        choices: [{ id: 'am', label: calendarStaffMessages.morning(spoken) }, { id: 'pm', label: calendarStaffMessages.evening(spoken, evening) }],
+        resume: value => value === 'am' ? prepareCreate(morning) : value === 'pm' ? prepareCreate(evening) : undefined,
+      };
+    }
+    if (!chosenTime && !isTodo && /아침|오전|저녁|오후|점심때/u.test(text)) {
+      const askTime = () => clarification('time', calendarStaffMessages.eventTime, value => {
+        const times = clocks(value);
+        return times.length === 1 && !times[0].ambiguous ? prepareCreate(times[0].time) : undefined;
+      });
+      return { kind: 'clarification', field: 'time', answer: calendarStaffMessages.optionalTime,
+        choices: [{ id: 'set-time', label: calendarStaffMessages.setTime }, { id: 'skip-time', label: calendarStaffMessages.skipTime }],
+        resume: value => value === 'set-time' ? askTime() : value === 'skip-time' ? prepareCreate(undefined) : undefined,
+      };
+    }
+    return prepareCreate(chosenTime);
   }
 
   if (selected.length && /언제|메모|출처|분류/u.test(text)) {
@@ -802,7 +906,9 @@ function calendarRoute(text: string, s: DataSnapshot, locale: Locale, options: O
     return [`calendar.entry.${index}`];
   });
   const selectedKeys = upcoming ? keys
-    : [isTodo ? 'calendar.todo.count' : 'calendar.entries.count', ...keys];
+    : [...(isTodo ? ['calendar.todo.count'] : /캘린더\s*상태/u.test(text) ? ['calendar.entries.count'] : ['calendar.scheduled.count',
+      ...(listRows.some(row => row.staffShift) ? ['calendar.shift.count'] : []),
+      ...(listRows.some(row => row.source === 'pickup') ? ['calendar.pickup.count'] : [])]), ...keys];
   const result = widgetRead(calendar, condition, selectedKeys, { answer: isTodo
     ? l.tr('할 일이 없어요.', 'There are no to-dos.', '没有待办事项。', '沒有待辦事項。')
     : l.tr('일정이 없어요.', 'There are no events.', '没有日程。', '沒有行程。') });
@@ -853,19 +959,22 @@ export function createCalendarStaffDomain(options: Options = {}): DomainAdapter 
     routePresentation(raw, s, locale) {
       const text = cleanText(raw);
       if (negatedWrite.test(text)) return;
+      if (/휴무자/u.test(text) && !/공지|발송|예약|회원/u.test(text)) return staffRoute(text, s, locale, options);
       const person = nameFrom(text, activeStaff(s));
       if (person && staffMatches(s, person, locale).length &&
         /(?:휴무|쉬는\s*(?:날|걸로)|\s이름(?:을|은)?\s|휴게\s*\d)/u.test(text) && !/공지|발송|예약|회원/u.test(text)) {
         return staffRoute(text, s, locale, options);
       }
       const date = dateFrom(text, dayOf(s));
-      const datedCalendar = (calendarWords.test(text) || /점검.*스케줄/u.test(text)) && !!date && addVerb.test(text) &&
+      const datedMeeting = /거래처\s*미팅/u.test(text) && clocks(text).length === 1;
+      const datedCalendar = (calendarWords.test(text) || /점검.*스케줄/u.test(text) || datedMeeting) && !!date && addVerb.test(text) &&
         !/납부\s*일정|예약\s*일정|발주\s*일정/u.test(text);
-      const calendarCategory = !!categoryIn(text) && !!date && addVerb.test(text);
+      const calendarCategory = !!categoryIn(text) && !!date && (addVerb.test(text) || calendarWords.test(text) && /분류로\s*[.!?]?$/u.test(text));
       const categorySetting = !!categoryIn(text) && /분류/u.test(text) && /숨겨|안\s*보이|꺼\s*줘|보이게|보기\s*켜/u.test(text);
-      const storedEvent = (editVerb.test(text) || deleteVerb.test(text)) && (calendarWords.test(text) || /메모|분류/u.test(text)) &&
-        eventIn(text, s, labels(locale)).some(item => item.row.editable);
-      if (datedCalendar || calendarCategory || categorySetting || storedEvent) return calendarRoute(text, s, locale, options);
+      const storedEvent = (calendarEdit(text) || deleteVerb.test(text)) && (calendarWords.test(text) || /메모|분류/u.test(text) || !!categoryIn(text)) &&
+        directCandidate(s, text, undefined, labels(locale)).some(item => item.row.editable);
+      const eventMove = /\S\s+일정(?:을)?\s.*옮겨/u.test(text) && !/위젯|패널|보드|페이지|예약|픽업|근무|납부/u.test(text);
+      if (datedCalendar || calendarCategory || categorySetting || storedEvent || eventMove) return calendarRoute(text, s, locale, options);
     },
     route(raw, s, locale) {
       const text = cleanText(raw);
@@ -876,12 +985,16 @@ export function createCalendarStaffDomain(options: Options = {}): DomainAdapter 
         (addVerb.test(text) || deleteVerb.test(text)) && !/캘린더|달력/u.test(text)) return;
       const knownStaffQuestion = /몇\s*(?:시|시간).*일해|점심\s*시간.*몇/u.test(text) &&
         !!nameFrom(text, activeStaff(s));
-      if (/교대/u.test(text) && !deleteVerb.test(text) || (staffWords.test(text) || knownStaffQuestion) &&
+      const overnightStaffInterval = /부터.*다음\s*날.*까지/u.test(text) && !!nameFrom(text, activeStaff(s)) &&
+        !!dateFrom(text, dayOf(s)) && staffClocks(text).length === 2;
+      if (overnightStaffInterval || /교대/u.test(text) && !deleteVerb.test(text) || (staffWords.test(text) || knownStaffQuestion) &&
         (!calendarWords.test(text) || /근무|교대/u.test(text) && /옮겨/u.test(text))) {
         return staffRoute(text, s, locale, options);
       }
       const periodQuestion = /^(?:이번\s*달에?|다음\s*주)\s*(?:뭐|무슨\s*일)\s*(?:있어|있었어)/u.test(text);
-      if (calendarWords.test(text) || recent.test(text) || periodQuestion ||
+      const scheduledAppointment = appointment.test(text) && addVerb.test(text) &&
+        (!!dateFrom(text, dayOf(s)) || /다음\s*주/u.test(text));
+      if (calendarWords.test(text) || recent.test(text) || periodQuestion || scheduledAppointment || filterHistory.test(text) ||
         /(?:필터\s*청소|점검).*(?:언제|옮|변경)|(?:원두\s*공동구매|답장|응답)\s*기한|예약.*보기\s*켜/u.test(text)) {
         return calendarRoute(text, s, locale, options);
       }

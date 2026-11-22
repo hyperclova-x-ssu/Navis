@@ -73,14 +73,20 @@ describe('API-200', () => {
     const latte = selectMenus(cafeSnapshot, {}).rows.find(row => row.menuId === 'm-cafe-latte')!;
     expect(latte.cost).not.toBeNull();
     expect(latte.rate).not.toBeNull();
+    // A named cost question is a menu record read (A-3 N04): it answers the cost alone; asking for the margin too adds the rate.
     const menu = await ask('카페라테 원가 얼마야?');
-    expect(menu.panels[0]?.featureId).toBe('menu');
-    expect(menu.answer).toContain(format.money(latte.cost!, 'compact'));
-    expect(menu.answer).toContain(format.percent(latte.rate!));
+    expect(menu.turn?.kind).toBe('read');
+    expect(menu.answer).toContain(format.money(latte.cost!, 'full'));
+    expect(menu.answer).not.toContain(format.percent(latte.rate!, 1));
+    const both = await ask('카페라테 원가랑 마진 얼마야?');
+    expect(both.turn?.kind).toBe('read');
+    expect(both.answer).toContain(format.money(latte.cost!, 'full'));
+    expect(both.answer).toContain(format.percent(latte.rate!, 1));
     for (const locale of ['en', 'zh-Hans', 'zh-Hant'] as const) {
-      const reply = await createAssistantProvider({ fetcher: offline }).ask({ text: '카페라테 원가 얼마야?', locale, signal: signal() });
-      expect(reply.panels[0]?.featureId).toBe('menu');
-      expect(reply.answer).toContain(navisTranslator(locale).format.percent(latte.rate!));
+      const reply = await createAssistantProvider({ fetcher: offline }).ask({ text: '카페라테 원가랑 마진 얼마야?', locale, signal: signal() });
+      expect(reply.turn?.kind).toBe('read');
+      expect(reply.answer).toContain(navisTranslator(locale).format.money(latte.cost!, 'full'));
+      expect(reply.answer).toContain(navisTranslator(locale).format.percent(latte.rate!, 1));
     }
     const members = await ask('단골 몇 명이야?');
     expect(members.panels[0]?.featureId).toBe('members');

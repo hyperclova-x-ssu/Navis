@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 import { createServer } from 'vite';
 import { createBridge } from '../bridge.mjs';
 import { createNavisMenuHarness, navisAgentFakeFetch } from '../fixtures/navis-eval-fake.mjs';
@@ -110,8 +110,11 @@ function scopes(snapshot) {
 
 async function checkCommand(harness, store, command, args, scope, want = 'proposal') {
   const before = store.getSnapshot();
+  const suggestion = command === 'suppliers.createOrder' && args.suggestionItemId;
+  const snapshot = suggestion ? [{ ...widget, facts: projection(before).suggestions.map(row =>
+    fact('suppliers.suggestions.item', row.qty, quantity(row.qty, row.unit), rowName(before, row.itemId))) }] : [];
   const result = await harness.run(request(before, { kind: 'command', command, args, ...(scope.searches[0] && { querySlot: scope.searches[0].querySlot }) },
-    { searches: scope.searches, slots: Object.keys(scope.slots), ...(command === 'suppliers.createOrder' && { conversation: true }) }));
+    { snapshot, searches: scope.searches, slots: Object.keys(scope.slots), ...(command === 'suppliers.createOrder' && { conversation: true }) }));
   assert.equal(result.status, 200, result.raw);
   assert.equal(result.terminal.outcome, want, result.raw);
   assert.equal(store.getSnapshot(), before);
@@ -120,6 +123,7 @@ async function checkCommand(harness, store, command, args, scope, want = 'propos
     return result;
   }
   assert.deepEqual(result.calls, [
+    ...(suggestion ? [{ name: 'get_widget', args: widget }] : []),
     ...scope.searches.map(({ kind, querySlot }) => lookup(kind, querySlot)),
     { name: 'propose_action', args: { command, args } },
   ]);
@@ -368,6 +372,10 @@ async function checkScheduling(harness, id, store, expected) {
       ['scheduled', null, TODAY, estimate.dueDate, purchaseItem.supplierId]);
     assert.deepEqual([line.poId, line.itemId, line.qtyOrdered, line.unitPrice], [order.poId, itemId, qty, purchaseItem.unitPrice]);
     assert.equal(projection(after).upcomingCount, projection(previous).upcomingCount + 1);
+    const calendar = data.selectCalendar(after, { date: order.dueDate });
+    assert.ok(calendar.todayEntries.some(row => row.source === 'delivery' && row.sourceId === order.poId && !row.editable));
+    assert.deepEqual(after.tables.inventoryItem, previous.tables.inventoryItem);
+    assert.deepEqual(after.tables.stockAdjustment, previous.tables.stockAdjustment);
     assert.deepEqual(after.tables.receipt, previous.tables.receipt);
     assert.deepEqual(after.tables.expense, previous.tables.expense);
     if (suggestion && id === 'S1-219') assert.equal(projection(after).suggestions.some(row => row.itemId === itemId), false);
@@ -593,6 +601,7 @@ async function checkSupplier(harness, id, store) {
   const [field, newValue] = ({ 'S1-255': ['memo', '월요일 휴무'], 'S1-256': ['contact', '이사장'],
     'S1-257': ['phone', '01099998888'], 'S1-258': ['name', '한강우유유통'] })[id];
   wire.patch = { [field]: scope.value(field, newValue) };
+  if (field === 'name') scope.supplierRecord(undefined, 'name', false);
   await apply(harness, store, 'suppliers.updateSupplier', wire, scope, after => {
     const row = after.tables.supplier.find(row => row.supplierId === supplierId);
     assert.equal(field === 'phone' ? row.phone : row[field].raw, newValue);
@@ -715,4 +724,46 @@ test('a receipt card from an earlier supplier revision cannot apply', async () =
   } finally {
     harness.close();
   }
+});
+
+test('an intake cannot bind a different local slot as the received quantity', async () => {
+  const { store, order } = scheduledStore(milk, { qty: 12 });
+  const scope = scopes(store.getSnapshot());
+  const wire = { polId: scope.orderRecord(order, true), qty: scope.value('remaining', 12) };
+  const harness = createNavisMenuHarness(createBridge, schema.validateAgentFrame, navisAgentFakeFetch);
+  try {
+    await checkCommand(harness, store, 'suppliers.recordReceipt', wire, scope, 'clarify');
+  } finally {
+    harness.close();
+  }
+});
+
+test('a suggested order card requires the exact projected quantity and due date', async () => {
+  const { store } = prerequisite('S1-219');
+  const before = store.getSnapshot(), scope = scopes(before);
+  const suggestion = projection(before).suggestions.find(row => row.itemId === cups);
+  const wire = { purchaseItemId: scope.purchaseItem(cups), suggestionItemId: scope.stock(cups),
+    qty: scope.value('qty', suggestion.qty + 500), dueDate: scope.value('dueDate', suggestion.dueDate) };
+  const harness = createNavisMenuHarness(createBridge, schema.validateAgentFrame, navisAgentFakeFetch);
+  try {
+    const result = await checkCommand(harness, store, 'suppliers.createOrder', wire, scope);
+    assert.equal(atCard(store, result.proposal, scope).kind, 'conflict');
+    assert.equal(store.getSnapshot(), before);
+  } finally {
+    harness.close();
+  }
+});
+
+test('a duplicate supplier rename returns a typed refusal and never opens a card', async t => {
+  const store = createWidgetDataStore();
+  const before = store.getSnapshot(), scope = scopes(before);
+  const supplierId = scope.supplierRecord('s-dairy', 'target');
+  scope.supplierRecord('s-roaster', 'name', false);
+  const replacement = supplier(before, 's-roaster');
+  const name = scope.value('name', label(replacement.name, replacement.nameKey));
+  const harness = createNavisMenuHarness(createBridge, schema.validateAgentFrame, navisAgentFakeFetch);
+  t.after(harness.close);
+  const result = await checkCommand(harness, store, 'suppliers.updateSupplier', { supplierId, patch: { name } }, scope, 'refused');
+  assert.equal(result.terminal.refusal.reason, 'duplicate');
+  assert.deepEqual(result.calls, [lookup('supplier', 'target'), lookup('supplier')]);
 });

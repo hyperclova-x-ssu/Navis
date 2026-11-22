@@ -1,10 +1,13 @@
 import { getLayerCatalog, getRegistration, getRegistry } from '../../../catalog';
 import type { CellPosition, CellSpan, DashboardLayerId, FeatureId, Locale, Panel, QueryCondition, RunState } from '../../../contracts';
+import type { DataSnapshot } from '../../../data/db/types';
 import { addDays, TODAY } from '../../../data/db/time';
 import { planNavisLayout, readNavisBoard, type NavisLayoutPlan, type NavisLayoutResult, type NavisLayoutStep } from '../../../state/navis-layout';
+import type { PresentationRunStore } from '../../../state';
 import { validateAgentCommandArgs, type AgentFact, type AgentKnownCommand, type AgentReadArgs, type AgentReadProjection, type AgentWireArgs } from '../../../../shared/navis-agent-schema.mjs';
 import { navisTranslator } from '../messages';
-import type { AgentProposalPreview } from '../navis-conversation';
+import { readConversationControl, type AgentProposalPreview } from '../navis-conversation';
+import { navisScopeIssue, parseNavisNumber } from '../navis-input';
 import type { DomainAdapter, DomainRoute, DomainTurnInput, ReadToolAdapter, RunCommandAdapter, RunPreflight } from './registry';
 
 const commands = [
@@ -83,9 +86,10 @@ export function projectNavisBoard(state: RunState | undefined, args: AgentReadAr
 
 const boardTool: ReadToolAdapter<'get_board'> = {
   tool: 'get_board',
-  read(_snapshot, args, locale, slots, _targets, run) {
+  read(snapshot, args, locale, slots, _targets, run) {
+    if (!run || snapshot.runId !== run.runId) return { status: 'unavailable' };
     const projection = projectNavisBoard(run, args, locale);
-    if ('status' in projection || !run || args.layer === 'pos' || !slots.boardQuestion) return projection;
+    if ('status' in projection || args.layer === 'pos' || !slots.boardQuestion) return projection;
     const board = readNavisBoard(run, args.layer, args.page === undefined ? undefined : args.page - 1)!;
     const label = layerName(board.layer, locale);
     if (slots.boardQuestion === 'free') return { facts: projection.facts.filter(item => item.key === 'board.cells.free') };
@@ -121,7 +125,7 @@ function draftAddress(command: LayoutCommand, draft: LayoutDraft, run: RunState)
   const board = run.boards[layer];
   const featureId = draft.featureId ?? draft.featureIds?.[0] ?? draft.a;
   const existing = placement(run, layer, featureId);
-  const useExisting = !['layout.add_widget', 'layout.add_widgets', 'layout.add_page', 'layout.start_with_three', 'layout.start_with_preset'].includes(command);
+  const useExisting = !['layout.add_widget', 'layout.add_widgets', 'layout.remove_widgets', 'layout.add_page', 'layout.start_with_three', 'layout.start_with_preset'].includes(command);
   const page = draft.page !== undefined ? draft.page - 1 : (useExisting ? existing?.index : undefined) ?? board.currentPage;
   return { layer, board, page, featureId, existing };
 }
@@ -163,11 +167,15 @@ function previewFor(command: LayoutCommand, draft: LayoutDraft, plan: NavisLayou
   const old = plan.previousPages.flatMap((entry, page) => entry.panels.map(panel => ({ panel, page })));
   const next = plan.pages.flatMap((panels, page) => panels.map(panel => ({ panel, page })));
   const removing = command === 'layout.remove_widget' || command === 'layout.remove_widgets';
-  const title = removing ? phrase(locale, `${featureIds.map(id => name(id, locale)).join(' · ')} 뺄까요?`, 'Remove widgets?', '移除组件？', '移除小工具？')
-    : command === 'layout.swap_widgets' ? phrase(locale, '두 위젯의 자리를 바꿀까요?', 'Swap the widgets?', '交换两个组件的位置？', '交換兩個小工具的位置？')
-    : phrase(locale, `${layer} 보드를 바꿀까요?`, `Change the ${layer} board?`, `更改${layer}看板？`);
+  const panelNames = featureIds.map(id => name(id, locale)).join(' · ');
+  const adding = command === 'layout.add_widget' || command === 'layout.add_widgets';
+  const title = removing ? phrase(locale, `${panelNames} 패널을 뺄까요?`, 'Remove the panels?', '移除面板？', '移除面板？')
+    : adding ? phrase(locale, `대시보드에 ${panelNames} 패널을 놓을까요?`, `Place ${panelNames} on the dashboard?`, `将${panelNames}放到看板上？`, `將${panelNames}放到看板上？`)
+    : command === 'layout.swap_widgets' ? phrase(locale, '두 패널의 자리를 바꿀까요?', 'Swap the panels?', '交换两个面板的位置？', '交換兩個面板的位置？')
+    : phrase(locale, `${layer} 대시보드를 바꿀까요?`, `Change the ${layer} dashboard?`, `更改${layer}看板？`);
   const panelLabel = (placed: typeof old[number] | undefined) => placed
-    ? `${pageLabel(placed.page, locale)} · ${sizeLabel(placed.panel)} · ${location(placed.panel, locale)}` : absent(locale);
+    ? `${pageLabel(placed.page, locale)} · ${adding ? navisTranslator(locale).t('navis.card.size', { w: placed.panel.width, h: placed.panel.height }) : sizeLabel(placed.panel)} · ${location(placed.panel, locale)}`
+    : adding ? phrase(locale, '대시보드에 없어요', 'Off the dashboard', '未放在看板上') : absent(locale);
   const fields = [...featureIds, ...plan.displaced.filter(id => !featureIds.includes(id))].map(id => {
     const before = old.find(item => item.panel.featureId === id), after = next.find(item => item.panel.featureId === id);
     const movedAside = plan.displaced.includes(id) && !featureIds.includes(id);
@@ -179,7 +187,7 @@ function previewFor(command: LayoutCommand, draft: LayoutDraft, plan: NavisLayou
     }
     return { label: name(id, locale), before: previous, after: movedAside ? `${updated} · ${phrase(locale, '비켜요', 'Moves aside', '移开', '移開')}` : updated };
   });
-  if (removing && !next.length) fields[fields.length - 1].after = phrase(locale, '마지막 위젯을 빼요', 'Removes the last widget', '移除最后一个组件', '移除最後一個小工具');
+  if (removing && !next.length) fields[fields.length - 1].after = phrase(locale, '마지막 패널을 빼요', 'Removes the last panel', '移除最后一个面板', '移除最後一個面板');
   if (command === 'layout.add_page') fields.push({ label: layer, before: pageLabel(plan.previousPages.length - 1, locale),
     after: `${pageLabel(plan.pages.length - 1, locale)} · ${phrase(locale, '되돌릴 수 없어요', 'Cannot be undone', '无法撤销', '無法復原')}` });
   if (command === 'layout.start_with_three' || command === 'layout.start_with_preset') {
@@ -194,15 +202,15 @@ const runCommands = commands.map((command): RunCommandAdapter<{ readonly locale:
   resolve(value, slots) {
     return validateAgentCommandArgs(command, value) ? { args: value as LayoutDraft, locale: (slots.navisLocale as Locale | undefined) ?? 'ko' } : undefined;
   },
-  preflight({ args, locale }, { run, snapshot }): RunPreflight<AgentProposalPreview> {
+  preflight({ args, locale }, { run, snapshot, deferLayoutNotice }): RunPreflight<AgentProposalPreview> {
     const result = prepareLayout(command, args, run);
     if (result.kind !== 'ready') return { kind: result.kind };
     const { plan } = result;
     return { kind: 'ready', preview: previewFor(command, args, plan, locale, snapshot.pos?.businessDate ?? TODAY), execute(store) {
-      const applied = store.actions.commitNavisLayout(plan);
+      const applied = (store as PresentationRunStore).actions.commitNavisLayout(plan, { deferNotice: deferLayoutNotice });
       if (applied.status !== 'accepted') return { kind: applied.status === 'unchanged' ? 'unchanged'
         : applied.code === 'STALE_REVISION' ? 'conflict' : applied.code === 'CANCELLED' ? 'busy' : 'invalid' };
-      if (!plan.undoKind || plan.layer === plan.originLayer) return { kind: 'applied' };
+      if (!plan.undoKind) return { kind: 'applied' };
       const token = store.getState().boards[plan.layer].undo?.token;
       return { kind: 'applied', ...(token ? { undo: current => current.actions.undo(token).status === 'accepted' } : {}) };
     } };
@@ -210,27 +218,44 @@ const runCommands = commands.map((command): RunCommandAdapter<{ readonly locale:
 }));
 
 const layoutVerb = {
-  add: /추가|넣어|놓아|놔|올려|깔아|\b(?:add|place|put)\b/iu,
-  remove: /빼\s*(?:줘|주세요)|빼고|빼기|제거|지워|(?:위젯|패널).*삭제|\bremove\b/iu,
-  move: /옮겨|옮기|자리\s*바꿔|페이지로\s*보내|\bmove\b/iu,
-  resize: /크게|작게|키워|줄여|늘려|(?:가로|세로)\s*\d+\s*칸|\d\s*[x×]\s*\d|\bresize\b/iu,
-  starter: /추천.*(?:채워|배치.*시작)|\b(?:starter|recommended) layout\b/iu,
+  add: /추가|넣어|놓아|놔|올려|올리고|깔아|\b(?:add|place|put)\b/iu,
+  remove: /[빼뻬]\s*(?:줘|주세요)|빼고|빼기|제거|지워|치워|없애|삭제|\bremove\b/iu,
+  move: /옮겨|옮기|이동|(?:으?로|칸)\s*보내|\bmove\b/iu,
+  resize: /크게|작게|키워|줄여|늘려|확대|축소|\bresize\b/iu,
+  starter: /추천.*(?:채워|배치.*시작)|기본\s*배치로\s*(?:채워|돌려|시작)|(?:3|8)개로\s*시작|빈\s*화면.*기본\s*위젯.*놔|\b(?:starter|recommended) layout\b/iu,
 };
 const surface = /위젯|패널|보드|대시보드|화면에|\b(?:widget|panel|board|dashboard)s?\b/iu;
-const conditionRequest = /최근\s*(?:7|일곱)\s*일\s*기준|last 7 days.*(?:board|widget)/iu;
-const boardRead = /보드에\s*(?:뭐|무엇)|(?:관리|마케팅)\s*화면에(?:는)?\s*(?:뭐|무엇)|몇\s*페이지까지|자리\s*몇\s*칸|(?:위젯|패널)\s*(?:크기|어디)|안\s*놓은\s*(?:위젯|패널)/u;
-const pageCount = (text: string) => text.match(/(\d+)\s*페이지|페이지\s*(\d+)|\bpage\s+(\d+)/iu)?.slice(1).find(Boolean);
-const pageAppend = (text: string) => /^(?:(?:관리|마케팅)\s*)?(?:(?:새|빈)\s*)?페이지\s*(?:한\s*장|하나|또)?\s*(?:추가|만들)|^add (?:a )?page\b/iu.test(text);
-export function isNavisLayoutNavigationConflict(text: string): boolean {
-  return boardRead.test(text) || pageAppend(text) || !!pageCount(text) &&
-    (layoutVerb.move.test(text) || layoutVerb.add.test(text) && surface.test(text));
-}
+const conjunction = /이랑|랑|하고|과\s+|와\s+|둘\s*다|,|\band\b/iu;
+const swapRequest = /자리\s*(?:를\s*)?바꿔|서로\s*바꿔|위치\s*교환|<->/u;
+const negated = /(?:추가|놓|올리|넣|깔|옮기|[빼뻬]|지우|치우|없애|키우|삭제|이동|바꾸).{0,9}(?:하지\s*마|말아|지\s*마|지\s*말)|\b(?:do not|don't|never)\b/iu;
+const instructionsRequest = /(?:추가|이동|삭제|옮기|놓)(?:하|는|을|기)*\s*(?:방법|법)/u;
+const detailOpen = /자세히|상세|(?:화면|창|탭|내역)(?:을|를)?\s*(?:열|띄워)|(?:열어|띄워)\s*(?:줘|주세요)?[.!?]*$/u;
+const conditionRequest = (text: string) => !detailOpen.test(text) && (
+  /^(?:손익)(?:을|은)?\s*(?:최근\s*(?:7|일곱)\s*일\s*기준|7\s*일\s*치)\s*(?:으로|로)\s*(?:보여|해|바꿔)/u.test(text)
+  || /(?:위젯|패널).*?(?:최근\s*(?:7|일곱)\s*일|일주일|7\s*일\s*치).*?(?:바꿔|해\s*줘|보여)/u.test(text)
+  || /last 7 days.*(?:board|widget)/iu.test(text));
+const boardQuestions = {
+  pages: /몇\s*페이지까지|페이지\s*(?:수|몇\s*장)/u,
+  free: /자리\s*몇\s*칸|보드에\s*빈\s*칸|위젯\s*더\s*놓을\s*공간/u,
+  unplaced: /안\s*놓은\s*(?:위젯|패널)|추가할\s*수\s*있는\s*위젯.*남았|보드에\s*없는\s*(?:기능|위젯)/u,
+  widget: /(?:위젯|패널)\s*(?:크기|어디|지금\s*몇\s*칸|위치\s*알려)/u,
+  panels: /보드에\s*(?:뭐|무엇|어떤\s*위젯.*놓|어떤\s*위젯.*놨)|(?:관리|마케팅)\s*화면에(?:는)?\s*(?:뭐|무엇)|(?:화면|보드)\s*(?:패널\s*목록|지금\s*어떻게)|(?:보드|에)\s*놓인\s*위젯/u,
+};
+const boardQuestionFor = (text: string) => detailOpen.test(text) ? undefined
+  : (Object.keys(boardQuestions) as (keyof typeof boardQuestions)[]).find(key => boardQuestions[key].test(text));
+const pageCount = (text: string) => {
+  const number = text.match(/(\d+)\s*페이지|페이지\s*(\d+)|\bpage\s+(\d+)/iu)?.slice(1).find(Boolean);
+  if (number !== undefined) return Number(number);
+  const ordinal = text.match(/([가-힣]+)\s*번째\s*페이지/u)?.[1];
+  return ordinal ? parseNavisNumber(ordinal) : /첫\s*페이지/u.test(text) ? 1 : undefined;
+};
+const pageAppend = (text: string) => /^(?:(?:관리|마케팅)\s*)?(?:(?:새|빈)\s*)?페이지\s*(?:(?:한\s*장|하나|또)\s*(?:더\s*)?)?(?:추가|만들|늘려)|^add (?:a )?page\b/iu.test(text);
 const normalized = (value: string) => value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/gu, '');
 const couponChoices = ['slot-coupon', 'expiry-coupon', 'coupon-status'] as const;
 
-function findFeatures(text: string, run: RunState, locale: Locale): FeatureId[] {
+function findFeatures(text: string, presetId: RunState['screenPreset']['id'], locale: Locale) {
   const value = normalized(text), translator = navisTranslator(locale);
-  const candidates = getRegistry(run.screenPreset.id).flatMap(entry => {
+  const candidates = getRegistry(presetId).flatMap(entry => {
     const terms = [entry.label, translator.t(entry.nameKey), ...entry.aliases, ...translator.t(entry.aliasesKey).split('|')];
     return terms.flatMap(term => {
       const key = normalized(term), index = key.length > 1 ? value.indexOf(key) : -1;
@@ -239,61 +264,103 @@ function findFeatures(text: string, run: RunState, locale: Locale): FeatureId[] 
   }).sort((a, b) => a.index - b.index || b.length - a.length);
   const chosen: typeof candidates = [];
   for (const candidate of candidates) if (!chosen.some(prior => prior.id === candidate.id || prior.index + prior.length > candidate.index)) chosen.push(candidate);
-  return chosen.map(item => item.id);
+  return chosen;
+}
+
+const dimensionsPattern = /(\d+)\s*(?:[x×]|by|곱하기)\s*(\d+)/iu;
+const layoutPosition = /자리(?:에|로)|(?:재고|위젯|패널)\s*있는\s*칸|\d+\s*[행열]|(?:맨|제일)\s*(?:아래|밑)|아래\s*줄/u;
+const direction = /(?:오른쪽|왼쪽|우측|좌측|아래|위)(?:으?로)?\s*(?:한|두|세|네|\d+)\s*칸|(?:한|두|세|네|\d+)\s*칸\s*(?:오른쪽|왼쪽|우측|좌측|아래|위)/u;
+const abbreviatedTransfer = /(?:위젯|패널)\s*\d+\s*페이지[.!?]*$/u;
+const pageDestination = /페이지(?:으?로|\s*\d+로)\s*(?:보내|옮겨|이동)/u;
+const explicitBoardAction = (text: string) => surface.test(text) && (layoutVerb.remove.test(text) || layoutVerb.add.test(text)
+  || layoutVerb.move.test(text) && (layoutPosition.test(text) || direction.test(text) || /페이지/u.test(text))
+  || swapRequest.test(text));
+
+function widgetListBefore(text: string, verb: RegExp, mentions: ReturnType<typeof findFeatures>) {
+  const prefix = normalized(text).split(verb)[0];
+  let remainder = prefix;
+  for (const { index, length } of [...mentions].reverse()) {
+    if (index + length <= prefix.length) remainder = remainder.slice(0, index) + '|' + remainder.slice(index + length);
+  }
+  return prefix !== remainder && !remainder.replace(/\||이랑|랑|하고|둘다|같이|함께|,|and|[을를은는이가과와]/gu, '');
+}
+
+export function isNavisLayoutNavigationConflict(raw: string): boolean {
+  const text = raw.normalize('NFKC').trim();
+  if (negated.test(text) || instructionsRequest.test(text) || detailOpen.test(text) || navisScopeIssue(text)) return false;
+  const question = boardQuestionFor(text);
+  if (question && !(question === 'widget' && /(?:위젯|패널)\s*어디/u.test(text))) return true;
+  if (conditionRequest(text) || pageAppend(text) || explicitBoardAction(text) || abbreviatedTransfer.test(text)) return true;
+  if (!layoutVerb.add.test(text) && !layoutVerb.remove.test(text) && !pageDestination.test(text)) return false;
+  const mentions = findFeatures(text, 'A', 'ko');
+  if (layoutVerb.add.test(text)) return pageCount(text) !== undefined
+    || mentions[0]?.index === 0 && (dimensionsPattern.test(text) || layoutPosition.test(text) || mentions.length > 1 && widgetListBefore(text, layoutVerb.add, mentions));
+  return layoutVerb.remove.test(text) ? widgetListBefore(text, layoutVerb.remove, mentions) : mentions[0]?.index === 0;
 }
 
 function routeLayout(
-  raw: string, snapshot: { readonly pos?: { readonly businessDate: string } | null }, locale: Locale, run?: RunState,
+  raw: string, snapshot: Pick<DataSnapshot, 'runId' | 'pos'>, locale: Locale, run?: RunState,
 ): DomainRoute | undefined {
-  if (!run || run.screen !== 'dashboard' || run.layer === 'orders-payment') return undefined;
+  if (!run || run.runId !== snapshot.runId || run.screen !== 'dashboard' || run.layer === 'orders-payment') return undefined;
   const text = raw.normalize('NFKC').trim();
-  if (/(?:추가|넣|옮기|빼|지우|키우|삭제).{0,9}(?:하지\s*마|말아|지\s*마|지\s*말)|\b(?:do not|don't|never)\b/iu.test(text)) return undefined;
+  if (/[“”"'‘’]/u.test(text) || negated.test(text) || instructionsRequest.test(text) || navisScopeIssue(text) || detailOpen.test(text)) return undefined;
   if (/(?:이전|기존|모든|앞선)\s*(?:지시|규칙|명령).*무시|ignore\s+(?:all\s+|previous\s+)?(?:instructions|rules)/iu.test(text)) return undefined;
   if (/(?:뭐|무엇|어떤|어느).{0,20}(?:좋아|추천|할까)|\b(?:which|what|how)\b.*\b(?:add|put|place)\b/iu.test(text)) return undefined;
   const active = run.activeBoard;
-  const marketing = /마케팅\s*(?:보드|화면|레이어|탭|쪽에|에|으로|추천)|\b(?:on|to) (?:the )?marketing\b/iu.exec(text);
-  const management = /관리\s*(?:보드|화면|레이어|탭|쪽에|에|로|추천)|\b(?:on|to) (?:the )?management\b/iu.exec(text);
+  const marketing = /(?:^|\s)마케팅\s*(?:보드|화면|레이어|탭|쪽에|에|으로|추천|가서|(?=8개로\s*시작))|\b(?:on|to) (?:the )?marketing\b/iu.exec(text);
+  const management = /(?:^|\s)관리\s*(?:보드|화면|레이어|탭|쪽에|에|로|추천)|\b(?:on|to) (?:the )?management\b/iu.exec(text);
   const explicit: DashboardLayerId | undefined = marketing ? 'marketing' : management ? 'management' : undefined;
   const layer = explicit ?? active, board = run.boards[layer];
   const addressText = (marketing ?? management)?.[0];
-  const ids = findFeatures(addressText ? text.replace(addressText, ' ') : text, run, locale), featureId = ids[0];
+  const subject = addressText ? text.replace(addressText, ' ') : text;
+  const mentions = findFeatures(subject, run.screenPreset.id, locale), ids = mentions.map(item => item.id), featureId = ids[0];
   const current = placement(run, layer, featureId);
-  const namedPage = pageCount(text);
-  const page = namedPage === undefined ? undefined : Number(namedPage);
+  const page = pageCount(text) ?? (/다음\s*페이지/u.test(text) ? board.currentPage + 2 : /(?:마지막|맨\s*끝)\s*페이지/u.test(text) ? board.pages.length : undefined);
   const target = featureId ? name(featureId, locale) : '';
   const tr = navisTranslator(locale);
   const answer = (answer: string): DomainRoute => ({ kind: 'answer', answer });
-  const clarify = (field: string, answer: string, resume?: (value: string) => DomainRoute | undefined): DomainRoute => ({ kind: 'clarification', field, answer, resume });
+  const clarify = (field: string, answer: string, resume?: Extract<DomainRoute, { kind: 'clarification' }>['resume']): DomainRoute =>
+    ({ kind: 'clarification', field, answer, resume });
   const invalidSize = phrase(locale, '크기는 1~4칸이에요', 'Each side can be 1–4 cells', '边长为 1–4 格', '邊長為 1–4 格');
   const askSize = phrase(locale, `${target} 크기를 골라 주세요`, `Choose a size for ${target}`, `请选择${target}的尺寸`, `請選擇${target}的尺寸`);
+  const grid = run.screenPreset.grid;
+  const outsideBoard = () => clarify('column', phrase(locale, `${target} 보드는 가로 ${grid.columns}칸이에요`,
+    `The ${target} board is ${grid.columns} cells wide`, `${target}看板宽 ${grid.columns} 格`));
   const position = (from: Panel | undefined): CellPosition | undefined => {
-    if (/맨\s*아래\s*(?:의\s*)?왼쪽|bottom left/iu.test(text)) return { column: 0, row: run.screenPreset.grid.rows - (from?.height ?? 1) };
+    if (/(?:맨\s*아래|제일\s*밑|아래\s*줄\s*맨)\s*(?:의\s*)?왼쪽|bottom left/iu.test(text)) return { column: 0, row: grid.rows - (from?.height ?? 1) };
     const placed = ids[1] && placement(run, layer, ids[1]);
-    if (placed && /자리(?:에|로)/u.test(text)) return placed.panel;
+    if (placed && /자리(?:에|로)|있는\s*칸/u.test(text)) return placed.panel;
     const col = text.match(/(\d+)\s*열/u), row = text.match(/(\d+)\s*행/u);
     if (col || row) return { column: col ? Number(col[1]) - 1 : from?.column ?? 0, row: row ? Number(row[1]) - 1 : from?.row ?? 0 };
     if (!from) return undefined;
-    if (/그대로|같은\s*자리/u.test(text)) return from;
-    const relative = text.match(/(오른쪽|왼쪽|아래|위)(?:으?로)?\s*(한|두|세|네|\d+)\s*칸/u);
+    if (/그대로|같은\s*자리|지금\s*있는\s*칸/u.test(text)) return from;
+    const relative = direction.exec(text);
     if (!relative) return undefined;
-    const distance = ({ 한: 1, 두: 2, 세: 3, 네: 4 } as Record<string, number>)[relative[2]] ?? Number(relative[2]);
-    return { column: from.column + (relative[1] === '오른쪽' ? distance : relative[1] === '왼쪽' ? -distance : 0),
-      row: from.row + (relative[1] === '아래' ? distance : relative[1] === '위' ? -distance : 0) };
+    const distance = parseNavisNumber(relative[0].match(/(한|두|세|네|\d+)\s*칸/u)![1]);
+    if (distance === undefined) return undefined;
+    return { column: from.column + (/오른쪽|우측/u.test(relative[0]) ? distance : /왼쪽|좌측/u.test(relative[0]) ? -distance : 0),
+      row: from.row + (/아래/u.test(relative[0]) ? distance : /위/u.test(relative[0]) ? -distance : 0) };
   };
-  const dimensions = text.match(/(\d+)\s*[x×]\s*(\d+)/iu), horizontal = text.match(/가로\s*(\d+)\s*칸/u), vertical = text.match(/세로\s*(\d+)\s*칸/u);
-  const span = (current: Panel | undefined) => ({ width: Number(dimensions?.[1] ?? horizontal?.[1] ?? current?.width ?? 1) as CellSpan,
-    height: Number(dimensions?.[2] ?? vertical?.[1] ?? current?.height ?? 1) as CellSpan });
+  const dimensions = text.match(dimensionsPattern);
+  const horizontal = text.match(/(?:가로(?:로)?|옆으로\s*(?:더\s*)?(?:길게|크게))\s*(\d+)\s*칸/u)?.[1]
+    ?? (/한\s*줄\s*전체/u.test(text) ? grid.columns : undefined);
+  const vertical = text.match(/세로(?:로)?\s*(\d+)\s*칸/u)?.[1];
+  const squareText = !horizontal && !vertical ? text.match(/(?:^|\s)(한|\d+)\s*칸(?:으로|로)/u)?.[1] : undefined;
+  const square = squareText === undefined ? undefined : parseNavisNumber(squareText);
+  const sizeSpecified = !!(dimensions || horizontal || vertical) || square !== undefined;
+  const span = (current: Panel | undefined) => ({ width: Number(dimensions?.[1] ?? horizontal ?? square ?? current?.width ?? 1) as CellSpan,
+    height: Number(dimensions?.[2] ?? vertical ?? square ?? current?.height ?? 1) as CellSpan });
   const address: Pick<LayoutDraft, 'layer'> = explicit ? { layer: explicit } : {};
   const moveFailure = () => {
     if (!featureId) return clarify('featureId', phrase(locale, '어느 패널을 옮길까요?', 'Which widget should move?', '要移动哪个组件？', '要移動哪個小工具？'));
     const registered = getRegistration(featureId)!;
     return answer(registered.layer === layer ? `${target} ${absent(locale)}` : tr.t('page.inOtherLayer', { name: target, layer: layerName(registered.layer, locale) }));
   };
-  const turn = (command: LayoutCommand, draft: LayoutDraft): DomainRoute => {
-    const { layer, board, page: resolvedPage, existing } = draftAddress(command, draft, run);
+  const turn = (command: LayoutCommand, draft: LayoutDraft, state = run): DomainRoute => {
+    const { layer, board, page: resolvedPage, existing } = draftAddress(command, draft, state);
     const args = draft.page === undefined && resolvedPage !== board.currentPage ? { ...draft, page: resolvedPage + 1 } : draft;
     if (!validateAgentCommandArgs(command, asWire(args))) return { kind: 'refusal', reason: 'invalid_target', answer: tr.t('common.navis.agent.invalid') };
-    const prepared = prepareLayout(command, args, run);
+    const prepared = prepareLayout(command, args, state);
     if (prepared.kind !== 'ready') {
       const label = prepared.featureId ? name(prepared.featureId, locale) : target;
       if (prepared.code === 'DUPLICATE') return answer(prepared.page === (page === undefined ? board.currentPage : page - 1)
@@ -307,8 +374,16 @@ function routeLayout(
       if (prepared.code === 'OUTSIDE_GRID' && command === 'layout.resize_widget') return clarify('alternative', phrase(locale,
         `${label} 오른쪽 끝에 있어요. 다른 크기를 골라 주세요`, `${label} is at the right edge. Choose another size`, `${label}在右侧边缘，请选择其他尺寸`, `${label}在右側邊緣，請選擇其他尺寸`));
       if (prepared.code === 'UNSUPPORTED_CONDITION') return answer(tr.t('common.navis.agent.unsupportedPeriod'));
-      if (prepared.code === 'NO_NEIGHBOR_PAGE') return clarify('confirmAddPage', phrase(locale, `${page}페이지가 없어요. 새 페이지를 만들까요?`, `Page ${page} does not exist. Add a page?`, `第 ${page} 页不存在，要添加一页吗？`, `第 ${page} 頁不存在，要新增一頁嗎？`),
-        () => turn('layout.add_page', address));
+      if (prepared.code === 'NO_NEIGHBOR_PAGE') return {
+        kind: 'clarification', field: 'confirmAddPage',
+        answer: phrase(locale, `${page}페이지가 없어요. 새 페이지를 만들까요?`, `Page ${page} does not exist. Add a page?`, `第 ${page} 页不存在，要添加一页吗？`, `第 ${page} 頁不存在，要新增一頁嗎？`),
+        choices: [{ id: 'add-page', label: navisTranslator('ko').t('page.add') }],
+        resume(value, latest = state) {
+          if (value !== 'add-page' || latest.runId !== state.runId || latest.layer !== state.layer) return undefined;
+          return page !== undefined && page <= latest.boards[layer].pages.length
+            ? turn(command, args, latest) : turn('layout.add_page', { layer }, latest);
+        },
+      };
       if (prepared.kind === 'unchanged' && existing) {
         if (command === 'layout.move_to_page') return answer(phrase(locale, `${label} ${existing.index + 1}페이지에 있어요`, `${label} is on page ${existing.index + 1}`, `${label}在第 ${existing.index + 1} 页`, `${label}在第 ${existing.index + 1} 頁`));
         const value = command === 'layout.resize_widget' ? sizeLabel(existing.panel) : location(existing.panel, locale);
@@ -317,74 +392,77 @@ function routeLayout(
       return answer(prepared.kind === 'unchanged' ? `${label} ${absent(locale)}` : tr.t('common.navis.agent.invalid'));
     }
     const source = { layer, ...(args.page === undefined ? {} : { page: args.page }) };
-    const additionalReadings = [projectNavisBoard(run, source, locale)];
+    const additionalReadings = [projectNavisBoard(state, source, locale)];
     if (command === 'layout.move_to_page' && args.destinationPage !== undefined) {
-      additionalReadings.push(projectNavisBoard(run, { layer, page: args.destinationPage }, locale));
+      additionalReadings.push(projectNavisBoard(state, { layer, page: args.destinationPage }, locale));
     }
-    return { intent: { kind: 'command', command, args: asWire(args) }, page: run.boards[run.activeBoard].currentPage + 1, additionalReadings };
+    return { intent: { kind: 'command', command, args: asWire(args) }, page: state.boards[state.activeBoard].currentPage + 1, additionalReadings };
   };
 
-  if (boardRead.test(text)) {
-    const boardQuestion = /몇\s*페이지까지/u.test(text) ? 'pages' : /자리\s*몇\s*칸/u.test(text) ? 'free'
-      : /안\s*놓은/u.test(text) ? 'unplaced' : featureId && /(?:위젯|패널)\s*(?:크기|어디)/u.test(text) ? 'widget' : 'panels';
+  const boardQuestion = boardQuestionFor(text);
+  if (boardQuestion) {
     const sourceLayer = boardQuestion === 'widget' && featureId ? getRegistration(featureId)!.layer : layer;
-    return { intent: { kind: 'read', tool: 'get_board' }, reading: { tool: 'get_board', args: { layer: sourceLayer } },
+    return { intent: { kind: 'read', tool: 'get_board' }, reading: { tool: 'get_board', args: { layer: sourceLayer, ...(page === undefined ? {} : { page }) } },
       slots: { boardQuestion, ...(featureId ? { boardFeature: featureId } : {}) } } satisfies DomainTurnInput;
   }
   if (pageAppend(text)) return turn('layout.add_page', address);
-  if (layoutVerb.starter.test(text)) return turn(layer === 'marketing' ? 'layout.start_with_preset' : 'layout.start_with_three', address);
-  const adding = layoutVerb.add.test(text), removing = layoutVerb.remove.test(text), moving = layoutVerb.move.test(text), resizing = layoutVerb.resize.test(text);
+  if (!featureId && layoutVerb.starter.test(text)) return turn(layer === 'marketing' ? 'layout.start_with_preset' : 'layout.start_with_three', address);
+  const adding = layoutVerb.add.test(text), removing = layoutVerb.remove.test(text);
+  const moving = layoutVerb.move.test(text) || swapRequest.test(text) || !!current && direction.test(text);
+  const onBoard = surface.test(text) || page !== undefined && /페이지/u.test(text);
+  const listOnly = (verb: RegExp) => widgetListBefore(subject, verb, mentions);
   const couponMissing = /쿠폰/u.test(text) && !ids.some(id => couponChoices.some(choice => choice === id));
-  if (couponMissing && (adding || removing) && surface.test(text)) {
-    return clarify('featureId', couponChoices.map(id => name(id, locale)).join('\n'), value => {
-      const selected = findFeatures(value, run, locale).find(id => couponChoices.some(choice => choice === id));
-      return selected ? turn(adding ? 'layout.add_widget' : 'layout.remove_widget', { featureId: selected, ...address }) : undefined;
+  if (couponMissing && (adding || removing) && (onBoard || /^쿠폰\s*치워/u.test(text))) {
+    return clarify('featureId', couponChoices.map(id => name(id, locale)).join('\n'), (value, latest = run) => {
+      const selected = findFeatures(value, latest.screenPreset.id, locale).find(({ id }) => couponChoices.some(choice => choice === id));
+      return selected ? routeLayout(text.replace(/쿠폰/u, name(selected.id, locale)), snapshot, locale, latest) : undefined;
     });
   }
-  if (adding && (surface.test(text) || featureId && (dimensions || horizontal || vertical || /자리에|맨\s*아래|둘\s*다/u.test(text)))) {
+  if (adding && (onBoard || featureId && (sizeSpecified || layoutPosition.test(text) || ids.length > 1 && listOnly(layoutVerb.add)))) {
     if (!featureId || /^(?:메뉴|상품)\s+.+\s+\d+\s*원/u.test(text)) return !featureId
-      ? clarify('featureId', tr.t('navis.placeWhich'), value => routeLayout(`${value} 위젯 추가해줘`, snapshot, locale, run)) : undefined;
+      ? clarify('featureId', tr.t('navis.placeWhich'), (value, latest = run) => routeLayout(`${value} ${text}`, snapshot, locale, latest)) : undefined;
     const size = span(undefined);
     if ([size.width, size.height].some(n => n < 1 || n > 4)) return { kind: 'refusal', reason: 'invalid_target', answer: invalidSize };
     const spot = position(undefined);
-    if (ids.length > 1 && !spot && /이랑|랑|하고|둘\s*다|\band\b/iu.test(text)) {
+    if (ids.length > 1 && !spot && conjunction.test(text)) {
       return turn('layout.add_widgets', { ...address, ...(page !== undefined ? { page } : {}), widgets: ids.map(featureId => ({ featureId, ...size })) });
     }
     return turn('layout.add_widget', { featureId, ...address, ...(page !== undefined ? { page } : {}), ...size,
       ...(spot ? { column: spot.column, row: spot.row } : {}) });
   }
-  if (removing && (surface.test(text) || featureId && /^(?:마진|캘린더|브리핑|손익|재고|세무관리)\s*(?:이랑|랑|을|를|은|는|\s)/u.test(text))) {
+  if (removing && (onBoard || featureId && listOnly(layoutVerb.remove))) {
     if (!featureId) return clarify('featureId', tr.t('common.navis.agent.chooseWidget'));
-    if (ids.length > 1 && /이랑|랑|하고|둘\s*다|\band\b/iu.test(text)) return turn('layout.remove_widgets', { ...address, featureIds: ids });
-    return turn('layout.remove_widget', { featureId, ...address, ...(current && current.index !== board.currentPage ? { page: current.index + 1 } : {}) });
+    if (ids.length > 1 && conjunction.test(text)) return turn('layout.remove_widgets', { ...address, featureIds: ids, ...(page !== undefined ? { page } : {}) });
+    return turn('layout.remove_widget', { featureId, ...address, ...(page !== undefined ? { page } : {}) });
   }
-  if (moving && (featureId || /그거|그\s*패널|위젯|패널/u.test(text))) {
+  if ((moving || abbreviatedTransfer.test(text)) && (featureId || /[그저]거|그\s*패널|위젯|패널/u.test(text))) {
     if (!featureId || !current) return moveFailure();
     if (page !== undefined) return page < 1 || page > 5 ? answer(tr.t('page.limit'))
       : turn('layout.move_to_page', { featureId, layer, page: current.index + 1, destinationPage: page });
-    if (ids[1] && /자리\s*바꿔/u.test(text)) return turn('layout.swap_widgets', { ...address, a: featureId, b: ids[1] });
+    if (ids[1] && swapRequest.test(text)) return turn('layout.swap_widgets', { ...address, a: featureId, b: ids[1] });
+    if (/바깥|화면\s*밖/u.test(text)) return outsideBoard();
     const spot = position(current.panel);
-    if (!spot) return clarify('destination', phrase(locale, '어디로 옮길까요?', 'Where should it move?', '要移到哪里？', '要移到哪裡？'));
-    const grid = run.screenPreset.grid;
+    if (!spot) return clarify('destination', phrase(locale, '어디로 옮길까요?', 'Where should it move?', '要移到哪里？', '要移到哪裡？'),
+      (value, latest = run) => routeLayout(`${target} 위젯 ${value} 옮겨줘`, snapshot, locale, latest));
     if (spot.column < 0 || spot.column + current.panel.width > grid.columns || spot.row < 0 || spot.row + current.panel.height > grid.rows) {
-      return clarify('column', phrase(locale, `${target} 보드는 가로 ${grid.columns}칸이에요`, `The ${target} board is ${grid.columns} cells wide`, `${target}看板宽 ${grid.columns} 格`));
+      return outsideBoard();
     }
     return turn('layout.move_widget', { featureId, ...address, column: spot.column, row: spot.row });
   }
-  if (resizing && featureId && (current || surface.test(text))) {
+  if ((layoutVerb.resize.test(text) || sizeSpecified) && featureId && (current || onBoard)) {
     if (!current) return moveFailure();
-    if (!dimensions && !horizontal && !vertical) return clarify('size', askSize, value => routeLayout(`${target} ${value}로 바꿔줘`, snapshot, locale, run));
+    if (!sizeSpecified) return clarify('size', askSize, (value, latest = run) => routeLayout(`${target} ${value}로 바꿔줘`, snapshot, locale, latest));
     const size = span(current.panel);
-    if ([size.width, size.height].some(n => n < 1 || n > 4)) return dimensions
-      ? { kind: 'refusal', reason: 'invalid_target', answer: invalidSize }
-      : clarify('size', `${invalidSize}\n${phrase(locale, '4칸으로 바꿀까요?', 'Use 4 cells?', '改为 4 格？', '改為 4 格？')}`);
+    if (size.width < 1 || size.height < 1 || size.height > 4) return { kind: 'refusal', reason: 'invalid_target', answer: invalidSize };
+    if (size.width > 4) return clarify('size', `${invalidSize}\n${phrase(locale, '4칸으로 바꿀까요?', 'Use 4 cells?', '改为 4 格？', '改為 4 格？')}`,
+      value => readConversationControl(value)?.kind === 'confirm' ? turn('layout.resize_widget', { featureId, ...address, ...size, width: 4 }) : undefined);
     return turn('layout.resize_widget', { featureId, ...address, ...size });
   }
-  if (conditionRequest.test(text) && featureId && current) {
+  if (conditionRequest(text) && featureId && current) {
     const end = snapshot.pos?.businessDate ?? TODAY;
     return turn('layout.set_condition', { featureId, ...address, condition: { kind: 'dateRange', start: addDays(end, -6), end } });
   }
   return undefined;
 }
 
-export const layoutDomain: DomainAdapter = { commands: [], reads: [], tools: [boardTool], runCommands, route: routeLayout };
+export const layoutDomain: DomainAdapter = { commands: [], reads: [], tools: [boardTool], runCommands, routePresentation: routeLayout };

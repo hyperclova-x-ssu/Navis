@@ -7,9 +7,11 @@ import { createNavisContractFake } from '../fixtures/navis-eval-fake.mjs';
 
 import test from 'node:test';
 import * as schema from '../../shared/navis-agent-schema.mjs';
-import { readCafeScenarios, readTrace, releasedScenario } from './scenario-fixtures.mjs';
+import { evidence, readCafeScenarios, readTrace, releasedScenario } from './scenario-fixtures.mjs';
 
 const { corpus, facts: cafe } = await readCafeScenarios();
+const authoredPhotoDrafts = new Map(JSON.parse(evidence('MERGED.json'))
+  .filter(({ id }) => id === 'S6-012' || id === 'S6-013').map(({ id, expected }) => [id, expected.tools]));
 
 test('command and tool schemas validate nested slots, domain enums, and record kinds', () => {
   assert.equal(schema.validateAgentToolArgs('get_board', { layer: 'pos', page: 1 }), true);
@@ -27,6 +29,26 @@ test('command and tool schemas validate nested slots, domain enums, and record k
   assert.equal(schema.validateAgentToolArgs('propose_action', { ...proposal, args: { ...proposal.args, patch: { price: 5500 } } }), false);
   assert.equal(schema.validateAgentToolArgs('propose_action', { command: 'notice.send', args: {} }), false);
   assert.equal(schema.validateAgentCommandArgs('tax.createPayment', { taxType: 'VAT', amount: 123, dueOn: '2026-02-29' }), false);
+  const evidence = { taxPaymentId: { handle: 'payment' }, evidence: 'none' };
+  assert.equal(schema.agentCommandPolicy('tax.setEvidence', evidence).policy, 'widget-only');
+  assert.equal(schema.validateAgentToolArgs('propose_action', { command: 'tax.setEvidence', args: evidence }), false);
+});
+
+test('compiled read intent accepts defaults and the order alias at input only', () => {
+  const input = {
+    runId: 'compiled', snapshotRevision: 0, layer: 'management', businessDate: '2026-10-26',
+    slots: ['name'], catalog: [], snapshot: [], searches: [],
+  };
+  const order = { name: 'search_records', args: { kind: 'order', querySlot: 'name' } };
+  const pos = { name: 'get_source', args: { sourceId: 'pos' } };
+  const read = (reads, extra) => schema.validateAgentRequest({ ...input, intent: { kind: 'read', reads, ...extra } });
+  assert.equal(read([pos, order]), true);
+  assert.equal(schema.validateAgentToolArgs(pos.name, pos.args), false);
+  assert.equal(schema.validateAgentToolArgs(order.name, order.args), false);
+  assert.equal(read([pos], { featureId: 'ledger' }), false);
+  assert.equal(read([{ ...order, args: { ...order.args, querySlot: 'other' } }]), false);
+  assert.equal(read([{ name: 'get_widget', args: { featureId: 'ledger', condition: { kind: 'dateRange', start: '2026-10-27', end: '2026-10-26' } } }]), false);
+  assert.equal(read([{ name: 'propose_action', args: {} }]), false);
 });
 
 const defaultCondition = { kind: 'default' };
@@ -245,7 +267,7 @@ async function runBridge(request, fake) {
 
 const marketing = new Set([
   'notice-send', 'local-changes', 'trade-area', 'local-trends', 'ai-response', 'community', 'marketing-today',
-  'slot-coupon', 'expiry-coupon', 'promo-video', 'coupon-status', 'customer-groups', 'marketing-performance',
+  'slot-coupon', 'expiry-coupon', 'promo-video', 'coupon-status', 'customer-groups',
 ]);
 function requestFor(id, calls, intent = { kind: 'read' }, slots = []) {
   const catalog = new Map(), snapshot = new Map(), searches = new Map();
@@ -429,6 +451,22 @@ const clarificationExceptions = {
   'S3-240': 'N10 · calendar delete choices need a scoped local selection',
 };
 const reviewedExceptions = clarificationExceptions;
+
+function protocolScenario(scenario) {
+  const { id, expected } = scenario;
+  let tools = authoredPhotoDrafts.get(id);
+  if (id === 'S5-020') {
+    // Provider draft origin stays in the review widget. The existing wire identifies a thread.
+    tools = [{ name: 'search_records', args: { kind: 'thread', querySlot: 'name' } },
+      { name: 'propose_action', args: { command: 'reply.draft', args: { threadId: 'th-4' } } }];
+  }
+  if (id === 'S5-159' || id === 'S6-087') {
+    // Publication and scheduled SMS use the existing notice widget. An unsaved draft cannot become a model proposal.
+    return { ...scenario, expected: { ...expected, kind: 'refuse', tools: [{ name: '(refused)', args: { command: 'notice.send' } }] } };
+  }
+  return tools ? { ...scenario, expected: { ...expected, tools } } : scenario;
+}
+
 async function verifyScenario(scenario, row, assigned) {
   const { steps, exceptions } = validateTranscript(scenario);
   const calls = steps.flatMap(step => step.call ? [step.call] : []);
@@ -488,6 +526,9 @@ async function verifyScenario(scenario, row, assigned) {
   else check(steps.length > 0, 'missing executable contract steps');
 }
 
+/** D-365: rows that open or read the removed 마케팅 성과 widget are retired with it (expectation patch for B17). */
+const touchesRemovedWidget = scenario => JSON.stringify(scenario ?? {}).includes('marketing-performance');
+
 test('N00/N01 corpus protocol and zero-effect policy coverage', async t => {
   const trace = readTrace();
   assert.equal(corpus.size, 1859);
@@ -502,8 +543,9 @@ test('N00/N01 corpus protocol and zero-effect policy coverage', async t => {
   for (const row of selected) {
     const inSlice = row.slice_id === 'N00' || row.slice_id === 'N01';
     const scenario = corpus.get(row.scenario_id);
+    if (touchesRemovedWidget(scenario)) continue;
     try {
-      await verifyScenario(releasedScenario(scenario), row, inSlice);
+      await verifyScenario(protocolScenario(releasedScenario(scenario)), row, inSlice);
       if (scenario.policyGap) {
         const list = inSlice ? policyGaps : dependencyPolicyGaps;
         list.push(`${scenario.id} (${scenario.policyGap.slice})`);

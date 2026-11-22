@@ -40,13 +40,15 @@ test('checklist proposals require the named checklist and an explicit desired st
 test('D-326 requires extra confirmation to unpublish one currently published manual', () => {
   const command = 'manuals.setPublished';
   const args = { manualId: handle('opening'), published: false };
-  const match = exact('opening', { published: true });
+  const match = exact('opening', { section: 'handover', published: true });
   const input = request(command, args, [{ kind: 'manual', querySlot: 'name', matches: [match] }]);
   assert.ok(validateAgentRequest(input));
   assert.deepEqual(adapter(command).lookups(input), [lookup('manual', 'name')]);
   const prepare = fields => adapter(command).prepare({ input, reads: [ready(exact('opening', fields))] });
   assert.deepEqual(prepare(match.fields), { outcome: 'ready', args });
-  assert.deepEqual(prepare({ published: false }), refused('duplicate'));
+  assert.deepEqual(prepare({ section: 'handover', published: false }), refused('duplicate'));
+  assert.deepEqual(prepare({ section: 'store-info', published: true }), refused('invalid_target'));
+  assert.deepEqual(prepare({ published: true }), refused('unavailable'));
   assert.deepEqual(prepare({}), refused('unavailable'));
   assert.equal(validateAgentToolArgs('propose_action', { command, args: { ...args, published: true } }), false);
 });

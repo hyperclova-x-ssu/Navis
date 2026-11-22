@@ -80,11 +80,15 @@ function spiedDomains() {
   return { state, domains: createDomainRegistry(registeredDomains.map(domain => domain === localDomain ? spied : domain)) };
 }
 
-function fixture(id: string) {
+function fixture(id: string, openingTitleKey?: string) {
   const run = createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: timePolicy, theme: 'light', clock: () => 0, reducedMotion: true });
   beginDashboard(run, 'cafe');
   run.actions.dismissCoach();
-  const store = createWidgetDataStore(undefined, { runId: run.getState().runId });
+  if (id === 'S4-147') run.actions.switchLayer('marketing');
+  const seed = openingTitleKey ? {
+    localChange: base.tables.localChange.map(row => row.changeId === opening.changeId ? { ...row, titleKey: openingTitleKey } : row),
+  } : undefined;
+  const store = createWidgetDataStore(seed, { runId: run.getState().runId });
   // S4-148, S4-151 and S4-157 start with the opening already folded.
   if (['S4-148', 'S4-151', 'S4-157'].includes(id)) expect(store.dispatch({ type: 'localChanges.acknowledge', changeId: opening.changeId }).ok).toBe(true);
   const requests: AgentRequest[] = [], calls: { name: string; args: Record<string, unknown> }[] = [];
@@ -129,13 +133,11 @@ type Env = ReturnType<typeof fixture>;
 
 /** Authored kinds that differ in the café, with the reviewed reason. */
 const kindErrata: Readonly<Record<string, { kind: Kind; reason: string }>> = {
-  'S4-151': { kind: 'proposal', reason: 'G-104 adds localChanges.unacknowledge, so a folded row now reopens from a card instead of being refused.' },
+  'S4-151': { kind: 'clarify', reason: 'G-104 reopens a folded change by card after the owner resolves a missing or mismatched target.' },
 };
 /** Variants a stored-row or keyword name is needed to route, or another widget owns. Their kind is still asserted when listed. */
 const exceptions: Readonly<Record<string, { kind?: Kind; reason: string }>> = {
-  'S4-147/4': { kind: 'answer', reason: '“다 봤어 확인” names no change, alert or row, so no domain can claim it from one turn.' },
   ...Object.fromEntries([1, 2, 3, 4].map(variant => [`S4-145/${variant}`, { kind: 'clarify' as Kind, reason: 'D-327 Q3: “새 카페” names a shop type no open opening title contains, so the app asks which opening first.' }])),
-  ...Object.fromEntries([1, 4].map(variant => [`S4-151/${variant}`, { kind: 'clarify' as Kind, reason: 'D-327 Q3: “새 카페” names a shop type no folded opening title contains, so the app asks which opening first.' }])),
   'S4-212/1': { kind: 'answer', reason: 'The authored keyword is not in the café week, so there is no row to open.' },
   'S4-212/2': { kind: 'answer', reason: 'The authored keyword is not in the café week, so there is no row to open.' },
   'S4-212/3': { kind: 'answer', reason: 'The authored keyword is not in the café week, so there is no row to open.' },
@@ -185,7 +187,7 @@ describe('N20 local intelligence café contract', () => {
 
   it.each(assigned)('$id replays every authored utterance in the café', async row => {
     for (const [index, utterance] of row.utterances.entries()) {
-      const env = fixture(row.id);
+      const env = fixture(row.id, row.id === 'S4-148' ? 'data.localChange.newCafe' : undefined);
       const result = await env.ask(utterance);
       const owner = env.spy.state.claimed || localDomain.navigation?.(utterance, env.store.getSnapshot(), 'ko') !== undefined ? 'local' : 'other';
       const wanted = exceptions[`${row.id}/${index + 1}`]?.kind ?? kindErrata[row.id]?.kind ?? row.expected.kind;
@@ -228,6 +230,23 @@ describe('N20 café analogs of the authored targets that are not in the café we
   });
 });
 
+describe('N20 widget location questions', () => {
+  it('names the catalog path for a widget that is not on the board and the board placement once it is placed', async () => {
+    const env = fixture('analog');
+    env.run.actions.switchLayer('marketing');
+    const off = await env.ask('상권분석 위젯 위치 알려줘');
+    expect(off.actual, off.reply.answer).toBe('answer');
+    expect(off.reply.answer).toContain('마케팅');
+    expect(off.reply.answer).toContain('동네');
+    env.run.actions.applyLayoutIntent({ type: 'add-tap', featureId: 'trade-area' });
+    expect(env.run.getState().boards.marketing.pages[0].panels.some(panel => panel.featureId === 'trade-area')).toBe(true);
+    const on = await env.ask('상권분석 위젯 위치 알려줘');
+    expect(on.actual, on.reply.answer).toBe('answer');
+    expect(on.reply.answer).toMatch(/\d+x\d+/u);
+    expect(on.reply.answer).not.toContain('동네');
+  });
+});
+
 describe('D-327 decisions', () => {
   it('counts 점심 as 12~14시 without asking and says which hours it used (Q1)', async () => {
     for (const text of ['점심때 사람 얼마나 다녀', '점심 두 시간 동안 지나가는 사람 수', '점심 유동인구 알려줘']) {
@@ -260,13 +279,28 @@ describe('D-327 decisions', () => {
     await confirm('S4-145', env, picked, opening);
   });
 
-  it('does not ask when the title holds the type, the wording names no type, or the row is already checked (Q3)', async () => {
+  it('does not ask when the title holds the type or the wording names no type (Q3)', async () => {
     const titled = await fixture('S4-145').ask('서점 개점 확인했어');
     expect(titled.actual, titled.reply.answer).toBe('proposal');
     const generic = await fixture('S4-145').ask('새 가게 확인했어');
     expect(generic.actual, generic.reply.answer).toBe('proposal');
-    const folded = await fixture('S4-148').ask('새 카페 확인했어');
-    expect(folded.actual, folded.reply.answer).toBe('answer');
+  });
+
+  it('S4-148 acknowledges the folded status only for an opening with the requested shop type', async () => {
+    const titled = fixture('S4-148', 'data.localChange.newCafe');
+    const exact = await titled.ask('새 카페 확인했어');
+    expect(exact.actual).toBe('answer');
+    expect(exact.reply.answer).toContain('이미 확인한 소식이에요');
+    expect(titled.calls).toEqual([]);
+
+    const mismatched = fixture('S4-148');
+    const asked = await mismatched.ask('새 카페 확인했어');
+    expect(asked.reply.turn).toMatchObject({ kind: 'clarification', field: 'changeId', choices: [{ id: opening.changeId }] });
+    if (asked.reply.turn?.kind !== 'clarification') throw Error('Expected an opening choice');
+    const picked = await mismatched.ask('', false, { clarificationId: asked.reply.turn.id, choiceId: opening.changeId });
+    expect(picked.reply.answer).toContain('이미 확인한 소식이에요');
+    expect(mismatched.calls).toEqual([]);
+    expect(mismatched.store.getSnapshot()).toBe(asked.before);
   });
 
   it('asks the same way before reopening a folded opening (Q3)', async () => {
@@ -279,5 +313,24 @@ describe('D-327 decisions', () => {
     const picked = await env.ask('', false, { clarificationId: turn.id, choiceId: opening.changeId });
     expect(picked.actual, picked.reply.answer).toBe('proposal');
     await confirm('S4-151', env, picked, opening);
+  });
+
+  it('asks which change to acknowledge when the owner names none on the marketing board', async () => {
+    const env = fixture('S4-147');
+    const asked = await env.ask('다 봤어 확인');
+    expect(asked.reply.turn).toMatchObject({ kind: 'clarification', field: 'changeId' });
+    const turn = asked.reply.turn!;
+    if (turn.kind !== 'clarification') throw Error('Expected a clarification');
+    expect(turn.choices.map(choice => choice.id).sort()).toEqual(changes.openChanges.map(row => row.changeId).sort());
+    const picked = await env.ask('', false, { clarificationId: turn.id, choiceId: event.changeId });
+    await confirm('S4-147', env, picked, event);
+  });
+
+  it('asks which folded row to reopen even when there is a single folded row', async () => {
+    const env = fixture('S4-151');
+    const asked = await env.ask('접은 거 다시 확인 필요로 바꿔줘');
+    expect(asked.reply.turn).toMatchObject({ kind: 'clarification', field: 'changeId', choices: [{ id: opening.changeId }] });
+    expect(env.calls).toEqual([]);
+    expect(env.store.getSnapshot()).toBe(asked.before);
   });
 });

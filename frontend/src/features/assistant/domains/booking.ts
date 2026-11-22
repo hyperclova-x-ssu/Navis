@@ -8,6 +8,7 @@ import { addDays, isIsoDate, isTime } from '../../../data/db/time';
 import type { DataSnapshot, Reservation } from '../../../data/db/types';
 import { allocateReservation, selectReservations, tableLayoutEnabled } from '../../../data/derive/reservations';
 import { maskCustomer } from '../../../data/derive/members';
+import { naverRules } from '../../../data/reality/06/dto';
 import { dataBundles, resolveDataText } from '../../../data/widget-data';
 import { baseBundles, createTranslator, type MessageBundle, type Translator } from '../../../i18n';
 import { customersBundle } from '../../widgets/mgmt-customers/messages';
@@ -22,6 +23,12 @@ const bookingRows = {
   'booking.navis.guest': ['예약자', 'Guest', '预约人', '預約人'],
   'booking.navis.phone': ['연락처', 'Phone number', '联系电话', '聯絡電話'],
   'booking.navis.table': ['테이블', 'Table', '桌位', '桌位'],
+  'booking.navis.askGuest': ['예약자 이름을 알려 주세요', 'What is the guest’s name?', '请告诉我预约人的名字', '請告訴我預約人的名字'],
+  'booking.navis.askDate': ['예약 날짜를 알려 주세요', 'What date is the reservation for?', '请告诉我预约日期', '請告訴我預約日期'],
+  'booking.navis.askTime': ['예약 시각을 알려 주세요', 'What time is the reservation for?', '请告诉我预约时间', '請告訴我預約時間'],
+  'booking.navis.askParty': ['몇 분이 오시나요?', 'How many guests are coming?', '有几位客人？', '有幾位客人？'],
+  'booking.navis.askPhone': ['예약자 연락처를 알려 주세요', 'What is the guest’s phone number?', '请告诉我预约人的联系电话', '請告訴我預約人的聯絡電話'],
+  'booking.navis.askTable': ['어느 테이블로 예약할까요?', 'Which table should I reserve?', '要预订哪个桌位？', '要預訂哪個桌位？'],
   'booking.navis.status': ['상태', 'Status', '状态', '狀態'],
   'booking.navis.available': ['가능해요', 'Available', '有空位', '有空位'],
   'booking.navis.noTable': ['맞는 테이블이 없어요', 'No matching table', '没有合适的桌位', '沒有合適的桌位'],
@@ -35,6 +42,10 @@ const bookingRows = {
   'booking.navis.unavailable': ['이 요청은 준비할 수 없어요. 앱에서 직접 입력해 주세요.', 'Enter this in the booking widget.', '请在预约页面输入。', '請在預約頁面輸入。'],
   'booking.navis.unchanged': ['이미 같은 내용이에요', 'Already set', '已经是这个内容', '已經是這個內容'],
   'booking.navis.closed': ['이 예약은 상태를 바꿀 수 없어요', 'This reservation cannot be changed', '无法更改此预约', '無法更改此預約'],
+  // REAL-PLAN F06 (D-347 PN02, AC-1597): an Npay-linked NAVER booking cannot be changed here, and a phone request or a NAVER booking has no "suggest another time".
+  // REAL-PLAN F06-2 (D-347 PN02, AC-1597): a NAVER cancel needs the owner's own reason (the customer reads it) and, for a paid Npay booking, refund terms: the widget asks for them.
+  'booking.navis.naverCancel': ['네이버 예약은 취소 사유와 환불 조건을 직접 적어야 해요. 예약 화면에서 이어서 해 주세요', 'A NAVER booking needs your own cancellation reason (and refund terms). Continue in the booking widget.', '取消NAVER预约需要您亲自填写取消原因（及退款条件），请在预约页面继续。', '取消NAVER預約需要您親自填寫取消原因（及退款條件），請在預約頁面繼續。'],
+  'booking.navis.npayLocked': ['Npay로 결제한 예약은 앱에서 바꿀 수 없어요', "Bookings paid with Npay can't be changed in the app", '已关联 Npay 的预约无法在此更改', '已連結 Npay 的預約無法在此更改'],
 } as const;
 const copyAt = (position: 0 | 1 | 2 | 3) => Object.fromEntries(Object.entries(bookingRows).map(([key, row]) => [key, row[position]]));
 export const bookingBundle: MessageBundle<string> = { id: 'navis.booking', ko: copyAt(0), en: copyAt(1), 'zh-Hans': copyAt(2), 'zh-Hant': copyAt(3) };
@@ -116,6 +127,11 @@ function bookingAdapter(type: BookingType): CommandAdapter<BookingCommand, Booki
     },
     preflight({ args, locale }, { snapshot, proposalId, idempotencyKey }) {
       const before = visits(snapshot).find(row => row.reservationId === args.reservationId);
+      // REAL-PLAN F06: the service refuses to change an Npay-linked NAVER booking, so no card is offered for it.
+      const meta = typeof args.reservationId === 'string' ? snapshot.tables.realBooking?.meta[args.reservationId] : undefined;
+      if (type === 'booking.update' && meta?.npayLinked) return { kind: 'invalid', field: 'reservationId', messageKey: 'data.management.error.BOOKING_TRANSITION' };
+      // A NAVER cancel needs the owner's typed reason (and refund terms): a card cannot carry them, so no card runs it; the chat hands off to the widget.
+      if (type === 'booking.cancel' && meta?.origin === 'naver') return { kind: 'invalid', field: 'reservationId', messageKey: 'data.management.error.BOOKING_TRANSITION' };
       const command = { ...args, type, baseRevision: snapshot.revision, idempotencyKey } as BookingCommand;
       const ctx = { snapshot, tables: snapshot.tables, nextId: (prefix: string) => `${prefix}-navis-preview-${proposalId}` };
       const handler = handlers[type] as (context: typeof ctx, command: BookingCommand) => ReturnType<typeof handlers['booking.create']>;
@@ -128,7 +144,9 @@ function bookingAdapter(type: BookingType): CommandAdapter<BookingCommand, Booki
       if (object(patch) && object(patch.tableChoice) && (!tableLayoutEnabled(snapshot.tables.shopSettings) || after.allocationWarning)) {
         return { kind: 'invalid', field: 'tableChoice', messageKey: 'data.management.error.TABLE_INVALID' };
       }
-      return { kind: 'ready', command, preview: bookingPreview(snapshot, before, after, locale) };
+      // A NAVER booking without a party holds no seat: the preview never shows a table the local rules would have guessed for it.
+      const shown = meta?.partyKnown === false ? { ...after, tableId: null, allocationWarning: undefined } : after;
+      return { kind: 'ready', command, preview: bookingPreview(snapshot, before, shown, locale) };
     },
     undoToken: result => result.undoToken,
   };
@@ -184,13 +202,16 @@ const reservationReader: RecordAdapter = {
     const t = bookingTranslator(locale);
     const matches = visitMatches(snapshot, queryOf(query), locale);
     const exact = matches.filter(item => item.match === 'exact');
-    return (exact.length ? exact : matches).map(({ row, match }, index) => ({
-      handle: reservationHandle(index), match,
-      ...(!privateLookup ? { label: rowName(row, t).slice(0, 180) } : {}),
-      fields: { kind: 'visit', date: row.date, time: row.time, partySize: row.partySize, status: row.status, source: row.source,
-        visitStarted: slotHasPassed(row.date, row.time),
-        ...(row.allocationWarning === 'NO_MATCHING_TABLE' || row.allocationWarning === 'SEAT_LIMIT' ? { allocationWarning: row.allocationWarning } : {}) },
-    }));
+    return (exact.length ? exact : matches).map(({ row, match }, index) => {
+      const origin = snapshot.tables.realBooking?.meta[row.reservationId]?.origin;
+      return {
+        handle: reservationHandle(index), match,
+        ...(!privateLookup ? { label: rowName(row, t).slice(0, 180) } : {}),
+        fields: { kind: 'visit', date: row.date, time: row.time, partySize: row.partySize, status: row.status, source: row.source,
+          ...(origin ? { origin } : {}), visitStarted: slotHasPassed(row.date, row.time),
+          ...(row.allocationWarning === 'NO_MATCHING_TABLE' || row.allocationWarning === 'SEAT_LIMIT' ? { allocationWarning: row.allocationWarning } : {}) },
+      };
+    });
   },
   resolve(input, handle) {
     const matches = visitMatches(input.snapshot, queryOf(input.query), input.locale);
@@ -301,6 +322,9 @@ const phonePattern = /(?:연락처|번호(?:는)?|전화번호|전화)\s*[:：]?
 const knownNamePattern = /(?:[가-힣][○●*]+[가-힣]*(?:\d{4})?|[가-힣]\s*씨)(?:님|씨)?/u;
 const politeNamePattern = /(?<![가-힣])[가-힣]{2,5}(?:님|씨)(?=\s|$)/u;
 const requestsMentioned = /(?:아기\s*의자|창가\s*자리)/u;
+const requestField = /요청(?:\s*사항|\s*내용)?(?:을|를|은|는)?/u;
+const updateRequestVerb = /(?:바꿔\s*(?:줘|주세요)?|수정(?:해\s*(?:줘|주세요))?|변경(?:해\s*(?:줘|주세요))?|고쳐\s*(?:줘|주세요)?)/u;
+const automaticTable = /자동\s*(?:배정|추천|으로)|(?:자리|테이블)\s*지정\s*풀/u;
 const cancelIntent = /취소|캔슬|날려/u;
 const bulkIntent = /전부|모두|(?:^|\s)다(?:\s|$)|한꺼번에|한\s*번에|싹/u;
 const tablePattern = /\bT(\d{1,2})\b|(\d{1,2})\s*번\s*(?:테이블|자리)/iu;
@@ -334,7 +358,7 @@ function guestIn(text: string) {
   if (named && !/^(?:없음|내일|오늘|요청|자동|수동)$/u.test(named)) return named;
   const cleaned = text
     .replace(timePattern, ' ').replace(partyPattern, ' ').replace(phonePattern, ' ').replace(tablePattern, ' ')
-    .replace(registrationWords, ' ').replace(openWords, ' ')
+    .replace(registrationWords, ' ').replace(openWords, ' ').replace(/만들어\s*(?:줘|주세요)?/gu, ' ')
     .replace(/테이블\s*지정해서/u, ' ')
     .replace(/(?:\d+\s*월\s*\d+\s*일|\d{1,4}[-./]\d{1,2}(?:[-./]\d{1,2})?|(?:이번|다음|지난|저번)\s*주\s*[월화수목금토일]요일)/gu, ' ')
     .replace(/(?:오늘|어제|내일|담날|모레)(?:에|로|은|는)?|날짜로|예약(?:을|이|은)?|잡아\s*(?:줘|주세요)?|넣어\s*(?:줘|주세요)?|해\s*(?:줘|주세요)|하나|새로|추가(?:해\s*줘)?|등록(?:해\s*줘)?|부탁|손님|연락처|전화|번호|단체|오전|오후|아침|저녁|점심|이름|시간|인원|방문|완료|노쇼|취소|변경|수정|확정|자동|자리|테이블|요청사항|바꿔\s*줘|옮겨\s*줘|줄여\s*줘|미뤄\s*줘/gu, ' ');
@@ -352,6 +376,21 @@ function readBookingDate(text: string, date: string) {
   const day = /(?:^|\s)(\d{1,2})\s*일(?:에|로|쯤)?(?=\s|$)/u.exec(text)?.[1];
   const dateOnly = day && `${date.slice(0, 8)}${day.padStart(2, '0')}`;
   return !/\d+\s*월/u.test(text) && isIsoDate(dateOnly) ? dateOnly : undefined;
+}
+
+function requestEdit(text: string): { context: string; request?: string | null } | undefined {
+  const field = requestField.exec(text);
+  if (!field) return;
+  const tail = text.slice(field.index + field[0].length).trim();
+  const quoted = /^['"‘“]([^'"’”]+)['"’”]\s*(?:으?로)?\s*/u.exec(tail);
+  const context = text.slice(0, field.index + field[0].length);
+  if (quoted) return updateRequestVerb.test(tail.slice(quoted[0].length)) ? { context, request: quoted[1].trim() } : undefined;
+  if (/^(?:지워|없애|삭제|비워|빼줘)/u.test(tail)) return { context, request: null };
+  const directive = updateRequestVerb.exec(tail);
+  if (!directive) return;
+  const value = (directive.index === 0 ? tail.slice(directive[0].length) : tail.slice(0, directive.index).replace(/으?로\s*$/u, ''))
+    .trim().replace(/^[:：]\s*/u, '');
+  return { context, request: value || undefined };
 }
 function contextualTime(candidate: ReturnType<typeof timesIn>[number] | undefined, expected: (time: string) => boolean) {
   const time = candidate?.time;
@@ -383,7 +422,7 @@ function createRoute(fields: CreateFields, snapshot: DataSnapshot, locale: Local
   const t = bookingTranslator(locale);
   const clarify = (field: keyof CreateFields, label: string, parse: (value: string) => string | number | undefined, answer?: string): DomainRoute => ({
     kind: 'clarification', field: field === 'name' ? 'guest' : field === 'table' ? 'tableChoice' : field,
-    answer: answer ?? t.t(label),
+    answer: answer ? `${answer}. ${t.t(label)}` : t.t(label),
     resume(value) {
       if (field === 'name' && (!nonEmpty(value) || !/^[\p{L}○●*' .-]+$/u.test(value))) return;
       const next = parse(value);
@@ -393,14 +432,14 @@ function createRoute(fields: CreateFields, snapshot: DataSnapshot, locale: Local
   const anchor = snapshot.pos?.businessDate ?? BUSINESS_CLOCK.date;
   const readTime = (value: string) => contextualTime(timesIn(value).at(-1), time => !slotHasPassed(fields.date ?? anchor, time));
   const readParty = (value: string) => partyIn(value).value ?? parseNavisNumber(value);
-  if (fields.partySize !== undefined && !positive(fields.partySize)) return clarify('partySize', 'widget.voice-booking.extParty', readParty);
-  if (fields.phone !== undefined && !phoneNumber(fields.phone)) return clarify('phone', 'booking.navis.phone', value => value.replace(/[^\d]/gu, ''));
-  if (!fields.name) return clarify('name', 'booking.navis.guest', value => value.trim());
-  if (!fields.date || fields.date < anchor) return clarify('date', 'widget.voice-booking.extDate',
+  if (fields.partySize !== undefined && !positive(fields.partySize)) return clarify('partySize', 'booking.navis.askParty', readParty);
+  if (fields.phone !== undefined && !phoneNumber(fields.phone)) return clarify('phone', 'booking.navis.askPhone', value => value.replace(/[^\d]/gu, ''));
+  if (!fields.name) return clarify('name', 'booking.navis.askGuest', value => value.trim());
+  if (!fields.date || fields.date < anchor) return clarify('date', 'booking.navis.askDate',
     value => readBookingDate(value, anchor), fields.date ? t.t('booking.navis.past') : undefined);
-  if (!fields.time || slotHasPassed(fields.date, fields.time)) return clarify('time', 'widget.voice-booking.extTime', readTime,
+  if (!fields.time || slotHasPassed(fields.date, fields.time)) return clarify('time', 'booking.navis.askTime', readTime,
     fields.time ? t.t('booking.navis.past') : undefined);
-  if (!positive(fields.partySize)) return clarify('partySize', 'widget.voice-booking.extParty', readParty);
+  if (!positive(fields.partySize)) return clarify('partySize', 'booking.navis.askParty', readParty);
   const guest = { name: fields.name, ...(fields.phone ? { phone: fields.phone } : {}) };
   if (findBookingDuplicate(snapshot.tables, { ...fields, date: fields.date, time: fields.time, partySize: fields.partySize, guest })) {
     return { kind: 'clarification', field: 'confirm_duplicate', answer: t.t('booking.navis.duplicate') };
@@ -418,7 +457,7 @@ function createRoute(fields: CreateFields, snapshot: DataSnapshot, locale: Local
     };
     const table = tableMatches({ snapshot, locale, query: fields.table, privateLookup: true })[0];
     const allocation = table && bookingAllocation(snapshot, { date: fields.date, time: fields.time, partySize: fields.partySize, tableChoice: { tableId: table.tableId } });
-    if (!allocation || allocation.status !== 'confirmed') return clarify('table', 'booking.navis.table',
+    if (!allocation || allocation.status !== 'confirmed') return clarify('table', 'booking.navis.askTable',
       value => /자동|^auto$/iu.test(value) ? '' : tableIn(value), t.t('booking.navis.noTable'));
     lookups.push({ kind: 'table', querySlot: 'tableId', bind: ['tableChoice', 'tableId'] });
   }
@@ -427,7 +466,8 @@ function createRoute(fields: CreateFields, snapshot: DataSnapshot, locale: Local
 }
 
 function mutationRoute(text: string, command: BookingType | 'booking.propose', query: BookingQuery,
-  destination: { date?: string; time?: string; partySize?: number }, snapshot: DataSnapshot, locale: Locale): DomainRoute {
+  destination: { date?: string; time?: string; partySize?: number; request?: string | null; editingRequest?: boolean },
+  snapshot: DataSnapshot, locale: Locale): DomainRoute {
   const t = bookingTranslator(locale), navis = navisTranslator(locale);
   const matched = visitMatches(snapshot, query, locale);
   const exact = matched.filter(item => item.match === 'exact');
@@ -438,7 +478,14 @@ function mutationRoute(text: string, command: BookingType | 'booking.propose', q
     ({ kind: 'clarification', field, answer: t.t(label), resume });
   if (!matched.length) return recordRead(query, locale);
   if (row) {
+    // REAL-PLAN F06: facts only the booking API knows (HTTP booking domain). An Npay-linked NAVER booking cannot be changed here; a NAVER booking has no "suggest another time" (a phone request has one: a local record, nothing is sent).
+    const meta = snapshot.tables.realBooking?.meta[row.reservationId];
+    if (command === 'booking.update' && meta?.npayLinked) return refused(t.t('booking.navis.npayLocked'));
+    if (command === 'booking.propose' && meta?.origin === 'naver') return refused(t.t('booking.navis.unavailable'));
     if (command === 'booking.cancel' && row.status === 'canceled' || command === 'booking.confirm' && row.status === 'confirmed') return unchanged();
+    if (command === 'booking.cancel' && naverRules(meta, row.status)?.cancel) {
+      return { kind: 'refusal', reason: 'widget_only', answer: t.t('booking.navis.naverCancel'), alternative: { featureId, command: 'booking.cancel', draft: { reservationId: row.reservationId } } };
+    }
     if (command === 'booking.confirm' || command === 'booking.propose') {
       if (row.status !== 'needs-check') return refused(t.t('booking.navis.closed'));
     } else if (command === 'booking.update' || command === 'booking.markCompleted' || command === 'booking.markNoShow') {
@@ -460,14 +507,17 @@ function mutationRoute(text: string, command: BookingType | 'booking.propose', q
     const movingTime = /(?:시간|시각)\s*(?:바꾸|변경|바꿔|옮겨|수정)|(?:시(?:\s*반)?|:\d\d)\s*(?:에서|로)|(?:다시\s*잡아)/u.test(text);
     const movingDate = /(?:날짜|내일|담날|모레|어제).*(?:미뤄|옮겨|날짜)|날짜\s*(?:바꿔|변경)/u.test(text);
     const restart = (suffix: string) => routeBooking(`${text} ${suffix}`, snapshot, locale);
-    if (party.given && !positive(party.value)) return clarify('partySize', 'widget.voice-booking.extParty');
+    if (party.given && !positive(destination.partySize ?? party.value)) return clarify('partySize', 'data.management.error.PARTY_INVALID', value => {
+      const partySize = partyIn(value).value ?? parseNavisNumber(value);
+      return positive(partySize) ? mutationRoute(text, command, query, { ...destination, partySize }, snapshot, locale) : undefined;
+    });
     if (movingTime && !destination.time) {
-      return clarify('time', 'widget.voice-booking.extTime', value => {
+      return clarify('time', 'booking.navis.askTime', value => {
         const time = contextualTime(timesIn(value).at(-1), item => item >= BUSINESS_CLOCK.time);
         return time ? mutationRoute(text, command, query, { ...destination, time }, snapshot, locale) : undefined;
       });
     }
-    if (movingDate && !destination.date) return clarify('date', 'widget.voice-booking.extDate', restart);
+    if (movingDate && !destination.date) return clarify('date', 'booking.navis.askDate', restart);
     const nextDate = destination.date ?? (row && /하루\s*뒤로/u.test(text) ? addDays(row.date, 1) : undefined);
     const changedSlot = (nextDate && nextDate !== row?.date) || (destination.time && destination.time !== row?.time);
     if (changedSlot && row && slotHasPassed(nextDate ?? row.date, destination.time ?? row.time)) {
@@ -476,11 +526,16 @@ function mutationRoute(text: string, command: BookingType | 'booking.propose', q
     if (destination.time && destination.time !== row?.time) patch.time = bindValue('time', destination.time);
     if (nextDate && nextDate !== row?.date) patch.date = bindValue('date', nextDate);
     if (positive(destination.partySize) && destination.partySize !== row?.partySize) patch.partySize = bindValue('partySize', destination.partySize);
-    const request = /["“'‘]([^"”'’]+)["”'’]/u.exec(text)?.[1];
-    if (/요청(?:사항)?/u.test(text) && (request || /지워|없애|삭제|비워|빼줘/u.test(text))) patch.request = request ? bindValue('request', request) : null;
+    if (destination.editingRequest) {
+      if (destination.request === undefined) return clarify('request', 'widget.voice-booking.extRequest', value => {
+        const request = value.trim();
+        return nonEmpty(request) ? mutationRoute(text, command, query, { ...destination, request }, snapshot, locale) : undefined;
+      });
+      patch.request = destination.request === null ? null : bindValue('request', destination.request);
+    }
     const phone = phoneIn(text);
     const name = /(?:이름(?:을|를)?|성함)\s+([\p{L}]{2,40}?)(?:으?로|이래)(?=\s|$)/u.exec(text)?.[1];
-    if (phone !== null && !phoneNumber(phone)) return clarify('phone', 'booking.navis.phone');
+    if (phone !== null && !phoneNumber(phone)) return clarify('phone', 'booking.navis.askPhone');
     if (name || phone && row) {
       const label = name ?? (row ? rowName(row, t) : undefined);
       if (label) patch.guest = { name: bindValue('name', label), ...(phone ? { phone: bindValue('phone', phone) } : {}) };
@@ -489,7 +544,7 @@ function mutationRoute(text: string, command: BookingType | 'booking.propose', q
     if (table) {
       slots.tableId = table;
       lookups.push({ kind: 'table', querySlot: 'tableId', bind: ['patch', 'tableChoice', 'tableId'] });
-    } else if (/자동\s*(?:배정|추천|으로)|테이블\s*지정\s*풀/u.test(text)) patch.tableChoice = 'auto';
+    } else if (automaticTable.test(text)) patch.tableChoice = 'auto';
     if (!Object.keys(patch).length && !table) {
       if (row && (destination.date || destination.time || destination.partySize)) return unchanged();
       if (matched.length > 1 && !row) {
@@ -500,7 +555,7 @@ function mutationRoute(text: string, command: BookingType | 'booking.propose', q
     }
     args.patch = patch;
   } else if (command === 'booking.propose') {
-    if (!destination.time) return clarify('time', 'widget.voice-booking.extTime');
+    if (!destination.time) return clarify('time', 'booking.navis.askTime');
     if (row && slotHasPassed(row.date, destination.time)) return clarify('time', 'booking.navis.past');
     args.time = bindValue('time', destination.time);
   }
@@ -508,7 +563,9 @@ function mutationRoute(text: string, command: BookingType | 'booking.propose', q
 }
 
 function routeBooking(input: string, snapshot: DataSnapshot, locale: Locale): DomainRoute | undefined {
-  const text = normalizeNavisInput(input);
+  const normalized = normalizeNavisInput(input);
+  const requestPatch = requestEdit(normalized);
+  const text = requestPatch?.context ?? normalized;
   if (noAction.test(text)) return;
   if (bookingWords.test(text) && cancelIntent.test(text) && bulkIntent.test(text)) return { kind: 'refusal', reason: 'unsupported' };
   if (otherBooking.test(text)) return;
@@ -534,7 +591,7 @@ function routeBooking(input: string, snapshot: DataSnapshot, locale: Locale): Do
   if (capacity) {
     const time = contextualTime(times[0], item => !slotHasPassed(day ?? date, item));
     if (!time || !positive(party.value)) return { kind: 'clarification', field: time ? 'partySize' : 'time',
-      answer: t.t(time ? 'widget.voice-booking.extParty' : 'widget.voice-booking.extTime') };
+      answer: t.t(time ? 'booking.navis.askParty' : 'booking.navis.askTime') };
     if (table && !tableMatches({ snapshot, locale, query: table, privateLookup: true }).length)
       return { kind: 'clarification', field: 'tableChoice', answer: t.t('booking.navis.noTable') };
     return { intent: { kind: 'read', tool: 'check_booking_capacity' },
@@ -547,7 +604,7 @@ function routeBooking(input: string, snapshot: DataSnapshot, locale: Locale): Do
     ...(/아기\s*의자/u.test(text) && !name ? { request: '아기 의자' } : {}) }, locale);
   if (/케이크.*픽업.*예약/u.test(text) && /있|확인/u.test(text))
     return recordRead({ date: day ?? date, mode: 'requests', request: '케이크' }, locale, true);
-  if (/요청(?:사항)?|특별\s*요청|창가\s*자리/u.test(text) && /알려|있|누구|보여/u.test(text)) {
+  if (!requestPatch && /요청(?:사항)?|특별\s*요청|창가\s*자리/u.test(text) && /알려|있|누구|보여/u.test(text)) {
     return recordRead({ date: day ?? date, mode: 'requests', ...(/창가\s*자리.*누구/u.test(text) ? { request: '창가' } : {}) }, locale, true);
   }
   const navigation = bookingNavigation(text, snapshot, locale);
@@ -568,7 +625,7 @@ function routeBooking(input: string, snapshot: DataSnapshot, locale: Locale): Do
     : suggestion ? 'booking.propose'
     : cancelAndMove ? 'booking.update' : /취소|캔슬/u.test(text) ? 'booking.cancel'
     : /확정\s*(?:해|처리|$)|컨펌/u.test(text) ? 'booking.confirm'
-    : presentChange || name && (patchEnding || !!table || /인원|시각|시간/u.test(text) && (party.given || times.length))
+    : requestPatch || presentChange || name && (patchEnding || !!table || party.given && !positive(party.value) || /인원|시각|시간/u.test(text) && (party.given || times.length))
       && !/잡아|넣어|예약해/u.test(text) ? 'booking.update' : undefined;
   if ((bulk || waitBooking && !bookingWords.test(text)) && command === 'booking.confirm')
     return { intent: { kind: 'read', featureId, condition: { kind: 'default' } }, factKeys: ['booking.needsCheck.count'] };
@@ -586,17 +643,18 @@ function routeBooking(input: string, snapshot: DataSnapshot, locale: Locale): Do
       ...(request && !name ? { request } : {}),
       ...(waiting ? { mode: 'waiting' } : {}) };
     if (!query.name && !query.time && !query.request && !waiting) return /취소된\s*예약/u.test(text)
-      ? recordRead({ date, status: 'canceled' }, locale) : { kind: 'clarification', field: 'reservationId', answer: t.t('booking.navis.guest') };
+      ? recordRead({ date, status: 'canceled' }, locale) : { kind: 'clarification', field: 'reservationId', answer: t.t('booking.navis.askGuest') };
     const target = visitMatches(snapshot, query, locale);
     const targetTime = isUpdate && (times.length > 1 || !timeTarget || /시간\s*\d/u.test(text)) || command === 'booking.propose' ? times.at(-1) : undefined;
     const nextTime = contextualTime(targetTime, time => target.some(({ row }) => row.time === time) || !slotHasPassed(day ?? date, time));
     return mutationRoute(text, command, query, { date: isUpdate && lookupDay === undefined ? day : undefined, time: nextTime,
-      partySize: isUpdate && !cancelAndMove ? party.value : undefined }, snapshot, locale);
+      partySize: isUpdate && !cancelAndMove ? party.value : undefined,
+      ...(requestPatch ? { request: requestPatch.request, editingRequest: true } : {}) }, snapshot, locale);
   }
   if (name && /몇|언제|알려|보여|[?？]/u.test(text)) return recordRead({ name, date: day }, locale);
   if (/몇|있어|있나|알려|어때|다\s*왔|보여|현황|나눠|있는지|인원수/u.test(text) || partyQuestion || day && /예약\s*확인/u.test(text)) {
     if (/잡아|넣어|예약해|예약\s*부탁/u.test(text)) return;
-    if (!day && dateWords.test(dateText)) return { kind: 'clarification', field: 'date', answer: t.t('widget.voice-booking.extDate') };
+    if (!day && dateWords.test(dateText)) return { kind: 'clarification', field: 'date', answer: t.t('booking.navis.askDate') };
     const keys = /전화|AI|직접\s*입력/u.test(text) ? ['booking.source.phone', 'booking.source.direct']
       : /이미\s*온|방문\s*완료|다\s*왔|안\s*온/u.test(text) ? ['booking.completed.count', 'booking.past.confirmed']
       : /인원|몇\s*명|몇\s*분/u.test(text) && (!day || day === date) ? ['booking.people']
@@ -604,7 +662,7 @@ function routeBooking(input: string, snapshot: DataSnapshot, locale: Locale): Do
     return { intent: { kind: 'read', featureId, condition: day && day !== date ? selectedDate(day) : { kind: 'default' } }, factKeys: keys };
   }
   if (openWords.test(text) || /위젯|패널|메뉴/u.test(text)) return;
-  if (!/잡아|넣어|넣고|예약해|부탁|등록|추가|예약\s*(?:하나|받아|ㄱ)|예약.*연락처/u.test(text) &&
+  if (!/잡아|넣어|넣고|예약해|부탁|등록|추가|예약(?:을)?\s*(?:하나|받아|만들어|ㄱ)|예약.*연락처/u.test(text) &&
     !(times.length || party.given || dateWords.test(text))) return;
   const guest = guestIn(text);
   const time = contextualTime(times[0], item => !slotHasPassed(day ?? date, item));
@@ -612,6 +670,17 @@ function routeBooking(input: string, snapshot: DataSnapshot, locale: Locale): Do
   const invalidPhone = phone !== null ? phone : /연락처|번호(?:는)?/u.test(text) ? null : undefined;
   const request = /["“'‘]([^"”'’]+)["”'’]/u.exec(text)?.[1];
   return createRoute({ name: guest, date: actualDate, time, partySize: party.value, phone: invalidPhone, table, request }, snapshot, locale);
+}
+
+function bookingPresentation(input: string, snapshot: DataSnapshot, locale: Locale): DomainRoute | undefined {
+  const text = normalizeNavisInput(input);
+  const request = requestEdit(text);
+  const assignment = automaticTable.test(text) && /자리|테이블/u.test(text);
+  const party = /인원|마이너스/u.test(text) && partyIn(text).given;
+  if (!request && !assignment && !party) return;
+  const context = request?.context ?? text;
+  if (bookingWords.test(context) || knownNamePattern.test(context) || politeNamePattern.test(context) ||
+    assignment && dateWords.test(context) && timesIn(context).length) return routeBooking(text, snapshot, locale);
 }
 
 function detailQuery(text: string, snapshot: DataSnapshot, locale: Locale, date: string | undefined,
@@ -624,7 +693,7 @@ function detailQuery(text: string, snapshot: DataSnapshot, locale: Locale, date:
 }
 
 function bookingNavigation(text: string, snapshot: DataSnapshot, locale: Locale): DomainDetail | null | undefined {
-  if (!bookingWords.test(text) || !openWords.test(text) || noAction.test(text) || otherBooking.test(text)) return;
+  if (!bookingWords.test(text) || !openWords.test(text) || noAction.test(text) || otherBooking.test(text) || requestEdit(text)) return;
   if (/통화|전화|요약|요청사항|몇|인원수/u.test(text)) return null;
   const anchor = snapshot.pos?.businessDate ?? BUSINESS_CLOCK.date;
   const date = readBookingDate(text, anchor);
@@ -649,8 +718,9 @@ function bookingNavigation(text: string, snapshot: DataSnapshot, locale: Locale)
 
 export const bookingDomain: DomainAdapter = {
   commands: bookingTypes.map(bookingAdapter), reads: [reservationReader, tableReader], tools: [capacityTool],
-  route: routeBooking, projectWidget: projectBooking, navigation: bookingNavigation,
+  route: routeBooking, routePresentation: bookingPresentation, projectWidget: projectBooking, navigation: bookingNavigation,
   handoff(command, draft) {
+    if (command === 'booking.cancel' && typeof draft.reservationId === 'string') return { featureId, itemId: draft.reservationId, focus: 'action' };
     if (command !== 'booking.propose' || typeof draft.reservationId !== 'string' || !isTime(draft.time)) return;
     return { featureId, itemId: draft.reservationId, focus: 'action',
       prefill: { kind: 'widget-draft', command, fields: { time: draft.time } } };

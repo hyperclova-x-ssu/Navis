@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { appendFileSync, readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { beginDashboard } from '../../../app/test-session';
 import { getRegistry } from '../../../catalog';
 import { createWidgetDataStore, dataBundles, readModel, type WidgetDataStore } from '../../../data/widget-data';
@@ -54,7 +54,7 @@ function stageVideo(data: WidgetDataStore, kind: 'making' | 'done' | 'failed' | 
   const menu = readModel(data.getSnapshot(), 'promo-video').menus.find(row => row.photos.length >= 5)!;
   const input = { menuIds: [menu.menuId], photoIds: menu.photos.slice(0, 5).map(photo => photo.photoId), moods: ['warm' as const],
     concepts: ['review-roundup' as const], memo: '', referenceId: 'ref-2' as const, lengthSec: 15 as const, locale: 'ko' as const };
-  const made = data.dispatch({ type: 'video.make', input, idempotencyKey: `seed-${kind}` });
+  const made = data.dispatch({ type: 'video.make', input, idempotencyKey: `seed-${kind}-${data.getSnapshot().revision}` });
   if (!made.ok) throw new Error(made.messageKey);
   const videoId = (made.value as { videoId: string }).videoId;
   if (kind === 'done' || kind === 'posted') expect(data.dispatch({ type: 'video.settle', videoId, outcome: { kind: 'done', result: done } }).ok).toBe(true);
@@ -63,7 +63,7 @@ function stageVideo(data: WidgetDataStore, kind: 'making' | 'done' | 'failed' | 
   return videoId;
 }
 
-function fixture(id: string, options: { video?: 'making' | 'done' | 'failed' | 'posted'; financier?: boolean } = {}) {
+function fixture(id: string, options: { video?: 'making' | 'done' | 'failed' | 'posted'; financier?: boolean; liveRetry?: boolean } = {}) {
   const run = createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: timePolicy,
     theme: 'light', clock: () => 0, reducedMotion: true });
   beginDashboard(run, 'cafe');
@@ -88,7 +88,7 @@ function fixture(id: string, options: { video?: 'making' | 'done' | 'failed' | '
     expect(validateAgentRequest(body)).toBe(true);
     requests.push(body);
     const result = await bridge.run(body);
-    return new Response(result.raw, { status: result.status, headers: { [AGENT_PROTOCOL_HEADER]: AGENT_PROTOCOL } });
+    return new Response(result.raw, { status: result.status, headers: { [AGENT_PROTOCOL_HEADER]: AGENT_PROTOCOL, ...(options.liveRetry ? { 'x-navis-agent-mode': 'live' } : {}) } });
   } });
   const navigation = createNavisNavigation(run, { highlight() {}, closeChat() {} });
   // The owner's draft lives in the promo window: its step phrases (십오초, ref-2, 주제는 리뷰 모음) are typed while it is open.
@@ -116,7 +116,7 @@ function fixture(id: string, options: { video?: 'making' | 'done' | 'failed' | '
         : reply.turn?.kind === 'refusal' || reply.turn?.kind === 'handoff' ? 'refuse' : 'answer';
     return { reply, detailRef, kind, before };
   }
-  return { data, run, ask, bridge, requests, videoId, close: () => bridge.close() };
+  return { data, run, ask, bridge, requests, videoId, navigation, close: () => { promoSession(data).dispose(); bridge.close(); } };
 }
 
 /** The estimate lives in the promo session cache (a local GET); the replay fills it through the in-memory fake service. */
@@ -128,10 +128,58 @@ async function loadEstimate(env: ReturnType<typeof fixture>) {
   expect(server.calls.map(call => call.path)).toEqual(['/api/promo/estimate-model']);
 }
 
-const choose = (env: ReturnType<typeof fixture>, input: Parameters<ReturnType<typeof promoSession>['setDraft']>[0]) =>
-  promoSession(env.data).setDraft(input);
-
 describe('N18 promo video draft and job start', () => {
+  it('offers the exact named menu photo draft even with the promo window closed', async () => {
+    const env = fixture('closed-draft', { financier: true });
+    try {
+      const { reply, before } = await env.ask('휘낭시에 사진 싹 다');
+      if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
+      const { proposal } = reply.turn;
+      expect(proposal.command).toBe('promo.draft.set');
+      const session = promoSession(env.data);
+      const draft = session.getState().draft;
+      await env.ask('네 해줘');
+      expect(session.getState().draft).toBe(draft);
+      expect(proposal.confirm(env.data).frame.outcome).toBe('applied');
+      expect(session.getState().draft.photoIds).toEqual(financierPhotos);
+      expect(env.data.getSnapshot()).toBe(before);
+    } finally { env.close(); }
+  });
+
+  it.each([
+    ['S6-014', 'photoCount'],
+    ['S6-018', 'mood'],
+    ['S6-020', 'concept'],
+    ['S6-022', 'memo'],
+    ['S6-026', 'lengthSec'],
+  ])('asks only the invalid draft field in every %s wording', async (id, field) => {
+    for (const text of merged.get(id)!.utterances) {
+      const env = fixture(id);
+      try {
+        const session = promoSession(env.data);
+        const before = session.getState().draft;
+        const result = await env.ask(text);
+        expect(result.reply.turn, text).toMatchObject({ kind: 'clarification', field });
+        expect(session.getState().draft).toBe(before);
+        expect(env.requests).toEqual([]);
+      } finally { env.close(); }
+    }
+  });
+
+  it('rejects a stale draft confirmation when the widget changed the previewed selection', async () => {
+    const env = fixture('S6-012');
+    try {
+      const { reply, before } = await env.ask('영상 메뉴는 휘낭시에로 하고 사진 전부 골라줘');
+      if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
+      const session = promoSession(env.data);
+      session.setDraft({ menuIds: ['m-americano'] });
+      const changed = session.getState().draft;
+      expect(reply.turn.proposal.confirm(env.data).frame.outcome).toBe('conflict');
+      expect(session.getState().draft).toBe(changed);
+      expect(env.data.getSnapshot()).toBe(before);
+    } finally { env.close(); }
+  });
+
   it('sets the draft only on the card press and restores it from the receipt', async () => {
     const env = fixture('S6-012');
     try {
@@ -156,49 +204,93 @@ describe('N18 promo video draft and job start', () => {
     } finally { env.close(); }
   });
 
-  it('asks for the first missing choice before offering the start card', async () => {
+  it('asks for a missing menu before offering a video job', async () => {
     const env = fixture('empty-draft');
     try {
-      const first = await env.ask('영상 만들어줘');
-      expect(first.kind).toBe('clarify');
-      expect(first.reply.turn).toMatchObject({ kind: 'clarification', field: 'menuIds' });
-      expect(env.data.getSnapshot().tables.marketing.promoVideo).toHaveLength(0);
-      choose(env, { menuIds: ['m-americano'], photoIds: readModel(env.data.getSnapshot(), 'promo-video').menus.find(menu => menu.menuId === 'm-americano')!.photos.map(photo => photo.photoId) });
-      expect((await env.ask('영상 만들어줘')).reply.turn).toMatchObject({ kind: 'clarification', field: 'moods' });
+      const { reply, before } = await env.ask('영상 만들어줘');
+      expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'menuId' });
+      expect(env.data.getSnapshot()).toBe(before);
+      expect(env.requests).toEqual([]);
     } finally { env.close(); }
   });
 
-  it('starts one fake job on the card press, never reaches the AI service, and keeps the draft readable', async () => {
+  it('opens the widget start step when a complete draft has no cached estimate', async () => {
     const env = fixture('S6-028');
-    const server = createFakeServer();
-    const realFetch = globalThis.fetch;
-    const calls = server.calls;
-    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => server.fetch(input, init)) as typeof fetch;
     try {
-      const menu = readModel(env.data.getSnapshot(), 'promo-video').menus.find(row => row.menuId === 'm-americano')!;
-      await promoSession(env.data).loadEstimate();
-      calls.length = 0;
-      choose(env, { menuIds: [menu.menuId], photoIds: menu.photos.map(photo => photo.photoId), moods: ['warm'], concepts: ['review-roundup'], referenceId: 'ref-2', lengthSec: 15, memo: '비 오는 날' });
+      const { reply, before } = await env.ask('영상 만들어줘');
+      if (reply.turn?.kind !== 'refusal' || !reply.turn.alternative) throw Error(reply.answer);
+      expect(reply.turn.alternative).toMatchObject({ featureId: 'promo-video', command: 'video.make' });
+      expect(await env.navigation.handoff(reply.turn.alternative)).toBe('opened');
+      expect(env.run.getState().overlay).toMatchObject({ type: 'detail', stack: [
+        { featureId: 'promo-video', view: 'create', prefill: { fields: { tab: 0, composing: true } } },
+      ] });
+      expect(env.data.getSnapshot()).toBe(before);
+      expect(env.requests).toEqual([]);
+    } finally { env.close(); }
+  });
+
+  it.each([false, true])('starts the reviewed draft only on the card press (live transport %s)', async liveRetry => {
+    const env = fixture('S6-028', { liveRetry });
+    const server = createFakeServer();
+    vi.stubGlobal('fetch', server.fetch);
+    try {
+      const session = promoSession(env.data);
+      session.setDraft({ memo: '손님 리뷰 모음' });
+      await session.loadEstimate();
       const { reply, before } = await env.ask('영상 만들어줘');
       if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
       const { proposal } = reply.turn;
       expect(proposal.command).toBe('video.make');
-      expect(proposal.tier).toBe('normal');
-      expect(env.requests).toHaveLength(1);
-      expect(JSON.stringify(env.requests)).not.toContain('비 오는 날');
-      expect(before.tables.marketing.promoVideo).toHaveLength(0);
+      expect(proposal.preview).toMatchObject({ fields: expect.arrayContaining([
+        expect.objectContaining({ after: '휘낭시에' }), expect.objectContaining({ after: '10장' }),
+        expect.objectContaining({ after: '손님 리뷰 모음' }), expect.objectContaining({ after: expect.stringMatching(/예상 시간.*예상 비용/u) }),
+      ]) });
+      expect(JSON.stringify(env.requests)).not.toContain('손님 리뷰 모음');
       await env.ask('확인');
       expect(env.data.getSnapshot()).toBe(before);
+      expect(server.calls.map(call => call.method)).toEqual(['GET']);
       const receipt = proposal.confirm(env.data);
       expect(receipt.frame).toMatchObject({ outcome: 'applied', messageKey: 'data.marketing.notice.videoStarted' });
-      expect(receipt.undoToken).toBeUndefined();
-      const rows = env.data.getSnapshot().tables.marketing.promoVideo;
-      expect(rows).toMatchObject([{ status: 'making', jobId: null, input: { memo: '비 오는 날', lengthSec: 15, referenceId: 'ref-2' } }]);
-      expect(calls).toEqual([]);
+      const input = { menuIds: ['fixture-financier'], photoIds: financierPhotos, moods: ['warm'], concepts: ['review-roundup'],
+        memo: '손님 리뷰 모음', referenceId: 'ref-2', lengthSec: 15, locale: 'ko' };
+      await vi.waitFor(() => expect(env.data.getSnapshot().tables.marketing.promoVideo).toMatchObject([{
+        status: liveRetry ? 'making' : 'failed', jobId: expect.stringMatching(/^pj-/u), input,
+      }]));
       expect(proposal.confirm(env.data).frame).toEqual(receipt.frame);
       expect(env.data.getSnapshot().tables.marketing.promoVideo).toHaveLength(1);
-      expect((await env.ask('영상 하나 더 만들어줘')).kind).toBe('answer');
-    } finally { globalThis.fetch = realFetch; env.close(); }
+      expect(server.calls.filter(call => call.method === 'POST').map(call => [call.path, call.body])).toEqual(liveRetry
+        ? [['/api/promo/jobs', { input, idempotencyKey: expect.any(String) }]] : []);
+    } finally { vi.unstubAllGlobals(); env.close(); }
+  });
+
+  it('allows a new draft and shows the count of unposted finished videos', async () => {
+    const env = fixture('S6-012', { video: 'done' });
+    try {
+      stageVideo(env.data, 'done');
+      const { reply, before } = await env.ask('영상 메뉴는 휘낭시에로 하고 사진 전부 골라줘');
+      if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
+      const { proposal } = reply.turn;
+      expect(proposal.command).toBe('promo.draft.set');
+      expect(proposal.preview).toMatchObject({ fields: expect.arrayContaining([
+        expect.objectContaining({ after: '아직 안 올린 영상이 2개 있어요' }),
+      ]) });
+      expect(promoSession(env.data).getState().draft.photoIds).toEqual([]);
+      expect(proposal.confirm(env.data).frame.outcome).toBe('applied');
+      expect(promoSession(env.data).getState().draft).toMatchObject({ composing: true, photoIds: financierPhotos });
+      expect(env.data.getSnapshot()).toBe(before);
+    } finally { env.close(); }
+  });
+
+  it('requires a fresh start card after the widget draft changes', async () => {
+    const env = fixture('S6-028');
+    try {
+      await loadEstimate(env);
+      const { reply, before } = await env.ask('영상 만들어줘');
+      if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
+      promoSession(env.data).setDraft({ lengthSec: 30 });
+      expect(reply.turn.proposal.confirm(env.data).frame.outcome).toBe('conflict');
+      expect(env.data.getSnapshot()).toBe(before);
+    } finally { env.close(); }
   });
 
   it('D-328 retries the failed video once with the same widget input and a receipt', async () => {
@@ -217,14 +309,33 @@ describe('N18 promo video draft and job start', () => {
       const receipt = proposal.confirm(env.data);
       expect(receipt.frame).toMatchObject({ outcome: 'applied', messageKey: 'data.marketing.notice.videoStarted' });
       expect(receipt.undoToken).toBeUndefined();
-      const after = env.data.getSnapshot();
       const [video] = before.tables.marketing.promoVideo;
-      expect(after.tables.marketing.promoVideo).toMatchObject([{ videoId: video.videoId, status: 'making', jobId: null,
-        input: video.input, retryCount: video.retryCount + 1, failReason: null }]);
+      await vi.waitFor(() => expect(env.data.getSnapshot().tables.marketing.promoVideo).toMatchObject([
+        { videoId: video.videoId, status: 'failed', jobId: expect.stringMatching(/^pj-/), input: video.input, retryCount: video.retryCount + 1 },
+      ]));
+      const after = env.data.getSnapshot();
       expect(proposal.confirm(env.data).frame).toEqual(receipt.frame);
       expect(env.data.getSnapshot()).toBe(after);
       expect(server.calls).toEqual([]);
     } finally { globalThis.fetch = realFetch; env.close(); }
+  });
+
+  it('uses the widget job endpoint on a live retry card and attaches the returned job', async () => {
+    const env = fixture('S6-030', { liveRetry: true });
+    const server = createFakeServer();
+    vi.stubGlobal('fetch', server.fetch);
+    try {
+      const { reply, before } = await env.ask('홍보 영상 다시 만들기');
+      if (reply.turn?.kind !== 'proposal') throw Error(reply.answer);
+      expect(server.calls).toEqual([]);
+      const receipt = reply.turn.proposal.confirm(env.data);
+      expect(receipt.frame.outcome).toBe('applied');
+      await vi.waitFor(() => expect(env.data.getSnapshot().tables.marketing.promoVideo).toMatchObject([
+        { status: 'making', jobId: server.job?.jobId, input: before.tables.marketing.promoVideo[0].input },
+      ]));
+      expect(server.job?.jobId).toMatch(/^pj-/);
+      expect(server.calls.map(call => [call.method, call.path])).toEqual([['POST', '/api/promo/jobs']]);
+    } finally { vi.unstubAllGlobals(); env.close(); }
   });
 
   it.each([['done', '영상이 완성됐어요.'], ['posted', '이미 올렸다고 표시한 영상이에요.']] as const)(
@@ -261,6 +372,29 @@ describe('N18 promo video draft and job start', () => {
     } finally { env.close(); }
   });
 
+  it.each(['단골 손님한테 다시 오세요 쿠폰 보내줘', '처음 온 손님한테 다시 오세요 쿠폰 보내줘'])(
+    'keeps the reach-out card scoped to churn risk (%s)', async phrase => {
+      const env = fixture('S6-152');
+      try {
+        const { reply, before } = await env.ask(phrase);
+        expect(reply.proposalSession?.getSnapshot().proposal.command).not.toBe('coupon.sendReachOut');
+        expect(env.data.getSnapshot()).toBe(before);
+      } finally { env.close(); }
+    },
+  );
+
+  it.each(['이탈 위험 김정민한테 쿠폰 보내줘', '이탈 손님 중 한 분만 쿠폰 보내줘', '이탈 손님 가운데 김정민만 골라서 쿠폰 보내줘'])(
+    'keeps individual requests out of the group send route (%s)', async phrase => {
+      const env = fixture('S6-152');
+      try {
+        const { reply, before } = await env.ask(phrase);
+        expect(reply.turn?.kind).not.toBe('proposal');
+        expect(env.data.getSnapshot()).toBe(before);
+        expect(env.requests).toEqual([]);
+      } finally { env.close(); }
+    },
+  );
+
   it('sends the reach-out coupon only to consenting customers after the card press', async () => {
     const env = fixture('S6-152');
     try {
@@ -292,7 +426,7 @@ describe('N18 localized words', () => {
     for (const key of ['promo.stage.look', 'promo.stage.merge', 'promo.place.clip', 'promo.place.reels', 'promo.place.shorts', 'promo.ref.ref-1.name', 'promo.ref.ref-6.name',
       'data.marketing.mood.warm', 'data.marketing.mood.elegant', 'data.marketing.concept.day-at-shop', 'data.marketing.concept.todays-deal', 'promo.fail.AI_TIMEOUT', 'promo.fail.BUSY',
       'widget.customer-groups.basis.churn-risk', 'widget.customer-groups.basis.regular', 'widget.customer-groups.basis.first-visit', 'widget.marketing-today.slot.now',
-      'widget.marketing-today.slot.today', 'widget.marketing-today.slot.week', 'widget.marketing-performance.period.this', 'widget.marketing-performance.period.last',
+      'widget.marketing-today.slot.today', 'widget.marketing-today.slot.week',
       'data.marketing.route.placeNews', 'data.marketing.route.blog', 'data.marketing.route.clip', 'data.marketing.route.sms']) keys.add(key);
     const params = { n: 1, s: 1, e: 1, day: 'x', item: 'x', route: 'x', place: 'x', used: 1, issued: 1, total: 1, rate: 'x', a: 'x', b: 'x', cost: 'x',
       discount: 'x', profit: 'x', days: 1, date: 'x', t: 'x', c: 'x', name: 'x', left: 1, step: 'x', group: 'x' };
@@ -307,9 +441,13 @@ describe('N18 localized words', () => {
 const representativeExceptions: Readonly<Record<string, string>> = {
   'S5-050': 'answer', 'S5-051': 'answer', // one projection cites both counts; the two-widget turn is not split
   'S6-015': 'proposal', // the café's 아메리카노 has six photos, so the draft card is eligible (the seed had none)
+  'S6-028': 'proposal', // D-329 starts a complete draft from the widget's confirmation path.
   'S6-030': 'proposal', // D-328 enables the widget retry command on a card.
-  'S6-029': 'proposal', 'S6-048': 'proposal', 'S6-163': 'proposal', // N21 owns the steps after the first card
+  'S6-029': 'answer', // the first turn also requests the withdrawn review theme
+  'S6-048': 'proposal', 'S6-163': 'proposal', // N21 owns the steps after the first card
   'S6-193': 'answer', // "지난달로 바꿔서 보여줘" names no widget; it relies on the earlier turn
+  // D-365: the 마케팅 성과 window is gone, so asking to open it is answered plainly instead of navigating there.
+  'S6-191': 'answer', 'S6-192': 'answer', 'S6-194': 'answer', 'S7-086': 'answer', 'S7-087': 'answer',
 };
 
 describe('N18 grounded answers', () => {
@@ -335,7 +473,7 @@ describe('N18 grounded answers', () => {
     for (const name of ['아메리카노', '카페라떼', '휘낭시에']) expect(menus).toContain(name);
     expect(menus).toContain('10장');
     const designs = (await ask('S6-009', '영상 디자인 어떤 거 있어요?')).reply.answer;
-    for (const name of ['리뷰 말풍선 모음', '진열대 천천히 훑기', '손글씨 감성 카드']) expect(designs).toContain(name);
+    for (const name of ['디자인 2번', '진열대 천천히 훑기', '손글씨 감성 카드']) expect(designs).toContain(name);
   });
   it('asks which length before an estimate, and cites the loaded estimate table', async () => {
     const first = await ask('S6-006', '영상 하나 만들면 시간이랑 비용 얼마나 들어?');
@@ -347,6 +485,8 @@ describe('N18 grounded answers', () => {
     globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => server.fetch(input, init)) as typeof fetch;
     try {
       await promoSession(env.data).loadEstimate();
+      const menu = readModel(env.data.getSnapshot(), 'promo-video').menus.find(row => row.photos.length >= 5)!;
+      promoSession(env.data).setDraft({ menuIds: [menu.menuId], photoIds: menu.photos.map(photo => photo.photoId) });
       const { reply } = await env.ask('15초 영상 만들면 얼마 들어?');
       expect(reply.answer).toContain('예상 시간 약');
       expect(reply.answer).toContain('예상 비용 약');
@@ -354,6 +494,25 @@ describe('N18 grounded answers', () => {
       expect(notLoaded.kind).toBe('refuse');
       expect(notLoaded.reply.answer).toContain('예상 값을 불러오지 못했어요');
     } finally { globalThis.fetch = realFetch; env.close(); }
+  });
+  it('uses the selected photos and selected length for the current estimate', async () => {
+    const env = fixture('current-estimate', { financier: true });
+    try {
+      await loadEstimate(env);
+      const session = promoSession(env.data);
+      const missing = await env.ask('15초 영상 비용 얼마야?');
+      expect(missing.reply.turn).toMatchObject({ kind: 'clarification', field: 'photoCount' });
+      session.setDraft({ menuIds: ['fixture-financier'], photoIds: financierPhotos, lengthSec: 15 });
+      const estimate = await env.ask('영상 시간하고 비용 얼마나 들어?');
+      expect(estimate.kind).toBe('answer');
+      expect(estimate.reply.answer).toMatch(/15초.*10장.*예상 시간 약.*예상 비용 약/u);
+    } finally { env.close(); }
+  });
+  it('answers a named-route coupon question plainly now that route history has no screen', async () => {
+    const { reply } = await ask('S6-177', '블로그로 나간 쿠폰은 어떤 거야?');
+    // D-365: route history was the 마케팅 성과 screen's, which is gone.
+    expect(reply.answer).toContain('이제 따로 보여 드리지 않아요');
+    expect(reply.answer).not.toContain('단골 문자');
   });
   it('reads the customer groups, the oldest absence, the consent block, the rules and the reach-out history', async () => {
     const groups = (await ask('S6-143', '떠날 수 있는 손님이 누구누구야?'));
@@ -368,24 +527,28 @@ describe('N18 grounded answers', () => {
     expect(rules).toContain(`${model.rule.regularVisits}번`);
     expect((await ask('S6-150', '떠날 손님한테 쿠폰 보낸 적 있어?')).reply.answer).toContain('없어요');
   });
-  it('reads the performance numbers, routes and formulas from the selector', async () => {
-    const cost = await ask('S6-169', '이번 달 원가랑 할인액 알려줘');
-    const perf = cost.model('marketing-performance') as ReturnType<typeof readModel<'marketing-performance'>>;
-    expect(cost.reply.answer).toContain(perf.cost.toLocaleString('en-US'));
-    expect(cost.reply.answer).toContain(perf.discount.toLocaleString('en-US'));
-    const routes = (await ask('S6-173', '경로별 발행 사용 수 알려줘')).reply.answer;
-    expect(routes).toContain(`${perf.issued}`);
-    expect((await ask('S6-179', '사용률이랑 매출은 어떻게 계산한 거야?')).reply.answer).toContain('14일');
-    expect((await ask('S6-194', '영상별 성과 보여줘')).detailRef).toMatchObject({ featureId: 'marketing-performance', view: 'video' });
-    expect((await ask('S7-086', '마케팅 성과 쿠폰 탭 열어줘')).detailRef).toMatchObject({ featureId: 'marketing-performance', view: 'coupon' });
+  it('says plainly that the 마케팅 성과 screen is gone and never opens or cites it (D-365)', async () => {
+    const gone = '마케팅 성과 화면은 없어졌어요', stopped = '이제 따로 보여 드리지 않아요';
+    // A phrase that names the screen hears that the screen is gone; a question about its numbers hears that they are no longer shown.
+    for (const [id, text, expected] of [['S6-169', '이번 달 원가랑 할인액 알려줘', stopped], ['S6-173', '경로별 발행 사용 수 알려줘', stopped],
+      ['S6-179', '사용률이랑 매출은 어떻게 계산한 거야?', stopped], ['S6-194', '영상별 성과 보여줘', gone], ['S7-086', '마케팅 성과 쿠폰 탭 열어줘', gone],
+      ['S6-193', '마케팅 성과 지난달 화면 열어줘', gone]] as const) {
+      const result = await ask(id, text);
+      expect(result.reply.answer, text).toContain(expected);
+      expect(result.reply.answer, text).toContain('진행 중인 쿠폰');
+      expect(result.detailRef, text).toBeUndefined();
+      expect(result.kind, text).toBe('answer');
+    }
   });
-  it('opens the groups, the reach-out view and last month without sending anything', async () => {
+  it('keeps the coupon ranking with the coupon domain instead of the removed screen', async () => {
+    const result = await ask('S6-170', '어떤 쿠폰이 제일 사용률이 높아?');
+    expect(result.reply.answer).not.toContain('마케팅 성과 화면은 없어졌어요');
+  });
+  it('opens the groups and the reach-out view without sending anything', async () => {
     expect((await ask('S6-161', '첫 방문 손님 목록 열어줘')).detailRef).toMatchObject({ featureId: 'customer-groups', view: 'first-visit' });
     const reach = await ask('S6-162', '이탈 손님 챙기는 창 열어줘');
     expect(reach.detailRef).toMatchObject({ featureId: 'customer-groups', view: 'reach-out', focus: 'action' });
     expect(reach.model('customer-groups')).toBeDefined();
-    const last = await ask('S6-193', '마케팅 성과 지난달 화면 열어줘');
-    expect(last.detailRef).toMatchObject({ featureId: 'marketing-performance', condition: { kind: 'dateRange' } });
     const design = await ask('S6-047', '영상 디자인 고르는 화면 열어줘');
     expect(design.detailRef).toMatchObject({ featureId: 'promo-video', view: 'create', prefill: { fields: { tab: 2 } } });
   });
@@ -408,6 +571,10 @@ describe('N18 authored utterances', () => {
       const env = fixture(row.id);
       try {
         if (['S6-007', 'S6-028'].includes(row.id)) await loadEstimate(env);
+        if (row.id === 'S6-007') {
+          const menu = readModel(env.data.getSnapshot(), 'promo-video').menus.find(item => item.photos.length >= 5)!;
+          promoSession(env.data).setDraft({ menuIds: [menu.menuId], photoIds: menu.photos.map(photo => photo.photoId) });
+        }
         const result = await env.ask(text);
         const proposal = result.reply.turn?.kind === 'proposal' ? result.reply.turn.proposal : undefined;
         if (process.env.N18_OBSERVATIONS) appendFileSync(process.env.N18_OBSERVATIONS, JSON.stringify({
@@ -417,7 +584,27 @@ describe('N18 authored utterances', () => {
             .map(intent => `${intent.kind}:${intent.command ?? intent.featureId ?? intent.tool ?? ''}`),
         }) + '\n');
         expect(result.reply.answer || result.kind === 'navigate' || proposal, text).toBeTruthy();
-        if (index === 0) expect(result.kind, row.id).toBe(representativeExceptions[row.id] ?? row.kind);
+        // Reviewed corpus I09 supersedes the original review-derived options.
+        if (row.id === 'S6-019') {
+          expect(result.kind, text).toBe('answer');
+          for (const label of ['리뷰', '사진', '매장 소개', '만드는 과정', '오늘의 할인', '신메뉴 소개', '우리 가게 하루']) {
+            expect(result.reply.answer, text).toContain(label);
+          }
+          expect(env.requests).toEqual([]);
+        } else if (row.id === 'S6-023' && index % 2 === 0) {
+          expect(result.reply.turn, text).toMatchObject({ kind: 'clarification', field: 'referenceId' });
+          expect(result.reply.answer).toContain('진열대 천천히 훑기');
+          expect(result.reply.answer).not.toContain('리뷰 말풍선 모음');
+          expect(env.requests).toEqual([]);
+        } else if (row.id === 'S6-023') {
+          expect(proposal?.command, text).toBe('promo.draft.set');
+          expect(env.requests).toEqual([expect.objectContaining({
+            intent: expect.objectContaining({ args: { referenceId: 'ref-2' } }),
+          })]);
+          expect(promoSession(env.data).getState().draft.referenceId).toBeNull();
+        } else if (index === 0) {
+          expect(result.kind, row.id).toBe(representativeExceptions[row.id] ?? row.kind);
+        }
       } finally { env.close(); }
     }
   }, 30_000);

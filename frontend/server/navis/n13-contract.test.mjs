@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 import { createServer } from 'vite';
 import { createBridge } from '../bridge.mjs';
 import { createNavisMenuHarness, navisAgentFakeFetch } from '../fixtures/navis-eval-fake.mjs';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame, validateAgentRequest } from '../../shared/navis-agent-schema.mjs';
+import { customAdapters } from './custom.mjs';
 import { readCafeScenarios, readTrace, scenarioVariant } from './scenario-fixtures.mjs';
 
+const { AbortController, Response } = globalThis;
 const trace = readTrace();
 const assigned = trace.filter(row => row.slice_id === 'N13');
 const dependencies = trace.filter(row => row.required_slices.split('|').includes('N13') && row.slice_id !== 'N13');
@@ -107,6 +109,12 @@ function assertReflection(id, store, before, variant) {
       assert.equal(created.desiredPickupAt, id === 'S1-081' ? `${tomorrow}T15:00` : id === 'S1-085' ? `${afterTomorrow}T14:00` : `${tomorrow}T17:00`);
       if (id === 'S1-089') assert.deepEqual(created.answers.extras, ['candle']);
       if (id === 'S1-081') assert.equal(created.answers.message, '생일 축하해요');
+      if (id === 'S1-085') {
+        assert.equal(created.guest, null);
+        assert.equal(created.channel, 'message');
+        assert.equal(created.quantity, 1);
+        assert.deepEqual(created.answers, { message: '축하해요', size: 'one' });
+      }
       break;
     }
     case 'S1-090':
@@ -163,6 +171,10 @@ function assertReflection(id, store, before, variant) {
     case 'S1-116':
       assert.equal(cake.pickup.time, '18:00');
       assert.equal(cake.history.at(-1).kind, 'rescheduled');
+      assert.equal(cake.confirmedPickupAt, facts.today + 'T18:00');
+      assert.deepEqual(store.getSnapshot().tables.reservation.filter(row => row.kind === 'visit'), before.tables.reservation.filter(row => row.kind === 'visit'));
+      assert.ok(data.selectCustomCalendar(data.selectCustomOrderRead(store.getSnapshot()))
+        .some(entry => entry.reservationId === cake.pickup.reservationId && entry.time === '18:00'));
       break;
     case 'S1-120':
       assert.match(selected.templates.find(template => template.templateId === 'CT-001').name, /쿠키 주문서 · 선물/u);
@@ -267,11 +279,6 @@ async function checkUtterance(scenario, text, variant) {
       assert.equal(order(store, 'CO-001').pickup.status, 'confirmed');
       assert.deepEqual(store.getSnapshot().pos.money, before.pos.money);
     } else if (['answer', 'refuse', 'clarify'].includes(expected.kind)) {
-      const missingGuestName = id === 'S1-083' && variant === 2 && reply.turn.field === 'guestName';
-      if (missingGuestName) {
-        assert.equal(reply.proposalSession, undefined);
-        return 'N13 R5: variant 3 asks again for the supplied guest name.';
-      }
       for (const part of expected.answer_must_contain ?? []) assert.ok(reply.answer.includes(part), `${text} | missing ${part} | ${reply.answer}`);
       if (expected.kind === 'clarify' && expected.ask?.length) {
         const fields = expected.ask.flatMap(field => [field, ...(clarificationFields[field] ?? [])]);
@@ -368,6 +375,78 @@ test('D-326 pickup card records and undoes sales atomically, and sends payment-a
   assert.equal(order(store, paidId).stage, 'production_complete');
 });
 
+test('N13 asks for the exact missing template answer and waits for the owner to press the resulting card', async () => {
+  const run = openRun();
+  const store = fixtureStore('S1-083', run.getState().runId);
+  const before = store.getSnapshot();
+  const { assistant, replies, close } = capture(run, store);
+  const ask = (text, extra) => assistant.ask({ text, locale: 'ko', layer: 'management', signal: new AbortController().signal, ...extra });
+  try {
+    const reply = await ask(corpus.get('S1-083').utterances[2]);
+    assert.equal(reply.turn?.kind, 'clarification');
+    assert.match(reply.answer, /크게\(\+5,000원\)/u);
+    assert.deepEqual(reply.turn.choices, [{ id: 'one', label: '기본' }, { id: 'large', label: '크게' }]);
+    await ask('네');
+    assert.equal(replies.length, 0);
+    assert.equal(store.getSnapshot(), before);
+    const next = await ask('크게', { continuation: { clarificationId: reply.turn.id, choiceId: 'large' } });
+    assert.equal(next.turn?.kind, 'proposal');
+    const { proposal } = next.turn;
+    assertProposalCalls(replies.at(-1), 'customOrder.create');
+    assert.doesNotMatch(JSON.stringify(replies.at(-1).input), /박서연|2345.?6789|축하해요/u);
+    await ask('확인');
+    assert.equal(store.getSnapshot(), before);
+    const receipt = proposal.confirm(store, proposal.id);
+    assert.equal(receipt.frame.outcome, 'applied');
+    assert.equal(receipt.undoToken, undefined);
+    const after = store.getSnapshot();
+    assert.equal(after.revision, before.revision + 1);
+    assert.deepEqual(order(store, 'CO-003').answers, { message: '축하해요', size: 'large' });
+    assert.equal(order(store, 'CO-003').guest.name, '박서연');
+    proposal.confirm(store, proposal.id);
+    assert.equal(store.getSnapshot(), after);
+  } finally {
+    close();
+  }
+});
+
+test('N13 approval proposals require an actual quote on the scoped order', () => {
+  const command = 'customOrder.recordDecision';
+  const adapter = customAdapters.find(candidate => candidate.command === command);
+  const args = { customOrderId: { handle: 'order-token' }, quoteRevision: { slot: 'quoteRevision' }, decision: 'approved', paymentTiming: 'on_pickup' };
+  const check = fields => adapter.prepare({ input: { intent: { command, args } }, reads: [{ status: 'ready', matches: [
+    { handle: 'order-token', match: 'exact', fields: { stage: 'quote_pending', paymentReversalRequired: false, ...fields } },
+  ] }] });
+  assert.deepEqual(check({ quoteRevision: 0 }), { outcome: 'refused', reason: 'invalid_target' });
+  assert.deepEqual(check({ quoteRevision: 1 }), { outcome: 'refused', reason: 'unavailable' });
+  assert.deepEqual(check({ quoteRevision: 1, proposedPickupAt: `${tomorrow}T14:00` }), { outcome: 'ready', args });
+});
+
+test('N13 revalidates a pickup card after the linked reservation changes in the widget', async () => {
+  const run = openRun();
+  const store = fixtureStore('S1-116', run.getState().runId);
+  const before = store.getSnapshot();
+  const { assistant, replies, close } = capture(run, store);
+  try {
+    const reply = await assistant.ask({ text: 'CO-001 케이크 픽업 6시로 미뤄줘', locale: 'ko',
+      layer: 'management', signal: new AbortController().signal });
+    assert.equal(reply.turn?.kind, 'proposal');
+    assertProposalCalls(replies.at(-1), 'pickup.reschedule');
+    assert.equal(store.getSnapshot(), before);
+    const original = order(store, 'CO-001').pickup;
+    apply(store, { type: 'pickup.reschedule', reservationId: original.reservationId, date: original.date, time: '17:30',
+      idempotencyKey: 'widget-pickup' });
+    const changed = store.getSnapshot();
+    const { proposal } = reply.turn;
+    const receipt = proposal.confirm(store, proposal.id);
+    assert.notEqual(receipt?.frame.outcome, 'applied');
+    assert.equal(store.getSnapshot(), changed);
+    assert.equal(order(store, 'CO-001').pickup.time, '17:30');
+  } finally {
+    close();
+  }
+});
+
 test('N13 covers 52 primary scenarios and two downstream dependencies', () => {
   assert.equal(assigned.length, 52);
   assert.equal(assigned.reduce((total, { scenario_id }) => total + corpus.get(scenario_id).utterances.length, 0), 156);
@@ -377,21 +456,18 @@ test('N13 covers 52 primary scenarios and two downstream dependencies', () => {
 });
 
 for (const { scenario_id: id } of assigned) {
-  test(`N13 ${id}`, async t => {
+  test(`N13 ${id}`, async () => {
     const scenario = corpus.get(id);
     assert.ok(scenario, id);
     const failures = [];
-    let clientException;
     for (const [index, utterance] of scenario.utterances.entries()) {
       try {
-        const exception = await checkUtterance(scenario, utterance, index);
-        clientException ??= exception;
+        await checkUtterance(scenario, utterance, index);
       } catch (error) {
         if (!(error instanceof assert.AssertionError)) throw error;
         failures.push(`Variant ${index + 1}: ${error.message}`);
       }
     }
     assert.deepEqual(failures, []);
-    if (clientException) t.todo(clientException);
   });
 }

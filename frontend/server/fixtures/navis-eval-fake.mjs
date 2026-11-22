@@ -72,8 +72,9 @@ export function createNavisEvalFake(fixture) {
 // network access. It responds only to the filtered intent and tool results.
 export async function navisAgentFakeFetch(_url, options) {
   const { messages, toolChoice } = JSON.parse(options.body);
-  const { intent, slots, readings, activeBoard, preparedProposal, nextLookup } = JSON.parse(messages[1].content);
-  const readResult = messages.at(-1).role === 'tool' ? JSON.parse(messages.at(-1).content) : null;
+  const { intent, slots, readings, activeBoard, preparedProposal, nextLookup, lookupIndex, toolHistory } = JSON.parse(messages[1].content);
+  const transcript = toolHistory ?? messages;
+  const readResult = transcript.at(-1).role === 'tool' ? JSON.parse(transcript.at(-1).content) : null;
   // N04 reads must observe the menu handle before using it in a scoped tool.
   const menuRead = intent.kind === 'read' && ['get_recipe', 'simulate_menu_price'].includes(intent.tool)
     ? readings?.find(reading => reading.tool === intent.tool) : undefined;
@@ -104,12 +105,28 @@ export async function navisAgentFakeFetch(_url, options) {
   // End N17 read scope.
   const call = (name, args) => ({
     message: { role: 'assistant', content: '', toolCalls: [
-      { id: `fake-agent-${messages.length}`, type: 'function', function: { name, arguments: args } },
+      { id: options.headers?.['X-NCP-CLOVASTUDIO-REQUEST-ID'] ?? `fake-agent-${lookupIndex ?? messages.length}`,
+        type: 'function', function: { name, arguments: args } },
     ] },
     finishReason: 'tool_calls',
   });
   let result;
   if (nextLookup && toolChoice?.function?.name === nextLookup.name) result = call(nextLookup.name, nextLookup.args);
+  else if (intent.kind === 'read' && intent.reads) {
+    const groups = new Map();
+    for (const message of transcript.filter(message => message.role === 'tool')) {
+      const refs = (JSON.parse(message.content).facts ?? []).map(fact => fact.ref);
+      if (refs.length) groups.set(refs[0], refs);
+    }
+    const facts = [];
+    let remaining = groups.size;
+    for (const group of groups.values()) {
+      // Keep one citation available for each later source under the reply limit.
+      remaining--;
+      facts.push(...group.slice(0, 12 - facts.length - remaining));
+    }
+    result = { message: { role: 'assistant', content: JSON.stringify({ outcome: 'reply', facts }) }, finishReason: 'stop' };
+  }
   else if (toolChoice?.function?.name === 'search_records') result = call('search_records', { kind: 'menu', querySlot: 'name' });
   else if (toolChoice?.function?.name === 'propose_action') result = call('propose_action', preparedProposal ?? {
     command: 'menu.create',
@@ -186,7 +203,7 @@ export async function navisAgentFakeFetch(_url, options) {
   // End N17 fact citations.
   // N18 cites the selected promotion projection, including the bounded reference list.
   if (!result && intent.kind === 'read' && (
-    ['promo-video', 'customer-groups', 'marketing-performance', 'marketing-today'].includes(intent.featureId)
+    ['promo-video', 'customer-groups', 'marketing-today'].includes(intent.featureId)
     || ['promo-estimate', 'promo-references'].includes(intent.sourceId)
   )) {
     const facts = (readResult?.facts ?? []).slice(0, 12).map(fact => fact.ref);

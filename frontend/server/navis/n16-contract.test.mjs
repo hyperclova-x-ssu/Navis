@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 import { createServer } from 'vite';
 import { createBridge } from '../bridge.mjs';
 import { createNavisMenuHarness, navisAgentFakeFetch } from '../fixtures/navis-eval-fake.mjs';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame, validateAgentRequest } from '../../shared/navis-agent-schema.mjs';
 import { evidence, readTrace } from './scenario-fixtures.mjs';
+import { couponAdapters } from './coupons.mjs';
 
 const trace = readTrace();
 const assigned = trace.filter(row => row.slice_id === 'N16');
@@ -18,13 +19,13 @@ const vite = await createServer({
   logLevel: 'silent', server: { middlewareMode: true, watch: null, ws: false, hmr: false },
 });
 const load = path => vite.ssrLoadModule(`/src/${path}.ts`);
-let data, dates, calc, session, catalog, state, presets, motion, provider, nav, text, translator, loyalty, discounts, actions;
+let data, dates, calc, session, catalog, state, presets, motion, provider, nav, text, translator, loyalty, discounts, actions, legacySeed;
 try {
-  [data, dates, calc, session, catalog, state, presets, motion, provider, nav, text, translator, loyalty, discounts, actions] = await Promise.all([
+  [data, dates, calc, session, catalog, state, presets, motion, provider, nav, text, translator, loyalty, discounts, actions, legacySeed] = await Promise.all([
     load('data/widget-data'), load('data/db/time'), load('data/marketing/calc'), load('app/test-session'),
     load('catalog/index'), load('state/index'), load('layout/presets'), load('ui/motion'), load('features/assistant/provider'),
     load('screens/dashboard/navis-navigation'), load('data/text'), load('features/assistant/messages'),
-    load('data/pos/loyalty'), load('pos/loyalty/discounts'), load('features/assistant/agent-actions'),
+    load('data/pos/loyalty'), load('pos/loyalty/discounts'), load('features/assistant/agent-actions'), load('data/db/legacy-seed'),
   ]);
 } finally {
   await vite.close();
@@ -63,8 +64,22 @@ function context(t, id) {
     ...base,
     coupon: base.coupon.map(row => stagedEnding && row === campaign ? { ...row, endsOn: dates.addDays(data.TODAY, 2) } : row),
     couponTarget: [...base.couponTarget, ...testTargets],
+    ...(id === 'zero-slot' && { mktCustomer: base.mktCustomer.map(customer => ({ ...customer, consentSms: false })) }),
   };
-  const store = data.createWidgetDataStore({ marketing }, { runId: run.getState().runId });
+  const legacy = id === 'authored-expiry' ? legacySeed.createLegacySeedTables() : undefined;
+  const croissant = legacy?.inventoryItem.find(row => row.itemId === 'it-croissant');
+  const croissantMenu = legacy?.menuItem.find(row => row.menuId === 'm-croissant');
+  const expiryStock = legacy && croissant && croissantMenu ? {
+    inventoryItem: [...initial.tables.inventoryItem, { ...croissant, expiresOn: data.TODAY }],
+    inventoryStock: [...initial.tables.inventoryStock, { itemId: croissant.itemId, channel: 'store', qty: 6 }],
+    stockOpening: [...initial.tables.stockOpening, { itemId: croissant.itemId, businessDate: data.TODAY, quantityBase: 6 }],
+    menuItem: [...initial.tables.menuItem, croissantMenu],
+    recipeLine: [...initial.tables.recipeLine, ...legacy.recipeLine.filter(row => row.menuId === croissantMenu.menuId)],
+    purchaseItem: [...initial.tables.purchaseItem, ...legacy.purchaseItem.filter(row => row.itemId === croissant.itemId)],
+  } : {};
+  const store = data.createWidgetDataStore({ ...expiryStock, marketing: legacy ? {
+    ...marketing, expiryForecast: [...marketing.expiryForecast, ...legacy.marketing.expiryForecast],
+  } : marketing }, { runId: run.getState().runId });
   const model = (feature, snapshot = store.getSnapshot()) => data.readModel(snapshot, feature);
   const slot = model(slotFeature).openSlots.find(row => row.regularIds.length > 0);
   const item = model(expiryFeature).target;
@@ -138,7 +153,7 @@ const receiptKeys = {
   'coupon.extend': 'data.marketing.notice.extended',
 };
 
-function confirm(env, result, command) {
+function confirm(env, result, command, messageKey = receiptKeys[command]) {
   const { store } = env;
   assert.equal(result.kind, 'proposal', result.reply.answer);
   const session = result.reply.proposalSession;
@@ -158,7 +173,7 @@ function confirm(env, result, command) {
   }
   const receipt = session.confirm(store, proposalId, extra);
   assert.equal(receipt.frame.outcome, 'applied', JSON.stringify(receipt.frame));
-  assert.equal(receipt.frame.messageKey, receiptKeys[command]);
+  assert.equal(receipt.frame.messageKey, messageKey);
   assert.equal(receipt.notice?.messageKey, receipt.frame.messageKey);
   const after = store.getSnapshot();
   assert.equal(after.revision, result.snapshot.revision + 1);
@@ -193,8 +208,6 @@ const exceptions = {
   'S6-119': 'N16 R5: a custom extension length needs the widget handoff under D-326 Q19.',
   'S6-120': 'N16 R5: a custom expiry date needs the widget handoff under D-326 Q19.',
   'S6-122': 'N02 with N16 R5: the repeat loses its confirmed coupon target. An explicit repeat prepares a fresh card.',
-  'S6-130': 'N16 R5: the generic coupon-status open goes to Slot Coupon.',
-  'S6-134': 'N16 R5 with N03: the coupon-status board location and generic opening do not resolve to Coupon Status.',
 };
 
 const reviewed = new Set([
@@ -202,7 +215,7 @@ const reviewed = new Set([
   'S5-143', 'S5-144', 'S5-145', 'S5-146', 'S5-148', 'S5-149', 'S5-150', 'S5-151',
   'S5-152', 'S5-153', 'S5-155', 'S6-096', 'S6-102', 'S6-107', 'S6-108', 'S6-109',
   'S6-110', 'S6-113', 'S6-114', 'S6-115', 'S6-117', 'S6-118', 'S6-121',
-  'S6-123', 'S6-124', 'S6-128', 'S6-129', 'S6-133', 'S6-195',
+  'S6-123', 'S6-124', 'S6-128', 'S6-129', 'S6-133', 'S6-134', 'S6-195',
 ]);
 
 const safeCopy = result => assert.doesNotMatch(result.reply.answer, /010[ -]?\d|customerId|recipientIds|idempotencyKey/u);
@@ -281,7 +294,7 @@ test('N16 replays every assigned coupon scenario against the café store and nat
     const expected = { ...fixture.expected, ...overlay[id]?.expected, ...overlay[id]?.policyGap?.expected };
     const gap = exceptions[id];
     if (gap) listed.push(id);
-    await t.test(id, gap && ['S6-130', 'S6-134'].includes(id) ? { todo: gap } : {}, async sub => {
+    await t.test(id, async sub => {
       const env = context(sub, id);
       const priorReceipt = await setupContinuation(env, id);
       const feature = couponFeatures.includes(fixture.widget) ? fixture.widget : id === 'S5-094' ? slotFeature : statusFeature;
@@ -299,7 +312,7 @@ test('N16 replays every assigned coupon scenario against the café store and nat
         passed++;
         return;
       }
-      if (reviewed.has(id) || (gap && id !== 'S6-130')) {
+      if (reviewed.has(id) || gap) {
         assert.ok(result.reply.answer || result.detail || result.reply.turn?.kind === 'proposal');
         const fixtureText = overlay[id]?.n16CafeText;
         const adapted = fixtureText ? await env.ask(fixtureText, feature) : result;
@@ -373,7 +386,9 @@ test('N16 replays every assigned coupon scenario against the café store and nat
           if (!['S6-123', 'S6-124'].includes(id)) assert.equal(adapted.kind, expected.kind, traceTurn(adapted));
           const field = id === 'S5-149' ? 'benefit' : expected.ask?.[0];
           if (field) assert.equal(adapted.reply.turn.field, field);
-          const fragments = id === 'S5-149' ? ['할인율', '할인 금액', '지정 가격'] : expected.answer_must_contain ?? [];
+          // D-365: S6-109 (last month's coupon use) came from the removed 마케팅 성과 numbers; the chat now says so plainly.
+          const fragments = id === 'S5-149' ? ['할인율', '할인 금액', '지정 가격'] : id === 'S6-109'
+            ? ['이제 따로 보여 드리지 않아요', '진행 중인 쿠폰'] : expected.answer_must_contain ?? [];
           for (const part of fragments) {
             assert.ok(adapted.reply.answer.includes(part), `${part} missing from ${adapted.reply.answer}`);
           }
@@ -431,6 +446,26 @@ test('D-328 won benefits create draft codes with the widget limits and receipt u
   }
 });
 
+test('S5-148 creates an inactive code and sends no messages for the exact authored croissant draft', async t => {
+  const env = context(t, 'authored-expiry');
+  const stock = env.model(expiryFeature).items.find(item => item.itemId === 'it-croissant');
+  assert.ok(stock);
+  assert.equal(stock.qty, 6);
+  for (const utterance of authored.get('S5-148').utterances) {
+    const result = await env.ask(utterance, expiryFeature);
+    await env.ask('응');
+    assert.equal(env.store.getSnapshot(), result.snapshot);
+    const { receipt, after } = confirm(env, result, 'coupon.createExpiry');
+    assert.deepEqual(after.tables.marketing.coupon.at(-1).originRef, { itemId: stock.itemId });
+    assert.equal(after.tables.marketing.coupon.at(-1).benefitValue, 40);
+    assert.equal(after.tables.marketing.couponCode.at(-1).activatedAt, null);
+    assert.deepEqual(after.tables.marketing.messageSend, result.snapshot.tables.marketing.messageSend);
+    env.run.actions.showNotice(receipt.notice);
+    assert.ok(actions.applyAgentRunUndo(env.run, env.store, receipt.undoToken));
+    assert.deepEqual(env.store.getSnapshot().tables.marketing, result.snapshot.tables.marketing);
+  }
+});
+
 test('D-326 coupon edit, unpublish and end preserve the issued code through its original expiry', async t => {
   const env = context(t, 'S5-156');
   const { store, expiryCodeId, item } = env;
@@ -464,6 +499,9 @@ test('D-326 coupon edit, unpublish and end preserve the issued code through its 
   ]) {
     const proposed = await env.ask(words);
     assert.equal(proposed.kind, 'proposal', `${command} | ${traceTurn(proposed)}`);
+    const notes = proposed.reply.proposalSession.getSnapshot().preview.fields.filter(field =>
+      field.after === '이미 받은 쿠폰은 원래 종료일까지 주문/결제 화면에서 쓸 수 있어요');
+    assert.equal(notes.length, command === 'coupon.update' ? 0 : 1);
     await env.ask('확인');
     assert.equal(store.getSnapshot().tables.marketing, before.tables.marketing);
     const { receipt, after } = confirm(env, proposed, command);
@@ -502,7 +540,8 @@ for (const [id, stamp] of [['S5-130', '2026-11-17T15:45'], ['S5-131', '2026-11-1
     assert.equal(foreignStore.getSnapshot(), foreignSnapshot);
     await env.ask('보내');
     assert.equal(env.store.getSnapshot(), result.snapshot);
-    const { receipt, after } = confirm(env, result, 'coupon.sendSlot');
+    const { receipt, after } = confirm(env, result, 'coupon.sendSlot',
+      id === 'S5-131' ? 'data.notices.notice.scheduled' : 'data.notice.sent');
     const original = result.snapshot.tables.marketing;
     const m = after.tables.marketing;
     const campaign = m.coupon.at(-1);
@@ -522,11 +561,40 @@ for (const [id, stamp] of [['S5-130', '2026-11-17T15:45'], ['S5-131', '2026-11-1
 test('S6-125 holds a reminder when the ending café campaign has zero consenting text targets', async t => {
   const env = context(t, 'public-only');
   const result = await env.ask(authored.get('S6-125').utterances[0]);
-  assert.notEqual(result.kind, 'proposal', result.reply.answer);
+  assert.equal(result.kind, 'clarify', result.reply.answer);
+  assert.match(result.reply.answer, /알림을 보낼 수 있는 손님이 없어요/u);
   assert.ok(!result.calls.some(call => call.name === 'propose_action'));
   const row = env.model(statusFeature).rows.find(row => row.couponId === env.campaignId);
   assert.equal(row.endingSoon, true);
   assert.equal(row.reminderRecipients, 0);
+});
+
+test('S5-130 holds a slot send when consent has been withdrawn for the whole audience', async t => {
+  const env = context(t, 'zero-slot');
+  const current = env.store.getSnapshot();
+  assert.ok(env.model(slotFeature).openSlots.length > 0);
+  const result = await env.ask('빈 시간 쿠폰 지금 보내줘', slotFeature);
+  assert.equal(result.kind, 'clarify', traceTurn(result));
+  assert.match(result.reply.answer, /받는 사람이 없어요/u);
+  assert.ok(!result.calls.some(call => call.name === 'propose_action'));
+  assert.equal(env.store.getSnapshot(), current);
+});
+
+test('posting and unpublishing require evidence for the code’s current coupon state', () => {
+  const handle = 'n16-couponCode-1';
+  const target = { kind: 'couponCode', querySlot: 'codeId' };
+  for (const [command, activated, statuses] of [
+    ['coupon.markPosted', false, { active: 'ready', paused: 'refused', ended: 'refused' }],
+    ['coupon.unpublish', true, { active: 'ready', paused: 'ready', ended: 'refused' }],
+  ]) {
+    const adapter = couponAdapters.find(candidate => candidate.command === command);
+    for (const [status, expected] of Object.entries(statuses)) {
+      const eligible = status === 'active' || (command === 'coupon.unpublish' && status === 'paused');
+      const matches = [{ match: 'exact', handle, fields: { route: 'place_news', activated, eligible, unpublished: false } }];
+      const input = { intent: { kind: 'command', command, args: { codeId: { handle } } }, slots: ['codeId'], searches: [{ ...target, matches }] };
+      assert.equal(adapter.prepare({ input, reads: [{ ...target, status: 'ready', matches }] }).outcome, expected, `${command} ${status}`);
+    }
+  }
 });
 
 test('S6-135 rechecks the ending-soon audience after the extension receipt', async t => {

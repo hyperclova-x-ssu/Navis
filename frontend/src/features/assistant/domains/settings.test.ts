@@ -127,7 +127,19 @@ describe('N08 representative scenario contracts', () => {
     expect(trace.filter(row => row[8]?.split('|').includes('N08'))).toHaveLength(50);
   });
 
-  it.each(scenarios.flatMap(s => s.utterances.map((text, i) => [s.id, i + 1, text, s] as const)))('%s/%d %s', async (id, index, text, scenario) => {
+  // D-365: S7-140 asked to preview the removed 마케팅 성과 widget's empty state; there is no such widget to preview any more.
+  const retired = new Set(['S7-140']);
+  it.each(scenarios.filter(s => retired.has(s.id)).flatMap(s => s.utterances.map((text, i) => [s.id, i + 1, text] as const)))('%s/%d %s no longer changes any preview', async (id, _index, text) => {
+    const { run, requests, ask } = fixture();
+    prepare(run, id);
+    const before = presentation(run);
+    const reply = await ask(text);
+    expect(reply.proposalSession).toBeUndefined();
+    expect(JSON.stringify(requests)).not.toContain('marketing-performance');
+    expect(presentation(run)).toEqual(before);
+  });
+
+  it.each(scenarios.filter(s => !retired.has(s.id)).flatMap(s => s.utterances.map((text, i) => [s.id, i + 1, text, s] as const)))('%s/%d %s', async (id, index, text, scenario) => {
     const { run, store, assistant, requests, ask, ...fixtureMethods } = fixture();
     prepare(run, id);
     if (id === 'S7-162' || id === 'S7-167') {
@@ -163,7 +175,7 @@ describe('N08 representative scenario contracts', () => {
         expect(requests[0]?.intent).toMatchObject({ kind: 'command', command: change.name, args });
         const preview = reply.proposalSession?.getSnapshot().preview;
         const labels = preview && [preview.title, ...preview.fields.map(field => `${field.label} ${field.after}`)].join('\n');
-        for (const word of (copy ?? []).filter(word => word !== '껐어요')) expect(labels).toContain(word);
+        for (const word of (copy ?? []).filter(word => word !== '껐어요')) expect(labels).toContain(id === 'S7-132' && word === '시연용' ? '예시 상태 보기' : word);
         const receipt = confirm({ run, store, assistant, requests, ask, ...fixtureMethods }, reply);
         expect(receipt).toMatchObject({ frame: { outcome: 'applied' }, notice: { undo: { target: 'run' } } });
         tools.forEach(tool => expectSetting(run, tool));
@@ -271,6 +283,22 @@ describe('N08 card and receipt boundary', () => {
     const reply = await f.ask('다크 모드로 바꿔줘');
     expect(reply.proposalSession).toBeUndefined();
     expect(f.run.getState().theme).toBe('light');
+  });
+
+  it.each(['다크 모드야', '지금 화면 모드가 뭐야', '어두운 화면인지 알려줘', '지금 다크야?', '라이트야?'])('reads the actual theme for %s and preserves a pending card', async text => {
+    const f = fixture();
+    try {
+      const pending = await f.ask('큰 글자로 해줘');
+      const before = f.run.getState();
+      const reply = await f.ask(text);
+      expect(reply.proposalSession).toBeUndefined();
+      expect(reply.turn).toMatchObject({ kind: 'read', evidence: [{ tool: 'get_ui_state', facts: [
+        expect.objectContaining({ key: 'ui.theme', value: 'light' }),
+      ] }] });
+      expect(pending.proposalSession?.isPending()).toBe(true);
+      expect(f.run.getState()).toBe(before);
+      expect(f.requests.at(-1)?.intent).toEqual({ kind: 'read', tool: 'get_ui_state' });
+    } finally { f.run.dispose(); }
   });
 
   it('cancels the dark-mode proposal when the owner edits it back to the current mode', async () => {

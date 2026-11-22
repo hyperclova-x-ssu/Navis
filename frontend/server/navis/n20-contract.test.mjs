@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 import { createServer } from 'vite';
 import { createBridge } from '../bridge.mjs';
 import { createNavisMenuHarness, navisAgentFakeFetch } from '../fixtures/navis-eval-fake.mjs';
@@ -84,7 +84,7 @@ const evidenceValues = {
   'S4-196': ['localTrends.noComparison.count', trends.keywords.filter(row => row.noComparison).length],
 };
 
-function context(t, id) {
+function context(t, id, openingTitleKey = opening.titleKey) {
   const clock = () => 0;
   const run = state.createRunStore({ screenPreset: presets.screenPresets.A, catalog: catalog.getRegistry('A'), time: motion.timePolicy,
     theme: 'light', clock, reducedMotion: true });
@@ -93,7 +93,8 @@ function context(t, id) {
   if (!['S4-158', 'S8-158'].includes(id)) run.actions.switchLayer('marketing');
   const folded = ['S4-148', 'S4-151', 'S4-157'].includes(id);
   // Start with a stored folded row and no receipt in the new run.
-  const seed = folded ? { localChange: cafe.tables.localChange.map(row => row === opening ? { ...row, ackedAt: data.NOW } : row) } : undefined;
+  const seed = folded ? { localChange: cafe.tables.localChange.map(row => row === opening
+    ? { ...row, titleKey: openingTitleKey, ackedAt: data.NOW } : row) } : undefined;
   const store = data.createWidgetDataStore(seed, { runId: run.getState().runId });
   const harness = createNavisMenuHarness(options => createBridge({ ...options, agentMode: 'fixture', onDiagnostics() {} }), validateAgentFrame, navisAgentFakeFetch);
   t.after(harness.close);
@@ -104,7 +105,7 @@ function context(t, id) {
     assert.equal(validateAgentRequest(request), true, JSON.stringify(request.intent));
     const result = await harness.run(request);
     exchanges.push({ request, result });
-    return new Response(result.raw, { status: result.status, headers: { [AGENT_PROTOCOL_HEADER]: AGENT_PROTOCOL, 'content-type': 'text/event-stream' } });
+    return new globalThis.Response(result.raw, { status: result.status, headers: { [AGENT_PROTOCOL_HEADER]: AGENT_PROTOCOL, 'content-type': 'text/event-stream' } });
   } });
   async function ask(text, continuation) {
     const start = exchanges.length;
@@ -112,7 +113,7 @@ function context(t, id) {
     const plan = nav.classifyNavigation(text, run.getState(), before);
     const prepared = plan && nav.prepareNavigationRequest(plan, run.getState(), navigation);
     let detail;
-    const reply = await assistant.ask({ text, continuation, locale: 'ko', layer: run.getState().activeBoard, signal: new AbortController().signal,
+    const reply = await assistant.ask({ text, continuation, locale: 'ko', layer: run.getState().activeBoard, signal: new globalThis.AbortController().signal,
       ...(prepared && { agentTurn: prepared.agentTurn, onNavigation: action => { detail = prepared.resolve(action); } }),
     });
     assert.equal(store.getSnapshot(), before, 'typed input preserves the business snapshot');
@@ -192,7 +193,22 @@ test('N20 replays its TRACE assignments against the café snapshot and native fa
     await t.test(id, async sub => {
       const scenario = corpus.get(id);
       const expected = scenario.expected;
-      const env = context(sub, id);
+      if (id === 'S4-148') {
+        // D-327 Q3 also applies when the only candidate is already folded.
+        const mismatched = context(sub, id);
+        const ambiguous = await mismatched.ask(scenario.utterances[0]);
+        assert.equal(outcome(ambiguous), 'clarify');
+        const prompt = ambiguous.reply.turn;
+        assert.equal(prompt.field, 'changeId');
+        assert.deepEqual(prompt.choices, [{ id: opening.changeId, label: openingTitle }]);
+        assert.deepEqual(ambiguous.observed, []);
+        const picked = await mismatched.ask('', { clarificationId: prompt.id, choiceId: opening.changeId });
+        assert.equal(outcome(picked), 'answer');
+        assert.match(picked.reply.answer, /이미 확인한 소식이에요/u);
+        assert.deepEqual(picked.observed, []);
+        assert.equal(mismatched.store.getSnapshot(), ambiguous.before);
+      }
+      const env = context(sub, id, id === 'S4-148' ? 'data.localChange.newCafe' : undefined);
       const turn = await env.ask(scenario.n20CafeText ?? scenario.utterances[0]);
       const actual = outcome(turn);
       assert.equal(actual, expected.kind, turn.reply.answer);
@@ -287,7 +303,7 @@ test('S4-175 distinguishes the historical hourly sample from a new observation',
   assert.deepEqual(turn.observed, []);
 });
 
-test('N20 guards reject missing targets, duplicate transitions and stale cards', async t => {
+test('N20 guards reject missing targets and duplicate transitions', t => {
   const env = context(t, 'S4-151');
   const { store } = env;
   const before = store.getSnapshot();
@@ -295,11 +311,34 @@ test('N20 guards reject missing targets, duplicate transitions and stale cards',
   assert.equal(store.dispatch({ type: 'localChanges.acknowledge', changeId: opening.changeId }).code, 'CONFLICT');
   assert.equal(store.dispatch({ type: 'localChanges.unacknowledge', changeId: event.changeId }).code, 'CONFLICT');
   assert.equal(store.getSnapshot(), before);
+});
+
+test('N20 a stale reopen card is unchanged only when the target has already reopened', async t => {
+  const env = context(t, 'S4-151');
+  const { store } = env;
   const turn = await env.ask(`접어둔 ${openingTitle} 다시 새 소식으로 돌려줘`);
   assert.equal(outcome(turn), 'proposal');
+  const proposalId = turn.reply.proposalSession.getSnapshot().proposal.id;
   assert.equal(store.dispatch({ type: 'localChanges.unacknowledge', changeId: opening.changeId }).ok, true);
   const reopened = store.getSnapshot();
-  const card = turn.reply.proposalSession;
-  assert.equal(card.confirm(store, card.getSnapshot().proposal.id).frame.outcome, 'conflict');
+  assert.equal(reopened.tables.localChange.find(row => row.changeId === opening.changeId).ackedAt, null);
+  // A3_BATCH2 B24 treats a stale card whose requested state already holds as unchanged with no write.
+  const receipt = press(store, turn.reply);
+  assert.deepEqual(receipt.frame, { proposalId, outcome: 'unchanged' });
+  assert.equal(receipt.undoToken, undefined);
   assert.equal(store.getSnapshot(), reopened);
+});
+
+test('N20 a stale reopen card conflicts when a different change advanced the revision', async t => {
+  const env = context(t, 'S4-151');
+  const { store } = env;
+  const turn = await env.ask(`접어둔 ${openingTitle} 다시 새 소식으로 돌려줘`);
+  assert.equal(outcome(turn), 'proposal');
+  assert.equal(store.dispatch({ type: 'localChanges.acknowledge', changeId: event.changeId }).ok, true);
+  const revised = store.getSnapshot();
+  const receipt = press(store, turn.reply);
+  assert.equal(receipt.frame.outcome, 'conflict');
+  assert.equal(receipt.undoToken, undefined);
+  assert.equal(revised.tables.localChange.find(row => row.changeId === opening.changeId).ackedAt, data.NOW);
+  assert.equal(store.getSnapshot(), revised);
 });

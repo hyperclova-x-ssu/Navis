@@ -7,6 +7,7 @@ import type { DetailRef, FeatureId, Locale, QueryCondition } from '../../../cont
 import type { DataCommand } from '../../../data/commands/types';
 import { addDays, dateOf, inRange, NOW, TODAY, WEEK_END, WEEK_START, weekdayOf } from '../../../data/db/time';
 import type { DataSnapshot, LocalChange, LocalChangeKind } from '../../../data/db/types';
+import type { RealLocal } from '../../../data/reality/13/dto';
 import { readModel, dataBundles } from '../../../data/widget-data';
 import { baseBundles, createTranslator, type MessageBundle, type Translator } from '../../../i18n';
 import { mktLocalBundle } from '../../widgets/mkt-local/messages';
@@ -99,9 +100,10 @@ interface ChangeRow {
 }
 /** The widget's own rule: a change belongs to a period when it starts or was updated inside it. */
 function changeRows(snapshot: DataSnapshot, start = WEEK_START, end = WEEK_END): readonly ChangeRow[] {
-  const { localChange, demandDay } = snapshot.tables;
-  return localChange.filter((c: LocalChange) => inRange(c.startDate, start, end) || inRange(dateOf(c.updatedAt), start, end))
-    .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.changeId.localeCompare(b.changeId))
+  const { localChange, demandDay, realLocal } = snapshot.tables;
+  const scoped = realLocal ? localChange : localChange.filter((c: LocalChange) => inRange(c.startDate, start, end) || inRange(dateOf(c.updatedAt), start, end))
+    .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.changeId.localeCompare(b.changeId));
+  return scoped
     .map(c => ({ changeId: c.changeId, kind: c.kind, titleKey: c.titleKey, whenKey: c.whenKey, startDate: c.startDate, endDate: c.endDate,
       distanceM: c.distanceM, sameCategory: c.sameCategory, sourceKey: c.sourceKey, updatedAt: c.updatedAt, folded: c.ackedAt !== null,
       forecast: (c.kind === 'event' || c.kind === 'construction') && demandDay.some(d => d.eventKey === c.titleKey) }));
@@ -118,6 +120,77 @@ const MAX_ROWS = 8;
 const counted = (t: Translator, widget: 'local-changes' | 'local-trends', n: number) =>
   `${t.format.number(n)}${t.locale === 'en' ? ' ' : ''}${t.t(`widget.${widget}.unit`, { n })}`;
 const changeKey = (index: number, field: string) => `localChanges.change.${index}.${field}`;
+
+function tradeHourFacts({ sales, population, period }: RealLocal['trade'], hour: number, t: Translator): readonly AgentFact[] {
+  const band = population.items.find(row => row.startHour <= hour && hour < row.endHour);
+  const sale = sales.items.find(row => row.hour === hour);
+  const hours = t.format.hourRange(hour, hour + 1);
+  const movement = t.t('data.real.local.movement');
+  const hourlySales = t.t('data.real.local.hourlySales');
+  const noData = t.t('data.real.local.noData');
+  const seoul = t.t('data.real.local.seoul');
+  return [
+    band ? { ...fact(`tradeArea.band.${hour}`, movement, band.estimate,
+      `${hours} · ${t.format.number(band.estimate)} · ${t.t('data.real.local.seoulDate', { date: t.format.date(band.referenceDate, 'short') })} · ${band.quarter}`, 'count', band.referenceDate), source: seoul }
+      : fact(`tradeArea.band.${hour}`, movement, 'unavailable', `${hours} · ${noData}`),
+    { ...fact(`tradeArea.sales.${hour}`, hourlySales, sale?.quantity ?? 'unavailable',
+      `${hours} · ${sale ? t.format.number(sale.quantity) : noData} · POS`, sale ? 'count' : 'text'),
+      source: 'POS', start: period.from, end: period.to },
+  ];
+}
+
+function lunchFact({ population }: RealLocal['trade'], t: Translator): AgentFact {
+  const label = t.t('data.real.local.movement');
+  const key = 'tradeArea.lunch.average';
+  const noon = population.items.find(row => row.startHour <= 12 && row.endHour > 12);
+  const one = population.items.find(row => row.startHour <= 13 && row.endHour > 13);
+  if (!noon || !one || noon.region !== one.region || noon.quarter !== one.quarter
+    || noon.weekday !== one.weekday || noon.referenceDate !== one.referenceDate) {
+    return fact(key, label, 'unavailable', `12시~14시 · ${t.t('data.real.local.noData')}`);
+  }
+  const average = (noon.estimate + one.estimate) / 2;
+  return { ...fact(key, label, average, `12시~14시 평균 ${t.format.number(average)} · ${t.t('data.real.local.seoulDate', { date: t.format.date(noon.referenceDate, 'short') })}`,
+    'count', noon.referenceDate), source: t.t('data.real.local.seoul') };
+}
+
+function sourcedFacts(data: RealLocal, feature: FeatureId, t: Translator): readonly AgentFact[] {
+  if (feature === CHANGES) {
+    const { coverage, changes, period, unreadCount } = data;
+    return [
+      { ...fact('localChanges.week.count', t.t('widget.local-changes.thisWeek'), changes.length, counted(t, CHANGES, changes.length), 'count'), start: period.from, end: period.to },
+      fact('localChanges.open.count', t.t('widget.local-changes.openList'), unreadCount, counted(t, CHANGES, unreadCount), 'count'),
+      fact('localChanges.folded.count', t.t('widget.local-changes.folded', { n: changes.filter(row => row.acknowledgedAt).length }), changes.filter(row => row.acknowledgedAt).length),
+      fact('localChanges.coverage', t.t('widget.local-changes.title'), coverage
+        ? t.t('data.real.local.coverage', { region: coverage.region, date: t.format.date(coverage.referenceDate, 'short') }) : t.t('data.real.local.noCoverage')),
+      ...changes.slice(0, MAX_ROWS).flatMap((row, index) => [
+        fact(changeKey(index, 'title'), t.t(`data.real.local.${row.kind}`), row.title, `${row.title} · ${row.region}`),
+        fact(changeKey(index, 'when'), t.t(`data.real.local.${row.dateKind}`), row.referenceDate, t.format.date(row.referenceDate, 'short'), 'date', row.referenceDate),
+        { ...fact(changeKey(index, 'source'), t.t('widget.local-changes.source', { source: row.authority }), row.authority,
+          row.authority, 'text', row.referenceDate), source: row.authority },
+      ]),
+    ];
+  }
+  if (feature === AREA) {
+    const { period } = data.trade;
+    const range = t.format.dateRange(period.from, period.to);
+    return [
+      fact('tradeArea.period', t.t('data.real.local.hourlySales'), range, `POS · ${range}`),
+      lunchFact(data.trade, t),
+      ...Array.from({ length: 24 }, (_, hour) => tradeHourFacts(data.trade, hour, t)).flat(),
+    ];
+  }
+  const { search, sales, period } = data.trends;
+  return [
+    fact('localTrends.period', t.t('data.real.local.menuSales'), t.format.dateRange(period.from, period.to)),
+    fact('localTrends.interest.mentions', t.t('data.real.local.searchInterest'), 'unavailable', '언급 횟수는 알 수 없어요'),
+    ...sales.items.slice(-12).map((row, index) => ({ ...fact(`localTrends.sales.${index}`, t.t('data.real.local.menuSales'), row.quantity,
+      `${row.menuName ?? ''} ${t.format.date(row.businessDate, 'short')} · ${t.format.number(row.quantity)} · POS`.trim(), 'count', row.businessDate),
+      source: 'POS', start: period.from, end: period.to })),
+    ...(search?.items.slice(-12).map((row, index) => ({ ...fact(`localTrends.interest.${index}`, t.t('data.real.local.searchInterest'), row.ratio,
+      `${search.query.keywordGroups[0]?.groupName} · ${t.format.date(row.period, 'short')} · ${t.format.number(row.ratio)} · ${t.t('data.real.local.searchSource', { period: t.format.dateRange(search.query.startDate, search.query.endDate) })}`,
+      'relative-index', row.period), source: '네이버 검색 관심도', start: search.query.startDate, end: search.query.endDate })) ?? []),
+  ];
+}
 
 function changeFacts(snapshot: DataSnapshot, condition: QueryCondition, locale: Locale): { readonly facts: readonly AgentFact[] } | { readonly status: AgentMissingStatus } {
   const day = businessDate(snapshot);
@@ -163,6 +236,7 @@ function areaFacts(snapshot: DataSnapshot, condition: QueryCondition, locale: Lo
   if (condition.kind !== 'default') return { status: 'unsupported_period' };
   const l = labels(locale), { t } = l, day = businessDate(snapshot);
   const model = readModel(snapshot, AREA);
+  if (!model.peak) return { status: 'unavailable' };
   const people = (value: number) => t.format.count(value, 'person');
   const hourFact = (key: string, hour: number, value: number) =>
     fact(key, t.t('widget.trade-area.peakFootfall', { hour }), value, people(value), 'person');
@@ -223,6 +297,12 @@ function trendFacts(snapshot: DataSnapshot, condition: QueryCondition, locale: L
 }
 
 function projectWidget(snapshot: DataSnapshot, feature: FeatureId, condition: QueryCondition, locale: Locale) {
+  const real = snapshot.tables.realLocal;
+  if (real && (feature === CHANGES || feature === AREA || feature === TRENDS)) {
+    if (condition.kind !== 'default' && (feature !== CHANGES || condition.kind !== 'dateRange'
+      || condition.start !== real.period.from || condition.end !== real.period.to)) return { status: 'unsupported_period' as const };
+    return { facts: sourcedFacts(real, feature, translator(locale)) };
+  }
   if (feature === CHANGES) return changeFacts(snapshot, condition, locale);
   if (feature === AREA) return areaFacts(snapshot, condition, locale);
   if (feature === TRENDS) return trendFacts(snapshot, condition, locale);
@@ -299,22 +379,27 @@ const kindWords: readonly (readonly [LocalChangeKind, RegExp])[] = [
   ['construction', /공사|정비|보수/u],
 ];
 const ackVerb = /확인\s*(?:했|함|처리|끝(?!낸))|접어\s*(?:줘|둬|주세요)|다\s*봤|봤어/u;
+const unnamedAcknowledgment = /^다\s*봤(?:어|어요)\s*확인[.!]?$/u;
 const reopenVerb = /새\s*소식으로|확인\s*안\s*한\s*걸로|확인\s*필요로|다시\s*(?:살려|열어)|살려\s*줘|되돌려|돌려\s*줘/u;
 const openVerb = /열어|보여|펼쳐|보기|상세|자세히|이동|넘어가|눌러|가줘/u;
 const changeScope = /동네\s*(?:변화|소식|알림)|새로\s*확인할\s*(?:변화|소식)|몇\s*미터\s*안\s*소식|확인\s*안\s*한\s*걸로|확인\s*필요로|주변\s*(?:변화|소식)|접어\s*둔|접은\s*(?:변화|소식|거)|확인\s*(?:안|끝낸)\s*(?:한|낸)?\s*(?:동네|변화|소식)|(?:행사|공사)\s*(?:장소|소식|알림)|경쟁\s*(?:업체|점|가게)|같은\s*업종/u;
 const areaScope = /유동\s*인구|상권|지나가|지나다|다니는|다녀|길에는|붐비|피크\s*시간|한가한\s*시간|조용한\s*시간|사람\s*(?:수|이\s*많|많|더\s*많|제일|없는)/u;
 const trendScope = /키워드|트렌드|유행|언급|관심\s*지표|증가율|비교\s*기간/u;
 const whereIs = /어디\s*(?:있|서\s*봐|에\s*있|메뉴)|위치\s*알려|어느\s*메뉴/u;
+/** The marketing widget a location question names. */
+const whereFeature = (value: string) => /상권|유동\s*인구/u.test(value) ? AREA : /트렌드|유행/u.test(value) ? TRENDS : /동네\s*(?:변화|소식|알림)|경쟁점/u.test(value) ? CHANGES : undefined;
 const competitor = /(?:경쟁|옆\s*가게|다른\s*(?:카페|가게)).*(?:매출|팔아|얼마|가격|받아)/u;
 
 function kindsOf(value: string): LocalChangeKind[] { return kindWords.filter(([, pattern]) => pattern.test(value)).map(([kind]) => kind); }
 const words = (title: string) => title.split(/[\s·]+/u).filter(word => normalizeNavisName(word).length >= 2);
 function targetRows(value: string, rows: readonly ChangeRow[], t: Translator) {
   const key = normalizeNavisName(value);
-  const titled = rows.filter(row => words(titleOf(row, t)).some(word => key.includes(normalizeNavisName(word))));
-  if (titled.length) return titled;
+  const exact = rows.filter(row => key.includes(normalizeNavisName(titleOf(row, t))));
+  if (exact.length) return exact;
   const kinds = kindsOf(value);
-  return kinds.length ? rows.filter(row => kinds.includes(row.kind)) : [];
+  const scoped = kinds.length ? rows.filter(row => kinds.includes(row.kind)) : rows;
+  const titled = scoped.filter(row => words(titleOf(row, t)).some(word => key.includes(normalizeNavisName(word))));
+  return titled.length || !kinds.length ? titled : scoped;
 }
 /** A shop type the owner can name (“새 카페”). Generic words (가게, 매장, 점포) name no type. */
 const shopType = /카페|커피(?:숍|샵|전문점)?|빵집|베이커리|식당|음식점|편의점|서점|꽃집|치킨집|술집|미용실|헬스장|약국/u;
@@ -383,30 +468,44 @@ function changeRoute(value: string, snapshot: DataSnapshot, locale: Locale): Dom
     slots: { changeId: encodeQuery({ state, kinds: [], ids: picked.map(row => row.changeId), words: [] }), navisLocale: locale },
     lookups: [{ kind: 'localChange', querySlot: 'changeId', bind: ['changeId'] }],
   });
-  /** Ask which opening before proposing a card; the pick becomes the one row of the same lookup (D-327 Q3). */
-  const askOpening = (state: 'open' | 'folded', type: string): DomainRoute => {
-    const choices = rows.filter(row => row.kind === 'opening' && row.folded === (state === 'folded'));
-    return { kind: 'clarification', field: 'changeId', answer: l.noTypeInTitle(type),
-      choices: choices.map(row => ({ id: row.changeId, label: titleOf(row, t) })),
-      resume: id => { const row = choices.find(item => item.changeId === id); return row ? lookup(state, [row]) : undefined; } };
+  const selectChange = (state: 'open' | 'folded', row: ChangeRow): DomainRoute => {
+    if (state === 'open' && row.folded) return answer(l.alreadyChecked);
+    if (state === 'folded' && !row.folded) return answer(l.alreadyNew);
+    return lookup(state, [row]);
   };
-  if (reopenVerb.test(value) && !ackVerb.test(value)) {
-    const pool = matched.length ? matched : rows;
+  const askChange = (state: 'open' | 'folded', choices: readonly ChangeRow[], question = l.chooseChange): DomainRoute => {
+    return { kind: 'clarification', field: 'changeId', answer: question,
+      choices: choices.map(row => ({ id: row.changeId, label: titleOf(row, t) })),
+      resume: id => { const row = choices.find(item => item.changeId === id); return row ? selectChange(state, row) : undefined; } };
+  };
+  const acknowledging = ackVerb.test(value);
+  if (acknowledging || reopenVerb.test(value)) {
     if (!rows.length) return answer(l.noRows);
-    const folded = pool.filter(row => row.folded);
-    if (!folded.length) return answer(matched.length ? l.alreadyNew : l.nothingFolded);
-    const type = unnamedShopType(value, folded, t);
-    return type ? askOpening('folded', type) : lookup('folded', folded);
-  }
-  if (ackVerb.test(value)) {
+    const state = acknowledging ? 'open' : 'folded';
     const pool = matched.length ? matched : rows;
-    if (!rows.length) return answer(l.noRows);
-    const open = pool.filter(row => !row.folded);
-    if (!open.length) return answer(matched.length ? l.alreadyChecked : l.nothingOpen);
-    const type = unnamedShopType(value, open, t);
-    return type ? askOpening('open', type) : lookup('open', open);
+    const type = unnamedShopType(value, pool, t);
+    if (type) return askChange(state, pool.filter(row => row.kind === 'opening'), l.noTypeInTitle(type));
+    if (matched.length === 1) return selectChange(state, matched[0]);
+    if (matched.length > 1) return askChange(state, matched);
+    const eligible = rows.filter(row => row.folded === !acknowledging);
+    if (!eligible.length) return answer(acknowledging ? l.nothingOpen : l.nothingFolded);
+    return askChange(state, eligible);
   }
   const past = /지난주|저번\s*주|지난\s*주|\d{1,2}월/u.test(value) ? pastCondition(value, day) : undefined;
+  const real = snapshot.tables.realLocal;
+  if (real) {
+    if (past) return read(CHANGES, ['localChanges.week.count'], past);
+    if (/접어\s*둔|접은|확인\s*안|안\s*본|새로\s*확인/u.test(value)) return read(CHANGES, ['localChanges.open.count', 'localChanges.folded.count']);
+    if (/몇\s*(?:개|건)|개수|떴어/u.test(value)) return read(CHANGES, ['localChanges.week.count', 'localChanges.open.count', 'localChanges.folded.count']);
+    const keys = sourcedFacts(real, CHANGES, t).map(item => item.key);
+    if (matched.length) {
+      return read(CHANGES, ['localChanges.coverage', ...matched.flatMap(row => {
+        const index = rows.indexOf(row);
+        return index < MAX_ROWS ? ['title', 'when', 'source'].map(field => changeKey(index, field)) : [];
+      })].slice(0, 12));
+    }
+    return read(CHANGES, keys.slice(0, 12));
+  }
   if (past) {
     const ranged = changeRows(snapshot, past.kind === 'dateRange' ? past.start : WEEK_START, past.kind === 'dateRange' ? past.end : WEEK_END);
     const kinds = kindsOf(value);
@@ -432,6 +531,20 @@ function changeRoute(value: string, snapshot: DataSnapshot, locale: Locale): Dom
 
 function areaRoute(value: string, snapshot: DataSnapshot, locale: Locale): DomainRoute | undefined {
   const l = labels(locale), { t } = l;
+  const real = snapshot.tables.realLocal;
+  if (real) {
+    const range = hourRange(value);
+    if (range) return read(AREA, ['tradeArea.period', ...Array.from({ length: range.end - range.start }, (_, offset) => {
+      const hour = range.start + offset;
+      return [`tradeArea.band.${hour}`, `tradeArea.sales.${hour}`];
+    }).flat()]);
+    if (/점심/u.test(value)) return read(AREA, ['tradeArea.lunch.average', 'tradeArea.sales.12', 'tradeArea.sales.13']);
+    const hour = hourOf(value);
+    if (hour !== undefined) return read(AREA, ['tradeArea.period', `tradeArea.band.${hour}`, `tradeArea.sales.${hour}`]);
+    const populated = real.trade.population.items.slice(0, 5).map(row => `tradeArea.band.${row.startHour}`);
+    const sold = real.trade.sales.items.slice(0, 5).map(row => `tradeArea.sales.${row.hour}`);
+    return populated.length || sold.length ? read(AREA, ['tradeArea.period', ...populated, ...sold]) : answer(t.t('data.real.local.noData'));
+  }
   const model = readModel(snapshot, AREA);
   const total = (range: { start: number; end: number }): DomainRoute => {
     const parts = model.hours.filter(item => item.hour >= range.start && item.hour < range.end);
@@ -473,8 +586,24 @@ function areaRoute(value: string, snapshot: DataSnapshot, locale: Locale): Domai
 
 function trendRoute(value: string, snapshot: DataSnapshot, locale: Locale): DomainRoute | undefined {
   const l = labels(locale), { t } = l, day = businessDate(snapshot);
-  const model = readModel(snapshot, TRENDS);
   const past = /지난달|지난\s*주|저번\s*주|작년|지난해|\d{1,2}월/u.test(value) ? pastCondition(value, day) : undefined;
+  const real = snapshot.tables.realLocal;
+  if (real) {
+    if (past) return read(TRENDS, ['localTrends.period'], past);
+    const search = real.trends.search;
+    const currentKeyword = search?.query.keywordGroups[0]?.groupName;
+    const named = currentKeyword && normalizeNavisName(value).includes(normalizeNavisName(currentKeyword));
+    const asksMentions = /언급.*(?:몇|횟수|얼마)|몇.*언급/u.test(value);
+    const interestKeys = Array.from({ length: Math.min(12, search?.items.length ?? 0) }, (_, index) => `localTrends.interest.${index}`);
+    if (asksMentions) return read(TRENDS, ['localTrends.interest.mentions', ...(named ? interestKeys.slice(-1) : [])]);
+    if (named && interestKeys.length) return read(TRENDS, interestKeys.slice(-2));
+    if (/^로컬\s*트렌드에서\s+.+\s+(?:어때|얼마나\s*(?:늘|줄)|관심도)/u.test(value)) {
+      return answer('해당 검색어의 자료가 없어요');
+    }
+    const keys = sourcedFacts(real, TRENDS, t).map(item => item.key).filter(key => key !== 'localTrends.interest.mentions');
+    return keys.length > 1 ? read(TRENDS, keys.slice(0, 12)) : answer(t.t('data.real.local.noData'));
+  }
+  const model = readModel(snapshot, TRENDS);
   if (past) return read(TRENDS, ['localTrends.notable.count'], past);
   const key = normalizeNavisName(value);
   const named = model.keywords.map((k, index) => ({ k, index })).filter(({ k }) => words(t.t(k.keywordKey)).some(word => key.includes(normalizeNavisName(word))));
@@ -501,16 +630,16 @@ function trendRoute(value: string, snapshot: DataSnapshot, locale: Locale): Doma
 
 /** A stored keyword's full name is as specific as a stored change title. */
 const namesKeyword = (value: string, snapshot: DataSnapshot, t: Translator) =>
-  readModel(snapshot, TRENDS).keywords.some(k => normalizeNavisName(value).includes(normalizeNavisName(t.t(k.keywordKey))));
+  [...(snapshot.tables.realLocal?.trends.search?.query.keywordGroups.map(group => group.groupName) ?? []),
+    ...readModel(snapshot, TRENDS).keywords.map(k => t.t(k.keywordKey))]
+    .some(name => name && normalizeNavisName(value).includes(normalizeNavisName(name)));
 
 function route(raw: string, snapshot: DataSnapshot, locale: Locale): DomainRoute | undefined {
   const value = normalizeNavisInput(raw);
   const l = labels(locale);
   if (competitor.test(value)) return answer(l.noCompetitor);
-  if (whereIs.test(value)) {
-    const feature = /상권|유동\s*인구/u.test(value) ? AREA : /트렌드|유행/u.test(value) ? TRENDS : /동네\s*(?:변화|소식|알림)|경쟁점/u.test(value) ? CHANGES : undefined;
-    if (feature) return answer(`${l.t.t(`widget.${feature}.title`)} · ${l.t.t('app.layer.marketing')} > ${l.t.t('group.neighborhood')}`);
-  }
+  const asked = whereIs.test(value) ? whereFeature(value) : undefined;
+  if (asked) return answer(`${l.t.t(`widget.${asked}.title`)} · ${l.t.t('app.layer.marketing')} > ${l.t.t('group.neighborhood')}`);
   const kinds = kindsOf(value);
   const changes = changeScope.test(value) || kinds.includes('opening') || kinds.length > 0 && (ackVerb.test(value) || reopenVerb.test(value) || /손님|매출|장사|거리|가까|멀|미터|같은\s*업종|이름|위치|주소|장소|소식|알림|지난주|저번\s*주/u.test(value))
     || (ackVerb.test(value) || reopenVerb.test(value)) && (/변화|소식|알림/u.test(value) || changeRows(snapshot).some(row => targetRows(value, [row], l.t).length > 0));
@@ -521,9 +650,30 @@ function route(raw: string, snapshot: DataSnapshot, locale: Locale): DomainRoute
 }
 
 /* ---------- opening a widget's detail ---------- */
+const cafeReceiptQuery = /카페.*(?:올린\s*글|게시한\s*글|게시\s*영수증|게시\s*결과)/u;
+function cafeReceiptRoute(raw: string, snapshot: DataSnapshot): DomainRoute | undefined {
+  const value = normalizeNavisInput(raw);
+  if (!cafeReceiptQuery.test(value) || /수정|고쳐|삭제|지워|다시\s*올/u.test(value)) return;
+  const local = snapshot.tables.realLocal;
+  if (!local) return;
+  const t = translator('ko');
+  if (/영수증|링크/u.test(value) && openVerb.test(value)) {
+    return { kind: 'refusal', reason: 'widget_only', answer: '커뮤니티에서 올린 글과 링크를 확인해 주세요',
+      alternative: { featureId: 'community', step: 'cafe-post' } };
+  }
+  const posts = local.cafePosts;
+  if (posts?.status !== 'available') return answer(t.t('data.real.local.cafe.postsUnavailable'));
+  if (!posts.items.length) return answer(t.t('data.real.local.cafe.noPosts'));
+  const recent = [...posts.items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
+  const named = recent.filter(row => normalizeNavisName(value).includes(normalizeNavisName(row.subject)));
+  const rows = named.length ? named : recent;
+  return answer(rows.slice(0, 4).map(row => `${row.subject} · ${t.t(`data.real.local.cafe.state.${row.state}`)}`).join('\n'));
+}
+
 function navigation(raw: string, snapshot: DataSnapshot, locale: Locale): DomainDetail | null | undefined {
   const value = normalizeNavisInput(raw);
   const t = translator(locale);
+  if (snapshot.tables.realLocal && cafeReceiptQuery.test(value)) return null;
   // A location question is answered from the catalog path, so generic panel navigation must not claim it.
   if (whereIs.test(value) && (areaScope.test(value) || /트렌드|유행|동네\s*(?:변화|소식|알림)|경쟁점/u.test(value))) return null;
   if ((ackVerb.test(value) || reopenVerb.test(value)) && (changeScope.test(value) || kindsOf(value).length > 0 || /변화|소식/u.test(value))) return null;
@@ -567,11 +717,19 @@ export const localDomain: DomainAdapter = {
   reads: [recordReader],
   projectWidget, route, navigation, handoff,
   // A stored change title or an explicit local-change phrase wins over shop-type wording in settings.
-  routePresentation(text, snapshot, locale) {
+  routePresentation(text, snapshot, locale, run) {
+    const cafeReceipt = cafeReceiptRoute(text, snapshot);
+    if (cafeReceipt) return cafeReceipt;
     const value = normalizeNavisInput(text), { t } = labels(locale);
+    if (run?.layer === 'marketing' && unnamedAcknowledgment.test(value)) return changeRoute(value, snapshot, locale);
+    // A widget that is on the board is answered by its board placement (layout); one that is not is answered by where it lives in the catalog.
+    const asked = whereIs.test(value) ? whereFeature(value) : undefined;
+    if (asked && !run?.boards.marketing.pages.some(page => page.panels.some(panel => panel.featureId === asked))) return route(text, snapshot, locale);
     const named = changeRows(snapshot).some(row => normalizeNavisName(value).includes(normalizeNavisName(titleOf(row, t))));
     // Marking or reopening a stored change is a card turn, ahead of the briefing's own acknowledge wording.
     const bookkeeping = (ackVerb.test(value) || reopenVerb.test(value)) && kindsOf(value).length > 0;
-    return named || bookkeeping || changeScope.test(value) || namesKeyword(value, snapshot, t) ? route(text, snapshot, locale) : undefined;
+    // A menu's price can share the name of a search keyword. Implicit keyword matches yield to price requests.
+    const keyword = (!/가격|판매가/u.test(value) || trendScope.test(value)) && namesKeyword(value, snapshot, t);
+    return named || bookkeeping || changeScope.test(value) || keyword ? route(text, snapshot, locale) : undefined;
   },
 };

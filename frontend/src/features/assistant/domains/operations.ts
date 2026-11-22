@@ -8,6 +8,9 @@ import { CCTV_SNAPSHOT } from '../../../data/cctv/snapshot';
 import { isIsoDate, TODAY } from '../../../data/db/time';
 import type { DataSnapshot } from '../../../data/db/types';
 import { selectStoreEnvironment, type StoreEnvironmentModel } from '../../../data/iteration7/environment';
+import { dataSourceFor } from '../../../data/reality/00';
+import { ackKey } from '../../../data/reality/12/ack';
+import { cameraMeasurement, insightHours, insightPeak } from '../../../data/reality/10/observations';
 import { NORMAL_VARIANT, resolveDataText, selectWidget } from '../../../data/widget-data';
 import { createTranslator, type MessageBundle, type Translator } from '../../../i18n';
 import { validateAgentCommandArgs, validateAgentDraft, validateAgentToolArgs, type AgentFact, type AgentReadArgs, type AgentReadProjection, type AgentWireArgs } from '../../../../shared/navis-agent-schema.mjs';
@@ -36,6 +39,7 @@ const pick = (locale: Locale, ko: string, en: string, hans: string, hant: string
 const isObject = (value: unknown): value is Readonly<Record<string, unknown>> => !!value && typeof value === 'object' && !Array.isArray(value);
 const dayOf = (snapshot: DataSnapshot) => snapshot.pos?.businessDate ?? TODAY;
 const hhmm = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
+const realCctv = (snapshot: DataSnapshot) => snapshot.tables.storeEnvironment.source === 'manual' || dataSourceFor('cctv') === 'http';
 
 /** Fixed sentences. Numbers and names are inserted from the selectors at the call site. */
 function copy(locale: Locale) {
@@ -120,7 +124,7 @@ function copy(locale: Locale) {
     volumeQuestion: (current: number) => l(`음량을 몇 %로 할까요? 지금은 ${current}%예요`, `What volume? It is ${current}% now`, `音量调到多少？现在是 ${current}%`, `音量調到多少？現在是 ${current}%`),
     volumeRange: l('음량은 0~100% 사이로 말해 주세요', 'Volume must be between 0 and 100%', '音量请设在 0~100% 之间', '音量請設在 0~100% 之間'),
     choosePlaylist: l('어느 재생목록으로 할까요?', 'Which playlist?', '选哪个播放列表？', '選哪個播放清單？'),
-    noSuchPlaylist: l('그런 재생목록은 없어요. 아래에서 골라 주세요', 'There is no such playlist. Choose one below', '没有这个播放列表，请从下面选择', '沒有這個播放清單，請從下面選擇'),
+    noSuchPlaylist: l('그런 재생목록은 없어요. 어느 재생목록으로 할까요?', 'There is no such playlist. Which playlist?', '没有这个播放列表。选哪个播放列表？', '沒有這個播放清單。選哪個播放清單？'),
     threshold: l('온도·습도 알림 기준은 여기서 바꿀 수 없어요', 'Alert thresholds cannot be changed here', '无法在这里更改温湿度提醒标准', '無法在這裡更改溫濕度提醒標準'),
     // briefing answers
     acknowledgedAlready: l('오늘 브리핑은 이미 읽음 처리돼 있어요', "Today's briefing is already marked as read", '今日简报已标记为已读', '今日簡報已標記為已讀'),
@@ -152,12 +156,26 @@ const fact = (key: string, label: string, value: string | number, display: strin
 // ───────────── selectors ─────────────
 const view = <F extends FeatureId>(snapshot: DataSnapshot, id: F) => selectWidget(snapshot, id, { kind: 'default' }, NORMAL_VARIANT);
 function environmentOf(snapshot: DataSnapshot): StoreEnvironmentModel | undefined {
+  if (realCctv(snapshot)) return snapshot.tables.storeEnvironment.source === 'manual' ? selectStoreEnvironment(snapshot) : undefined;
   const read = view(snapshot, ENV);
   return read.status === 'ready' ? read.model : undefined;
 }
 function cctvOf(snapshot: DataSnapshot) {
   const read = view(snapshot, CCTV);
   return read.status === 'ready' ? read.model : undefined;
+}
+function storedCctvRecord(snapshot: DataSnapshot) {
+  const insight = snapshot.tables.realInsight;
+  if (!insight) return;
+  const hours = insightHours(insight, snapshot);
+  return { date: insight.date, hours, peak: insightPeak(hours), totalVisits: null };
+}
+function reviewTarget(snapshot: DataSnapshot, date: string, hour: number) {
+  if (!realCctv(snapshot)) return selectCctvReviewTarget(snapshot.tables, date, hour);
+  const record = storedCctvRecord(snapshot);
+  if (record?.date !== date) return { reason: 'outside_hours' } as const;
+  const row = record.hours.find(item => item.hour === hour);
+  return row && row.max !== null ? { row: { ...row, max: row.max } } : { reason: 'unobserved' } as const;
 }
 function briefingOf(snapshot: DataSnapshot) {
   const read = view(snapshot, BRIEFING);
@@ -177,6 +195,7 @@ const degrees = (value: number) => `${(Math.round(value * 10) / 10).toFixed(1)}�
 // ───────────── environment facts ─────────────
 const sensorLabel = (c: Copy, status: StoreEnvironmentModel['sensorStatus']) => status === 'connected' ? c.sensorConnected : status === 'disconnected' ? c.sensorDisconnected : c.sensorNone;
 function environmentState(model: StoreEnvironmentModel): 'normal' | 'out_of_range' | 'sensor_disconnected' {
+  if (model.source === 'manual') return model.alerts.length ? 'out_of_range' : 'normal';
   if (model.sensorStatus !== 'connected' || !model.current) return 'sensor_disconnected';
   const { temperatureC, humidityPct } = model.current;
   const { temperature, humidity } = model.ranges;
@@ -185,7 +204,7 @@ function environmentState(model: StoreEnvironmentModel): 'normal' | 'out_of_rang
 function environmentFacts(snapshot: DataSnapshot, locale: Locale): readonly AgentFact[] | undefined {
   const model = environmentOf(snapshot);
   if (!model) return;
-  const c = copy(locale), date = dayOf(snapshot), { music, ranges } = model;
+  const c = copy(locale), date = model.source === 'manual' ? model.current?.measuredAt.slice(0, 10) ?? dayOf(snapshot) : dayOf(snapshot), { music, ranges } = model;
   const out: AgentFact[] = [];
   if (model.current) {
     out.push(
@@ -197,7 +216,7 @@ function environmentFacts(snapshot: DataSnapshot, locale: Locale): readonly Agen
   const state = environmentState(model);
   out.push(
     fact('environment.sensor.status', c.sensor, model.sensorStatus, sensorLabel(c, model.sensorStatus), { date }),
-    fact('environment.status', c.environment, state, state === 'normal' ? c.within : state === 'out_of_range' ? c.outside : c.sensorDisconnected, { date }),
+    ...(model.source === 'manual' && !model.current ? [] : [fact('environment.status', c.environment, state, state === 'normal' ? c.within : state === 'out_of_range' ? c.outside : c.sensorDisconnected, { date })]),
     fact('environment.temperature.range', c.tempRange, `${ranges.temperature[0]}~${ranges.temperature[1]}`, `${ranges.temperature[0]}~${ranges.temperature[1]}°C`),
     fact('environment.humidity.range', c.humidityRange, `${ranges.humidity[0]}~${ranges.humidity[1]}`, `${ranges.humidity[0]}~${ranges.humidity[1]}%`),
   );
@@ -208,6 +227,11 @@ function environmentFacts(snapshot: DataSnapshot, locale: Locale): readonly Agen
       fact('environment.temperature.max', c.hottest, high.temperatureC, `${degrees(high.temperatureC)} · ${high.measuredAt.slice(11, 16)}`, { date }),
       fact('environment.temperature.min', c.coolest, low.temperatureC, `${degrees(low.temperatureC)} · ${low.measuredAt.slice(11, 16)}`, { date }),
     );
+  }
+  if (model.source === 'manual') {
+    out.push(fact('music.device.status', c.musicDevice, 'none', c.deviceNone, { date }));
+    if (model.current) out.push(fact('environment.source', '측정 출처', 'manual', '직접 측정', { date }));
+    return out;
   }
   const playlist = music.playlists.find(item => item.id === music.playlistId);
   out.push(
@@ -224,7 +248,33 @@ function environmentFacts(snapshot: DataSnapshot, locale: Locale): readonly Agen
 
 // ───────────── CCTV facts ─────────────
 const toClearTables = () => CCTV_SNAPSHOT.tables.filter(table => CCTV_SNAPSHOT.tablesToClear.includes(table.id));
+function storedCctvFacts(snapshot: DataSnapshot, locale: Locale): readonly AgentFact[] | undefined {
+  const insight = snapshot.tables.realInsight;
+  if (!insight) return;
+  const { date, cameras } = insight, c = copy(locale);
+  const hours = insightHours(insight, snapshot), peak = insightPeak(hours);
+  const count = cameras.filter(camera => camera.deviceStatus === 'unavailable').length;
+  const facts = [
+    fact('cctv.businessDate', c.businessDate, date, fmt(locale).date(date, 'short'), { date }),
+    fact('cctv.visits.total', c.visitsTotal, 'none', '방문 수 미측정', { date }),
+    fact('cctv.cameras.count', c.cameras, cameras.length, c.cameraUnit(cameras.length), { date }),
+    fact('cctv.cameras.problem', c.cameraProblem, count, c.cameraUnit(count), { date }),
+    ...cameras.map((camera, index) => fact('cctv.camera.status', `카메라 ${index + 1}`, camera.measurementStatus, cameraMeasurement(camera), { date })),
+  ];
+  if (peak && peak.max !== null) {
+    facts.push(fact('cctv.peak.hour', '최대 관측 시간대', peak.hour, c.hourWord(peak.hour), { date, unit: 'hour' }),
+      fact('cctv.peak.observed', '최대 관측 인원', peak.max, c.people(peak.max), { date, unit: 'person' }));
+    if (peak.staff !== null) facts.push(fact('cctv.peak.staff', c.peakStaff, peak.staff, c.people(peak.staff), { date, unit: 'person' }));
+  }
+  for (const row of hours) {
+    facts.push(fact(`cctv.hour.${row.hour}.observed`, '시간대 최대 관측', row.max ?? 'none', row.max === null ? '미측정' : c.people(row.max), { date }));
+    if (row.max !== null) facts.push(fact(`cctv.review.${row.hour}`, c.reviewMark, row.reviewMarked ? 'marked' : 'open', row.reviewMarked ? c.alreadyMarked(row.hour) : c.reviewOpen, { date }));
+  }
+  return facts;
+}
+
 function cctvFacts(snapshot: DataSnapshot, locale: Locale): readonly AgentFact[] | undefined {
+  if (realCctv(snapshot)) return storedCctvFacts(snapshot, locale);
   const model = cctvOf(snapshot);
   if (!model) return;
   const c = copy(locale), t = fmt(locale), l = translator(locale), date = model.date;
@@ -253,7 +303,8 @@ function cctvFacts(snapshot: DataSnapshot, locale: Locale): readonly AgentFact[]
   for (const row of model.hours) {
     out.push(fact(`cctv.hour.${row.hour}.visits`, `${hourLabel(row.hour)}`, row.visits ?? 'none', visits(row.visits, row.status), { date, unit: 'visit' }));
     const target = selectCctvReviewTarget(snapshot.tables, date, row.hour);
-    if ('row' in target) out.push(fact(`cctv.review.${row.hour}`, `${hourLabel(row.hour)} ${c.reviewMark}`, target.row.reviewMarked ? 'marked' : 'open', target.row.reviewMarked ? c.reviewMarked : c.reviewOpen, { date }));
+    if ('row' in target) out.push(fact(`cctv.review.${row.hour}`, c.reviewMark, target.row.reviewMarked ? 'marked' : 'open',
+      target.row.reviewMarked ? c.alreadyMarked(row.hour) : `${hourLabel(row.hour)} · ${c.reviewOpen}`, { date }));
   }
   out.push(fact('cctv.gapHours', c.gapCount, model.gapHours.length, model.gapHours.length ? c.items(model.gapHours.length) : c.noGap, { date }));
   for (const hour of model.gapHours) {
@@ -286,6 +337,9 @@ function briefingFacts(snapshot: DataSnapshot, locale: Locale): readonly AgentFa
   if (!model) return;
   const c = copy(locale), t = fmt(locale), l = translator(locale), date = dayOf(snapshot);
   const out: AgentFact[] = [fact('briefing.importantAlerts.count', c.importantAlerts, model.importantAlerts.count, c.count(model.importantAlerts.count), { date, unit: 'count' })];
+  if (realCctv(snapshot)) for (const item of storedCctvFacts(snapshot, locale) ?? []) {
+    if (item.key.startsWith('cctv.peak.')) out.push({ ...item, key: `briefing.${item.key}` });
+  }
   const tax = view(snapshot, 'tax'), stock = view(snapshot, 'inventory-booking'), orders = view(snapshot, 'suppliers'), grants = view(snapshot, 'grants');
   for (const group of model.importantAlerts.groups) {
     for (const item of group.items) {
@@ -344,7 +398,18 @@ function projectWidget(snapshot: DataSnapshot, featureId: FeatureId, condition: 
 }
 
 /** Player, mode and briefing state for the proposal preflight (get_ui_state, section display). */
+function briefingAcknowledged(snapshot: DataSnapshot, run?: RunState): boolean {
+  const briefing = snapshot.tables.realBriefing;
+  return briefing ? !!briefing.acknowledgement : run?.briefing === 'dismissed';
+}
+
 function displayReading(snapshot: DataSnapshot, locale: Locale, run?: RunState): AgentReadProjection {
+  const acknowledged = briefingAcknowledged(snapshot, run);
+  if (realCctv(snapshot)) {
+    const c = copy(locale), facts = [fact('music.device.status', c.musicDevice, 'none', c.deviceNone), fact('cctv.mode.liveAvailable', c.liveAvailable, 0, c.no)];
+    if (run) facts.push(fact('briefing.acknowledged', c.acknowledged, Number(acknowledged), acknowledged ? c.yes : c.no));
+    return { tool: 'get_ui_state', args: { section: 'display' }, facts } as AgentReadProjection;
+  }
   const c = copy(locale), model = environmentOf(snapshot), mode = getCctvMode();
   const facts: AgentFact[] = [
     fact('music.device.status', c.musicDevice, model?.music.deviceStatus ?? 'none', model?.music.deviceStatus === 'connected' ? c.sensorConnected : c.deviceNone),
@@ -354,16 +419,16 @@ function displayReading(snapshot: DataSnapshot, locale: Locale, run?: RunState):
     fact('cctv.mode', c.mode, mode, mode === 'live' ? c.modeLive : c.modeMock),
     // Live needs the configured camera server (the app's own 'not configured' state); mock is always available.
     fact('cctv.mode.liveAvailable', c.liveAvailable, liveReady() ? 1 : 0, liveReady() ? c.yes : c.no),
-    ...(run ? [fact('briefing.acknowledged', c.acknowledged, run.briefing === 'dismissed' ? 1 : 0, run.briefing === 'dismissed' ? c.yes : c.no)] : []),
+    ...(run ? [fact('briefing.acknowledged', c.acknowledged, Number(acknowledged), acknowledged ? c.yes : c.no)] : []),
   ];
   return { tool: 'get_ui_state', args: { section: 'display' }, facts } as AgentReadProjection;
 }
 
 // ───────────── command adapters (data store) ─────────────
-type EnvironmentCommand = Extract<DataCommand, { type: `environment.${string}` }>;
+const environmentCommands = ['environment.setPlaying', 'environment.skipTrack', 'environment.selectPlaylist', 'environment.selectTrack', 'environment.setVolume'] as const;
+type EnvironmentCommand = Extract<DataCommand, { type: typeof environmentCommands[number] }>;
 type OperationsCommand = EnvironmentCommand | Extract<DataCommand, { type: 'cctv.markPeakForReview' }>;
 type Draft = { readonly command: OperationsCommand; readonly locale: Locale };
-const environmentCommands = ['environment.setPlaying', 'environment.skipTrack', 'environment.selectPlaylist', 'environment.selectTrack', 'environment.setVolume'] as const;
 
 function expand(value: unknown, slots: LocalSlots, targets: RecordTargets): unknown {
   if (!isObject(value)) return value;
@@ -418,15 +483,18 @@ function commandAdapter(type: OperationsCommand['type']): CommandAdapter<Operati
     preflight({ command: draft, locale }, { snapshot, proposalId, idempotencyKey }) {
       const command = { ...draft, idempotencyKey } as unknown as OperationsCommand;
       if (command.type === 'cctv.markPeakForReview') {
-        const target = selectCctvReviewTarget(snapshot.tables, command.date, command.hour);
-        if (!('row' in target)) return { kind: 'invalid', field: target.reason === 'outside_hours' ? 'hour' : 'hour' };
-        if (target.row.reviewMarked) return { kind: 'unchanged' };
-        const result = simulate(command, snapshot, proposalId);
-        if (!result.ok) return { kind: result.code === 'CONFLICT' ? 'conflict' : 'invalid', field: result.field, messageKey: result.messageKey };
-        const c = copy(locale), { row } = target, staff = cctvOf(snapshot)?.hours.find(item => item.hour === command.hour)?.staff;
-        const info = `${c.count(row.entries ?? 0)}${staff === null || staff === undefined ? '' : ` · ${c.people(staff)}`}`;
+        const target = reviewTarget(snapshot, command.date, command.hour);
+        if (!('row' in target) || !target.row) return { kind: 'invalid', field: 'hour' };
+        const { row } = target;
+        if (row.reviewMarked) return { kind: 'unchanged' };
+        if (!('max' in row)) {
+          const result = simulate(command, snapshot, proposalId);
+          if (!result.ok) return { kind: result.code === 'CONFLICT' ? 'conflict' : 'invalid', field: result.field, messageKey: result.messageKey };
+        }
+        const c = copy(locale), staff = 'max' in row ? row.staff : cctvOf(snapshot)?.hours.find(item => item.hour === command.hour)?.staff;
+        const info = `${'max' in row ? c.people(row.max) : c.count(row.entries ?? 0)}${staff === null || staff === undefined ? '' : ` · ${c.people(staff)}`}`;
         return { kind: 'ready', command, preview: { title: `${c.cardReview} · ${hhmm(command.hour)}~${hhmm(command.hour + 1)}`, target: `${hhmm(command.hour)}~${hhmm(command.hour + 1)}`, fields: [
-          { label: c.visitStaff, before: info, after: info }, { label: c.reviewMark, before: c.reviewOpen, after: c.reviewMarked },
+          { label: 'max' in row ? '최대 관측 · 근무표' : c.visitStaff, before: info, after: info }, { label: c.reviewMark, before: c.reviewOpen, after: c.reviewMarked },
         ] } };
       }
       const before = environmentOf(snapshot);
@@ -450,10 +518,12 @@ const modeCommand: RunCommandAdapter<{ mode: 'mock' | 'live'; locale: Locale }, 
     const locale = slots.navisLocale === 'en' || slots.navisLocale === 'zh-Hans' || slots.navisLocale === 'zh-Hant' ? slots.navisLocale : 'ko';
     return { mode: args.mode, locale };
   },
-  preflight({ mode, locale }, { run }): RunPreflight<AgentProposalPreview> {
+  preflight({ mode, locale }, { run, snapshot }): RunPreflight<AgentProposalPreview> {
+    if (realCctv(snapshot)) return { kind: 'invalid', messageKey: 'cctv.conn.none' };
     const current = getCctvMode(), c = copy(locale);
     if (current === mode) return { kind: 'unchanged' };
     if (busy(run)) return { kind: 'busy' };
+    if (mode === 'live' && !liveReady()) return { kind: 'invalid', messageKey: 'cctv.conn.none' };
     const label = (value: 'mock' | 'live') => value === 'live' ? c.modeLive : c.modeMock;
     return { kind: 'ready', preview: { title: c.cardMode, target: c.mode, fields: [
       { label: c.mode, before: label(current), after: label(mode) },
@@ -461,6 +531,7 @@ const modeCommand: RunCommandAdapter<{ mode: 'mock' | 'live'; locale: Locale }, 
     ] }, execute(store) {
       if (busy(store.getState())) return { kind: 'busy' };
       if (getCctvMode() !== current) return { kind: 'conflict' };
+      if (mode === 'live' && !liveReady()) return { kind: 'invalid', messageKey: 'cctv.conn.none' };
       setCctvMode(mode);
       return { kind: 'applied', notice: { kind: 'success', featureId: CCTV, messageKey: mode === 'live' ? 'data.notice.cctvModeLive' : 'data.notice.cctvModeMock' }, undo: () => { if (getCctvMode() !== mode) return false; setCctvMode(current); return true; } };
     } };
@@ -473,12 +544,19 @@ const acknowledgeCommand: RunCommandAdapter<{ locale: Locale }, AgentProposalPre
     const locale = slots.navisLocale === 'en' || slots.navisLocale === 'zh-Hans' || slots.navisLocale === 'zh-Hant' ? slots.navisLocale : 'ko';
     return { locale };
   },
-  preflight({ locale }, { run }): RunPreflight<AgentProposalPreview> {
+  preflight({ locale }, { run, snapshot }): RunPreflight<AgentProposalPreview> {
     const c = copy(locale);
-    if (run.briefing === 'dismissed') return { kind: 'unchanged' };
+    if (briefingAcknowledged(snapshot, run)) return { kind: 'unchanged' };
     // While the arrival card is on screen the owner closes it there; chat cannot replace that lifecycle.
     if (run.briefing === 'visible' || busy(run)) return { kind: 'busy' };
-    return { kind: 'ready', preview: { title: c.cardBriefing, target: c.cardBriefing, fields: [
+    const day = snapshot.tables.realBriefing?.businessDay;
+    return { kind: 'ready', ...(day && {
+      featureId: BRIEFING, realCommand: { type: 'briefing.acknowledge' as const, businessDay: day, idempotencyKey: ackKey(day) },
+      noticeKey: 'data.notice.briefingAcknowledged',
+      afterCommit(store) {
+        if (store.getState().briefing === 'pending') store.actions.acknowledgeBriefing();
+      },
+    }), preview: { title: c.cardBriefing, target: c.cardBriefing, fields: [
       { label: c.acknowledged, before: c.unread, after: `${c.read} · ${c.noRepeat}` },
     ] }, execute(store) {
       if (store.getState().briefing !== 'pending') return { kind: 'conflict' };
@@ -537,11 +615,11 @@ const reviewTool: ReadToolAdapter<'get_cctv_review'> = {
   read(snapshot, args: AgentReadArgs['get_cctv_review'], locale, slots) {
     const date = slots[args.date.slot], hour = slots[args.hour.slot];
     if (typeof date !== 'string' || typeof hour !== 'number') return { status: 'unavailable' };
-    const c = copy(locale), target = selectCctvReviewTarget(snapshot.tables, date, hour);
+    const c = copy(locale), target = reviewTarget(snapshot, date, hour);
     const status = 'row' in target ? target.row.reviewMarked ? 'marked' : 'open' : target.reason;
     return { facts: [
       fact('cctv.review.date', c.businessDate, date, date), fact('cctv.review.hour', c.hourWord(hour), hour, c.hourWord(hour)),
-      fact('cctv.review.status', c.reviewMark, status, status === 'marked' ? c.reviewMarked : c.reviewOpen),
+      fact('cctv.review.status', c.reviewMark, status, status === 'marked' ? c.reviewMarked : realCctv(snapshot) && status !== 'open' ? '미측정' : c.reviewOpen),
     ] };
   },
 };
@@ -574,7 +652,8 @@ function hourIn(text: string): number | 'peak' | undefined {
 }
 
 function routeCctv(text: string, snapshot: DataSnapshot, locale: Locale, run?: RunState): DomainRoute | undefined {
-  const model = cctvOf(snapshot);
+  const real = realCctv(snapshot);
+  const model = real ? storedCctvRecord(snapshot) : cctvOf(snapshot);
   if (!model) return;
   const c = copy(locale), date = model.date;
   const mark = markIntent(text);
@@ -582,30 +661,37 @@ function routeCctv(text: string, snapshot: DataSnapshot, locale: Locale, run?: R
     || /^(?:실시간|예시)\s*(?:보기|화면|모드)(?:로|으로)\s*(?:바꿔|해|전환|열어)/u.test(text) || /실시간\s*말고\s*예시/u.test(text);
   const camera = /(?:CCTV|카메라|씨씨티비)/iu.test(text) && /상태|연결|끊|문제|정상|살아|고장/u.test(text);
   const rows = model.hours;
-  const markable = rows.filter(row => 'row' in selectCctvReviewTarget(snapshot.tables, date, row.hour)).map(row => row.hour);
-  const range = markable.length ? `${hhmm(Math.min(...markable))}~${hhmm(Math.max(...markable) + 1)}` : '';
-  const hourChoices = () => markable.map(hour => ({ id: String(hour), label: c.hourWord(hour) }));
-  const markRoute = (hour: number): DomainRoute => {
-    const target = selectCctvReviewTarget(snapshot.tables, date, hour);
-    if (!('row' in target)) return clarification('hour', c.askHour(range), hourChoices(), value => /^\d+$/u.test(value) ? markRoute(Number(value)) : undefined);
-    if (target.row.reviewMarked) return answer(c.alreadyMarked(hour), true);
-    return command('cctv.markPeakForReview', { date: { slot: 'date' }, hour: { slot: 'hour' } }, { date, hour }, locale,
-      { reading: { tool: 'get_cctv_review', args: { date: { slot: 'date' }, hour: { slot: 'hour' } } } });
-  };
   if (mark) {
     if (/풀어|해제|취소|지워|없애/u.test(text)) return refusal(c.noUnmark);
     const typedDate = parseNavisDate(text, date);
     if (typedDate && typedDate !== date || /어제|그저께|지난\s*주|저번\s*주|지난\s*달/u.test(text)) return refusal(c.todayHoursOnly);
-    const hour = hourIn(text);
-    if (hour === 'peak') return model.peak ? markRoute(model.peak.hour) : clarification('hour', c.askHour(range), hourChoices(), value => /^\d+$/u.test(value) ? markRoute(Number(value)) : undefined);
-    if (hour === undefined) {
-      const choices = hourChoices(), peak = model.peak?.hour;
-      return clarification('hour', c.pickHour, peak === undefined ? choices : [...choices.filter(item => item.id === String(peak)), ...choices.filter(item => item.id !== String(peak))],
-        value => /^\d+$/u.test(value) ? markRoute(Number(value)) : undefined);
-    }
+    const markable = rows.filter(row => 'row' in reviewTarget(snapshot, date, row.hour)).map(row => row.hour);
+    if (!markable.length) return answer(navisTranslator('ko').t('common.navis.noData'));
+    const choices = markable.map(hour => ({ id: String(hour), label: c.hourWord(hour) }));
+    const first = markable[0];
+    const range = markable.every((hour, index) => hour === first + index)
+      ? `${hhmm(first)}~${hhmm(first + markable.length)}` : choices.map(choice => choice.label).join(', ');
+    const peak = model.peak?.hour;
+    const pickHour = (missing: boolean): DomainRoute => {
+      const ordered = !missing && peak !== undefined
+        ? [...choices.filter(choice => choice.id === String(peak)), ...choices.filter(choice => choice.id !== String(peak))] : choices;
+      return clarification('hour', missing ? c.askHour(range) : c.pickHour, ordered,
+        value => markable.includes(Number(value)) ? markRoute(Number(value)) : undefined);
+    };
+    const markRoute = (hour: number): DomainRoute => {
+      const target = reviewTarget(snapshot, date, hour);
+      if (!('row' in target) || !target.row) return pickHour(true);
+      if (target.row.reviewMarked) return read(CCTV, [`cctv.review.${hour}`]);
+      return command('cctv.markPeakForReview', { date: { slot: 'date' }, hour: { slot: 'hour' } }, { date, hour }, locale,
+        { reading: { tool: 'get_cctv_review', args: { date: { slot: 'date' }, hour: { slot: 'hour' } } } });
+    };
+    const requested = hourIn(text);
+    const hour = requested === 'peak' ? peak : requested;
+    if (hour === undefined) return pickHour(requested === 'peak');
     return markRoute(hour);
   }
   if (mode) {
+    if (real) return refusal('CCTV 화면에서 카메라별 측정 기록을 볼 수 있어요', 'widget_only', CCTV);
     const live = /실시간/u.test(text) && !/실시간\s*말고/u.test(text);
     if (live && getCctvMode() === 'live') return answer(c.alreadyMode(true), true);
     if (!live && getCctvMode() === 'mock') return answer(c.alreadyMode(false), true);
@@ -620,6 +706,20 @@ function routeCctv(text: string, snapshot: DataSnapshot, locale: Locale, run?: R
     if (reconnect) return { ...read(CCTV, keys), onMissing: { answer: c.reconnectByOwner, reason: 'widget_only', alternative: { featureId: CCTV } } };
     return read(CCTV, keys);
   }
+  if (real) {
+    if (/(?:CCTV|씨씨티비|카메라|매장)\s*영상/iu.test(text)) return refusal('카메라 영상 재생은 제공하지 않아요', 'unavailable', CCTV);
+    if (/브리핑/u.test(text)) return undefined;
+    if (/(?:최대|피크|붐빈|붐볐|가장\s*바쁜).*(?:관측|CCTV|시간|근무)|CCTV.*(?:피크|근무|최대)/iu.test(text)) return read(CCTV, ['cctv.peak.hour', 'cctv.peak.observed', 'cctv.peak.staff']);
+    if (/시간대별|시간별/u.test(text) && /관측|매장\s*인원/u.test(text)) return read(CCTV, rows.map(row => `cctv.hour.${row.hour}.observed`));
+    if (/(?:지금|현재).*(?:매장|가게|홀).*몇\s*명/u.test(text)) {
+      return snapshot.tables.realInsight?.cameras.some(camera => camera.deviceStatus !== 'unavailable')
+        ? refusal(c.liveNumbers, 'unavailable', CCTV)
+        : answer('연결된 카메라가 없어서 지금 매장 인원은 확인할 수 없어요.');
+    }
+    if (/방문\s*(?:수|감지)|(?:손님|몇\s*명).*(?:몇\s*명|왔|들어)|지금.*(?:매장|홀).*몇\s*명/u.test(text)) return answer('카메라 5분 집계에서 최대 관측 인원을 볼 수 있어요. 방문 수는 미측정이에요');
+    if (/(?:치울|정리할)\s*(?:자리|테이블)|(?:어떤|어느).*테이블.*(?:치워|정리)/u.test(text)) return answer('치울 테이블은 확인할 수 없어요');
+    return undefined;
+  }
   if (/빠진|구멍|못\s*센|비어/u.test(text) && /시간/u.test(text) && /방문|감지|CCTV|센서/u.test(text)) return read(CCTV, ['cctv.gapHours', 'cctv.gapHour', 'cctv.coverage']);
   if (/(?:어느|어떤|뭐|어디).*테이블.*(?:치워|정리)|치울\s*(?:자리|테이블)|정리할\s*테이블/u.test(text)) return read(CCTV, ['cctv.tables.toClear', 'cctv.table.toClear']);
   if (/(?:지금|현재).*(?:매장|가게|홀).*(?:몇\s*명|사람)|(?:매장|홀)에.*(?:몇\s*명|사람).*(?:있|실시간)/u.test(text)) {
@@ -632,13 +732,14 @@ function routeCctv(text: string, snapshot: DataSnapshot, locale: Locale, run?: R
     const compare = /비교|보다|늘었|줄었|많아|적어/u.test(text);
     const today = /오늘/u.test(text);
     if (today) return { ...read(CCTV, ['cctv.visits.total', 'cctv.coverage']), onMissing: { answer: c.onlyToday } };
-    return answer(`${compare ? c.notComparable : c.onlyToday}. ${c.visitsTotal} ${c.count(model.totalVisits)}`);
+    return answer(`${compare ? c.notComparable : c.onlyToday}. ${c.visitsTotal} ${c.count(model.totalVisits ?? 0)}`);
   }
   const hour = hourIn(text);
   if (typeof hour === 'number' && /몇\s*건\s*(?:왔|들어|있었|이야)|몇\s*명\s*(?:왔|들어)|방문\s*(?:이|은)?\s*(?:얼마|몇)|손님\s*감지|방문\s*감지|감지/u.test(text)
     && !/완료|처리|바꿔|예약|도착|취소|변경|표시|열어|보여\s*줘$/u.test(text)) {
     return rows.some(row => row.hour === hour) ? read(CCTV, [`cctv.hour.${hour}.visits`])
-      : clarification('hour', c.askHour(range), rows.map(row => ({ id: String(row.hour), label: c.hourWord(row.hour) })), value => /^\d+$/u.test(value) ? read(CCTV, [`cctv.hour.${Number(value)}.visits`]) : undefined);
+      : clarification('hour', c.pickHour, rows.map(row => ({ id: String(row.hour), label: c.hourWord(row.hour) })),
+        value => rows.some(row => row.hour === Number(value)) ? read(CCTV, [`cctv.hour.${Number(value)}.visits`]) : undefined);
   }
   return undefined;
 }
@@ -701,6 +802,7 @@ function routeEnvironment(text: string, snapshot: DataSnapshot, locale: Locale, 
 
 function musicRoute(text: string, snapshot: DataSnapshot, locale: Locale, run: RunState | undefined, model: StoreEnvironmentModel): DomainRoute | undefined {
   const c = copy(locale), { music } = model;
+  if (model.source === 'manual') return refusal(c.noDevice, 'unavailable', ENV);
   const reading = () => ({ additionalReadings: [displayReading(snapshot, locale, run)] });
   const noDevice = music.deviceStatus !== 'connected';
   const asks = /[?？]\s*$|알려\s*줘|뭐야|뭐뭐|보여\s*줘/u.test(text);
@@ -796,12 +898,13 @@ function routeBriefing(text: string, snapshot: DataSnapshot, locale: Locale, run
   if (!model) return;
   const c = copy(locale);
   const briefing = /브리핑|소식|알림/u.test(text);
+  if (realCctv(snapshot) && briefing && /CCTV|카메라/iu.test(text) && /관측|근무|피크/u.test(text)) return read(BRIEFING, ['briefing.cctv.peak.hour', 'briefing.cctv.peak.observed', 'briefing.cctv.peak.staff']);
   if (briefing && /다\s*읽었|읽음|그만\s*띄워|다\s*확인했|확인했어/u.test(text) && !/열어|보여|다시/u.test(text)) {
-    if (run?.briefing === 'dismissed') return answer(c.acknowledgedAlready, true);
+    if (briefingAcknowledged(snapshot, run)) return answer(c.acknowledgedAlready, true);
     return command('ui.acknowledgeBriefing', {}, {}, locale, { additionalReadings: [displayReading(snapshot, locale, run)] });
   }
   if (/오늘\s*소식\s*다\s*확인했어/u.test(text)) {
-    if (run?.briefing === 'dismissed') return answer(c.acknowledgedAlready, true);
+    if (briefingAcknowledged(snapshot, run)) return answer(c.acknowledgedAlready, true);
     return command('ui.acknowledgeBriefing', {}, {}, locale, { additionalReadings: [displayReading(snapshot, locale, run)] });
   }
   if (/제일\s*급한|우선\s*순위|뭐부터|가장\s*중요|뭐가\s*제일\s*중요/u.test(text)) return read(BRIEFING, ['briefing.arrival.count', 'briefing.arrival.item']);
@@ -875,10 +978,10 @@ function routePresentation(text: string, snapshot: DataSnapshot, locale: Locale,
 function navigation(text: string, snapshot: DataSnapshot, locale: Locale): DomainDetail | null | undefined {
   const value = normalizeNavisInput(text);
   if (/[“”"'‘’]|하지\s*마|말아\s*줘|무시해|\b(?:don't|never|do not)\b/iu.test(value)) return undefined;
-  const model = cctvOf(snapshot);
+  const real = realCctv(snapshot), model = real ? storedCctvRecord(snapshot) : cctvOf(snapshot);
   const open = /열어|보여\s*줘|띄워|선택|틀어|재생|가줘|눌러|자세히|상세/u.test(value);
   if (model && /^(?:[ㅅᄉ]{2}[ㅌᄐ][ㅂᄇ]|씨씨티비)\s*(?:열어|켜|보여)/u.test(value)) return { args: { featureId: CCTV } };
-  if (model && /(?:카페|CCTV|씨씨티비|분석한|카메라)\s*영상/iu.test(value) && /틀어|재생|보여|열어/u.test(value)) return { args: { featureId: CCTV } };
+  if (!real && model && /(?:카페|CCTV|씨씨티비|분석한|카메라)\s*영상/iu.test(value) && /틀어|재생|보여|열어/u.test(value)) return { args: { featureId: CCTV } };
   if (model && /구간|막대|선택/u.test(value) && /보여|열어|선택/u.test(value) && !/표시/u.test(value)) {
     const hour = hourIn(value);
     if (hour !== undefined) {
@@ -893,7 +996,8 @@ function navigation(text: string, snapshot: DataSnapshot, locale: Locale): Domai
   if (briefing && /퇴근|마감/u.test(value) && /열어|탭|화면|띄워/u.test(value)) return { args: { featureId: BRIEFING, view: 'closing' } };
   if (/마감\s*요약\s*탭|퇴근\s*탭/u.test(value)) return { args: { featureId: BRIEFING, view: 'closing' } };
   if (briefing && /출근/u.test(value) && open) return { args: { featureId: BRIEFING, view: 'alerts' } };
-  if (/재고|보충\s*필요/u.test(value) && /알림|자세히|눌러|가줘|쪽으로|데로/u.test(value) && /브리핑|알림|보충\s*필요|부족/u.test(value)) return { args: { featureId: 'inventory-booking' } };
+  if (/재고|보충\s*필요/u.test(value) && /자세히\s*보여|상세\s*(?:화면|창)|열어|띄워|눌러|가\s*줘|이동/u.test(value)
+    && /브리핑|알림|보충\s*필요|부족/u.test(value)) return { args: { featureId: 'inventory-booking' } };
   if (/(?:원천세|세금)/u.test(value) && /알림|자세히|눌러|쪽|상세/u.test(value) && (briefing || /알림|상세/u.test(value))) {
     const target = briefingTarget(snapshot, 'tax:');
     if (target?.itemId) return { args: { featureId: 'tax', itemId: target.itemId }, target: { kind: 'taxPayment', id: target.itemId } };

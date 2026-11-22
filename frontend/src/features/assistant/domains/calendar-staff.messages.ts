@@ -1,0 +1,15 @@
+export const calendarStaffMessages = {
+  overnight: '자정을 넘는 근무예요. 날짜별로 나눠 주세요.',
+  eventTime: '일정 시간을 알려 주세요.',
+  optionalTime: '시간을 정할까요, 시간 없이 넣을까요?',
+  setTime: '시간 정하기',
+  skipTime: '시간 없이 넣기',
+  morning: (clock: string) => `오전 ${clock}`,
+  evening: (clock: string, time: string) => `오후 ${clock} (${time})`,
+  weekday: (date: string, day: number) => `${'월화수목금'[day]} ${Number(date.slice(5, 7))}/${Number(date.slice(8))}`,
+  moveHandoff: (time: string) => `${time}으로 바꾸기`,
+  duplicate: (entry: string) => `이미 ${entry} 일정이 있어요. 하나 더 추가할까요?`,
+  keepDuplicate: '그대로 두기',
+  addDuplicate: '하나 더 추가',
+  keptDuplicate: '기존 일정을 그대로 두었어요.',
+};

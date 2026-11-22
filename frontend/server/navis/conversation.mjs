@@ -132,7 +132,7 @@ export function normalizeConversationTurn(text, { pending = false } = {}) {
 
 const resolutionCopy = {
   ko: {
-    undo_expired: '되돌리기 시간이 지났어요. 해당 위젯에서 직접 변경해 주세요.',
+    undo_expired: '되돌리기 시간이 지났어요',
     undo_unavailable: '되돌릴 변경이 없어요.',
     pending_missing: '응답할 수 있는 카드가 없어요.',
     target_required: '변경 대상을 지정하고 다시 확인해 주세요.',
@@ -177,8 +177,8 @@ const copy = value => structuredClone(value);
 const requestScope = ({ runId, layer, page, snapshotRevision }) => ({ runId, layer, page, snapshotRevision });
 const sameBoard = (a, b) => a.layer === b.layer && a.page === b.page;
 const sameSnapshot = (a, b) => sameBoard(a, b) && a.snapshotRevision === b.snapshotRevision;
-const scopedSearches = searches => searches.map(({ kind, querySlot, cursor, matches }) => ({
-  kind, querySlot, cursor, handles: matches.map(({ handle }) => handle),
+const scopedSearches = searches => searches.map(({ kind, querySlot, queryBinding, cursor, matches }) => ({
+  kind, querySlot, queryBinding, cursor, handles: matches.map(({ handle }) => handle),
 }));
 
 /** The wire stores metadata and opaque references. The authorized local store owns all effects. */
@@ -197,9 +197,11 @@ export function createAgentConversation({
     return current;
   }
 
-  function remember(input, { proposal, clarification, read, searches = [], panels = [], competing = false }) {
+  function remember(input, { proposal, clarification, read, searches = [], panels = [], competing = false, lookupReceipt }) {
     const current = state(input.runId);
     const scope = requestScope(input);
+    if (lookupReceipt) current.lookup = { scope, receipt: lookupReceipt };
+    else if (competing || searches.length) delete current.lookup;
     if (read) {
       current.reads.unshift({
         scope, intent: copy(read), searches: scopedSearches(searches),
@@ -213,10 +215,19 @@ export function createAgentConversation({
       current.pending = { scope, id: proposal.proposalId, proposal: copy(proposal), intent };
       delete current.retryCommand;
     } else if (clarification) {
-      current.pending = { scope, id: clarification.id, clarification: copy(clarification) };
+      current.pending = { scope, id: clarification.id, clarification: copy(clarification), intent: copy(input.intent), lookupReceipt };
     } else if (competing) {
       delete current.pending;
     }
+  }
+
+  function currentLookup(input) {
+    const current = state(input.runId);
+    if (input.intent?.action === 'continue') {
+      const pending = current.pending;
+      return pending?.id === input.intent.pendingId && sameSnapshot(input, pending.scope) ? pending.lookupReceipt : undefined;
+    }
+    return current.lookup && sameSnapshot(input, current.lookup.scope) ? current.lookup.receipt : undefined;
   }
 
   function referenced(input, current, { ordinal, recordKind, featureId }) {
@@ -224,10 +235,11 @@ export function createAgentConversation({
       if (!sameSnapshot(input, entry.scope)) continue;
       if (recordKind || entry.searches.length && !featureId) {
         const choices = entry.searches.filter(search => !recordKind || search.kind === recordKind)
-          .flatMap(({ kind, querySlot, cursor, handles }) => {
-            const currentSearch = input.searches.find(search => search.kind === kind && search.querySlot === querySlot && search.cursor === cursor);
+          .flatMap(({ kind, querySlot, queryBinding, cursor, handles }) => {
+            const currentSearch = input.searches.find(search => search.kind === kind && search.querySlot === querySlot
+              && search.queryBinding === queryBinding && search.cursor === cursor);
             return handles.map(handle => ({
-              choice: { type: 'record', recordKind: kind, querySlot, handle },
+              choice: { type: 'record', recordKind: kind, querySlot, handle, ...(queryBinding && { queryBinding }) },
               current: currentSearch?.matches.some(match => match.handle === handle),
             }));
           });
@@ -283,7 +295,8 @@ export function createAgentConversation({
 
   function repeatRead(input, current, { period, month }) {
     const remembered = current.reads.find(entry => entry.scope.layer === input.layer
-      && (entry.intent.featureId || entry.intent.sourceId) && !entry.intent.querySlot);
+      && !entry.intent.querySlot && (entry.intent.featureId || entry.intent.sourceId
+        || entry.intent.reads?.length && entry.intent.reads.every(({ name }) => name === 'get_widget' || name === 'get_source')));
     if (!remembered) return expired('reference_missing');
     const intent = copy(remembered.intent);
     if (period) {
@@ -297,7 +310,9 @@ export function createAgentConversation({
       const end = anchor.toISOString().slice(0, 10);
       if (period !== 'yesterday') anchor.setUTCDate(1);
       const start = anchor.toISOString().slice(0, 10);
-      intent.condition = { kind: 'dateRange', start, end };
+      const condition = { kind: 'dateRange', start, end };
+      if (intent.reads) intent.reads = intent.reads.map(read => ({ ...read, args: { ...read.args, condition } }));
+      else intent.condition = condition;
     }
     return { type: 'read', intent };
   }
@@ -318,11 +333,16 @@ export function createAgentConversation({
 
     if (action === 'cancel' || action === 'undo' || action === 'edit') {
       delete current.pending;
+      if (pending.lookupReceipt && current.lookup?.receipt === pending.lookupReceipt) delete current.lookup;
       if (action !== 'edit' && pending.proposal) current.retryCommand = pending.proposal.command;
       return { type: action === 'edit' ? 'edit' : 'cancel', pendingId };
     }
     if (pending.clarification) {
-      return { type: 'continue', pendingId, field: pending.clarification.field };
+      if (action !== 'continue' || !sameSnapshot(input, pending.scope)) return expired('pending_missing');
+      const { field } = pending.clarification;
+      if (!control.selection) return { type: 'continue', pendingId, field };
+      if (pending.intent?.kind !== 'command') return expired('target_required');
+      return { type: 'continue_record', field, intent: copy(pending.intent) };
     }
 
     const { proposal, scope } = pending;
@@ -355,5 +375,5 @@ export function createAgentConversation({
     return { type: 'confirm', pendingId };
   }
 
-  return Object.freeze({ remember, resolve });
+  return Object.freeze({ remember, resolve, currentLookup });
 }

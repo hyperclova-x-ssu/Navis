@@ -10,12 +10,15 @@ import { createSeedTables } from '../../data/db/seed';
 import { addDays, TODAY } from '../../data/db/time';
 import { createWidgetDataStore, readModel } from '../../data/widget-data';
 import { screenPresets } from '../../layout';
-import { createRunStore } from '../../state';
+import { createRunStore, setChatReceiptVisible, type ChatReceiptNoticeRequest } from '../../state';
 import { timePolicy } from '../../ui/motion';
 import { navisTranslator } from './messages';
-import { menuDomain } from './domains/menu';
+import { menuAgentDomain, menuDomain } from './domains/menu';
+import { layoutDomain } from './domains/layout';
+import { multiDomain } from './domains/multi';
 import { createDomainRegistry, type CommandAdapter, type RecordAdapter } from './domains/registry';
-import type { AgentProposalPreview } from './navis-conversation';
+import { applyAgentReceiptUndo } from './agent-actions';
+import { prepareConversationText, type AgentProposalPreview } from './navis-conversation';
 import { createAssistantProvider } from './provider';
 import { sseFrame } from './stream-fixture';
 import type { AskInput, AssistantReply } from './types';
@@ -37,7 +40,6 @@ const verified: string[] = [];
 const exceptions: Readonly<Record<string, string>> = {
   'S7-172': 'The host expires and discards its board receipt. A validated inverse placement preview requires the N07 adapter.',
   'S7-178': 'The authored pending layout removal proposal requires the N07 adapter. No bare cancellation can remove the widget.',
-  'S8-023': 'The first menu-cost answer only has legacy text. Reconstructing an exact record reference from that read requires the N04 margin projection.',
   'S8-024': 'The authored two-menu cost comparison cannot provide verified handles until N04 adds that projection.',
   'S8-027': 'The utterances ask for yesterday, while the authored tool condition uses October 20–26. The client reprojects October 25 only.',
   'S8-031': 'The prose requires ordinal placement or a layout proposal, while expected_kind says clarification for all variants. N07 owns the layout adapter.',
@@ -81,7 +83,7 @@ function fixtureAdapter(command: TestCommand, featureId: CommandAdapter['feature
   };
 }
 
-function fixture({ board = false, now = { value: 0 }, sellingTarget = 'm-americano', layer = 'management' as AskInput['layer'] } = {}) {
+function fixture({ board = false, now = { value: 0 }, sellingTarget = 'm-americano', layer = 'management' as AskInput['layer'], realMenu = false, withLayout = false } = {}) {
   const run = board ? createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: timePolicy, clock: () => now.value, theme: 'light' }) : undefined;
   if (run) {
     beginDashboard(run, 'cafe');
@@ -140,7 +142,12 @@ function fixture({ board = false, now = { value: 0 }, sellingTarget = 'm-america
   let legacy = 0;
   const provider = createAssistantProvider({
     store, run, clock: () => now.value,
-    domains: createDomainRegistry([menuDomain, { commands: adapters, reads: records }]),
+    domains: createDomainRegistry([
+      realMenu ? menuAgentDomain : menuDomain,
+      { commands: realMenu ? adapters.filter(adapter => adapter.featureId !== 'menu') : adapters, reads: records },
+      ...(withLayout ? [layoutDomain] : []),
+      multiDomain,
+    ]),
     async fetcher(_url, init) {
       if (!new Headers(init?.headers).has(AGENT_PROTOCOL_HEADER)) {
         legacy++;
@@ -157,13 +164,14 @@ function fixture({ board = false, now = { value: 0 }, sellingTarget = 'm-america
         } else if (!request.slots.includes('price')) {
           output += sseFrame('done', { outcome: 'clarify', clarification: AGENT_PRICE_CLARIFICATION });
         } else {
-          output += sseFrame('action_proposal', { command: 'menu.create', args: { name: { slot: 'name' }, category: intent.category, price: { slot: 'price' } }, snapshotRevision });
+          output += sseFrame('action_proposal', { command: 'menu.create', args: { name: { slot: 'name' }, category: intent.category, price: { slot: 'price' },
+            ...(request.slots.includes('memo') ? { memo: { slot: 'memo' } } : {}) }, snapshotRevision });
           output += sseFrame('done', { outcome: 'proposal' });
         }
       } else if (intent.kind === 'command') {
         const args = intent.args ?? {};
         const frame = { command: intent.command, args, snapshotRevision, runId: request.runId, layer: request.layer,
-          proposalId: 'fixture-proposal', tier: agentCommandPolicy(intent.command, args).confirmation };
+          proposalId: `fixture-proposal-${requests.length}`, tier: agentCommandPolicy(intent.command, args).confirmation };
         expect(validateAgentFrame('action_proposal', frame)).toBe(true);
         output += sseFrame('action_proposal', frame);
         output += sseFrame('done', { outcome: 'proposal' });
@@ -190,10 +198,104 @@ function fixture({ board = false, now = { value: 0 }, sellingTarget = 'm-america
   const created = () => store.getSnapshot().tables.menuItem.find(row => row.name && 'raw' in row.name && row.name.raw === menuName);
   const net = () => readModel(store.getSnapshot(), 'ledger').sales.net;
   const restock = () => readModel(store.getSnapshot(), 'inventory-booking').restockCount;
-  return { run, store, ask, seed, now, date, net, restock, requests, get legacy() { return legacy; }, menu, created, mark, updatePrice, deleteMenu, saveShift, markChange };
+  return { run, store, ask, seed, provider, now, date, net, restock, requests, get legacy() { return legacy; }, menu, created, mark, updatePrice, deleteMenu, saveShift, markChange };
 }
 
 type Fixture = ReturnType<typeof fixture>;
+
+it('routes one automatic table assignment and declines an ongoing rule', () => {
+  expect(prepareConversationText('내일 3시 한○○ 테이블 자동으로 바꿔줘').kind).toBe('text');
+  expect(prepareConversationText('예약 생기면 항상 테이블 자동으로 바꿔줘').kind).toBe('automation');
+  expect(prepareConversationText('메뉴에 흑임자라떼 6천 원 넣고 메모는 "カフェ, 자동으로 품절 바꾸기"로 남겨줘').kind).toBe('text');
+});
+
+it.each([
+  "메뉴에 흑임자라떼 6,000원 추가하는데 메모는 '여름 한정'으로 해줘",
+  '흑임자라떼 6천원 메뉴에 넣고 메모 여름 한정',
+  '메뉴에 흑임자라떼 6,000원 넣어줘 (메모: 여름 한정)',
+])('routes a menu addition with a memo to its card and records one undoable write (%s)', async text => {
+  const host = fixture();
+  const before = host.store.getSnapshot();
+  const session = current(await host.ask(text));
+  expect(session.getSnapshot().menu?.preview.after).toMatchObject({ name: '흑임자라떼', price: 6000, memo: '여름 한정' });
+  expect(host.requests.at(-1)?.intent).toEqual({ kind: 'menu.create', category: 'beverage' });
+  await host.ask('네 해줘');
+  await host.ask('응 진행해줘');
+  await host.ask('오늘 매출 알려줘');
+  expect(host.store.getSnapshot()).toBe(before);
+  expect(session.isPending()).toBe(true);
+  const { id } = session.getSnapshot().proposal;
+  const receipt = session.confirm(host.store, id);
+  expect(receipt).toMatchObject({ frame: { outcome: 'applied' }, undoToken: expect.any(String) });
+  expect(session.confirm(host.store, id)).toBeUndefined();
+  expect(host.store.getSnapshot().tables.menuItem.filter(item => item.name && 'raw' in item.name && item.name.raw === '흑임자라떼'))
+    .toEqual([expect.objectContaining({ price: 6000, memo: { raw: '여름 한정' } })]);
+  if (!receipt || receipt === 'finishEditing' || !receipt.undoToken) throw new Error('Expected a bound undo receipt');
+  expect(host.store.undo(receipt.undoToken).ok).toBe(true);
+  expect(host.store.getSnapshot().tables.menuItem).toEqual(before.tables.menuItem);
+});
+
+it.each([
+  '아까 그 메뉴 가격 올려줘',
+  '아까 말한 메뉴 가격 좀 올려줘',
+  '아까 그거 가격 올려',
+])('finds the earlier verified menu after unrelated reads and asks for the price (%s)', async text => {
+  const host = fixture({ realMenu: true });
+  expect((await host.ask('카페라테 원가 알려줘')).turn).toMatchObject({ kind: 'read' });
+  await host.ask('오늘 매출 알려줘');
+  await host.ask('재고 부족한 거 알려줘');
+  const before = host.store.getSnapshot();
+  const reply = await host.ask(text);
+  expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'price' });
+  expect(reply.answer).toContain('카페라테');
+  expect(reply.answer).toContain('5,000원');
+  if (reply.turn?.kind !== 'clarification') throw new Error('Expected a price clarification');
+  const answered = await host.ask('6천 원', { continuation: { clarificationId: reply.turn.id, value: '6천 원' } });
+  const card = current(answered);
+  expect(card.getSnapshot().preview).toMatchObject({ target: '카페라테', fields: [{ before: '5,000원', after: '6,000원' }] });
+  await host.ask('네 해줘');
+  expect(host.store.getSnapshot()).toBe(before);
+  expect(pressConfirm(host, card)).toMatchObject({ frame: { outcome: 'applied' } });
+  expect(host.menu('m-latte')?.price).toBe(6000);
+  expect(host.menu('m-americano')?.price).toBe(4500);
+});
+
+it('asks for the menu first when no verified menu was read, then asks for its price', async () => {
+  const host = fixture({ realMenu: true });
+  const before = host.store.getSnapshot();
+  const askName = await host.ask('아까 그 메뉴 가격 올려줘');
+  expect(askName.turn).toMatchObject({ kind: 'clarification', field: 'name' });
+  if (askName.turn?.kind !== 'clarification') throw new Error('Expected a menu clarification');
+  expect(askName.turn.isCurrent()).toBe(true);
+  const askPrice = await host.ask('카페라테', { continuation: { clarificationId: askName.turn.id, value: '카페라테' } });
+  expect(askPrice.turn).toMatchObject({ kind: 'clarification', field: 'price' });
+  expect(askPrice.answer).toContain('5,000원');
+  expect(host.store.getSnapshot()).toBe(before);
+});
+
+it('retains run references through navigation and requires a fresh menu card', async () => {
+  const host = fixture({ board: true, realMenu: true });
+  const run = host.run!;
+  try {
+    await host.ask('카페라테 원가 알려줘');
+    const text = '아메리카노 품절로 바꿔줘';
+    const original = current(await host.ask(text));
+    const originalId = original.getSnapshot().proposal.id;
+    const before = host.store.getSnapshot();
+    expect(run.actions.switchLayer('marketing')).toBe(true);
+    host.provider.discardAgentTurn?.();
+    expect(run.actions.switchLayer('management')).toBe(true);
+    expect(original.confirm(host.store, originalId)).toBeUndefined();
+    expect((await host.ask('아까 그 메뉴 가격 올려줘')).answer).toContain('카페라테');
+    const fresh = current(await host.ask(text));
+    expect(fresh.getSnapshot().proposal.id).not.toBe(originalId);
+    expect(host.store.getSnapshot()).toBe(before);
+    expect(pressConfirm(host, fresh)).toMatchObject({ frame: { outcome: 'applied' } });
+    expect(host.menu()?.saleStatus).toBe('sold_out');
+  } finally {
+    run.dispose();
+  }
+});
 
 function current(reply: AssistantReply) {
   expect(reply.proposalSession?.isPending(), reply.answer).toBe(true);
@@ -251,13 +353,14 @@ async function prepare(row: Scenario, host: Fixture) {
   }
   if (['S8-027', 'S8-049', 'S8-201'].includes(id)) await host.ask('오늘 얼마 벌었수꽈?');
   if (id === 'S8-030') await host.ask('재고 부족한 거 알려줘');
-  if (['S8-023', 'S8-029'].includes(id)) await host.ask('카페라테 원가와 마진율은?');
+  if (id === 'S8-023') for (const query of ['카페라테 원가 알려줘', '오늘 매출 알려줘', '재고 부족한 거 알려줘']) await host.ask(query);
+  if (id === 'S8-029') await host.ask('카페라테 원가와 마진율은?');
   if (id === 'S8-024') await host.ask('아메리카노랑 카페라테 원가 비교해줘');
   if (id === 'S8-031') await host.ask('재고랑 발주 같이 보여줘');
   if (id === 'S8-034') for (const query of ['오늘 우유 얼마나 썼어?', '재고 부족한 거 알려줘', '아메리카노 가격 알려줘', '메뉴 몇 개 등록돼 있어?', '오늘 얼마 벌었수꽈?']) await host.ask(query);
 }
 
-const localOnly = new Set(['S7-173', 'S7-175', 'S7-176', 'S8-034', 'S8-035', 'S8-044', 'S8-045', 'S8-046', 'S8-047', 'S8-048', 'S8-049', 'S8-051', 'S8-053',
+const localOnly = new Set(['S7-173', 'S7-175', 'S7-176', 'S8-023', 'S8-034', 'S8-035', 'S8-044', 'S8-045', 'S8-046', 'S8-047', 'S8-048', 'S8-049', 'S8-051', 'S8-053',
   'S8-057', 'S8-058', 'S8-060', 'S8-062', 'S8-094', 'S8-099', 'S8-143', 'S8-145', 'S8-146', 'S8-147', 'S8-148', 'S8-149']);
 
 describe.skipIf(!hasCorpus)('N02 authored conversation scenarios (.evidence corpus)', () => {
@@ -269,7 +372,7 @@ describe.skipIf(!hasCorpus)('N02 authored conversation scenarios (.evidence corp
   it.each(cases)('$id exercises every authored utterance through the browser provider', async row => {
     const exception = exceptions[row.id];
     for (const original of row.utterances) {
-      const host = fixture({ board: row.id.startsWith('S7-') || row.id === 'S8-062', sellingTarget: row.id === 'S8-060' ? 'm-latte' : 'm-americano', ...(row.id === 'S4-150' ? { layer: 'marketing' as const } : {}) });
+      const host = fixture({ board: row.id.startsWith('S7-') || row.id === 'S8-062', realMenu: row.id === 'S8-023', sellingTarget: row.id === 'S8-060' ? 'm-latte' : 'm-americano', ...(row.id === 'S4-150' ? { layer: 'marketing' as const } : {}) });
       try {
         const draft = await prepare(row, host);
         const before = host.store.getSnapshot();
@@ -321,7 +424,12 @@ describe.skipIf(!hasCorpus)('N02 authored conversation scenarios (.evidence corp
           case 'S8-022':
             expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'name' });
             break;
-          case 'S8-023': case 'S8-024':
+          case 'S8-023':
+            expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'price' });
+            expect(reply.answer).toContain('카페라테');
+            expect(reply.answer).toContain('5,000원');
+            break;
+          case 'S8-024':
             expect(reply.turn ?? reply).not.toMatchObject({ kind: 'proposal' });
             break;
           case 'S8-027':
@@ -434,8 +542,52 @@ it('reports an expired browser-held undo receipt without touching the store', as
   expect(pressConfirm(host, current(await host.ask(newMenu())))).toMatchObject({ frame: { outcome: 'applied' } });
   host.now.value = timePolicy.undoMs;
   const snapshot = host.store.getSnapshot();
-  expect((await host.ask('되돌리기')).answer).toContain('시간이 지났거나');
+  expect((await host.ask('되돌리기')).answer).toBe('되돌리기 시간이 지났어요');
   expect(host.store.getSnapshot()).toBe(snapshot);
+});
+
+it.each([false, true])('uses the visible menu receipt and respects its expiry (expired: %s)', async expired => {
+  const host = fixture({ board: true });
+  const run = host.run!;
+  const originalMenu = host.store.getSnapshot().tables.menuItem;
+  const card = current(await host.ask(newMenu()));
+  const receipt = card.confirm(host.store, card.getSnapshot().proposal.id);
+  const identity = card.getSnapshot().receiptIdentity;
+  if (!receipt || typeof receipt === 'string' || !receipt.notice || !receipt.undoToken || !identity) throw new Error('Expected a chat undo receipt');
+  const notice: ChatReceiptNoticeRequest = { ...receipt.notice, chatReceipt: identity };
+  run.actions.showNotice(notice);
+  setChatReceiptVisible(run, identity, true);
+  if (expired) host.now.value = timePolicy.undoMs;
+  const applied = host.store.getSnapshot();
+  const reply = await host.ask('방금 메뉴 추가한 거 취소해줘');
+  expect(reply.answer).toBe(expired ? '되돌리기 시간이 지났어요' : '영수증의 되돌리기를 눌러 주세요');
+  expect(host.store.getSnapshot()).toBe(applied);
+  expect(applyAgentReceiptUndo(run, host.store, identity, receipt.undoToken)).toBe(!expired);
+  expect(host.store.getSnapshot().tables.menuItem).toEqual(expired ? applied.tables.menuItem : originalMenu);
+});
+
+it('reports the expired layout card rather than redirecting typed undo to the board notice', async () => {
+  const host = fixture({ board: true, withLayout: true });
+  const run = host.run!;
+  try {
+    const card = current(await host.ask('발주랑 세무관리 둘 다 추가해줘'));
+    const receipt = card.confirm(host.store, card.getSnapshot().proposal.id);
+    const identity = card.getSnapshot().receiptIdentity;
+    if (!receipt || typeof receipt === 'string' || !receipt.notice || !receipt.undoToken || !identity) throw new Error('Expected a layout undo receipt');
+    const notice: ChatReceiptNoticeRequest = { ...receipt.notice, chatReceipt: identity };
+    run.actions.showNotice(notice);
+    setChatReceiptVisible(run, identity, true);
+    expect((await host.ask('되돌려줘')).answer).toBe('영수증의 되돌리기를 눌러 주세요');
+    host.now.value = timePolicy.undoMs - 1;
+    expect(run.actions.applyLayoutIntent({ type: 'remove', featureId: 'margin' }).status).toBe('accepted');
+    host.now.value += 2;
+    const applied = run.getState().boards.management.pages;
+    expect((await host.ask('되돌려줘')).answer).toBe('되돌리기 시간이 지났어요');
+    expect(applyAgentReceiptUndo(run, host.store, identity, receipt.undoToken)).toBe(false);
+    expect(run.getState().boards.management.pages).toEqual(applied);
+  } finally {
+    run.dispose();
+  }
 });
 
 it('refuses confirmation from the replaced price preview', async () => {
@@ -474,4 +626,124 @@ it('requires a fresh name and proposal when repeating the last confirmed menu cr
   expect((await host.ask('똑같이 해줘')).turn).toMatchObject({ kind: 'clarification', field: 'name' });
   const repeat = current(await host.ask('흑임자 라테'));
   expect(repeat.getSnapshot().menu?.preview.after).toMatchObject({ name: '흑임자 라테', price: 5500 });
+});
+
+describe('ordered plan on the dashboard path (B23 sequencer)', () => {
+  const both = '아메리카노 품절 처리하고 카페라테 가격 5,500원으로 올려줘';
+  const settle = () => new Promise<void>(done => setTimeout(done, 0));
+  const withFollowUps = () => {
+    const follow: AssistantReply[] = [];
+    return { follow, input: { onFollowUp: (reply: AssistantReply) => { follow.push(reply); } } };
+  };
+
+  it('shows step 1 of 2 with its own card and keeps every write behind its own press', async () => {
+    const host = fixture({ realMenu: true });
+    const before = host.store.getSnapshot();
+    const { follow, input } = withFollowUps();
+    const first = await host.ask(both, input);
+    const card = current(first);
+    expect(card.getSnapshot().proposal.command).toBe('menu.setSaleStatus');
+    expect(first.answer).toContain('1/2');
+    expect(host.requests).toHaveLength(1);
+    expect(host.requests[0].intent).toMatchObject({ kind: 'command', command: 'menu.setSaleStatus' });
+    for (const typed of ['네 해줘', '응 진행해줘', '확인']) await host.ask(typed);
+    await settle();
+    expect(host.store.getSnapshot()).toBe(before);
+    expect(follow).toHaveLength(0);
+    expect(host.requests).toHaveLength(1);
+  });
+
+  it('advances only from the actual card receipt, reprojects from the committed revision, then asks for the second card', async () => {
+    const host = fixture({ realMenu: true });
+    const { follow, input } = withFollowUps();
+    const card = current(await host.ask(both, input));
+    expect(pressConfirm(host, card)).toMatchObject({ frame: { outcome: 'applied' } });
+    await settle();
+    expect(host.menu('m-americano')?.saleStatus).toBe('sold_out');
+    expect(host.menu('m-latte')?.price).toBe(5000);
+    expect(follow).toHaveLength(1);
+    const second = current(follow[0]);
+    expect(second.getSnapshot().proposal.command).toBe('menu.update');
+    expect(follow[0].answer).toContain('2/2');
+    expect(host.requests).toHaveLength(2);
+    expect(host.requests[1].snapshotRevision).toBe(host.store.getSnapshot().revision);
+    expect(host.requests[1].snapshotRevision).toBeGreaterThan(host.requests[0].snapshotRevision);
+    expect(host.menu('m-latte')?.price).toBe(5000);
+    expect(pressConfirm(host, second)).toMatchObject({ frame: { outcome: 'applied' } });
+    await settle();
+    expect(host.menu('m-latte')?.price).toBe(5500);
+    expect(follow).toHaveLength(1);
+    expect(host.requests).toHaveLength(2);
+  });
+
+  it.each([
+    '아메리카노 품절로 하고 카페라테는 5500원으로 해줘',
+    '아메리카노는 품절, 카페라테는 5,500원으로 바꿔줘',
+  ])('plans the other phrasings of the same two writes (%s)', async text => {
+    const host = fixture({ realMenu: true });
+    const { follow, input } = withFollowUps();
+    const card = current(await host.ask(text, input));
+    expect(card.getSnapshot().proposal.command).toBe('menu.setSaleStatus');
+    expect(pressConfirm(host, card)).toMatchObject({ frame: { outcome: 'applied' } });
+    await settle();
+    expect(follow).toHaveLength(1);
+    expect(current(follow[0]).getSnapshot().proposal.command).toBe('menu.update');
+  });
+
+  it('does not plan a bare comma list that the owner means as one request', async () => {
+    const host = fixture({ realMenu: true, withLayout: true });
+    const reply = await host.ask('아메리카노, 카페라테 알려줘');
+    expect(reply.answer).not.toMatch(/^1\/\d/u);
+    expect(host.requests.length).toBeLessThanOrEqual(1);
+  });
+
+  it('records a cancelled step and still offers the independent step, with no write from the cancel', async () => {
+    const host = fixture({ realMenu: true });
+    const { follow, input } = withFollowUps();
+    const card = current(await host.ask(both, input));
+    const before = host.store.getSnapshot();
+    expect(card.cancel()).toMatchObject({ frame: { outcome: 'cancelled' } });
+    await settle();
+    expect(host.store.getSnapshot()).toBe(before);
+    expect(follow).toHaveLength(1);
+    expect(current(follow[0]).getSnapshot().proposal.command).toBe('menu.update');
+    expect(host.menu('m-americano')?.saleStatus).toBe('selling');
+  });
+
+  it('drops the remaining steps when the conversation moves on or closes, and never presses a card for the owner', async () => {
+    const host = fixture({ realMenu: true });
+    const { follow, input } = withFollowUps();
+    const card = current(await host.ask(both, input));
+    host.provider.discardAgentTurn?.();
+    await settle();
+    expect(card.isPending()).toBe(false);
+    expect(follow).toHaveLength(0);
+    expect(host.requests).toHaveLength(1);
+    expect(host.menu('m-americano')?.saleStatus).toBe('selling');
+  });
+
+  it('keeps the pending step through an unrelated read', async () => {
+    const host = fixture({ realMenu: true });
+    const { follow, input } = withFollowUps();
+    const card = current(await host.ask(both, input));
+    expect((await host.ask('오늘 매출 알려줘')).turn?.kind).toBe('read');
+    expect(card.isPending()).toBe(true);
+    expect(pressConfirm(host, card)).toMatchObject({ frame: { outcome: 'applied' } });
+    await settle();
+    expect(follow).toHaveLength(1);
+  });
+
+  it('answers an ordered read list in one reply, step by step with its progress, and writes nothing', async () => {
+    const host = fixture({ realMenu: true });
+    const before = host.store.getSnapshot();
+    const reply = await host.ask('카페라테 원가 알려주고 아메리카노 원가 알려줘');
+    expect(reply.turn?.kind).toBe('read');
+    expect(reply.answer).toMatch(/^1\/2 카페라테 /u);
+    expect(reply.answer).toMatch(/\n2\/2 아메리카노 /u);
+    expect(host.store.getSnapshot()).toBe(before);
+    expect(host.requests.map(request => request.intent)).toEqual([
+      { kind: 'read', recordKind: 'menu', querySlot: 'name' }, { kind: 'read', recordKind: 'menu', querySlot: 'name' },
+    ]);
+    expect(reply.turn?.kind === 'read' ? reply.turn.evidence.map(record => record.tool) : []).toEqual(['search_records', 'search_records']);
+  });
 });

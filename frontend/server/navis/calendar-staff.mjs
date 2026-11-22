@@ -15,6 +15,7 @@ const targets = {
   'staff.deleteSchedule': [['scheduleId', 'shift']],
 };
 const eventChanges = ['title', 'date', 'time', 'memo', 'categoryId', 'storeClosure'];
+const handoffWidget = () => ({ name: 'get_widget', args: { featureId: 'staff-schedule', condition: { kind: 'default' } } });
 const clarify = field => ({ outcome: 'clarify', field });
 const refuse = reason => ({ outcome: 'refused', reason });
 const readable = read => ['ready', 'missing'].includes(read?.status);
@@ -31,9 +32,9 @@ function lookupsFor({ intent, searches = [], slots }) {
   });
   if (command === 'staff.create' || command === 'staff.update') {
     const nameSlot = args.name?.slot;
-    if (nameSlot && slots.includes(nameSlot) &&
-      !targetReads.some(read => read.querySlot === nameSlot) &&
-      searches.some(search => search.kind === 'staff' && search.querySlot === nameSlot && !search.cursor)) {
+    const nameSearch = searches.find(search => search.kind === 'staff' && search.querySlot === nameSlot && !search.cursor);
+    if (nameSlot && slots.includes(nameSlot) && nameSearch && nameSearch.status !== 'missing' &&
+      !targetReads.some(read => read.querySlot === nameSlot)) {
       targetReads.push({ field: 'name', kind: 'staff', querySlot: nameSlot });
     }
   }
@@ -43,8 +44,11 @@ function lookupsFor({ intent, searches = [], slots }) {
 function prepareCalendarStaff({ input, reads }, { allowClosureWrites, allowSingleDeletes }) {
   const { command, args = {} } = input.intent;
   if (!validateAgentToolArgs('propose_action', { command, args })) return clarify('change');
-  // A historical choice stays private to the browser. Other slots cannot stand in for it.
-  if (args.dateIntent && (args.dateIntent.slot !== 'dateIntent' || !input.slots.includes('dateIntent'))) return clarify('dateIntent');
+  // Private browser inputs are bound to the intended field before proposal.
+  for (const [field, value] of Object.entries(args)) {
+    if (value?.slot && (value.slot !== field || !input.slots.includes(field))) return clarify(field);
+  }
+  if (args.storeClosure && (args.storeClosure.endDate.slot !== 'endDate' || !input.slots.includes('endDate'))) return clarify('storeClosure');
   if (command === 'calendar.updateEvent' && !eventChanges.some(field => Object.hasOwn(args, field))) return clarify('change');
 
   const resolved = new Map();
@@ -86,6 +90,7 @@ export function createCalendarStaffAdapters({ allowClosureWrites = true, allowSi
     // Deleting a staff profile can cascade to multiple shifts and remains widget-only.
     ...(command === 'staff.delete' ? { prepare: () => refuse('widget_only') } : {
       lookups(input) {
+        if (command === 'staff.moveHandoff') return [handoffWidget()];
         return lookupsFor(input).flatMap(({ kind, querySlot }) => querySlot ? [{ name: 'search_records', args: { kind, querySlot } }] : []);
       },
       prepare: input => prepareCalendarStaff(input, policy),

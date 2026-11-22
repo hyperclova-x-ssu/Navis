@@ -54,12 +54,12 @@ function setup(id: string, store: ReturnType<typeof createWidgetDataStore>) {
   if (id === 'S3-014') expect(store.dispatch({ type: 'environment.setPlaying', playing: false }).ok).toBe(true);
 }
 
-function fixture(id: string) {
+function fixture(id: string, seed?: Parameters<typeof createWidgetDataStore>[0]) {
   const run = createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: timePolicy,
     theme: 'light', clock: () => 0, reducedMotion: true });
   beginDashboard(run, 'cafe');
   run.actions.dismissCoach();
-  const store = createWidgetDataStore(undefined, { runId: run.getState().runId });
+  const store = createWidgetDataStore(seed, { runId: run.getState().runId });
   setup(id, store);
   if (id === 'S2-222' || id === 'S2-253') setCctvMode('live');
   const requests: AgentRequest[] = [], calls: { name: string; args: Record<string, unknown> }[] = [];
@@ -126,8 +126,9 @@ const expectedRead: Readonly<Record<string, readonly string[]>> = {
   'S2-229': [`${cctv.hours.filter(h => h.status === 'ok').sort((a, b) => a.visits! - b.visits!)[0].hour}시`],
   'S2-230': ['오늘'],
   'S2-231': ['비교하지 않아요'],
-  'S2-232': ['2대', '연결'],
-  'S2-233': ['2대', '연결됨'],
+  // D-362: the sample café has one camera (창가 좌석).
+  'S2-232': ['1대', '연결'],
+  'S2-233': ['1대', '연결됨'],
   'S2-234': ['15시', '일부만 집계'],
   'S3-003': [`${hottest.temperatureC === envModel.current!.temperatureC ? '' : ''}${envModel.current!.temperatureC.toFixed(1)}°C`, `${envModel.current!.humidityPct}%`, '적정 범위 안'],
   'S3-004': ['연결'],
@@ -209,6 +210,10 @@ describe('N19 café contract', () => {
       }) + '\n');
       const kind = variantKind(row, index);
       expect(result.actual, `${text}\n${result.reply.answer}`).toBe(kind);
+      if (row.id === 'S4-121') {
+        expect(result.detail).toEqual({ featureId: 'inventory-booking' });
+        expect(env.calls).toEqual([]);
+      }
       if (result.actual === 'answer') {
         const parts = expectedRead[`${row.id}#${index}`] ?? expectedRead[row.id] ?? [];
         for (const part of parts) expect(result.reply.answer, `${text}\n${result.reply.answer}`).toContain(part);
@@ -217,6 +222,14 @@ describe('N19 café contract', () => {
       if (result.actual === 'refuse') expect(result.reply.turn).toMatchObject({ kind: expect.stringMatching(/refusal|handoff/u) });
       if (result.actual === 'proposal') await confirm(row, env, result, true);
     });
+  });
+
+  it.each(['재고 부족 알림 몇 개야?', '재고 부족 알림 자세히 알려줘'])('answers "%s" without opening inventory', async text => {
+    const env = fixture('S4-121');
+    const result = await env.ask(text);
+    expect(result.actual).toBe('answer');
+    expect(result.reply.answer).toContain('보충 필요 0개');
+    expect(env.calls.map(call => call.name)).toEqual(['get_widget']);
   });
 });
 
@@ -230,6 +243,47 @@ const press = (env: Env, reply: Awaited<ReturnType<Env['ask']>>['reply']) => {
 const music = (env: Env) => selectStoreEnvironment(env.store.getSnapshot()).music;
 
 describe('N19 cards and guards', () => {
+  it('S2-240 offers only hours with reviewable observations on the selected day', async () => {
+    const observed = [10, 12, 14];
+    const cctvHourly = cafe.tables.cctvHourly.filter(row => row.businessDate === TODAY && observed.includes(row.hour));
+    const env = fixture('S2-240', { cctvHourly });
+    for (const text of ['20시 구간 검토 표시해줘', '15시 구간 표시해줘', '아침 9시 붐빈 시간 표시']) {
+      const result = await env.ask(text);
+      expect(result.reply.turn).toMatchObject({ kind: 'clarification', field: 'hour', choices: observed.map(hour => ({ id: String(hour) })) });
+      expect(result.reply.answer).toContain('10시, 12시, 14시');
+      expect(result.reply.proposalSession).toBeUndefined();
+    }
+    expect(env.calls).toEqual([]);
+    const result = await env.ask('20시 구간 검토 표시해줘');
+    const turn = result.reply.turn;
+    if (turn?.kind !== 'clarification') throw Error('Expected a review-hour question');
+    const selected = await env.ask('', false, { clarificationId: turn.id, choiceId: '12' });
+    const { receipt } = press(env, selected.reply);
+    expect(receipt.frame.outcome).toBe('applied');
+    expect(env.store.getSnapshot().tables.cctvHourly.filter(row => row.reviewMarked).map(row => row.hour)).toEqual([12]);
+    expect(receipt.undoToken && env.store.undo(receipt.undoToken).ok).toBe(true);
+    expect(env.store.getSnapshot().tables.cctvHourly).toEqual(result.before.tables.cctvHourly);
+  });
+
+  it('S2-242 reads the marked review hour with no second proposal', async () => {
+    const env = fixture('S2-242');
+    const result = await env.ask(`${cctv.peak!.hour}시 구간 또 검토 표시해줘`);
+    expect(result.reply.answer).toContain('이미');
+    expect(result.reply.proposalSession).toBeUndefined();
+    expect(env.calls.map(call => call.name)).toEqual(['get_widget']);
+    expect(env.store.getSnapshot()).toBe(result.before);
+  });
+
+  it('S3-025 gives the same playlist question for either unavailable lo-fi wording', async () => {
+    for (const text of ['오후 잔잔한 로파이로 바꿔줘', '로파이 틀어줘']) {
+      const env = fixture('S3-025');
+      const result = await env.ask(text);
+      expect(result.reply.turn).toMatchObject({ kind: 'clarification', field: 'playlistId' });
+      expect(result.reply.answer).toContain('어느 재생목록으로 할까요?');
+      expect(result.reply.proposalSession).toBeUndefined();
+      expect(env.store.getSnapshot()).toBe(result.before);
+    }
+  });
   it('never commits typed approval: yes, ok and repeat requests leave the store and the card untouched', async () => {
     const env = fixture('S3-013');
     const asked = await env.ask('음악 멈춰줘');
@@ -389,6 +443,24 @@ describe('D-327 Q5: Live is available only while a camera is connected now', () 
     const asked = await fixture('S2-252').ask('CCTV 실시간으로 바꿔줘');
     expect(asked.actual).toBe('refuse');
     expect(asked.reply.answer).toContain('카메라 서버');
+  });
+
+  it('keeps sample mode when the camera drops after the card was prepared', async () => {
+    vi.stubEnv('VITE_CNN_SERVER_URL', 'http://cnn.test:8080');
+    camera('live');
+    const env = fixture('S2-252');
+    const asked = await env.ask('CCTV 실시간으로 바꿔줘');
+    expect(asked.actual).toBe('proposal');
+    camera('lost');
+    // The press prepares the card again against the camera as it is now (D-324): a card that no longer holds is stale, so nothing switches,
+    // the refresh cannot offer Live again, and the card falls back to the manual route.
+    const { card, receipt } = press(env, asked.reply);
+    expect(receipt.frame.outcome).toBe('conflict');
+    expect(getCctvMode()).toBe('mock');
+    expect(card.getSnapshot().refreshFailed).toBe(true);
+    expect(card.isPending()).toBe(false);
+    expect(card.confirm(env.store, card.getSnapshot().proposal.id)).toBeUndefined();
+    expect(getCctvMode()).toBe('mock');
   });
 
   it('offers the Live card while the camera is connected now, and Live switches only on the press', async () => {

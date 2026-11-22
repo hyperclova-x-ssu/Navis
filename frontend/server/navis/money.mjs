@@ -55,7 +55,7 @@ function moneyLookups(input) {
   const { command, args = {} } = input.intent;
   switch (command) {
     case 'ledger.recordExpense':
-      return args.supplierId ? lookupFor(input, ['supplier'], 'supplierId') : [];
+      return args.supplierId || input.intent.querySlot ? lookupFor(input, ['supplier'], 'supplierId') : [];
     case 'ledger.confirmCandidate':
       return lookupFor(input, ['candidate', 'expense'], 'expenseId');
     case 'ledger.updateExpense':
@@ -73,6 +73,9 @@ function prepareMoneyCommand({ input: { intent }, reads }) {
   const { command, args = {} } = intent;
   if (!validateAgentToolArgs('propose_action', { command, args })) return { outcome: 'clarify', field: 'change' };
   if (command === 'ledger.recordExpense' && args.evidence === undefined) return { outcome: 'clarify', field: 'evidence' };
+  if (command === 'ledger.recordExpense' && intent.querySlot && !args.supplierId) {
+    return { outcome: 'clarify', field: 'supplierId' };
+  }
   if (command === 'tax.createPayment') {
     // The browser owns the amount/date behind the slots. The canonical local
     // handler compares the complete obligation before a card can execute.

@@ -12,8 +12,9 @@ import { screenPresets } from '../../../layout';
 import { classifyNavigation, createNavisNavigation, prepareNavigationRequest } from '../../../screens/dashboard/navis-navigation';
 import { createRunStore } from '../../../state';
 import { timePolicy } from '../../../ui';
-import { applyAgentRunUndo } from '../agent-actions';
 import { createAssistantProvider } from '../provider';
+import type { AskInput } from '../types';
+import { noticesDomain } from './notices';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame, validateAgentRequest } from '../../../../shared/navis-agent-schema.mjs';
 // @ts-expect-error The shared corpus loader is JavaScript.
 import { evidence, readTrace } from '../../../../server/navis/scenario-fixtures.mjs';
@@ -43,7 +44,7 @@ const notice = createLegacyNoticeSeed().noticeDraft[0];
 const closure = createInitialClosure();
 const policyDate = addDays(TODAY, 1);
 
-function fixture(id: string, { stale = false, historical = false } = {}) {
+function fixture(id: string, { stale = false, historical = false, emptyAudience = false, overlayDraft = false } = {}) {
   const run = createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: timePolicy,
     theme: 'light', clock: () => 0, reducedMotion: true });
   beginDashboard(run, 'cafe');
@@ -57,7 +58,8 @@ function fixture(id: string, { stale = false, historical = false } = {}) {
     storeClosure: { kind: 'temporary' as const, endDate: startDate } };
   const data = createWidgetDataStore({
     calendarEvent: [...base.tables.calendarEvent.filter(record => record.eventId !== closure.eventId), event],
-    noticeDraft: id === 'S6-080' ? [] : id === 'S6-083' ? [draft, ...base.tables.noticeDraft] : [draft],
+    noticeDraft: id === 'S6-080' ? [] : id === 'S6-083' || overlayDraft ? [draft, ...base.tables.noticeDraft] : [draft],
+    ...(emptyAudience ? { memberProfile: [] } : {}),
   }, { runId: run.getState().runId });
   if (['S6-053', 'S6-084', 'S6-088'].includes(id)) {
     const preview = data.dispatch({ type: 'notice.preview', noticeId: draft.noticeId, draftRevision: draft.revision });
@@ -79,12 +81,12 @@ function fixture(id: string, { stale = false, historical = false } = {}) {
     return new Response(result.raw, { status: result.status, headers: { [AGENT_PROTOCOL_HEADER]: AGENT_PROTOCOL } });
   } });
   const navigation = createNavisNavigation(run, { highlight() {}, closeChat() {} });
-  async function ask(text: string) {
+  async function ask(text: string, continuation?: AskInput['continuation']) {
     const before = data.getSnapshot();
     const plan = classifyNavigation(text, run.getState(), before, 'notice-send');
     const prepared = plan && prepareNavigationRequest(plan, run.getState(), navigation);
     let detail: ReturnType<NonNullable<typeof prepared>['resolve']> | undefined;
-    const reply = await provider.ask({ text, locale: 'ko', layer: 'marketing', signal: new AbortController().signal,
+    const reply = await provider.ask({ text, locale: 'ko', layer: 'marketing', signal: new AbortController().signal, continuation,
       ...(prepared ? { agentTurn: prepared.agentTurn, onNavigation: action => { detail = prepared.resolve(action); } } : {}) });
     expect(data.getSnapshot()).toBe(before);
     if (detail && plan) expect(await navigation.execute(plan.command, detail)).toBe('opened');
@@ -100,6 +102,84 @@ function fixture(id: string, { stale = false, historical = false } = {}) {
 const noticeTables = ({ tables }: DataSnapshot) => ({ drafts: tables.noticeDraft, sent: tables.noticeSent, previews: tables.noticePreview });
 
 describe('N15 notice contracts', () => {
+  it('S6-055 reads the exact quoted draft body and S6-056 asks which draft when the target is ambiguous', async () => {
+    const env = fixture('S6-055', { overlayDraft: true });
+    try {
+      const result = await env.ask(`'${env.draft.title}' 공지 본문 읽어줘`);
+      expect(result.reply.answer).toBe(env.draft.body);
+      expect((await env.ask('공지 보내면 몇 명이 받아')).reply.turn).toMatchObject({ kind: 'clarification', field: 'noticeId' });
+      expect((await env.ask(`'${env.draft.title}' 공지 초안 열어줘`)).detailRef).toMatchObject({ itemId: env.draft.noticeId });
+      expect((await env.ask('이 공지 몇 명한테 가?')).reply.answer).toContain('460명');
+      expect(env.data.getSnapshot()).toBe(result.before);
+    } finally { env.bridge.close(); }
+  });
+
+  it('S6-056 does not treat the draft count as an immediate send or use an unrelated named draft', async () => {
+    const env = fixture('S6-056');
+    try {
+      const result = await env.ask('공지 보내면 몇 명이 받아');
+      expect(result.reply.answer).toContain('460명');
+      expect((await env.ask('없는 주차 안내 공지 지금 보내줘')).reply.turn).toMatchObject({ kind: 'clarification', field: 'noticeId' });
+      const narrowerAudiences = [
+        '휴무 공지 민수한테만 보내줘', '휴무 공지 민수 한테만 보내줘', '휴무 공지 민수만 보내줘', "휴무 공지 '민수'에게만 보내줘",
+        '휴무 공지 단골한테만 보내줘', '휴무 공지 VIP 손님들한테 보내줘',
+      ];
+      for (const text of narrowerAudiences) {
+        expect((await env.ask(text)).reply.turn, text).toMatchObject({ kind: 'clarification', field: 'audience' });
+      }
+      expect(env.calls.map(call => call.name)).not.toContain('propose_action');
+      expect(env.data.getSnapshot()).toBe(result.before);
+    } finally { env.bridge.close(); }
+  });
+
+  it('S6-086 clarifies an ineligible audience without issuing a preview ID', async () => {
+    const env = fixture('S6-086', { emptyAudience: true });
+    try {
+      const { reply, before } = await env.ask('휴무 공지 지금 보내줘');
+      expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'audience' });
+      expect(env.calls.map(call => call.name)).not.toContain('propose_action');
+      expect(env.data.getSnapshot()).toBe(before);
+    } finally { env.bridge.close(); }
+  });
+
+  it('S6-063 keeps both fields from the slash-delimited draft and asks for its dates', () => {
+    const snapshot = createWidgetDataStore().getSnapshot();
+    const route = noticesDomain.route?.('초안 저장: 제목 정수기 점검 / 오전에 물이 안 나와요', snapshot, 'ko');
+    if (!route || !('kind' in route) || route.kind !== 'clarification') throw Error('Missing date clarification');
+    expect(route.field).toBe('period');
+    expect(route.resume?.('내일')).toMatchObject({ intent: { command: 'notice.saveDraft' },
+      slots: { title: '정수기 점검', body: '오전에 물이 안 나와요', startDate: policyDate, endDate: policyDate } });
+  });
+
+  it('S6-061 preserves the title through both clarifications and saves it on one card press', async () => {
+    const env = fixture('S6-061');
+    try {
+      const title = await env.ask('공지 초안 저장: 주차 안내');
+      const bodyRequest = title.reply.turn;
+      if (bodyRequest?.kind !== 'clarification' || bodyRequest.field !== 'body') throw Error(title.reply.answer);
+      const body = await env.ask('옆 건물 주차장을 이용해 주세요', { clarificationId: bodyRequest.id, value: '옆 건물 주차장을 이용해 주세요' });
+      const dateRequest = body.reply.turn;
+      if (dateRequest?.kind !== 'clarification' || dateRequest.field !== 'period') throw Error(body.reply.answer);
+      const date = await env.ask('내일', { clarificationId: dateRequest.id, value: '내일' });
+      if (date.reply.turn?.kind !== 'proposal') throw Error(date.reply.answer);
+      const { proposal } = date.reply.turn;
+      await env.ask('네, 해 줘');
+      expect(env.data.getSnapshot()).toBe(title.before);
+      const receipt = proposal.confirm(env.data, proposal.id);
+      expect(receipt.frame.outcome).toBe('applied');
+      const saved = env.data.getSnapshot();
+      expect(saved.tables.noticeDraft).toHaveLength(title.before.tables.noticeDraft.length + 1);
+      expect(saved.tables.noticeDraft.find(row => row.title === '주차 안내')).toMatchObject({
+        body: '옆 건물 주차장을 이용해 주세요', startDate: policyDate, endDate: policyDate, closureEventId: null,
+      });
+      expect(proposal.confirm(env.data, proposal.id).frame).toEqual(receipt.frame);
+      expect(env.data.getSnapshot()).toBe(saved);
+      expect(saved.tables.noticeSent).toEqual(title.before.tables.noticeSent);
+      expect(receipt.undoToken && env.data.undo(receipt.undoToken).ok).toBe(true);
+      expect(noticeTables(env.data.getSnapshot())).toEqual(noticeTables(title.before));
+    } finally { env.bridge.close(); }
+  });
+
   it('returns draft copy and audience from the same café snapshot through fake transport', async () => {
     const env = fixture('S6-054');
     try {
@@ -129,14 +209,15 @@ describe('N15 notice contracts', () => {
       expect(receipt.frame.outcome).toBe('applied');
       expect(env.data.getSnapshot().tables.noticeSent).toMatchObject([{ status: 'scheduled', sendAt, noticeId: notice.noticeId, recipientCount: recipients }]);
       expect(proposal.confirm(env.data, proposal.id).frame).toEqual(receipt.frame);
-      if (!receipt.notice?.undo) throw Error('Missing receipt undo');
-      env.run.actions.showNotice(receipt.notice);
-      expect(applyAgentRunUndo(env.run, env.data, receipt.notice.undo.token)).toBe(true);
+      if (!receipt.scheduledNotice) throw Error('Missing receipt cancellation');
+      env.run.actions.clearNotice();
+      expect(receipt.scheduledNotice.cancel()).toBe(true);
       expect(env.data.getSnapshot().tables.noticeSent).toEqual(before.tables.noticeSent);
       // Still blocked: no time asks for it, a time in the past is refused, and standing automation stays outside.
       expect((await env.ask('공지 예약해서 보내줘')).reply.turn).toMatchObject({ kind: 'clarification', field: 'sendAt' });
       expect((await env.ask('오늘 새벽 1시에 휴무 공지 예약 발송해줘')).reply.turn?.kind).not.toBe('proposal');
-      expect((await env.ask('매주 월요일마다 휴무 공지 자동으로 보내줘')).reply.turn).toMatchObject({ kind: 'refusal' });
+      const standing = await env.ask('매주 월요일마다 휴무 공지 자동 발송해줘');
+      expect(standing.reply.turn, standing.reply.answer).toMatchObject({ kind: 'refusal' });
     } finally { env.bridge.close(); }
   });
 
@@ -167,15 +248,18 @@ describe('N15 notice contracts', () => {
   it('blocks stale closure sends and proposes re-import with receipt undo', async () => {
     const env = fixture('S6-079', { stale: true });
     try {
+      const nextDate = addDays(policyDate, 2);
+      expect(env.data.dispatch({ type: 'calendar.addEvent', title: '두 번째 휴무', date: nextDate, memo: '다른 휴무 안내',
+        storeClosure: { kind: 'temporary', endDate: nextDate } }).ok).toBe(true);
       const first = await env.ask('휴무 공지 지금 보내줘');
       expect(first.reply.answer).toMatch(/다시 가져/u);
-      expect(first.outcome).toBe('refuse');
+      expect(first.reply.turn).toMatchObject({ kind: 'clarification', field: 'closureEventId' });
       const { reply, before } = await env.ask('휴무 공지 캘린더에서 다시 가져와줘');
       expect(reply.turn?.kind).toBe('proposal');
       if (reply.turn?.kind !== 'proposal') return;
       const receipt = reply.turn.proposal.confirm(env.data);
       expect(receipt.frame.outcome).toBe('applied');
-      expect(env.data.getSnapshot().tables.noticeDraft[0].closureRevision).toBe(2);
+      expect(env.data.getSnapshot().tables.noticeDraft[0]).toMatchObject({ closureEventId: closure.eventId, closureRevision: 2 });
       expect(receipt.undoToken && env.data.undo(receipt.undoToken).ok).toBe(true);
       expect(noticeTables(env.data.getSnapshot())).toEqual(noticeTables(before));
     } finally { env.bridge.close(); }
@@ -245,11 +329,10 @@ const dependencyOutcomes: Readonly<Record<string, string>> = {
   'S6-094': 'answer',
 };
 
-// N15 R5 owns these alternate utterance gaps. The ledger records each expected behavior.
+// Unqualified utterances need the intended widget context before the notice route can take them.
 const alternateGaps: Readonly<Record<string, readonly number[]>> = {
-  'S6-055': [3], 'S6-057': [3], 'S6-061': [3], 'S6-063': [2, 3],
-  'S6-065': [2, 3], 'S6-066': [2], 'S6-071': [3], 'S6-079': [4], 'S6-080': [3],
-  'S6-081': [3], 'S6-082': [4], 'S6-083': [3], 'S6-087': [3], 'S6-091': [3],
+  'S6-055': [3], 'S6-063': [3], 'S6-065': [3], 'S6-079': [4], 'S6-081': [3],
+  'S6-082': [4], 'S6-083': [3], 'S6-087': [3],
 };
 
 describe('N15 authored utterances', () => {
@@ -286,9 +369,10 @@ describe('N15 authored utterances', () => {
           expect(proposal).toBeUndefined();
           continue;
         }
-        const reviewed = { ...row.expected, ...patch?.variants?.[index + 1]?.expected };
+        const reviewed = { ...row.expected, ...patch?.variants?.[index + 1]?.expected,
+          ...(row.id === 'S6-086' && index === 2 ? { kind: 'clarify', ask: ['noticeId'] } : {}) };
         expect(result.outcome, utterance).toBe(dependencyOutcomes[row.id] ?? reviewed.kind);
-        if (patch?.expected && result.outcome === 'clarify' && reviewed.ask?.length) {
+        if ((patch?.expected || ['S6-061', 'S6-063'].includes(row.id)) && result.outcome === 'clarify' && reviewed.ask?.length) {
           expect(result.reply.turn && 'field' in result.reply.turn && result.reply.turn.field, utterance).toBe(reviewed.ask[0]);
         }
         for (const part of patch?.expected ? reviewed.answer_must_contain ?? [] : []) {

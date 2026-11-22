@@ -129,7 +129,7 @@ describe('agent-v1 replies', () => {
     expect(second.proposal?.preview.after).toMatchObject({ name: '동백 라테', price: 6730 });
     const [, request] = fetcher.mock.calls[1];
     expect(new Headers(request.headers).get('X-Navis-Protocol')).toBe('agent-v1');
-    expect(JSON.parse(request.body)).toMatchObject({ slots: ['name', 'price'], snapshot: [], intent: { kind: 'menu.create', category: 'drink' } });
+    expect(JSON.parse(request.body)).toMatchObject({ slots: ['name', 'price'], snapshot: [], intent: { kind: 'menu.create', category: 'beverage' } });
     expect(request.body).not.toMatch(/동백|6730/);
   });
 
@@ -144,7 +144,7 @@ describe('agent-v1 replies', () => {
       ...ask(), text: '캬라멜 마키야또 5,500원에 메뉴에 넣어줘',
     });
     expect(JSON.parse(fetcher.mock.calls[0][1].body).searches).toEqual([
-      { kind: 'menu', querySlot: 'name', matches: [{ handle: expect.any(String), match: 'similar' }] },
+      { kind: 'menu', querySlot: 'name', queryBinding: expect.stringMatching(/^q-/u), matches: [{ handle: expect.stringMatching(/^r-/u), match: 'similar' }] },
     ]);
     expect(reply.turn).toMatchObject({ kind: 'refusal', reason: 'duplicate' });
     expect(reply.proposal).toBeUndefined();
@@ -228,7 +228,8 @@ it('offers only verified similar-menu choices', async () => {
     } }),
   ].join(''), { headers: { 'X-Navis-Protocol': 'agent-v1' } }));
   const reply = await createAssistantProvider({ fetcher }).ask({ text: '라테 얼마야?', signal: signal() });
-  expect(reply.turn).toMatchObject({ kind: 'ambiguity', choices });
+  // A page holds five candidates; the catalog has more, so the next page is offered as one more choice (B22).
+  expect(reply.turn).toMatchObject({ kind: 'ambiguity', choices: [...choices, { id: 'next-page', label: '다음 후보 보기' }] });
 });
 
 it('offers one authorized clarification and supplies the selected enum for a generic command', async () => {

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { URL, fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { createBridge } from '../bridge.mjs';
 import { createNavisMenuHarness, navigationRequest } from '../fixtures/navis-eval-fake.mjs';
-import { validateAgentFrame } from '../../shared/navis-agent-schema.mjs';
+import { validateAgentDetailRef, validateAgentFrame } from '../../shared/navis-agent-schema.mjs';
 import { readCafeScenarios, readTrace } from './scenario-fixtures.mjs';
 
 const trace = readTrace();
@@ -144,6 +144,11 @@ async function checkScenario(scenario, ask, state, snapshot) {
     const current = ui('display', readings[0].facts.filter(item => item.key === key));
     assertRead(await ask({ kind: 'read', tool: current.tool }, { readings: [current] }),
       { name: current.tool, args: current.args }, [display]);
+    if (id === 'S7-119') {
+      const light = ui('display', [fact('ui.theme', 'light', '화면 모드', tr.t('app.mode.light'))]);
+      assertRead(await ask({ kind: 'read', tool: light.tool }, { readings: [light] }),
+        { name: light.tool, args: light.args }, ['라이트']);
+    }
     return;
   }
 
@@ -223,9 +228,18 @@ test('N08 accounts for all 44 assigned scenarios and all 50 required-slice rows'
     ['S7-206', 'S7-207', 'S7-208', 'S7-209', 'S7-212', 'S7-215']);
 });
 
+// D-365: S7-140 previewed the empty state of the removed 마케팅 성과 widget. The row stays accounted for above; the widget does not exist any more.
+const retired = new Set(['S7-140']);
 for (const { scenario_id: id } of assigned) {
   const scenario = corpus.get(id);
   assert.ok(scenario, id);
+  if (retired.has(id)) {
+    test(`${id} ${scenario.utterances[0]} is retired with the widget (D-365)`, () => {
+      assert.equal(scenario.widget, 'marketing-performance');
+      assert.equal(validateAgentDetailRef({ featureId: 'marketing-performance', view: 'route' }), false);
+    });
+    continue;
+  }
   test(`${id} ${scenario.utterances[0]}`, async t => {
     const harness = createNavisMenuHarness(createBridge, validateAgentFrame);
     const run = createBrowserRun({ theme: 'light', reducedMotion: false }, view);

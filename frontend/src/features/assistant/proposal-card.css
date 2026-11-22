@@ -1,39 +1,71 @@
+/* Navis confirm card, receipt, clarification and locator visuals (CHAT-UI M-09…M-17, M-19). Existing design tokens only. */
 .navis-agent-controls {
   display: grid;
   gap: var(--space-2);
   min-inline-size: 0;
   max-inline-size: 100%;
-  margin-block-start: var(--space-2);
   overflow-wrap: anywhere;
 }
 
 .navis-agent-controls__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
+/* M-10 change rows: hairline label/value rows; a changed row reads "{before} → {after}" with the new value heavier. */
 .navis-agent-controls__rows {
   display: grid;
-  gap: var(--space-1);
-  margin: 0;
+  gap: 0;
+  margin: var(--space-3) 0 0;
+  border-block-start: var(--stroke-hairline) solid var(--border);
 }
 
 .navis-agent-controls__rows > div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-  gap: var(--space-2);
+  grid-template-columns: minmax(calc(var(--space-16) + var(--space-5) + var(--space-1)), 30%) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+  border-block-end: var(--stroke-hairline) solid var(--border);
+}
+
+/* M-15: the full outbound message is quoted whole above the button. */
+.navis-agent-controls__rows > [data-quote] { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+.navis-agent-controls__rows > [data-quote] dd { padding: var(--space-2) var(--space-3); border-inline-start: var(--stroke-focus) solid var(--input); border-radius: 0 var(--radius-md) var(--radius-md) 0; background: var(--card); }
+
+@container (max-width: 340px) {
+  .navis-agent-controls__rows > div { grid-template-columns: minmax(0, 1fr); gap: 0; }
 }
 
 .navis-agent-controls__rows dt {
+  margin: 0;
   color: var(--muted-foreground);
+  font-size: var(--type-caption);
+  line-height: var(--leading-caption);
 }
 
 .navis-agent-controls__rows dd {
   margin: 0;
   color: var(--foreground);
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: tabular-nums lining-nums;
+  white-space: pre-wrap;
 }
+
+/* M-10: "전 {이전} → 후 {새 값}" — before muted, after heavier, the 전/후 words bold; wraps instead of truncating. */
+.navis-change { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
+.navis-change__was { color: var(--muted-foreground); }
+.navis-change__arrow { flex: none; color: var(--muted-foreground); white-space: normal; }
+.navis-change__now { font-weight: var(--weight-metric); }
+.navis-change__tag { font-weight: var(--weight-bold); }
+.navis-change__was .navis-change__tag { color: var(--muted-foreground); }
+.navis-change__now .navis-change__tag { color: var(--foreground); }
+
+/* C-14: an old question that is inert keeps one reason line; the picked chip stays marked. */
+.navis-agent-controls__reason { display: flex; align-items: flex-start; gap: var(--space-2); margin: 0; color: var(--muted-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); }
+.navis-agent-controls__reason > .ui-icon { flex: none; inline-size: var(--space-5); block-size: var(--space-5); margin-block-start: var(--space-1); }
+.navis-agent-controls .ui-button[aria-pressed="true"][aria-disabled="true"] > .ui-press-surface,
+.navis-agent-controls .ui-button[aria-pressed="true"][aria-disabled="true"]:is(:hover, :active, :focus-visible) > .ui-press-surface { border: var(--stroke-control) solid var(--selection-foreground); background: var(--selection); color: var(--selection-foreground); font-weight: var(--weight-bold); }
 
 .navis-agent-controls__rows [data-invalid] :is(dt, dd) {
   color: var(--destructive);
@@ -73,28 +105,263 @@
 
 .navis-agent-controls__details {
   min-inline-size: 0;
-  max-block-size: 5lh;
-  scrollbar-gutter: stable;
-  overflow: auto;
-  overscroll-behavior: contain;
+  color: var(--muted-foreground);
+  font-size: var(--type-caption);
+  line-height: var(--leading-caption);
 }
 
-.navis-agent-controls__details:focus-visible {
+.navis-agent-controls__details > strong { color: var(--foreground); }
+
+/* M-09 confirm card shell: background fill, 1px input border, radius 8, padding 16 (20 on the edge side), full-height 4px group-colour edge. */
+.navis-card {
+  position: relative;
+  container-type: inline-size;
+  background: var(--background);
+  color: var(--foreground);
+  border-color: var(--input);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-5);
+  box-shadow: inset var(--space-1) 0 0 var(--group-color, var(--input));
+  margin-block-start: 0;
+  gap: 0;
+}
+
+.navis-card__highlight {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border: var(--stroke-control) solid var(--ring);
+  border-radius: inherit;
+  opacity: 0;
+}
+
+.navis-card__highlight + strong:not(.ui-status-badge),
+.navis-card > strong:first-child:not(.ui-status-badge) {
+  display: block;
+  margin-block-end: var(--space-1);
+  font-size: var(--type-panel-title);
+  line-height: var(--leading-panel-title);
+  font-weight: var(--weight-bold);
+}
+
+.navis-agent-controls__review,
+.navis-agent-controls__swap {
+  display: grid;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+:is(.navis-agent-controls__swap, .navis-agent-controls__review[data-refresh]) {
+  animation: navis-card-swap var(--motion-duration-short) var(--motion-ease-out) both;
+}
+
+@keyframes navis-card-swap {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+[data-motion="reduced"] :is(.navis-agent-controls__swap, .navis-agent-controls__review[data-refresh]) {
+  animation-duration: var(--motion-duration-reduced);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.navis-agent-controls__swap, .navis-agent-controls__review[data-refresh]) {
+    animation-duration: var(--motion-duration-reduced);
+  }
+}
+
+/* M-11 card buttons: primary full width, then "변경 내용 고치기" (secondary) and "변경 취소하기" (borderless underlined text), equal widths. */
+.navis-card .navis-agent-controls__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
+}
+
+.navis-card .navis-agent-controls__actions > :first-child { grid-column: 1 / -1; }
+.navis-card .navis-agent-controls__actions > :nth-child(2):last-child { grid-column: 1 / -1; }
+
+.navis-card .navis-agent-controls__actions .ui-press-surface {
+  padding-inline: var(--space-2);
+  word-break: keep-all;
+}
+
+.navis-card .ui-button--default:not(.ui-button--secondary, .ui-button--outline, .ui-button--ghost, .ui-button--destructive, .ui-button--link) > .ui-press-surface { border-color: var(--input); }
+.navis-card .ui-button--secondary > .ui-press-surface { border-color: var(--input); box-shadow: none; }
+
+.navis-agent-controls__review .navis-agent-controls__actions .ui-button--outline > .ui-press-surface {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: var(--space-1);
+}
+
+.navis-card[data-agent-editing] .navis-agent-controls__actions { display: none; }
+
+/* M-13 step 2 ("한 번 더 확인"): same card, destructive tone; Cancel first and focused, then the named final button, stacked with a 12px gap. */
+.navis-card:has(> .navis-agent-controls__swap .ui-button--destructive) {
+  background: var(--change-up-bg);
+  border-color: var(--destructive);
+  box-shadow: inset var(--space-1) 0 0 var(--destructive);
+}
+
+.navis-agent-controls__swap > .ui-status-badge {
+  justify-self: start;
+  background: var(--card);
+  color: var(--destructive);
+  font-weight: var(--weight-bold);
+}
+
+.navis-agent-controls__swap > p { margin: 0; font-weight: var(--weight-bold); }
+
+.navis-agent-controls__swap .navis-agent-controls__actions {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.navis-agent-controls__swap .navis-agent-controls__actions > * { grid-column: 1 / -1; }
+
+.navis-agent-controls__swap .ui-button--outline > .ui-press-surface {
+  border-color: var(--input);
+  background: var(--card);
+}
+
+.navis-card .ui-button--destructive > .ui-press-surface { border-color: var(--destructive); }
+
+/* M-15 outbound: warning strip above the rows; the quoted message stays whole. */
+.navis-card__strip {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--warning-bg);
+  color: var(--foreground);
+  font-size: var(--type-caption);
+  line-height: var(--leading-caption);
+  font-weight: var(--weight-bold);
+}
+
+.navis-card__strip > .ui-icon { inline-size: var(--space-5); block-size: var(--space-5); margin-block-start: var(--space-1); color: var(--warning); }
+
+/* M-14 receipt line: one compact row — status icon, bold result, [되돌리기] 48 outline; applied = success fill, undone/cancelled/expired = secondary. */
+.navis-receipt {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  min-block-size: var(--space-16);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--secondary);
+  color: var(--foreground);
+}
+
+.navis-receipt > .ui-icon { color: var(--muted-foreground); }
+.navis-receipt > span:not(.navis-receipt__detail):not(.navis-agent-controls__caution) { flex: 1 1 8em; min-inline-size: 0; padding-block: var(--space-2); font-weight: var(--weight-bold); }
+.navis-receipt > .ui-button { margin-inline-start: auto; }
+.navis-receipt > .ui-button > .ui-press-surface { border-color: var(--input); background: transparent; box-shadow: none; }
+
+.navis-receipt[data-outcome="applied"]:not([data-receipt-status="undone"]):not([data-receipt-status="expired"]) { background: var(--success-bg); }
+.navis-receipt[data-outcome="applied"]:not([data-receipt-status="undone"]):not([data-receipt-status="expired"]) > .ui-icon { color: var(--success); }
+.navis-receipt[data-outcome="uncertain"] { background: var(--warning-bg); }
+.navis-receipt[data-outcome="uncertain"] .ui-icon { color: var(--warning); }
+
+.navis-receipt:focus-visible {
   outline: var(--stroke-focus) solid var(--ring);
   outline-offset: var(--focus-offset);
 }
 
+.navis-receipt__detail {
+  flex: 1 1 100%;
+  color: var(--muted-foreground);
+  font-size: var(--type-caption);
+  line-height: var(--leading-caption);
+}
+
+.navis-receipt[data-outcome="closed"] > .ui-button > .ui-press-surface {
+  min-block-size: var(--target-min);
+  padding-inline: var(--space-2);
+  border-color: transparent;
+  color: var(--selection-foreground);
+  text-decoration: underline;
+  text-underline-offset: var(--space-1);
+}
+
+.navis-agent-controls__caution {
+  color: var(--foreground);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.navis-agent-controls__caution svg { flex: none; color: var(--destructive); }
+/* F17: the press is waiting for the server's receipt. Quiet, no motion; the card keeps its place. */
+.navis-agent-controls__pending { color: var(--muted-foreground); display: flex; align-items: baseline; gap: var(--space-2); }
+.navis-agent-controls__pending svg { flex: none; }
+.navis-receipt .navis-agent-controls__caution { flex: 1 1 100%; }
+.navis-receipt[data-outcome="uncertain"] .navis-agent-controls__caution svg { color: var(--warning); }
+
+/* M-19 locator: the left half of the shared reserved row. */
+.navis-pending-locator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--foreground);
+  min-block-size: var(--target-default);
+  flex: none;
+}
+
+.navis-pending-locator:empty { display: none; }
+
+.navis-pending-locator:not(:empty) {
+  padding-inline: var(--space-3) var(--space-1);
+  border-radius: var(--radius-lg);
+  background: var(--warning-bg);
+  justify-content: space-between;
+}
+
+.navis-pending-locator > .ui-icon { inline-size: var(--space-5); block-size: var(--space-5); flex: none; color: var(--warning); }
+.navis-pending-locator > span { flex: 1; min-inline-size: 0; font-size: var(--type-caption); line-height: var(--leading-caption); font-weight: var(--weight-bold); }
+.navis-pending-locator .ui-button { min-block-size: var(--target-default); }
+.navis-pending-locator .ui-button > .ui-press-surface { min-block-size: var(--target-default); padding-inline: var(--space-2); border-color: transparent; background: transparent; box-shadow: none; color: var(--selection-foreground); font-size: var(--type-caption); line-height: var(--leading-caption); text-decoration: underline; text-underline-offset: var(--space-1); }
+.navis-pending-locator .ui-icon:not(:first-child) { inline-size: var(--space-5); block-size: var(--space-5); }
+
 .navis-agent-controls__toggle {
   justify-self: start;
+  margin-inline-start: calc(-1 * var(--space-2));
 }
 
-.navis-agent-controls[data-readonly="proposal"] .navis-agent-controls__actions {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(2 * var(--target-default))), 1fr));
-  align-items: stretch;
+.navis-agent-controls__toggle.ui-button { min-block-size: var(--target-min); }
+.navis-agent-controls__toggle > .ui-press-surface { min-block-size: var(--target-min); padding-inline: var(--space-2); color: var(--selection-foreground); text-decoration: underline; text-underline-offset: var(--space-1); }
+
+/* M-12 editing: the inline editor takes the action block's place. */
+.navis-card .ui-inline-form {
+  margin-block-start: var(--space-3);
+  padding: var(--space-3);
+  border-color: var(--input);
+  border-radius: var(--radius-md);
+  background: var(--card);
 }
 
-.navis-agent-controls[data-readonly="proposal"] .navis-agent-controls__actions .ui-press-surface {
-  padding-inline: var(--space-1);
-  word-break: keep-all;
+.navis-card .ui-inline-form__title { font-size: var(--type-control); line-height: var(--leading-control); }
+.navis-card .ui-inline-form__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* M-16 clarification: ordinary buttons — short labels wrap in one row, long ones stack (the label is one string). */
+.navis-agent-controls[role="group"] > p { margin: 0; }
+.navis-agent-controls[role="group"] .navis-agent-controls__actions .ui-button--outline > .ui-press-surface {
+  border-color: var(--input);
+  background: transparent;
+  font-weight: var(--weight-bold);
+}
+.navis-agent-controls[role="group"] .navis-agent-controls__actions .ui-button[aria-disabled="true"] > .ui-press-surface { border-color: var(--border); }
+.navis-agent-controls[role="group"] .ui-inline-form { background: var(--card); border-color: var(--input); }
+.navis-agent-controls[data-agent-active] .ui-button[aria-expanded="true"] > .ui-press-surface { border: var(--stroke-control) solid var(--selection-foreground); background: var(--selection); color: var(--selection-foreground); }
+
+/* M-26: more contrast → borders use --input; forced colours → system colours. */
+@media (forced-colors: active) {
+  .navis-card, .navis-receipt { border: var(--stroke-hairline) solid CanvasText; }
 }

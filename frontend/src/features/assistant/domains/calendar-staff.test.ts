@@ -165,8 +165,8 @@ const expectedRead: Readonly<Record<string, string[]>> = {
   'S3-147': ['윤서진', '25시간', '30분'],
   'S3-168': ['이미'],
   'S3-172': ['교대 일정이 없어요'],
-  'S3-205': ['11/23', '윤서진'],
-  'S3-206': ['11/12', '냉장 쇼케이스 온도·고무패킹 정기 점검'],
+  'S3-205': ['일정 1건', '근무 일정 2건', '11월 23일', '윤서진'],
+  'S3-206': ['일정 12건', '근무 일정 18건', '픽업 1건', '11월 12일', '냉장 쇼케이스 온도·고무패킹 정기 점검'],
   'S3-207': ['일정이 없어요'],
   'S3-208': ['17:00', '근무 교대'],
   'S3-212': ['할 일이 없어요'],
@@ -334,7 +334,9 @@ describe('N10 café contract', () => {
     expect(result.actual, `${utterance}\n${result.reply.answer}`).toBe(exception[row.id]?.kind ?? row.expected.kind);
     if (result.actual === 'clarify') expect(result.field).toBe(expectedField[row.id] ?? row.expected.ask?.[0]);
     if (result.actual === 'answer') {
-      const copy = (exception[row.id] ? expectedRead[row.id] : overlay[row.id]?.expected?.answer_must_contain) ?? expectedRead[row.id] ?? [];
+      // These two calendar reports show the same rows with labeled event, shift and pickup counts.
+      const hasCalendarBreakdown = row.id === 'S3-205' || row.id === 'S3-206';
+      const copy = (exception[row.id] || hasCalendarBreakdown ? expectedRead[row.id] : overlay[row.id]?.expected?.answer_must_contain) ?? expectedRead[row.id] ?? [];
       for (const part of copy) expect(result.reply.answer).toContain(part);
     }
     if (result.actual === 'refuse') expect(result.reply.turn).toMatchObject({
@@ -363,6 +365,251 @@ describe('N10 café contract', () => {
       await confirm(row, env, deleteResult);
     }
   });
+});
+
+it.each(assigned.find(row => row.id === 'S3-164')!.utterances)('S3-164 clarifies both dates for %s', async text => {
+  const env = fixture('S3-164');
+  const result = await env.ask(text);
+  expect(result.field).toBe('splitOvernight');
+  expect(result.reply.answer).toContain('22:00~23:59');
+  expect(result.reply.answer).toContain('00:00~02:00');
+  expect(result.reply.proposalSession).toBeUndefined();
+  expect(env.calls).toHaveLength(0);
+  expect(env.store.getSnapshot()).toBe(result.before);
+});
+
+it.each(assigned.find(row => row.id === 'S3-171')!.utterances)('S3-171 rejects an invalid handoff for %s', async text => {
+  const env = fixture('S3-171');
+  const result = await env.ask(text);
+  expect(result.field).toBe('toTime');
+  expect(result.reply.answer).toContain('퇴근 시각은 출근 시각보다 뒤여야 해요');
+  expect(result.reply.proposalSession).toBeUndefined();
+  expect(env.calls).toHaveLength(0);
+  expect(env.store.getSnapshot()).toBe(result.before);
+});
+
+it('offers a valid afternoon alternative without applying an ambiguous handoff by text', async () => {
+  const env = fixture('S3-236');
+  const result = await env.ask('오늘 교대 시간 6시로 바꿔줘 캘린더에서');
+  const { turn } = result.reply;
+  if (turn?.kind !== 'clarification') throw Error(result.reply.answer);
+  expect(turn.field).toBe('toTime');
+  expect(turn.choices).toEqual([{ id: 'afternoon', label: '18:00으로 바꾸기' }]);
+  expect(env.calls).toHaveLength(0);
+  const selected = await env.ask('', false, { clarificationId: turn.id, choiceId: 'afternoon' });
+  expect(selected.actual).toBe('proposal');
+  await confirm(assigned.find(row => row.id === 'S3-236')!, env, selected);
+});
+
+it('does not suggest an empty second shift when a proposed overnight range ends at midnight', async () => {
+  const env = fixture('S3-164');
+  const result = await env.ask('윤서진 내일 22:00부터 다음 날 00:00까지 근무 넣어줘');
+  expect(result.field).toBe('splitOvernight');
+  expect(result.reply.answer).not.toContain('00:00~00:00');
+  expect(result.reply.proposalSession).toBeUndefined();
+  expect(env.store.getSnapshot()).toBe(result.before);
+});
+
+it.each(assigned.find(row => row.id === 'S3-222')!.utterances)('S3-222 shows the stored duplicate for %s', async text => {
+  const env = fixture('S3-222');
+  const result = await env.ask(text);
+  expect(result.reply.answer).toContain('14:00 위생 점검');
+  const { turn } = result.reply;
+  if (turn?.kind !== 'clarification') throw Error('Duplicate clarification missing');
+  expect(turn.field).toBe('duplicateChoice');
+  expect(turn.choices).toEqual([
+    { id: 'keep', label: '그대로 두기' }, { id: 'add', label: '하나 더 추가' },
+  ]);
+  const selected = await env.ask('', false, { clarificationId: turn.id, choiceId: 'keep' });
+  expect(selected.reply.proposalSession).toBeUndefined();
+  expect(env.calls).toHaveLength(0);
+  expect(env.store.getSnapshot()).toBe(result.before);
+});
+
+it('S3-222 requires a historical choice and card press to add an elapsed duplicate', async () => {
+  const env = fixture('S3-222');
+  const first = await env.ask('오늘 오후 2시 위생점검 등록');
+  const { turn } = first.reply;
+  if (turn?.kind !== 'clarification') throw Error('Duplicate clarification missing');
+  const duplicate = await env.ask('', false, { clarificationId: turn.id, choiceId: 'add' });
+  if (duplicate.reply.turn?.kind !== 'clarification') throw Error('Historical clarification missing');
+  expect(duplicate.field).toBe('dateIntent');
+  const ready = await env.ask('', false, { clarificationId: duplicate.reply.turn.id, choiceId: 'historical' });
+  const card = ready.reply.proposalSession!;
+  const id = card.getSnapshot().proposal.id;
+  await env.ask('네, 추가해 줘', false);
+  expect(env.store.getSnapshot()).toBe(first.before);
+  const receipt = card.confirm(env.store, id);
+  if (!receipt || typeof receipt === 'string') throw Error('Duplicate receipt missing');
+  expect(receipt.frame.outcome).toBe('applied');
+  const after = env.store.getSnapshot();
+  expect(after.revision).toBe(first.before.revision + 1);
+  expect(after.tables.calendarEvent).toHaveLength(first.before.tables.calendarEvent.length + 1);
+  expect(after.tables.calendarEvent).toContainEqual(expect.objectContaining({ date: TODAY, time: '14:00', title: { raw: '위생점검' } }));
+  expect(card.confirm(env.store, id)).toBeUndefined();
+  expect(env.store.undo(receipt.undoToken!).ok).toBe(true);
+  expect(env.store.getSnapshot().tables.calendarEvent).toEqual(first.before.tables.calendarEvent);
+});
+
+const hygieneMove = assigned.find(row => row.id === 'S3-226')!;
+it.each(hygieneMove.utterances)('S3-226 moves the seeded event and undoes the exact change for %s', async text => {
+  const env = fixture('S3-226');
+  const result = await env.ask(text);
+  expect(result.actual).toBe('proposal');
+  expect(env.calls.map(call => call.name)).toEqual(['search_records', 'propose_action']);
+  await confirm(hygieneMove, env, result);
+});
+
+it.each([
+  ['S3-227', '오늘 위생 점검 내일로 옮겨줘'],
+  ['S3-228', '메뉴판 교체 일정 제목 메뉴판 인쇄로'],
+  ['S3-229', '필터 청소 일정에 2층 포함 메모 추가'],
+  ['S3-230', '위생 점검 세금 행정으로 옮겨줘'],
+  ['S3-237', '필터 청소 일정 삭제해줘'],
+  ['S3-255', "오늘 위생 점검 내일로 옮기고 메모에 '정수기 포함'이라고 적어줘"],
+] as const)('%s resolves the seeded event for %s', async (id, text) => {
+  const env = fixture(id);
+  const result = await env.ask(text);
+  expect(result.actual, result.reply.answer).toBe('proposal');
+  expect(env.calls.map(call => call.name)).toEqual(['search_records', 'propose_action']);
+  await confirm(assigned.find(row => row.id === id)!, env, result);
+});
+
+it('asks for a date match before moving an event identified by its original date', async () => {
+  const env = fixture('S3-227');
+  const result = await env.ask('어제 위생 점검 내일로 옮겨줘');
+  expect(result.reply.answer).toContain('일정이 없어요');
+  expect(env.calls).toHaveLength(0);
+  expect(env.store.getSnapshot()).toBe(result.before);
+});
+
+it.each([
+  { id: 'S8-121', text: '내일 9시에 거래처 미팅 일정 넣어줘', titles: ['오전 9:00', '오후 9:00 (21:00)'], choice: 'pm', time: '21:00' },
+  { id: 'S8-122', text: '내일 저녁에 직원 회식 일정 넣어줘', titles: ['시간 정하기', '시간 없이 넣기'], choice: 'skip-time', time: null },
+])('$id creates a card only after a time choice', async ({ id, text, titles, choice, time }) => {
+  const env = fixture(id);
+  const first = await env.ask(text);
+  const { turn } = first.reply;
+  if (turn?.kind !== 'clarification') throw Error(first.reply.answer);
+  expect(turn.choices.map(item => item.label)).toEqual(titles);
+  expect(env.calls).toHaveLength(0);
+  const selected = await env.ask('', false, { clarificationId: turn.id, choiceId: choice });
+  const card = selected.reply.proposalSession;
+  if (!card) throw Error(selected.reply.answer);
+  const proposalId = card.getSnapshot().proposal.id;
+  await env.ask('응', false);
+  expect(env.store.getSnapshot()).toBe(first.before);
+  const receipt = card.confirm(env.store, proposalId);
+  if (!receipt || typeof receipt === 'string') throw Error('Missing receipt');
+  expect(receipt.frame.outcome).toBe('applied');
+  expect(env.store.getSnapshot().tables.calendarEvent.at(-1)).toMatchObject({ date: tomorrow, time });
+  expect(card.confirm(env.store, proposalId)).toBeUndefined();
+  expect(env.store.undo(receipt.undoToken!).ok).toBe(true);
+  expect(env.store.getSnapshot().tables.calendarEvent).toEqual(first.before.tables.calendarEvent);
+});
+
+it('S8-122 accepts a specific time after the owner chooses to set it', async () => {
+  const env = fixture('S8-122');
+  const first = await env.ask('내일 저녁에 직원 회식 일정 넣어줘');
+  const { turn } = first.reply;
+  if (turn?.kind !== 'clarification') throw Error(first.reply.answer);
+  const selected = await env.ask('', false, { clarificationId: turn.id, choiceId: 'set-time' });
+  if (selected.reply.turn?.kind !== 'clarification') throw Error(selected.reply.answer);
+  expect(selected.field).toBe('time');
+  const ready = await env.ask('저녁 7시', false);
+  expect(ready.actual).toBe('proposal');
+  expect(env.store.getSnapshot()).toBe(first.before);
+});
+
+it('does not use the destination date to pick one of two same-title events', async () => {
+  const env = fixture('S3-227');
+  expect(env.store.dispatch({ type: 'calendar.addEvent', title: '위생 점검', date: tomorrow }).ok).toBe(true);
+  const result = await env.ask('위생 점검 내일로 옮기고 메모: 정수기 포함');
+  expect(result.field).toBe('eventId');
+  expect(result.reply.proposalSession).toBeUndefined();
+  expect(env.calls).toHaveLength(0);
+  expect(env.store.getSnapshot()).toBe(result.before);
+});
+
+it('uses a day-of-month destination without filtering out the original event', async () => {
+  const env = fixture('S3-227');
+  const result = await env.ask('위생 점검 30일로 옮겨줘');
+  const card = result.reply.proposalSession;
+  if (!card) throw Error(result.reply.answer);
+  const { id } = card.getSnapshot().proposal;
+  expect(env.store.getSnapshot()).toBe(result.before);
+  expect(card.confirm(env.store, id)).toMatchObject({ frame: { outcome: 'applied' } });
+  expect(env.store.getSnapshot().tables.calendarEvent).toContainEqual(expect.objectContaining({ eventId: hygiene.eventId, date: '2026-11-30' }));
+});
+
+it('asks which event to delete when a short title matches multiple direct records', async () => {
+  const env = fixture('S3-237');
+  expect(env.store.dispatch({ type: 'calendar.addEvent', title: '정수기 필터 청소', date: tomorrow }).ok).toBe(true);
+  const result = await env.ask('필터 청소 일정 삭제해줘');
+  expect(result.field).toBe('eventId');
+  expect(env.calls).toHaveLength(0);
+  expect(env.store.getSnapshot()).toBe(result.before);
+});
+
+it.each(assigned.find(row => row.id === 'S7-093')!.utterances)('S7-093 opens a blank calendar form for %s', async text => {
+  const env = fixture('S7-093');
+  const result = await env.ask(text);
+  expect(result.detail).toEqual({ featureId: 'calendar', view: 'add', focus: 'action' });
+  expect(env.store.getSnapshot()).toBe(result.before);
+});
+
+it('S3-140 answers staff time off from the roster', async () => {
+  const env = fixture('S3-140');
+  const result = await env.ask('오늘 휴무자 누구야?');
+  expect(result.reply.answer).toContain('휴무 0명');
+  expect(env.calls.at(-1)?.args.featureId).toBe('staff-schedule');
+});
+
+it.each(['필터 청소 마지막으로 한 날 알려줘', '에어컨 필터 언제 청소했어?'])('S3-207 reads the last completed event for %s', async text => {
+  const env = fixture('S3-229');
+  expect(env.store.dispatch({ type: 'calendar.addEvent', title: '에어컨 필터 청소', date: tomorrow, time: '16:00' }).ok).toBe(true);
+  const result = await env.ask(text);
+  expect(result.reply.answer).toContain('10:00 에어컨 필터 청소');
+  expect(result.reply.answer).not.toContain('16:00');
+  expect(env.store.getSnapshot()).toBe(result.before);
+});
+
+it('S3-214 drafts the explicit future appointment in the requested category', async () => {
+  const env = fixture('S3-214');
+  const result = await env.ask('모레 오후 3시 세무사 상담 일정 세금 행정 분류로');
+  expect(result.actual).toBe('proposal');
+  expect(env.requests.at(-1)?.intent).toMatchObject({ command: 'calendar.addEvent', args: { categoryId: 'tax-admin' } });
+  expect(env.store.getSnapshot()).toBe(result.before);
+});
+
+it.each([
+  ['오늘 아침 10시 거래처 미팅 추가해줘', 'dateIntent', '지난 기록'],
+  ['내일 아홉 시에 거래처 미팅 추가해줘', 'time', '오전과 오후'],
+  ['내일 점심때 거래처 미팅 일정 추가해줘', 'time', '시간'],
+] as const)('clarifies calendar meeting timing for %s', async (text, field, copy) => {
+  const env = fixture('S8-121');
+  const result = await env.ask(text);
+  expect(result.reply.turn).toMatchObject({ kind: 'clarification', field });
+  expect(result.reply.answer).toContain(copy);
+  expect(env.calls).toHaveLength(0);
+  expect(env.store.getSnapshot()).toBe(result.before);
+});
+
+it('S8-115 asks for the weekday when a colloquial next-week request omits it', async () => {
+  const env = fixture('S8-115');
+  const result = await env.ask('담주에 위생 점검 하나 잡아줘');
+  expect(result.field).toBe('date');
+  expect(result.reply.answer).toContain('무슨 요일');
+  expect(env.calls).toHaveLength(0);
+  const { turn } = result.reply;
+  if (turn?.kind !== 'clarification') throw Error(result.reply.answer);
+  expect(turn.choices.map(choice => choice.label)).toEqual(['월 11/23', '화 11/24', '수 11/25', '목 11/26', '금 11/27']);
+  const selected = await env.ask('', false, { clarificationId: turn.id, choiceId: '2026-11-25' });
+  const card = selected.reply.proposalSession;
+  if (!card) throw Error(selected.reply.answer);
+  expect(env.store.getSnapshot()).toBe(result.before);
+  expect(card.confirm(env.store, card.getSnapshot().proposal.id)).toMatchObject({ frame: { outcome: 'applied' } });
+  expect(env.store.getSnapshot().tables.calendarEvent.at(-1)).toMatchObject({ date: '2026-11-25', title: { raw: '위생 점검' } });
 });
 
 // The optional replay records authored wording against the café store, including legacy targets.
@@ -480,6 +727,31 @@ it('D-325 requires the second press when an update clears a saved closure', () =
   expect(store.getSnapshot().tables.calendarEvent.find(row => row.eventId === closure.eventId)?.storeClosure).toBeNull();
   expect(receipt.undoToken && store.undo(receipt.undoToken).ok).toBe(true);
   expect(store.getSnapshot().tables.calendarEvent).toEqual(before.tables.calendarEvent);
+});
+
+it('GD-2 previews the lost draft link and deletes a closure only after both card presses', async () => {
+  const env = fixture('S3-239', false);
+  const { reply, before } = await env.ask('내일 임시 휴무 일정 지워줘', false);
+  const card = reply.proposalSession;
+  if (!card) throw Error(reply.answer);
+  const { proposal } = card.getSnapshot();
+  expect(proposal.command).toBe('calendar.deleteEvent');
+  expect(proposal.preview).toMatchObject({
+    fields: expect.arrayContaining([
+      { label: '안내', before: '—', after: '연결된 공지 초안에서 휴무 연결이 끊겨요' },
+    ]),
+  });
+  await env.ask('확인', false);
+  expect(card.confirm(env.store, proposal.id)).toMatchObject({ requiresExtraConfirmation: true });
+  await env.ask('응', false);
+  expect(env.store.getSnapshot()).toBe(before);
+  const receipt = card.confirm(env.store, proposal.id, true);
+  expect(receipt).toMatchObject({ frame: { outcome: 'applied' } });
+  const draft = before.tables.noticeDraft.find(row => row.closureEventId === closure.eventId)!;
+  expect(selectDraftClosureLink(env.store.getSnapshot(), draft)).toBe('removed');
+  if (!receipt || typeof receipt === 'string') throw Error('Receipt missing');
+  expect(receipt.undoToken && env.store.undo(receipt.undoToken).ok).toBe(true);
+  expect(selectDraftClosureLink(env.store.getSnapshot(), draft)).toBe('current');
 });
 
 it('RV-M5 asks for the historical card choice even when the title says 기록', async () => {

@@ -15,6 +15,7 @@ import { createSupplierAdapters } from '../../../../server/navis/suppliers.mjs';
 import { navigationAdapters } from '../../../../server/navis/navigation.mjs';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame, validateAgentRequest, type AgentRequest } from '../../../../shared/navis-agent-schema.mjs';
 import { addDays } from '../../../data/db/time';
+import { purchaseQuantityBase } from '../../../data/derive/stock';
 import { readModel, resolveDataText, selectCalendar, selectMenus } from '../../../data/widget-data';
 import { createAssistantProvider } from '../provider';
 import { navisTranslator } from '../messages';
@@ -39,6 +40,22 @@ function fixtureOrder(store = createWidgetDataStore(), qty = 12) {
   const order = deriveOpenOrders(store.getSnapshot(), { date: TODAY }).open.find(row => row.lines.some(line => line.itemId === milk))!;
   return { store, item, order };
 }
+
+it('preserves explicit supplier scope when a purchase item lookup has no match', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  const purchase = snapshot.tables.purchaseItem.find(row => row.itemId === milk)!;
+  const scoped = {
+    ...snapshot, tables: {
+      ...snapshot.tables,
+      supplier: snapshot.tables.supplier.map(row => row.supplierId === purchase.supplierId
+        ? { ...row, name: { raw: '가나다 라마바' } } : row),
+    },
+  };
+  const reader = registry.reader('purchaseItem')!;
+  const input = { snapshot: scoped, locale: 'ko' as const, privateLookup: false };
+  expect(reader.search({ ...input, query: '가나다 라마바' })).not.toHaveLength(0);
+  expect(reader.search({ ...input, query: '가나다\n라마바' })).toEqual([]);
+});
 
 it('S1-220 records one receipt and expense candidate, then restores both via the receipt undo', () => {
   const { store, order } = fixtureOrder();
@@ -202,7 +219,7 @@ describe('N09 café corpus', () => {
     const request = row.utterances[0];
     const result = await driveScenario(row.id, request);
     const expected = row.expected.kind;
-    expect(result.actual, request).toBe(expected);
+    expect(result.actual, `${request}: ${result.reply.answer} (${JSON.stringify(result.requests[0]?.intent ?? result.reply.turn)})`).toBe(expected);
     await checkOutcome(row, result);
 
     // Exercise all authored texts, including those with obsolete names or dates.
@@ -216,6 +233,216 @@ describe('N09 café corpus', () => {
       }) + '\n');
     }
   });
+});
+
+it('S1-201 answers with the shared supplier of matching purchase rows', async () => {
+  const result = await driveScenario('S1-201', '원두 거래처가 어디였지');
+  expect(result.actual).toBe('answer');
+  expect(result.reply.answer).toContain('상도브루 로스터리');
+});
+
+describe('A3-B27 purchase-item facts keep the canonical name slot', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  const route = (text: string) => domain.route!(text, snapshot, 'ko') as Record<string, unknown> & { intent: unknown; slots: Record<string, unknown> };
+
+  it.each([
+    ['우유 단가가 얼마야?', '우유', 'unitPrice'], ['우유 얼마에 받아?', '우유', 'unitPrice'], ['우유 발주 단가 알려줘', '우유', 'unitPrice'],
+    ['우유 최소 몇 리터부터 주문돼?', '우유', 'minimumQty'], ['휘낭시에 최소 주문 수량', '휘낭시에', 'minimumQty'],
+    ['우유는 어디서 받아?', '우유', 'supplier'],
+  ])('S1-198/199/201 routes %s to purchaseItem/name with aspect %s', (text, name, aspect) => {
+    expect(route(text)).toMatchObject({ intent: { kind: 'read', recordKind: 'purchaseItem', querySlot: 'name' }, slots: { name }, aspect });
+  });
+
+  it('routes the order-step question about the cups to purchaseItem/name', () => {
+    expect(route('컵은 몇 개 단위로 시켜야 해?')).toMatchObject({
+      intent: { kind: 'read', recordKind: 'purchaseItem', querySlot: 'name' }, slots: { name: expect.stringMatching(/컵/u) }, aspect: 'orderStep',
+    });
+  });
+
+  it('S1-198 answers the milk unit price with its unit from the purchase row', async () => {
+    const result = await driveScenario('S1-198', '우유 단가가 얼마야?');
+    expect(result.actual).toBe('answer');
+    expect(result.requests[0].intent).toMatchObject({ kind: 'read', recordKind: 'purchaseItem', querySlot: 'name' });
+    expect(result.calls).toEqual([{ name: 'search_records', args: { kind: 'purchaseItem', querySlot: 'name' } }]);
+    expect(result.reply.answer).toContain('목장 1등급 우유');
+    expect(result.reply.answer).toContain('2,900원/L');
+  });
+
+  it.each([['우유 최소 몇 리터부터 주문돼?', '1 L'], ['컵은 몇 개 단위로 시켜야 해?', '500개']])(
+    'S1-199 states the minimum or step of the named item from its row (%s)', async (text, quantity) => {
+      const result = await driveScenario('S1-199', text);
+      expect(result.actual).toBe('answer');
+      expect(result.calls).toEqual([{ name: 'search_records', args: { kind: 'purchaseItem', querySlot: 'name' } }]);
+      expect(result.reply.answer).toContain(quantity);
+    },
+  );
+
+  it('S1-199 says an unregistered purchase item is not registered instead of a generic no-data copy', async () => {
+    const result = await driveScenario('S1-199', '휘낭시에 최소 주문 수량');
+    expect(result.reply.answer).toBe('등록된 발주 품목이 없어요');
+    expect(result.reply.turn?.kind).toBe('read');
+  });
+
+  it('S1-201 names the milk supplier and lists every bean row with its shared supplier', async () => {
+    const milkSupplier = await driveScenario('S1-201', '우유는 어디서 받아?');
+    expect(milkSupplier.calls).toEqual([{ name: 'search_records', args: { kind: 'purchaseItem', querySlot: 'name' } }]);
+    expect(milkSupplier.reply.answer).toContain('한강목장 유업유통');
+    const beans = await driveScenario('S1-201', '원두 거래처가 어디였지');
+    expect(beans.calls).toEqual([{ name: 'search_records', args: { kind: 'purchaseItem', querySlot: 'name' } }]);
+    expect(beans.reply.answer).toContain('하우스 블렌드 원두');
+    expect(beans.reply.answer).toContain('디카페인 콜롬비아 원두');
+    expect(beans.reply.answer).toContain('상도브루 로스터리');
+    expect(beans.reply.turn?.kind).toBe('read');
+  });
+
+  it('S1-201 lists the purchase items of a named supplier and reports an unknown supplier as not registered', async () => {
+    const known = await driveScenario('S1-201', '한강목장에서 뭐 받아?');
+    expect(known.calls).toEqual([{ name: 'search_records', args: { kind: 'purchaseItem', querySlot: 'name' } }]);
+    expect(known.reply.answer).toContain('목장 1등급 우유');
+    expect(known.reply.answer).toContain('달콤 연유');
+    const unknown = await driveScenario('S1-201', 'A유통에서 뭐 받아?');
+    expect(unknown.calls).toEqual([{ name: 'search_records', args: { kind: 'purchaseItem', querySlot: 'name' } }]);
+    expect(unknown.reply.answer).toBe('등록된 발주사가 없어요');
+  });
+
+  it.each(['휘낭시에 30개 왔어', '휘낭시에 입고 처리 30개', 'D베이커리 휘낭시에 도착했어'])(
+    'S1-226 refuses a receipt for %s through a scoped purchaseOrder lookup with zero effects', async text => {
+      expect(route(text)).toMatchObject({
+        intent: { kind: 'read', recordKind: 'purchaseOrder', querySlot: 'name' }, slots: { name: '휘낭시에' },
+        onMissing: { reason: 'invalid_target', answer: '해당 발주 내역이 없어요' },
+      });
+      const result = await driveScenario('S1-226', text);
+      expect(result.actual).toBe('refuse');
+      expect(result.reply.proposalSession).toBeUndefined();
+      expect(result.calls.map(call => call.name)).toEqual(['search_records']);
+      expect(result.calls[0].args).toMatchObject({ kind: 'purchaseOrder', querySlot: 'name' });
+    },
+  );
+});
+
+it('S1-215 keeps the requested due date when the owner corrects a below-minimum quantity', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  const result = domain.route('컵 200개 발주해줘 다음 주 화요일에 받게', snapshot, 'ko');
+  expect(result).toMatchObject({ kind: 'clarification', field: 'qty', answer: '최소 500개부터 주문할 수 있어요' });
+  if (!result || !('kind' in result) || result.kind !== 'clarification') throw Error('Expected a quantity clarification');
+  expect(result.resume?.('500개')).toMatchObject({
+    intent: { kind: 'command', command: 'suppliers.createOrder' },
+    slots: { qty: 500, dueDate: '2026-11-24' },
+  });
+});
+
+it('S1-215 still refuses an already elapsed delivery day in the current café fixture', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  expect(domain.route('컵 200개 11월 3일 도착으로 주문', snapshot, 'ko'))
+    .toMatchObject({ kind: 'refusal', reason: 'invalid_target', answer: '지난 날짜로 발주할 수 없어요' });
+});
+
+it('preserves a valid due date and identifies the order increment when correcting the quantity', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  const result = domain.route('컵 750개 내일 입고로 주문해줘', snapshot, 'ko');
+  expect(result).toMatchObject({ kind: 'clarification', field: 'qty', answer: '500개 단위로 주문해 주세요' });
+  if (!result || !('kind' in result) || result.kind !== 'clarification') throw Error('Expected a quantity clarification');
+  expect(result.resume?.('1,000개')).toMatchObject({
+    intent: { command: 'suppliers.createOrder' }, slots: { qty: 1000, dueDate: addDays(TODAY, 1) },
+  });
+});
+
+it('asks for a valid day when the requested delivery date does not exist', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  expect(domain.route('컵 500개 11월 31일에 발주해줘', snapshot, 'ko'))
+    .toMatchObject({ kind: 'clarification', field: 'dueDate' });
+});
+
+it('S1-219 applies an active suggestion exactly as quoted', async () => {
+  const result = await driveScenario('S1-219', '컵 발주 제안대로 주문해줘', false);
+  await checkOutcome(scenarios.find(row => row.id === 'S1-219')!, result);
+});
+
+it.each(corpus.find(row => row.id === 'S1-221')!.utterances)('S1-221 binds a partial intake to its order line: %s', async utterance => {
+  const result = await driveScenario('S1-221', utterance, false);
+  await checkOutcome(scenarios.find(row => row.id === 'S1-221')!, result);
+});
+
+it.each(['S1-219', 'S1-220', 'S1-227', 'S1-230', 'S1-237', 'S1-260'])('%s proposes the correct command for every authored form', async id => {
+  const row = scenarios.find(scenario => scenario.id === id)!;
+  for (const utterance of row.utterances) {
+    // Use the scoped fixture's vendor name and ordered quantity in the café variant.
+    const text = utterance.replace('A유통', '한강목장 유업유통').replace('C포장', '푸른패키징 상사')
+      .replace('컵 300개 발주 캔슬', '컵 500개 발주 캔슬');
+    const result = await driveScenario(id, text, false);
+    expect(result.actual, utterance).toBe('proposal');
+    await checkOutcome(row, result);
+  }
+});
+
+it.each(['S1-222', 'S1-223', 'S1-224', 'S1-232'])('%s collects the missing field for every authored form', id => {
+  const row = scenarios.find(scenario => scenario.id === id)!;
+  const store = scenarioStore(id, `supplier-${id}`);
+  const before = store.getSnapshot();
+  for (const utterance of row.utterances) {
+    expect(suppliersDomain.route(utterance.replace('A유통', '한강목장 유업유통'), before, 'ko'), utterance)
+      .toMatchObject({ kind: 'clarification', field: row.expected.ask![0] });
+  }
+  expect(store.getSnapshot()).toBe(before);
+});
+
+it('does not substitute a different supplier or amount when canceling an open order', () => {
+  const { store } = fixtureOrder();
+  const before = store.getSnapshot();
+  for (const text of ['A유통 우유 발주 취소해줘', '우유 8L 발주 취소해줘']) {
+    expect(domain.route(text, before, 'ko')).toMatchObject({ kind: 'refusal', reason: 'invalid_target' });
+  }
+});
+
+it('does not mistake a question about an upcoming order for received stock', () => {
+  const { store } = fixtureOrder();
+  const snapshot = store.getSnapshot();
+  expect(domain.route('우유 내일 8L 받아?', snapshot, 'ko')).toBeUndefined();
+});
+
+it('asks for an exact registered purchase item before scheduling ambiguous beans', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  const result = domain.route('원두 2kg 발주해줘', snapshot, 'ko');
+  expect(result).toMatchObject({ kind: 'clarification', field: 'purchaseItem' });
+  if (!result || !('kind' in result) || result.kind !== 'clarification') throw Error('Expected a purchase-item clarification');
+  expect(result.resume?.('디카페인 원두')).toMatchObject({ intent: { command: 'suppliers.createOrder' }, slots: { qty: 2 } });
+});
+
+it('keeps an intake report from becoming a stock edit when the order is missing', async () => {
+  const result = await driveScenario('no-open-order', '우유 8L 일부 입고', false);
+  expect(result).toMatchObject({ actual: 'refuse' });
+  expect(result.reply.proposalSession).toBeUndefined();
+});
+
+it.each(['우유 5리터 들어왔어', '우유 5L 입고됐어', '우유 5리터 받았어'])(
+  'leaves ambiguous intake shorthand to inventory when no order is open: %s', utterance => {
+    const snapshot = createWidgetDataStore().getSnapshot();
+    expect(domain.route(utterance, snapshot, 'ko')).toBeUndefined();
+    const { store } = fixtureOrder();
+    expect(domain.route(utterance, store.getSnapshot(), 'ko'))
+      .toMatchObject({ intent: { command: 'suppliers.recordReceipt' }, slots: { qty: 5 } });
+  },
+);
+
+it.each(['내일 오는 우유 모레로 미뤄줘', '내일 오는 우유 모레로 바꿔줘'])('binds a date change to the order due on the named source day: %s', utterance => {
+  const { store, item } = fixtureOrder();
+  expect(store.dispatch({ type: 'suppliers.createOrder', purchaseItemId: item.purchaseItemId, qty: 12,
+    dueDate: addDays(TODAY, 1), idempotencyKey: 'tomorrow-order' }).ok).toBe(true);
+  const snapshot = store.getSnapshot();
+  const routed = domain.route(utterance, snapshot, 'ko');
+  if (!routed || !('intent' in routed)) throw Error('Expected an order command');
+  expect(routed.intent).toMatchObject({ command: 'suppliers.changeDueDate' });
+  const lookup = { snapshot, locale: 'ko' as const, command: 'suppliers.changeDueDate', privateLookup: true, query: String(routed.slots?.name) };
+  const reader = registry.reader('purchaseOrder')!;
+  const matches = reader.search(lookup);
+  expect(matches).toHaveLength(1);
+  expect(reader.resolve?.(lookup, matches[0].handle)).toBe(readModel(snapshot, 'suppliers').orders.find(row => row.dueDate === addDays(TODAY, 1))?.poId);
+});
+
+it('requires a positive new purchase price', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  expect(domain.route('우유 발주 단가 0원으로 바꿔줘', snapshot, 'ko'))
+    .toMatchObject({ kind: 'clarification', field: 'unitPrice' });
 });
 
 type Driven = Awaited<ReturnType<typeof driveScenario>>;
@@ -270,7 +497,9 @@ async function checkOutcome(row: CorpusRow, result: Driven) {
       'S1-234': ['이미 같은 날짜예요'],
     };
     for (const value of overlay[row.id]?.expected?.answer_must_contain ?? expected[row.id] ?? []) expect(reply.answer).toContain(value);
-    const reads = ['S1-195', 'S1-196', 'S1-197', 'S1-200', 'S1-203'].includes(row.id) ? ['get_widget']
+    // B27 ordered pair: an order suggestion reads the stock shortage widget first, then the suppliers widget.
+    const reads = row.id === 'S1-197' ? ['get_widget', 'get_widget']
+      : ['S1-195', 'S1-196', 'S1-200', 'S1-203'].includes(row.id) ? ['get_widget']
       : ['S1-198', 'S1-199', 'S1-201', 'S1-202', 'S1-209'].includes(row.id) ? ['search_records'] : [];
     expect(calls.map(call => call.name)).toEqual(reads);
     return;
@@ -284,6 +513,8 @@ async function checkOutcome(row: CorpusRow, result: Driven) {
   expect(calls.at(-1)).toEqual({ name: 'propose_action', args: { command: expectedCommand, args: (result.requests[0].intent as { args: unknown }).args } });
   expect(result.requests[0].searches.every(search => search.matches.every(match => match.label === undefined))).toBe(true);
   await result.provider.ask({ text: '확인', signal: new AbortController().signal });
+  // Speech uses the same submitted text path as keyboard input.
+  await result.provider.ask({ text: '네 해줘', signal: new AbortController().signal });
   expect(store.getSnapshot()).toBe(before);
   const first = card.confirm(store, proposal.id);
   if (!first || typeof first === 'string') throw new Error('The confirmation card is unavailable');
@@ -318,10 +549,14 @@ function checkEffects(id: string, command: unknown, before: DataSnapshot, after:
   } else if (command === 'suppliers.recordReceipt') {
     const qty = id === 'S1-220' ? 12 : id === 'S1-221' ? 8 : 300;
     const order = old.upcoming[0], line = order.lines[0];
+    const storedLine = before.tables.purchaseOrderLine.find(row => row.polId === line.polId)!;
+    const stock = (snapshot: DataSnapshot) => deriveStock(snapshot, { date: TODAY }).rows.find(row => row.itemId === line.itemId)!.stock;
     expect(after.tables.receipt).toHaveLength(before.tables.receipt.length + 1);
     expect(after.tables.receipt.at(-1)).toMatchObject({ polId: line.polId, qty });
-    expect(after.tables.expense.at(-1)).toMatchObject({ amount: qty * line.unitPrice, status: 'candidate', supplierId: order.supplierId });
+    expect(after.tables.expense.at(-1)).toMatchObject({ amount: qty * line.unitPrice, status: 'candidate', supplierId: order.supplierId,
+      receiptId: after.tables.receipt.at(-1)?.receiptId });
     expect(next.orders.find(row => row.poId === order.poId)?.lines[0].remaining).toBe(line.remaining - qty);
+    expect(stock(after) - stock(before)).toBeCloseTo(purchaseQuantityBase(qty, line.unit, storedLine.basePerUnit)!);
   } else if (command === 'suppliers.changeDueDate') {
     const date = id === 'S1-229' ? addDays(TODAY, 2) : id === 'S1-230' ? addDays(TODAY, 1) : '2026-11-24';
     expect(next.orders.find(row => row.poId === old.upcoming[0].poId)?.dueDate).toBe(date);

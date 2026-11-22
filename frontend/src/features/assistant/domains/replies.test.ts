@@ -1,9 +1,11 @@
 // @vitest-environment node
 import { appendFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { repliesDomain } from './replies';
 import { beginDashboard } from '../../../app/test-session';
 import { getRegistry } from '../../../catalog';
 import { createLegacySeedTables } from '../../../data/db/legacy-seed';
+import type { DataTables } from '../../../data/db/types';
 import { createWidgetDataStore } from '../../../data/widget-data';
 import { screenPresets } from '../../../layout';
 import { classifyNavigation, createNavisNavigation, prepareNavigationRequest } from '../../../screens/dashboard/navis-navigation';
@@ -39,7 +41,7 @@ const scenarios = trace.filter(row => row.required_slices.split('|').includes('N
 });
 const eligibleOffers = ['S5-070', 'S5-071', 'S5-072'];
 
-function fixture(id: string) {
+function fixture(id: string, overrides: Partial<Pick<DataTables, 'inquiryThread' | 'partnershipOffer'>> = {}) {
   const run = createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: timePolicy,
     theme: 'light', clock: () => 0, reducedMotion: true });
   beginDashboard(run, 'cafe');
@@ -62,7 +64,7 @@ function fixture(id: string) {
     if (eligibleOffers.includes(id)) return { ...row, respondBy: '2026-11-20T18:00' };
     return row;
   });
-  const data = createWidgetDataStore({ partnershipOffer: offers, inquiryThread }, { runId: run.getState().runId });
+  const data = createWidgetDataStore({ partnershipOffer: offers, inquiryThread, ...overrides }, { runId: run.getState().runId });
   const requests: unknown[] = [];
   const bridge = createNavisMenuHarness((options: Parameters<typeof createBridge>[0]) =>
     createBridge({ ...options, agentMode: 'fake', onDiagnostics() {} }), validateAgentFrame, navisAgentFakeFetch);
@@ -149,6 +151,7 @@ describe('N17 replies and community', () => {
   // N21 owns compound sequencing. These assertions keep each interim outcome pinned
   // while replaying all source utterances. S8-181 variant 4 lacks a single exact thread.
   const differences: Readonly<Record<string, readonly string[]>> = {
+    'S5-021': ['refuse', 'refuse', 'refuse'],
     'S5-047': ['answer', 'answer', 'answer'],
     'S5-048': ['proposal', 'answer', 'answer'],
     'S5-049': ['refuse', 'answer', 'answer'],
@@ -159,7 +162,6 @@ describe('N17 replies and community', () => {
   const effectTargets: Readonly<Record<string, { readonly command: string; readonly key: string; readonly id: string }>> = {
     'S5-019': { command: 'reply.draft', key: 'data.notice.replyDraftSaved', id: 'th-2' },
     'S5-020': { command: 'reply.draft', key: 'data.notice.replyDraftSaved', id: 'th-4' },
-    'S5-021': { command: 'reply.draft', key: 'data.notice.replyDraftSaved', id: 'th-1' },
     'S5-030': { command: 'inquiry.send', key: 'data.notice.sent', id: 'th-2' },
     'S5-031': { command: 'inquiry.post', key: 'data.notice.posted', id: 'th-4' },
     'S5-070': { command: 'community.accept', key: 'data.notice.offerAccepted', id: 'of-1' },
@@ -208,4 +210,161 @@ describe('N17 replies and community', () => {
     if (process.env.NAVIS_N17_OBSERVATIONS) appendFileSync(process.env.NAVIS_N17_OBSERVATIONS, JSON.stringify({ id: row.id, expected: row.kind, results }) + '\n');
     expect(results.map(result => result.kind)).toEqual(differences[row.id] ?? row.utterances.map(() => row.kind));
   });
+});
+
+it.each(['신메뉴 아이디어 제안해줘', '가격 제안 부탁해', '프로모션 제안해줘', '카페 인테리어 제안해줘'])('does not claim unrelated wording %s', text => {
+  expect(repliesDomain.route?.(text, createWidgetDataStore().getSnapshot(), 'ko')).toBeUndefined();
+});
+
+it('matches widget send failure in the sample variant', async () => {
+  const env = fixture('S5-030');
+  try {
+    env.run.actions.setPreviewVariant('ai-response', 'send-failure');
+    const { reply, before } = await env.ask('주차 문의 답변 보내줘');
+    expect(reply.turn?.kind).not.toBe('proposal');
+    expect(env.data.getSnapshot()).toBe(before);
+  } finally { env.bridge.close(); }
+});
+
+it('directs a refund draft request to the owner without storing filler', async () => {
+  const env = fixture('S5-021');
+  try {
+    const { reply, before } = await env.ask('환불 문의 답변 초안 만들어줘');
+    expect(reply.turn).toMatchObject({ kind: 'refusal', alternative: { featureId: 'ai-response' } });
+    expect(env.data.getSnapshot()).toBe(before);
+  } finally { env.bridge.close(); }
+});
+
+const parkingThread = createLegacySeedTables().inquiryThread.find(row => row.threadId === 'th-2')!;
+
+it.each(['주차 문의 답변 초안 새로 만들어줘', "주차 답변을 '건물 뒤 2대까지 주차돼요'로 고쳐줘"])(
+  'reports that a completed parking inquiry is outside the waiting scope of %s', async text => {
+    const review = createLegacySeedTables().inquiryThread.find(row => row.threadId === 'th-4')!;
+    const env = fixture('S5-019', { inquiryThread: [{ ...parkingThread, status: 'done' }, review] });
+    try {
+      const { reply, before } = await env.ask(text);
+      expect(reply.answer).toBe('요청에 맞는 답변 대기 항목이 없어요');
+      expect(reply.proposalSession).toBeUndefined();
+      expect(env.requests).toHaveLength(0);
+      expect(env.data.getSnapshot()).toBe(before);
+    } finally { env.bridge.close(); }
+  },
+);
+
+it('S5-019 keeps the requested channel and drafts without sending', async () => {
+  const otherChannel = { ...parkingThread, threadId: 'parking-kakao', channelKey: 'data.channel.kakao' };
+  const env = fixture('S5-019', { inquiryThread: [otherChannel, parkingThread] });
+  try {
+    const { reply, before } = await env.ask('톡톡 주차 질문 답장 써줘, 보내지 마');
+    const card = reply.proposalSession;
+    const proposal = card?.getSnapshot().proposal;
+    if (!card || !proposal) throw new Error(reply.answer);
+    expect(proposal.command).toBe('reply.draft');
+    await env.ask('응, 해줘');
+    expect(env.data.getSnapshot()).toBe(before);
+    expect(card.confirm(env.data, proposal.id)).toMatchObject({ notice: { messageKey: 'data.notice.replyDraftSaved' } });
+    expect(env.data.getSnapshot().tables.inquiryThread).toMatchObject([
+      otherChannel,
+      { threadId: 'th-2', status: 'draft-ready', replyDraft: { origin: 'generated' } },
+    ]);
+    expect(env.data.getSnapshot().tables.inquiryThread[0].replyDraft).toBeUndefined();
+  } finally { env.bridge.close(); }
+});
+
+it('S5-020 shows the reviewer as masked and identifies the review rating on the draft card', async () => {
+  const env = fixture('S5-020');
+  try {
+    const { reply } = await env.ask('박서연 리뷰 답글 초안 만들어줘');
+    const preview = reply.proposalSession?.getSnapshot().preview;
+    expect(preview?.target).toContain('박**');
+    expect(preview?.target).toContain('3점');
+    expect(JSON.stringify(preview)).not.toContain('박서연');
+    expect(JSON.stringify(env.requests)).not.toContain('박서연');
+  } finally { env.bridge.close(); }
+});
+
+it('S5-020 leaves a different reviewer untouched when the named reviewer is absent', async () => {
+  const review = createLegacySeedTables().inquiryThread.find(row => row.threadId === 'th-4')!;
+  const env = fixture('S5-020', { inquiryThread: [{ ...review, author: '김서연' }] });
+  try {
+    const { reply, before } = await env.ask('박서연 리뷰 답글 초안 만들어줘');
+    expect(reply.answer).toBe('요청에 맞는 답변 대기 항목이 없어요');
+    expect(reply.proposalSession).toBeUndefined();
+    expect(env.data.getSnapshot()).toBe(before);
+  } finally { env.bridge.close(); }
+});
+
+it('S5-020 scopes a topical review draft to the review queue', async () => {
+  const review = createLegacySeedTables().inquiryThread.find(row => row.threadId === 'th-4')!;
+  const parkingReview = { ...review, threadId: 'parking-review', bodyKey: parkingThread.bodyKey };
+  const env = fixture('S5-020', { inquiryThread: [parkingThread, review, parkingReview] });
+  try {
+    const { reply, before } = await env.ask('주차 불편 리뷰 답글 초안 써줘');
+    const card = reply.proposalSession;
+    const proposalId = card?.getSnapshot().proposal?.id;
+    if (!card || !proposalId) throw new Error(reply.answer);
+    expect(card.confirm(env.data, proposalId)).toMatchObject({ notice: { messageKey: 'data.notice.replyDraftSaved' } });
+    const threads = env.data.getSnapshot().tables.inquiryThread;
+    expect(threads.slice(0, 2)).toEqual(before.tables.inquiryThread.slice(0, 2));
+    expect(threads[2].replyDraft).toMatchObject({ origin: 'generated' });
+  } finally { env.bridge.close(); }
+});
+
+it('S5-027 treats colon-delimited reply text as a literal local draft body', async () => {
+  const env = fixture('S5-027');
+  const body = '“리뷰 답글 게시”는 메뉴 이름이에요.\n건물 뒤 ２대까지  주차돼요.';
+  try {
+    const { reply, before } = await env.ask(`톡톡 주차 답장 문구 바꿔줘: ${body}`);
+    const card = reply.proposalSession;
+    const proposal = card?.getSnapshot().proposal;
+    if (!card || !proposal) throw new Error(reply.answer);
+    expect(proposal.command).toBe('inquiry.saveDraft');
+    expect(card.getSnapshot().preview?.fields).toEqual(expect.arrayContaining([expect.objectContaining({ after: body })]));
+    expect(JSON.stringify(env.requests)).not.toContain(body);
+    expect(env.data.getSnapshot()).toBe(before);
+    expect(card.confirm(env.data, proposal.id)).toMatchObject({ notice: { messageKey: 'data.notice.replyDraftSaved' } });
+    expect(env.data.getSnapshot().tables.inquiryThread.find(row => row.threadId === 'fixture-waiting-parking')).toMatchObject({
+      status: 'waiting', replyDraft: { body, origin: 'edited' },
+    });
+  } finally { env.bridge.close(); }
+});
+
+it('S5-027 rejects a pending card after the same inquiry draft changes', async () => {
+  const env = fixture('S5-027');
+  try {
+    const { reply } = await env.ask("주차 답변을 '건물 뒤 2대까지 주차돼요'로 고쳐줘");
+    const card = reply.proposalSession;
+    const proposalId = card?.getSnapshot().proposal?.id;
+    if (!card || !proposalId) throw new Error(reply.answer);
+    expect(env.data.dispatch({
+      type: 'inquiry.saveDraft', threadId: 'fixture-waiting-parking', revision: 1,
+      idempotencyKey: 'widget-edit', body: '이미 위젯에서 고친 문구예요.',
+    }).ok).toBe(true);
+    const latest = env.data.getSnapshot();
+    expect(card.confirm(env.data, proposalId)).toMatchObject({ frame: { outcome: 'conflict' } });
+    expect(env.data.getSnapshot()).toBe(latest);
+  } finally { env.bridge.close(); }
+});
+
+it('S5-022 asks for a thread when the draft request omits a target', async () => {
+  const env = fixture('S5-022');
+  try {
+    const { reply } = await env.ask('초안 써줘');
+    expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'threadId' });
+    expect(reply.proposalSession).toBeUndefined();
+  } finally { env.bridge.close(); }
+});
+
+it('keeps completed reviews out of waiting review choices without filtering by sentiment', async () => {
+  const review = createLegacySeedTables().inquiryThread.find(row => row.threadId === 'th-4')!;
+  const neutral = { ...review, threadId: 'neutral-review', author: '김서연', rating: 4, sentiment: 'neutral' as const };
+  const done = { ...review, threadId: 'completed-review', author: '이서연', status: 'done' as const };
+  const env = fixture('S5-043', { inquiryThread: [neutral, review, done] });
+  try {
+    const { reply } = await env.ask('대기 중인 리뷰 보여줘');
+    expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'threadId', choices: [
+      { label: expect.stringContaining('김**') }, { label: expect.stringContaining('박**') },
+    ] });
+    expect(reply.proposalSession).toBeUndefined();
+  } finally { env.bridge.close(); }
 });

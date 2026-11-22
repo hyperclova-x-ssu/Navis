@@ -190,9 +190,11 @@ async function proposalCase(t, scenario, store, authored) {
     assert.ok(scenario.n04RejectedDraft, scenario.id);
     assert.equal(outcome.terminal.outcome, 'refused', outcome.raw);
     assert.equal(outcome.terminal.refusal.reason, 'invalid_target');
-    assert.equal(outcome.terminal.refusal.alternative?.featureId, 'menu');
+    assert.deepEqual(outcome.terminal.refusal.alternative, { featureId: 'menu' });
     assert.deepEqual(outcome.calls, scenario.expected.tools);
-    assertFragments(outcome.answer, scenario.expected.answer_must_contain);
+    assert.equal(outcome.answer, name === 'menu.delete'
+      ? '삭제할 메뉴를 찾을 수 없어요. 판매 중인 메뉴는 품절로 바꿀 수 있어요.'
+      : '메뉴를 찾을 수 없어요. 메뉴 패널에서 확인해 주세요.');
     assert.equal(outcome.proposal, undefined);
     return;
   }
@@ -341,7 +343,10 @@ async function checkedReply(t, scenario, store) {
   beforeConfirm(outcome, before, store);
   assert.equal(outcome.terminal.outcome, 'reply');
   assert.equal(outcome.proposal, undefined);
-  for (const text of scenario.expected.answer_must_contain ?? []) assert.ok(outcome.answer.includes(text), outcome.answer);
+  for (const text of scenario.expected.answer_must_contain ?? []) {
+    const wording = scenario.id === 'S1-017' && text === '메뉴 관리' ? '관리 > 상품 > 메뉴 > "메뉴 추가하기"' : text;
+    assert.ok(outcome.answer.includes(wording), outcome.answer);
+  }
 }
 
 async function marginPeriods(t, store, step) {
@@ -459,7 +464,7 @@ async function nonProposalCase(t, scenario, store) {
     if (create && scenario.review) {
       assert.equal(outcome.terminal.refusal.reason, 'duplicate');
       assert.deepEqual(outcome.calls, expected.tools);
-      assertFragments(outcome.answer, expected.answer_must_contain);
+      assert.equal(outcome.answer, '같거나 비슷한 이름의 메뉴가 있어요. 메뉴 패널에서 확인해 주세요.');
     }
   }
   else if (create) {
@@ -523,7 +528,8 @@ function reviewedLocal(scenario, store) {
 // on a live-mode bridge that still talks to the same fixture transport (the fixture bridge has no quota).
 const liveNative = t => {
   const harness = createNavisMenuHarness(options => createBridge({
-    ...options, agentMode: 'live', apiKey: 'navis-fixture-key', fetchImpl: options.agentFetchImpl, onDiagnostics() {},
+    // agentWindowTurns pins the former six-turn allowance: the default is now 30 per minute (NAVIS_AGENT_WINDOW_TURNS), and this case proves the limit itself.
+    ...options, agentMode: 'live', apiKey: 'navis-fixture-key', fetchImpl: options.agentFetchImpl, onDiagnostics() {}, agentWindowTurns: 6,
   }), schema.validateAgentFrame);
   t.after(harness.close);
   return harness.run;
@@ -606,6 +612,21 @@ for (const { scenario_id: id } of primary) {
     return nonProposalCase(t, scenario, store);
   });
 }
+
+test('N04 explicit price drafts use the canonical name lookup and the owner card', async t => {
+  const store = data.createWidgetDataStore();
+  const before = store.getSnapshot();
+  const row = rowFor(before, facts.americano.id);
+  const args = { menuId: menuHandle(row), patch: { price: { slot: 'price' } } };
+  const result = await native(t)(request(before, { kind: 'command', command: 'menu.update', args }, {
+    slots: ['name', 'price'], searches: [query('name', [menuChoice(row)])],
+  }));
+  beforeConfirm(result, before, store);
+  assert.deepEqual(result.calls, [searchTool('name'), { name: 'propose_action', args: { command: 'menu.update', args } }]);
+  assert.deepEqual(result.proposal?.args, args);
+  assertConfirmedChange(store, before, result.proposal, { menuId: row.menuId, patch: { price: 4500 } },
+    { name: menuLabel(row), price: 4500 }, targetsFor(row), {});
+});
 
 test('N04 forged menu price projection is rejected before the model starts', async t => {
   const before = cafe.cafeSnapshot;
@@ -708,4 +729,43 @@ test('N04 application sale-status requests reach the fake bridge and present a c
   assert.equal(store.getSnapshot(), before);
   assert.equal(write.turn.proposal.isCurrent(), true);
   assert.deepEqual(transcripts, [['search_records', 'propose_action']]);
+});
+
+test('N04 recipe preflight refuses a reading scoped to a different menu', async t => {
+  const store = data.createWidgetDataStore();
+  const before = store.getSnapshot();
+  const latte = rowFor(before, facts.latte.id);
+  const americano = rowFor(before, facts.americano.id);
+  const target = { menuId: menuHandle(latte), lines: { slot: 'lines' } };
+  const foreign = { menuId: { handle: 'other-menu' } };
+  const result = await native(t)(request(before, command('menu.setRecipe', target), {
+    slots: ['name', 'lines', 'otherName'],
+    searches: [query('name', [menuChoice(latte)]), query('otherName', [menuChoice(americano, 'exact', foreign.menuId.handle)])],
+    readings: [{ tool: 'get_recipe', args: foreign, facts: getRecipe(before, americano.menuId).map(line => ({
+      key: 'menu.recipe.line', label: line.itemId, value: line.quantity, unit: line.unit, display: String(line.quantity),
+    })) }],
+  }));
+  beforeConfirm(result, before, store);
+  assert.equal(result.terminal.outcome, 'refused', result.raw);
+  assert.equal(result.terminal.refusal.reason, 'unavailable');
+  assert.equal(result.proposal, undefined);
+});
+
+test('N04 checks the menu match before reading a recipe for a different handle', async t => {
+  const store = data.createWidgetDataStore();
+  const before = store.getSnapshot();
+  const latte = rowFor(before, facts.latte.id);
+  const americano = rowFor(before, facts.americano.id);
+  const handle = 'other-menu';
+  const args = { menuId: { handle }, lines: { slot: 'lines' } };
+  const result = await native(t)(request(before, command('menu.setRecipe', args), {
+    slots: ['name', 'lines', 'otherName'],
+    searches: [query('name', [menuChoice(latte)]), query('otherName', [menuChoice(americano, 'exact', handle)])],
+    readings: [{ ...recipeProjection(before, americano, { menuId: menuHandle(americano) }), args: { menuId: args.menuId } }],
+  }));
+  beforeConfirm(result, before, store);
+  assert.deepEqual(result.calls, [searchTool('name')]);
+  assert.equal(result.terminal.outcome, 'refused', result.raw);
+  assert.equal(result.terminal.refusal.reason, 'invalid_target');
+  assert.equal(result.proposal, undefined);
 });

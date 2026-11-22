@@ -3,12 +3,14 @@ import { inventoryQuantityInUnit } from './inventory.mjs';
 import { resolveAgentTarget } from './registry.mjs';
 
 const lookup = (kind, querySlot) => ({ name: 'search_records', args: { kind, querySlot } });
+const suggestionWidget = () => ({ name: 'get_widget', args: { featureId: 'suppliers', condition: { kind: 'default' } } });
 const clarify = field => ({ outcome: 'clarify', field });
 const refuse = reason => ({ outcome: 'refused', reason });
 const ready = args => ({ outcome: 'ready', args });
 const openStatuses = ['scheduled', 'partial'];
 const positive = value => Number.isFinite(value) && value > 0;
 const nonnegativeInteger = value => Number.isSafeInteger(value) && value >= 0;
+const positiveInteger = value => Number.isSafeInteger(value) && value > 0;
 const readable = search => ['ready', 'missing'].includes(search?.status);
 const fieldsOf = match => match.fields ?? {};
 const targets = Object.freeze({
@@ -51,7 +53,7 @@ function isoDay(value) {
 export function prepareSupplierEstimate({ item, qty, sourceUnit = item?.unit, businessDate, dueDate, hasOpenOrder = false }) {
   const baseDay = isoDay(businessDate);
   if (!baseDay || !item || !positive(item.minimumQty) || !positive(item.orderStep)
-    || !nonnegativeInteger(item.unitPrice) || !nonnegativeInteger(item.leadDays)) return refuse('unavailable');
+    || !positiveInteger(item.unitPrice) || !nonnegativeInteger(item.leadDays)) return refuse('unavailable');
   const quantity = purchaseQuantity(qty, sourceUnit, item.unit, item.basePerUnit);
   if (quantity.outcome) return quantity;
   if (quantity.qty < item.minimumQty) return clarify('minimumQty');
@@ -85,7 +87,7 @@ export function prepareSupplierReceipt({ line, qty, sourceUnit = line?.unit }) {
 
 function openOrderIssue(fields, receipt) {
   if (typeof fields.open !== 'boolean' || !fields.status || receipt && !Number.isFinite(fields.remaining)) return refuse('unavailable');
-  if (!fields.open || !openStatuses.includes(fields.status) || receipt && fields.remaining <= 0) return refuse('invalid_target');
+  if (!fields.open || !openStatuses.includes(fields.status) || receipt && fields.remaining < 1) return refuse('invalid_target');
   return undefined;
 }
 
@@ -99,10 +101,11 @@ function checkTarget(read, wanted, lookupIndex, field) {
 
 function nameConflict(read, except) {
   if (!readable(read) || read.nextCursor) return refuse('unavailable');
-  return read.matches.some(match => match.match === 'exact' && match.handle !== except) ? clarify('name') : undefined;
+  if (!read.matches.some(match => match.match === 'exact' && match.handle !== except)) return undefined;
+  return except ? refuse('duplicate') : clarify('name');
 }
 
-function supplierLookups({ intent, slots, searches = [] }) {
+function supplierLookups({ intent, slots }) {
   const { command, args = {}, querySlot = 'name' } = intent;
   if (!slots.includes(querySlot)) return [];
   const [kind] = targets[command];
@@ -112,21 +115,27 @@ function supplierLookups({ intent, slots, searches = [] }) {
     const supplierSlot = slots.includes('supplierId') ? 'supplierId' : slots.includes('supplier') ? 'supplier' : undefined;
     if (supplierSlot) lookups.push(lookup('supplier', supplierSlot));
   }
-  if (command === 'suppliers.createOrder' && args.suggestionItemId) lookups.push(lookup('stock', querySlot));
-  if (command === 'suppliers.updateSupplier' && args.patch?.name?.slot !== querySlot
-    && searches.some(search => search.kind === 'supplier' && search.querySlot === args.patch?.name?.slot && !search.cursor)) {
-    lookups.push(lookup('supplier', args.patch.name.slot));
+  if (command === 'suppliers.createOrder' && args.suggestionItemId) return [suggestionWidget(), ...lookups, lookup('stock', querySlot)];
+  const nameSlot = args.patch?.name?.slot;
+  if (command === 'suppliers.updateSupplier' && nameSlot !== querySlot && slots.includes(nameSlot)) {
+    lookups.push(lookup('supplier', nameSlot));
   }
   return lookups;
 }
 
-function prepareSupplierCommand({ input: { intent }, reads }) {
+function prepareSupplierCommand({ input: { intent, slots }, reads }) {
   const { command, args = {} } = intent;
   if (!validateAgentToolArgs('propose_action', { command, args })) return clarify('change');
+  for (const [field, value] of Object.entries(args)) {
+    if (value && typeof value === 'object' && 'slot' in value && (value.slot !== field || !slots.includes(value.slot))) return clarify(field);
+  }
+  if (Object.entries(args.patch ?? {}).some(([field, value]) => value?.slot &&
+      (value.slot !== field || !slots.includes(value.slot)))) return clarify('patch');
   if (command === 'suppliers.createSupplier') return nameConflict(reads[0]) ?? ready(args);
 
   const [, field] = targets[command];
-  const { fields, issue } = checkTarget(reads[0], args[field], 0, field);
+  const targetIndex = command === 'suppliers.createOrder' && args.suggestionItemId ? 1 : 0;
+  const { fields, issue } = checkTarget(reads[targetIndex], args[field], targetIndex, field);
   if (issue) return issue;
   switch (command) {
     case 'suppliers.createPurchaseItem': {
@@ -141,13 +150,14 @@ function prepareSupplierCommand({ input: { intent }, reads }) {
     case 'suppliers.deleteSupplier':
       return fields.referenced === false ? ready(args) : refuse(fields.referenced === true ? 'invalid_target' : 'unavailable');
     case 'suppliers.updateSupplier':
-      return (reads[1] && nameConflict(reads[1], args.supplierId.handle)) ?? ready(args);
+      return (args.patch.name ? nameConflict(reads[1], args.supplierId.handle) : undefined) ?? ready(args);
     case 'suppliers.createOrder': {
       if (!fields.unit || !positive(fields.minimumQty) || !positive(fields.orderStep)
-        || !nonnegativeInteger(fields.unitPrice) || !nonnegativeInteger(fields.leadDays)) return refuse('unavailable');
+        || !positiveInteger(fields.unitPrice) || !nonnegativeInteger(fields.leadDays)) return refuse('unavailable');
       if (!args.suggestionItemId) return ready(args);
       if (fields.suggested !== true) return refuse('invalid_target');
-      const stock = checkTarget(reads[1], args.suggestionItemId, 1, 'suggestionItemId');
+      const stockIndex = targetIndex + 1;
+      const stock = checkTarget(reads[stockIndex], args.suggestionItemId, stockIndex, 'suggestionItemId');
       return stock.issue ?? (stock.fields.kind === 'ingredient' ? ready(args) : refuse('invalid_target'));
     }
     case 'suppliers.changeDueDate':

@@ -1,6 +1,8 @@
 import type { DetailRef, Locale, QueryCondition } from '../../../contracts';
 import { handlers } from '../../../data/commands/handlers';
 import { LEGACY_GRANT_EVALUATION_NOW, TODAY, dateOf, daysBetween, timeOf } from '../../../data/db/time';
+import { isOfficialNotice, isOwnerApplication } from '../../../data/reality/11/adapter';
+import { projectOfficialGrants } from '../../../data/reality/11/grants';
 import { normalizeCondition, resolveDataText, selectMenus, selectWidget, type DataCommand, type DataSnapshot, type ManualRow } from '../../../data/widget-data';
 import { createTranslator, type MessageBundle, type Translator } from '../../../i18n';
 import { mgmtMoneyBundle } from '../../widgets/mgmt-money/messages';
@@ -58,13 +60,16 @@ const noticeTitle = (snapshot: DataSnapshot, noticeId: string, locale: Locale) =
   const notice = snapshot.tables.grantNotice.find(row => row.noticeId === noticeId);
   return notice ? tr(locale).t(notice.titleKey) : '';
 };
+const applicationTitle = (snapshot: DataSnapshot, application: DataSnapshot['tables']['grantApplication'][number], locale: Locale) =>
+  isOwnerApplication(application) ? resolveDataText(tr(locale).t, application.title) : noticeTitle(snapshot, application.noticeId, locale);
 const grantStatus = (locale: Locale, status: typeof statuses[number]) => tr(locale).t(`widget.grants.${status}`);
 const isReviewed = (snapshot: DataSnapshot, noticeId: string) =>
   snapshot.tables.grantReview.some(row => row.noticeId === noticeId && row.reviewStatus === 'reviewed');
 const isApplied = (snapshot: DataSnapshot, noticeId: string) =>
   snapshot.tables.grantApplication.some(row => row.noticeId === noticeId);
 const canApply = (notice: DataSnapshot['tables']['grantNotice'][number]) =>
-  notice.applyStart <= LEGACY_GRANT_EVALUATION_NOW && LEGACY_GRANT_EVALUATION_NOW <= notice.applyEnd;
+  isOfficialNotice(notice) ? !!notice.official.deadline && notice.businessDay <= notice.official.deadline && (!notice.official.startsOn || notice.official.startsOn <= notice.businessDay)
+    : notice.applyStart <= LEGACY_GRANT_EVALUATION_NOW && LEGACY_GRANT_EVALUATION_NOW <= notice.applyEnd;
 
 interface SearchRow {
   readonly id: string;
@@ -84,11 +89,11 @@ function recordRows(kind: RecordKind, snapshot: DataSnapshot, locale: Locale): S
   }));
   if (kind === 'grantNotice') return tables.grantNotice.map(notice => ({
     id: notice.noticeId, label: tr(locale).t(notice.titleKey), fields: {
-      date: dateOf(notice.applyEnd), canApply: canApply(notice), reviewed: isReviewed(snapshot, notice.noticeId), applied: isApplied(snapshot, notice.noticeId),
+      ...(notice.applyEnd && { date: dateOf(notice.applyEnd) }), canApply: canApply(notice), reviewed: isReviewed(snapshot, notice.noticeId), applied: isApplied(snapshot, notice.noticeId),
     },
   }));
   return tables.grantApplication.map(row => ({
-    id: row.applicationId, label: noticeTitle(snapshot, row.noticeId, locale), fields: { date: row.appliedOn, status: row.status },
+    id: row.applicationId, label: applicationTitle(snapshot, row, locale), fields: { date: row.appliedOn, status: row.status },
   }));
 }
 
@@ -135,7 +140,8 @@ function commandAdapter(type: CommandName): CommandAdapter<Command, { args: Reco
       if (!object(args) || !validateAgentCommandArgs(type, args)) return;
       if (type === 'manuals.toggleStep' && typeof args.checked !== 'boolean') return;
       // D-326 Q3: chat only takes a manual down. Publishing again is the receipt undo or the widget.
-      if (type === 'manuals.setPublished' && args.published !== false) return;
+      if (type === 'manuals.setPublished' && (args.published !== false ||
+        !snapshot.tables.manual.some(row => row.manualId === args.manualId && row.isPublished && row.section !== 'store-info'))) return;
       if (args.manualId && !manualRows(snapshot).some(row => row.manualId === args.manualId)) return;
       if (args.draftId && !snapshot.tables.manualDraft.some(row => row.draftId === args.draftId && row.status === 'draft')) return;
       const locale = slots.navisLocale;
@@ -186,9 +192,20 @@ function commandAdapter(type: CommandName): CommandAdapter<Command, { args: Reco
       } else if (manual || updatedManual) {
         field(t('widget.manuals.draftTitle'), manual && manualTitle(manual, locale), updatedManual && manualTitle(updatedManual, locale));
         field(t('widget.manuals.category'), manual && t(manual.categoryKey), updatedManual && t(updatedManual.categoryKey));
-        field(t('widget.manuals.procedures'), manual?.steps.map(step => resolveDataText(t, step.body)).join('\n'),
-          updatedManual?.steps.map(step => resolveDataText(t, step.body)).join('\n'));
+        if (manual && updatedManual && manual.steps.length === updatedManual.steps.length) {
+          for (const [index, step] of manual.steps.entries()) {
+            field(t('widget.manuals.stepCount', { n: step.stepNo }), resolveDataText(t, step.body),
+              resolveDataText(t, updatedManual.steps[index].body));
+          }
+        } else {
+          field(t('widget.manuals.procedures'), manual?.steps.map(step => resolveDataText(t, step.body)).join('\n'),
+            updatedManual?.steps.map(step => resolveDataText(t, step.body)).join('\n'));
+        }
         field(t('widget.manuals.cautions'), manual && resolveDataText(t, manual.cautions), updatedManual && resolveDataText(t, updatedManual.cautions));
+        if (command.type === 'manuals.saveDraft') {
+          const count = (value: DataSnapshot) => String(manualModel(value)?.[updatedManual?.section === 'store-info' ? 'storeInfoCount' : 'publishedCount'] ?? 0);
+          field(t('widget.manuals.title'), count(snapshot), count(after));
+        }
       } else if (command.type === 'grants.markReviewed') {
         field(t('widget.grants.notices'), t('common.navis.agent.none'), t('common.badge.reviewed'));
       } else {
@@ -210,7 +227,8 @@ function commandAdapter(type: CommandName): CommandAdapter<Command, { args: Reco
         }
       })();
       const target = manual ? manualTitle(manual, locale) : updatedManual ? manualTitle(updatedManual, locale)
-        : createdDraft || draft ? resolveDataText(t, (createdDraft ?? draft)!.title) : noticeId ? noticeTitle(snapshot, noticeId, locale) : '';
+        : createdDraft || draft ? resolveDataText(t, (createdDraft ?? draft)!.title)
+          : application ? applicationTitle(snapshot, application, locale) : noticeId ? noticeTitle(snapshot, noticeId, locale) : '';
       const removingStep = command.type === 'manuals.update' && manual && updatedManual && updatedManual.steps.length < manual.steps.length;
       return { kind: 'ready', command, preview: { title: target ? `${title} · ${target}` : title, target, fields },
         ...(removingStep || command.type === 'manuals.setPublished' ? { tier: 'extra-confirm' as const } : {}) };
@@ -266,8 +284,9 @@ function projectFacts(snapshot: DataSnapshot, feature: string, condition: QueryC
   } else {
     const view = selectWidget(snapshot, grants, condition, 'normal');
     if (view.status !== 'ready') return { status: view.status === 'empty' ? 'missing' as const : 'unavailable' as const };
-    const model = view.model;
-    const source = t(model.sourceKey);
+    const official = snapshot.tables.grantNotice.some(isOfficialNotice);
+    const model = official ? projectOfficialGrants(snapshot, view.model) : view.model;
+    const source = official ? '기업마당' : t(model.sourceKey);
     facts.push(fact('grants.candidates.count', t('widget.grants.reviewCandidates'), model.candidateCount, format.count(model.candidateCount, 'count'), 'count', source));
     facts.push(fact('grants.inProgress.count', t('widget.grants.applications'), model.inProgressCount, format.count(model.inProgressCount, 'count'), 'count', source));
     const eligibility = {
@@ -277,11 +296,14 @@ function projectFacts(snapshot: DataSnapshot, feature: string, condition: QueryC
     facts.push(fact('grants.eligibility', t('widget.grants.draftCheck'), 'unverified', eligibility, '', source));
     for (const notice of snapshot.tables.grantNotice) {
       const key = noticeKey(notice.noticeId), title = t(notice.titleKey);
-      const date = dateOf(notice.applyEnd);
-      const formattedEnd = `${format.date(date, 'short')} ${format.time(timeOf(notice.applyEnd))}`;
-      const days = daysBetween(TODAY, date);
-      const deadline = days < 0 ? formattedEnd : `${formattedEnd} · ${t('widget.grants.daysLeft', { n: days })}`;
-      facts.push(fact(`${key}.deadline`, title, notice.applyEnd, deadline, 'date', source));
+      const officialNotice = isOfficialNotice(notice);
+      const date = officialNotice ? notice.official.deadline : dateOf(notice.applyEnd);
+      if (date) {
+        const formattedEnd = officialNotice ? format.date(date, 'short') : `${format.date(date, 'short')} ${format.time(timeOf(notice.applyEnd))}`;
+        const days = daysBetween(officialNotice ? notice.businessDay : TODAY, date);
+        const deadline = days < 0 ? formattedEnd : `${formattedEnd} · ${t('widget.grants.daysLeft', { n: days })}`;
+        facts.push(fact(`${key}.deadline`, title, officialNotice ? date : notice.applyEnd, deadline, 'date', source));
+      }
       facts.push(fact(`${key}.detail`, title, t(notice.summaryKey), undefined, '', source));
       notice.conditionKeys.forEach((message, index) => {
         facts.push(fact(`${key}.condition.${index}`, title, t(message), undefined, '', source));
@@ -292,12 +314,13 @@ function projectFacts(snapshot: DataSnapshot, feature: string, condition: QueryC
         t(isReviewed(snapshot, notice.noticeId) ? 'common.markReviewed' : 'common.navis.agent.none'), 'flag', source));
     }
     for (const application of model.applications) {
-      const title = noticeTitle(snapshot, application.noticeId, locale) || t('widget.grants.applicationName');
+      const title = applicationTitle(snapshot, application, locale) || t('widget.grants.applicationName');
+      const applicationSource = isOwnerApplication(application) ? '사장님 기록' : source;
       const key = applicationKey(application.applicationId);
-      facts.push(fact(`${key}.status`, title, application.status, grantStatus(locale, application.status), '', source));
-      facts.push(fact(`${key}.date`, title, application.appliedOn, format.date(application.appliedOn, 'short'), 'date', source));
+      facts.push(fact(`${key}.status`, title, application.status, grantStatus(locale, application.status), '', applicationSource));
+      facts.push(fact(`${key}.date`, title, application.appliedOn, format.date(application.appliedOn, 'short'), 'date', applicationSource));
       const memo = resolveDataText(t, application.resultMemo);
-      if (memo) facts.push(fact(`${key}.memo`, title, memo, undefined, '', source));
+      if (memo) facts.push(fact(`${key}.memo`, title, memo, undefined, '', applicationSource));
     }
   }
   return { facts };
@@ -311,8 +334,10 @@ const remove = /지워|삭제|없애|버려|취소/u;
 const edit = /바꿔|고쳐|변경|수정|옮겨|이동/u;
 const numberedStep = /(\d+)\s*(?:번|단계)/u;
 const multipleSteps = /\d+\s*(?:번|단계)?\s*[,·]\s*\d+|전부|모두|다\s*(?:끝|해제|체크)/u;
-const otherFeatureRequest = /^(?:공지|휴무\s*공지)|배치|패널|위젯\s*(?:추가|지워|삭제)|대시보드|보드|페이지/u;
+// A notice request is the notice widget's, even when it names store hours or a handover ("영업시간 변경 안내 공지 만들어줘").
+const otherFeatureRequest = /^(?:공지|휴무\s*공지)|공지(?:사항|문)?\s*(?:를|을)?\s*(?:만들|써|작성|보내|올려|초안|문구)|배치|패널|위젯\s*(?:추가|지워|삭제)|대시보드|보드|페이지/u;
 const compound = /알려주고|읽어주고|보여주고/u;
+const standaloneDraft = /^(?:(?:그|만든|방금\s*만든|방금)\s+)?초안(?:을)?\s*(?:저장|버려|취소|삭제)/u;
 const readWords = /알려|뭐|어떤|얼마|몇|있어|어디|언제|어떻게|어디까지|얼마나/u;
 const quote = /['"‘“]([^'"’”]+)['"’”]/u;
 const tail = /(?:->|[:：]|\s-\s)(.+)$/u;
@@ -344,16 +369,19 @@ function detail(featureId: typeof manuals | typeof grants, args: AgentWireArgs =
   return { args: { featureId, ...args, ...(id ? { itemId: id } : {}) }, ...(kind && id ? { target: { kind, id }, querySlot: kind } : {}) };
 }
 
-function manualMention(rows: readonly ManualRow[], input: string, locale: Locale) {
+function manualMention<T extends Pick<DataSnapshot['tables']['manual'][number], 'title' | 'category' | 'section'>>(
+  rows: readonly T[], input: string, locale: Locale,
+) {
   const text = normalizeNavisName(input);
+  const t = tr(locale).t;
   const exact = rows.filter(row => {
-    const title = normalizeNavisName(manualTitle(row, locale));
+    const title = normalizeNavisName(resolveDataText(t, row.title));
     return title.length > 1 && text.includes(title);
   });
   if (exact.length) return exact;
-  if (/오픈/u.test(input)) return rows.filter(row => row.checklist && row.category === 'opening');
-  if (/마감/u.test(input)) return rows.filter(row => row.checklist && row.category === 'closing');
-  if (/영업\s*시간/u.test(input)) return rows.filter(row => row.section === 'store-info' && /영업시간/u.test(normalizeNavisName(manualTitle(row, locale))));
+  if (/오픈/u.test(input)) return rows.filter(row => row.section !== 'store-info' && row.category === 'opening');
+  if (/마감/u.test(input)) return rows.filter(row => row.section !== 'store-info' && row.category === 'closing');
+  if (/영업\s*시간/u.test(input)) return rows.filter(row => row.section === 'store-info' && /영업시간/u.test(normalizeNavisName(resolveDataText(t, row.title))));
   return [];
 }
 
@@ -442,7 +470,8 @@ function manualCreate(text: string, locale: Locale, fields: { title?: string; ca
   const t = tr(locale).t;
   const storeInfo = /매장\s*정보/u.test(text);
   const section = storeInfo ? 'store-info' : 'handover';
-  if (!storeInfo && !/인수인계|매뉴얼/u.test(text)) {
+  const procedure = readSteps(text);
+  if (!storeInfo && !/인수인계|매뉴얼/u.test(text) && !procedure.length) {
     return clarify('section', [t('widget.manuals.handover'), t('widget.manuals.storeInfo')].join(' / '), value =>
       /매장\s*정보|인수인계/u.test(value) ? manualCreate(`${text} ${value.trim()}`, locale, fields) : undefined);
   }
@@ -452,14 +481,20 @@ function manualCreate(text: string, locale: Locale, fields: { title?: string; ca
     ?? (storeInfo ? text.match(/매장\s*정보에\s+(.+?)\s*(?:적어|추가)/u)?.[1] : undefined);
   const category = fields.category ?? (storeInfo ? 'store-info' : readCategory(text, locale));
   const body = text.match(/(?:내용(?:은|을)?\s*[:：]?\s*|적어\s*줘\s*[:：]\s*)(.+)$/u)?.[1];
-  const steps = fields.steps ?? (storeInfo && body ? [body.replace(/^['"‘“]|['"’”][.]?$/gu, '')] : readSteps(text));
+  const steps = fields.steps ?? (storeInfo && body ? [body.replace(/^['"‘“]|['"’”][.]?$/gu, '')] : procedure);
   if (!title?.trim()) return clarify('title', t('widget.manuals.titleRequired'), value => manualCreate(text, locale, { ...fields, title: value.trim() }));
-  if (!category) return clarify('category', t('data.error.categoryInvalid'), value =>
-    manualCreate(text, locale, { title, steps, category: readCategory(value, locale) }));
-  if (!steps.length) return clarify('steps', t('data.error.stepsRequired'), value => {
-    const numbered = readSteps(value);
-    return manualCreate(text, locale, { title, category, steps: numbered.length ? numbered : [value.trim()] });
+  const inlineProcedure = /(?:매뉴얼|문서)\s*(?:만들|추가)(?:어\s*줘|해\s*줘)?\s*[:：]?\s+[^\s]/u.test(text)
+    && !/제목|이름/u.test(text);
+  if (!category && (steps.length || inlineProcedure)) return clarify('category', t('data.error.categoryInvalid'), value => {
+    const selected = readCategory(value, locale);
+    return selected ? manualCreate(text, locale, { title, steps, category: selected }) : undefined;
   });
+  if (!steps.length) return clarify('steps', t('data.error.stepsRequired'), value => {
+    const lines = value.split(/\r?\n/u).map(line => line.trim()).filter(Boolean);
+    const numbered = readSteps(lines.join(' '));
+    return lines.length ? manualCreate(text, locale, { title, category, steps: numbered.length ? numbered : lines }) : undefined;
+  });
+  if (!category) return clarify('category', t('data.error.categoryInvalid'));
   return commandTurn('manuals.create', { section, title: slot('title'), category, steps: slot('steps') }, { title, steps });
 }
 
@@ -481,10 +516,16 @@ function manualRoute(text: string, snapshot: DataSnapshot, locale: Locale): Doma
   if (draftRequest) {
     if (remove.test(text) || /저장/u.test(text)) {
       const drafts = snapshot.tables.manualDraft.filter(row => row.status === 'draft');
-      const target = drafts.length === 1 ? drafts[0] : undefined;
-      if (!target) return drafts.length ? clarify('draftId', t('common.navis.agent.chooseRecord')) : refusal('invalid_target');
-      return commandTurn(remove.test(text) ? 'manuals.discardDraft' : 'manuals.saveDraft', {}, undefined,
-        { kind: 'manualDraft', id: target.draftId, field: 'draftId' });
+      if (!drafts.length) return refusal('invalid_target');
+      const label = (row: typeof drafts[number]) => resolveDataText(t, row.title);
+      const name = text.match(quote)?.[1];
+      const candidates = name ? drafts.filter(row => normalizeNavisName(label(row)) === normalizeNavisName(name)) : drafts;
+      const propose = (id: string) => commandTurn(remove.test(text) ? 'manuals.discardDraft' : 'manuals.saveDraft', {}, undefined,
+        { kind: 'manualDraft', id, field: 'draftId' });
+      if (candidates.length === 1) return propose(candidates[0].draftId);
+      return { kind: 'clarification', field: 'draftId', answer: t('common.navis.agent.chooseRecord'),
+        choices: (candidates.length ? candidates : drafts).map(row => ({ id: row.draftId, label: label(row) })),
+        resume: propose };
     }
     const memo = text.match(tail)?.[1]?.trim() ?? text.match(/\(([^)]+)\)\s*$/u)?.[1]?.trim();
     const create = (value: string) => commandTurn('manuals.createDraftFromMemo', {
@@ -533,9 +574,12 @@ function manualRoute(text: string, snapshot: DataSnapshot, locale: Locale): Doma
   if (!manualTopic) return;
   if (/게시\s*(?:취소|해제|중지|내려)|비공개|숨겨|공개\s*끄|내려\s*줘/u.test(text)) {
     // D-326 Q3: one published manual comes down by a card with extra confirmation. Several at once and store info stay in the widget.
-    if (/전부|모두|전체|일괄|한꺼번에/u.test(text) || manual?.section === 'store-info') return refusal('widget_only');
-    if (!manual) return matches.length > 1 ? clarify('manualId', t('common.navis.agent.chooseRecord')) : refusal('invalid_target');
-    return commandTurn('manuals.setPublished', { published: false }, undefined, { kind: 'manual', id: manual.manualId, field: 'manualId' });
+    const targets = manualMention(snapshot.tables.manual, text, locale);
+    const target = targets.length === 1 ? targets[0] : undefined;
+    if (/전부|모두|모든|전체|일괄|한꺼번에/u.test(text) || target?.section === 'store-info') return refusal('widget_only');
+    if (!target) return targets.length > 1 ? clarify('manualId', t('common.navis.agent.chooseRecord')) : refusal('invalid_target');
+    if (!target.isPublished) return answer(t('common.navis.agent.unchanged'));
+    return commandTurn('manuals.setPublished', { published: false }, undefined, { kind: 'manual', id: target.manualId, field: 'manualId' });
   }
 
   const read = (filter: (key: string) => boolean, missing = t('common.navis.noData')) => readFacts(snapshot, manuals, locale, filter, { answer: missing });
@@ -577,9 +621,13 @@ function manualRoute(text: string, snapshot: DataSnapshot, locale: Locale): Doma
     const steps: ManualStepInput[] = updateSteps(snapshot, manual, locale);
     const index = manual.steps.findIndex(row => row.stepNo === stepNo);
     if (removeStep && index >= 0) steps.splice(index, 1);
-    else if (stepNo && index >= 0 && value) {
+    else if (stepNo && index >= 0 && !/맨\s*끝|마지막\s*단계|\d+\s*번\s*추가/u.test(text)) {
       const prior = steps[index];
-      steps[index] = str(prior) ? value : { ...prior, body: value };
+      const replace = (body: string) => {
+        const revised = steps.map((step, i) => i === index ? str(prior) ? body : { ...prior, body } : step);
+        return commandTurn('manuals.update', { patch: { steps: slot('steps') } }, { steps: revised }, ref);
+      };
+      return value ? replace(value) : clarify('steps', t('data.error.stepsRequired'), text => text.trim() ? replace(text.trim()) : undefined);
     } else if (/맨\s*끝|마지막\s*단계|\d+\s*번\s*추가/u.test(text)) {
       const appended = value ?? text.match(/마지막\s*단계로\s+(.+?)\s*넣/u)?.[1] ?? text.match(/체크리스트에\s+(.+?)\s*\d+\s*번/u)?.[1];
       if (!appended) return clarify('steps', t('data.error.stepsRequired'));
@@ -708,7 +756,9 @@ function grantRoute(text: string, snapshot: DataSnapshot, locale: Locale): Domai
   }
   if (/빠른|임박|곧\s*마감/u.test(text)) {
     const view = selectWidget(snapshot, grants, defaultCondition, 'normal');
-    const first = view.status === 'ready' ? view.model.notices.find(row => row.isCandidate) : undefined;
+    const model = view.status === 'ready' && snapshot.tables.grantNotice.some(isOfficialNotice) ? projectOfficialGrants(snapshot, view.model)
+      : view.status === 'ready' ? view.model : undefined;
+    const first = model?.notices.find(row => row.isCandidate);
     return read(key => !!first && key === `${noticeKey(first.noticeId)}.deadline`, t('data.state.grants.none'));
   }
   if (notice) {
@@ -747,16 +797,23 @@ export const manualsGrantsDomain = {
   routePresentation(raw, snapshot, locale) {
     const text = normalizeNavisInput(raw);
     if (noAction.test(text) || otherFeatureRequest.test(text)) return;
-    if (/라[테떼].*우유/u.test(text) && /얼마나|몇\s*m[lL]|우유\s*양/u.test(text)) {
+    const latte = /^(.*라[테떼]).*우유/u.exec(text)?.[1];
+    const asksMilkAmount = /(?:얼마나|몇\s*ml)\s*(?:넣|들어|필요|[.?!]*$)/iu.test(text)
+      || /우유\s*양(?:을|이|은|는)?\s*(?:알려|보여|말해|[.?!]*$)/u.test(text);
+    if (latte && asksMilkAmount) {
       const t = tr(locale).t;
-      const exact = menuAgentDomain.route?.(`${text} 레시피`, snapshot, locale);
+      const readRecipe = (name: string) => {
+        const route = menuAgentDomain.route?.(`${name} 레시피`, snapshot, locale);
+        if (route && 'intent' in route && route.intent.kind === 'read' && route.intent.tool === 'get_recipe') return route;
+      };
+      const exact = readRecipe(latte);
       if (exact) return exact;
       const names = selectMenus(snapshot, {}).rows.map(row => resolveDataText(t, row.name))
         .filter(name => normalizeNavisName(name).includes('라테'));
-      return clarify('name', names.join(' / '), value => menuAgentDomain.route?.(`${value} 레시피`, snapshot, locale));
+      return clarify('name', names.join(' / '), readRecipe);
     }
     if (grantWords.test(text) || grantSubject.test(text)) return grantRoute(text, snapshot, locale);
-    if (manualWords.test(text) || /메모로.*만들|매뉴얼로\s*저장|조명.*(?:켰|켜)|영업\s*시간|컵\s*규칙|조심할\s*점/u.test(text)) {
+    if (manualWords.test(text) || standaloneDraft.test(text) || /메모로.*만들|매뉴얼로\s*저장|조명.*(?:켰|켜)|영업\s*시간|컵\s*규칙|조심할\s*점/u.test(text)) {
       return manualRoute(text, snapshot, locale);
     }
   },

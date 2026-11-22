@@ -173,6 +173,14 @@ function assertApplied(before, after, type, command) {
       const person = t.staff.find(row => command.staffId ? row.staffId === command.staffId :
         !before.tables.staff.some(original => original.staffId === row.staffId));
       assert.equal(person?.name, command.name);
+      if (type === 'staff.create') {
+        assert.equal(person.archivedAt, null);
+        assert.deepEqual(t.staff.filter(row => row.staffId !== person.staffId), before.tables.staff);
+        assert.deepEqual(t.staffSchedule, before.tables.staffSchedule);
+        const changes = t.staffScheduleChange.slice(before.tables.staffScheduleChange.length);
+        assert.deepEqual(changes.map(({ operation, entityId, before, after }) => [operation, entityId, before, after]),
+          [['create', person.staffId, null, person]]);
+      }
     }
     if (type === 'staff.deleteSchedule') assert.deepEqual(t.staffSchedule, before.tables.staffSchedule.filter(row => row.scheduleId !== command.scheduleId));
     if (type === 'staff.saveSchedule') {
@@ -185,6 +193,17 @@ function assertApplied(before, after, type, command) {
         item.sourceId === row.scheduleId && item.sourceFeatureId === 'staff-schedule' && !item.editable));
     }
     if (type === 'staff.moveHandoff') {
+      const moved = before.tables.staffSchedule.filter(row => row.date === command.date && row.kind === 'work' &&
+        (row.start === command.fromTime || row.end === command.fromTime)).map(row => ({ ...row,
+        start: row.start === command.fromTime ? command.toTime : row.start,
+        end: row.end === command.fromTime ? command.toTime : row.end,
+      }));
+      assert.ok(moved.length > 1);
+      const expectedById = new Map(moved.map(row => [row.scheduleId, row]));
+      assert.deepEqual(t.staffSchedule, before.tables.staffSchedule.map(row => expectedById.get(row.scheduleId) ?? row));
+      const changes = t.staffScheduleChange.slice(before.tables.staffScheduleChange.length);
+      assert.deepEqual(changes.map(({ operation, entityId, after }) => [operation, entityId, after]),
+        moved.map(row => ['update', row.scheduleId, row]));
       const calendar = selectCalendar(after, { date: command.date });
       assert.ok(calendar.todayEntries.some(row => row.source === 'shift' && row.time === command.toTime));
       assert.ok(!calendar.todayEntries.some(row => row.source === 'shift' && row.time === command.fromTime));
@@ -219,7 +238,10 @@ async function checkWrite(harness, store, scenario, tool) {
     assert.deepEqual(refer.terminal?.resolution, { type: 'record', recordKind: 'event',
       querySlot: search.querySlot, handle: search.matches[0].handle }, refer.raw);
   }
-  const input = request(before, wire.intent, { ...wire.extras, ...(earlier ? { conversation: true } : {}) });
+  const widget = type === 'staff.moveHandoff' ? { featureId: 'staff-schedule', condition: baseCondition } : undefined;
+  const handoff = widget && selectStaffSchedule(before, { startDate: command.date, endDate: command.date }).today.nextHandoffAt;
+  const snapshot = widget && handoff ? [{ ...widget, facts: [fact('staff.handoff.time', handoff)] }] : [];
+  const input = request(before, wire.intent, { ...wire.extras, snapshot, ...(earlier ? { conversation: true } : {}) });
   const response = await harness.run(input);
   if (type === 'staff.delete') {
     assert.equal(response.terminal?.refusal?.reason, 'widget_only', response.raw);
@@ -235,6 +257,10 @@ async function checkWrite(harness, store, scenario, tool) {
   assert.equal(response.proposal?.snapshotRevision, before.revision);
   if (earlier) assert.notEqual(response.proposal?.proposalId, earlier);
   assert.equal(response.calls.at(-1)?.name, 'propose_action');
+  if (widget) assert.deepEqual(response.calls, [
+    { name: 'get_widget', args: widget },
+    { name: 'propose_action', args: { command: type, args: wire.intent.args } },
+  ]);
   assert.ok(agentCommandRefs(type, response.proposal.args).every(ref => ref.slot || ref.handle));
   assert.equal(store.getSnapshot(), before, 'Wire proposal must not dispatch');
   const actions = createAgentActions(store, clientDomains);
@@ -260,11 +286,18 @@ async function checkWrite(harness, store, scenario, tool) {
     assert.equal(notices.selectDraftClosureLink(after, draft), 'removed');
     assert.equal(store.dispatch({ type: 'notice.preview', noticeId: draft.noticeId, draftRevision: draft.revision }).reason, 'PREVIEW_STALE');
   }
-  if (guarded) {
+  if (guarded || type === 'staff.moveHandoff' || type === 'staff.create') {
     assert.ok(result.undoToken);
     accepted(store.undo(result.undoToken));
     assert.deepEqual(store.getSnapshot().tables.calendarEvent, before.tables.calendarEvent);
+    assert.deepEqual(store.getSnapshot().tables.staff, before.tables.staff);
     assert.deepEqual(store.getSnapshot().tables.staffSchedule, before.tables.staffSchedule);
+    if (id === 'S3-239') {
+      const restored = store.getSnapshot();
+      assert.deepEqual(restored.tables.noticeDraft, before.tables.noticeDraft);
+      const linked = restored.tables.noticeDraft.find(row => row.closureEventId === closure.eventId);
+      assert.equal(notices.selectDraftClosureLink(restored, linked), 'current');
+    }
   }
 }
 
@@ -340,7 +373,11 @@ async function checkRead(harness, store, scenario) {
     assert.ok(answer.calls.some(call => call.name === 'get_widget' && call.args.featureId === featureId), answer.raw);
     for (const { display } of facts) assert.ok(answer.answer.includes(display), answer.raw);
   } else assert.ok(/없어요/u.test(answer.answer), answer.raw);
-  for (const text of scenario.expected.answer_must_contain ?? []) assert.ok(answer.answer.includes(text), answer.raw);
+  const currentDateLabels = { 'S3-205': ['11/23', '11월 23일'], 'S3-206': ['11/12', '11월 12일'] };
+  for (const text of scenario.expected.answer_must_contain ?? []) {
+    const [oldDate, displayedDate] = currentDateLabels[id] ?? [];
+    assert.ok(answer.answer.includes(text === oldDate ? displayedDate : text), answer.raw);
+  }
   assert.equal(store.getSnapshot(), before);
 }
 
@@ -622,6 +659,24 @@ test('N10 fake HCX-005 contracts exercise all 91 assigned scenarios', async t =>
   assert.deepEqual(failures, []);
   assert.deepEqual(new Set(listed), new Set(exceptions.keys()));
   assert.equal(passed + listed.length, assigned.length);
+});
+
+test('N10 only accepts duplicate confirmation from the dedicated choice slot', async () => {
+  const before = setup('S3-222').getSnapshot();
+  const bridge = createNavisMenuHarness(createBridge, validateAgentFrame);
+  try {
+    const args = { title: slot('title'), date: slot('date'), confirmDuplicate: slot('otherChoice') };
+    const run = args => bridge.run(request(before, { kind: 'command', command: 'calendar.addEvent', args }, {
+      slots: ['title', 'date', 'otherChoice', 'confirmDuplicate'],
+    }));
+    const aliased = await run(args);
+    assert.equal(aliased.terminal?.clarification?.field, 'confirmDuplicate', aliased.raw);
+    assert.equal(aliased.proposal, undefined);
+    const valid = { ...args, confirmDuplicate: slot('confirmDuplicate') };
+    assert.deepEqual((await run(valid)).proposal?.args, valid);
+  } finally {
+    bridge.close();
+  }
 });
 
 test('N10 creates and changes a closure only on card press and restores the linked draft on undo', async t => {

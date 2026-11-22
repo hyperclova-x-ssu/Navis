@@ -9,7 +9,8 @@ export type AgentCondition =
   | { readonly kind: 'snapshot'; readonly asOf: string }
   | { readonly kind: 'dateRange'; readonly start: string; readonly end: string };
 export type AgentSlot = string;
-export type AgentMenuCategory = 'drink' | 'dessert';
+export type AgentMenuCategory = 'coffee' | 'tea' | 'beverage' | 'dessert';
+export type AgentMenuCategoryInput = AgentMenuCategory | 'drink';
 export type AgentRecordKind =
   | 'menu' | 'stock' | 'purchaseItem'
   | 'member' | 'note' | 'event'
@@ -98,6 +99,7 @@ export type AgentKnownCommand = AgentCommand | AgentWidgetCommand;
 export type AgentToolName = AgentReadTool | 'propose_action';
 export type AgentExtraReadTool = Exclude<AgentReadTool, 'list_widget_ids' | 'get_widget' | 'search_records' | 'get_source'>;
 export type AgentMissingStatus = 'missing' | 'unavailable' | 'unsupported_period';
+export type AgentReadStatus = 'ready' | AgentMissingStatus;
 export type AgentSlotRef = { readonly slot: AgentSlot };
 export type AgentHandleRef = { readonly handle: string };
 export type AgentWireValue = string | boolean | number | null | AgentSlotRef | AgentHandleRef | AgentWireArgs
@@ -119,11 +121,14 @@ export interface AgentSettingsArgs {
 export const AGENT_SETTINGS_COMMANDS: readonly (keyof AgentSettingsArgs)[];
 // End N08 presentation proposals.
 
-// N02 conversation controls contain no continuation values or undo tokens.
+// N02 conversation controls carry only opaque continuation references and receipt IDs.
 export type AgentConversationIntent = { readonly kind: 'conversation' } & (
   | { readonly action: 'confirm'; readonly pendingId: string; readonly target?: string }
   | { readonly action: 'confirm_extra'; readonly pendingId: string; readonly challengeId: string }
-  | { readonly action: 'cancel' | 'edit' | 'continue'; readonly pendingId: string }
+  | { readonly action: 'cancel' | 'edit'; readonly pendingId: string }
+  | { readonly action: 'continue'; readonly pendingId: string;
+      readonly selection?: { readonly querySlot: AgentSlot; readonly handle: string } & (
+        { readonly recordKind?: never; readonly queryBinding?: never } | { readonly recordKind: AgentRecordKind; readonly queryBinding: string }) }
   | { readonly action: 'undo'; readonly pendingId?: string; readonly featureId?: string; readonly previous?: boolean }
   | { readonly action: 'refer'; readonly ordinal?: 1 | 2 | 3 | 4 | 5; readonly recordKind?: AgentRecordKind; readonly featureId?: string }
   | { readonly action: 'repeat_read'; readonly period?: 'yesterday' | 'previous_month' }
@@ -131,7 +136,8 @@ export type AgentConversationIntent = { readonly kind: 'conversation' } & (
   | { readonly action: 'repeat_command' | 'hold' }
 );
 export type AgentConversationChoice =
-  | { readonly type: 'record'; readonly recordKind: AgentRecordKind; readonly querySlot: AgentSlot; readonly handle: string }
+  | { readonly type: 'record'; readonly recordKind: AgentRecordKind; readonly querySlot: AgentSlot; readonly handle: string;
+      readonly queryBinding?: string }
   | { readonly type: 'widget'; readonly featureId: string }
   | { readonly type: 'undo'; readonly receiptId: string; readonly target: 'data' | 'layout' };
 export type AgentConversationResolution =
@@ -147,10 +153,16 @@ export type AgentConversationResolution =
 // End N02 conversation controls.
 export type AgentIntent =
   | AgentConversationIntent
-  | { readonly kind: 'menu.create'; readonly category: AgentMenuCategory }
-  | { readonly kind: 'command'; readonly command: AgentKnownCommand; readonly args?: AgentWireArgs; readonly querySlot?: AgentSlot }
+  | { readonly kind: 'menu.create'; readonly category: AgentMenuCategoryInput }
+  | { readonly kind: 'command'; readonly command: AgentKnownCommand; readonly args?: AgentWireArgs; readonly querySlot?: AgentSlot;
+      /** The request validator checks the permitted command/field pairs and excludes proposal args. */
+      readonly clarify?: 'menuId' | 'status' | 'expenseId' }
   | { readonly kind: 'read'; readonly featureId?: string; readonly sourceId?: AgentSourceId; readonly condition?: AgentCondition;
-      readonly recordKind?: AgentRecordKind; readonly querySlot?: AgentSlot; readonly tool?: AgentExtraReadTool }
+      readonly recordKind?: AgentRecordKind; readonly querySlot?: AgentSlot; readonly tool?: AgentExtraReadTool; readonly reads?: never;
+      readonly queryBinding?: string; readonly cursor?: string }
+  | { readonly kind: 'read'; readonly reads: readonly AgentReadSelection[]; readonly featureId?: never; readonly sourceId?: never;
+      readonly condition?: never; readonly recordKind?: never; readonly querySlot?: never; readonly tool?: never;
+      readonly queryBinding?: string; readonly cursor?: never }
   | { readonly kind: 'help' | 'layout' | 'unsupported' };
 
 export interface AgentCatalogEntry {
@@ -186,11 +198,20 @@ export interface AgentRecordMatch {
   readonly handle: string;
   readonly match: 'exact' | 'similar';
   readonly label?: string;
-  readonly category?: AgentMenuCategory;
+  readonly category?: AgentMenuCategoryInput;
   readonly price?: number;
   /** Registry-defined distinguishing fields, including N14 checklist step numbers. */
   readonly fields?: Readonly<Record<string, string | number | boolean | readonly number[]>>;
 }
+export type AgentMenuRecordFields = Readonly<{
+  category?: AgentMenuCategoryInput;
+  seasonal?: boolean;
+  price?: number;
+  status?: 'selling' | 'sold_out';
+  kind?: 'menu' | 'retail';
+  soldToday?: number;
+  cost?: number;
+}>;
 // N10 calendar and staff preflight projections.
 export type AgentCalendarRecordFields = Readonly<{
   date?: string;
@@ -228,6 +249,7 @@ export type AgentBookingRecordFields = Readonly<{
   partySize?: number;
   status?: 'needs-check' | 'confirmed' | 'proposed' | 'canceled' | 'completed' | 'no-show';
   source?: 'phone_ai' | 'direct';
+  origin?: 'local' | 'call' | 'naver';
   allocationWarning?: 'NO_MATCHING_TABLE' | 'SEAT_LIMIT';
   visitStarted?: boolean;
 }>;
@@ -278,6 +300,7 @@ export interface AgentSearchArgs {
 export interface AgentSearchProjection extends AgentSearchArgs {
   readonly matches: readonly AgentRecordMatch[];
   readonly nextCursor?: string;
+  readonly queryBinding?: string;
   readonly status?: AgentMissingStatus;
 }
 export interface AgentReadArgs {
@@ -297,6 +320,14 @@ export interface AgentReadArgs {
   get_cctv_review: { readonly date: AgentSlotRef; readonly hour: AgentSlotRef }; // N19
   'notice.preview': { readonly noticeId: AgentHandleRef; readonly draftRevision: AgentSlotRef } | { readonly draft: AgentWireArgs };
 }
+export type AgentReadSelection =
+  | { readonly name: 'get_widget'; readonly args: { readonly featureId: string; readonly condition?: AgentCondition } }
+  | { readonly name: 'get_source'; readonly args: { readonly sourceId: AgentSourceId; readonly condition?: AgentCondition } }
+  | { readonly name: 'search_records'; readonly args: Omit<AgentSearchArgs, 'kind'> & { readonly kind: AgentRecordKind | 'order' } };
+export type AgentCanonicalRead = { [Name in AgentReadSelection['name']]:
+  { readonly name: Name; readonly args: AgentReadArgs[Name] }
+}[AgentReadSelection['name']];
+export function normalizeAgentReadSelection(value: unknown): AgentCanonicalRead | undefined;
 export type AgentReadProjection = { [Name in AgentExtraReadTool]:
   { readonly tool: Name; readonly args: AgentReadArgs[Name] } & AgentProjectionContent
 }[AgentExtraReadTool];
@@ -320,7 +351,7 @@ export interface AgentRequest {
 
 export interface AgentMenuProposalArgs {
   readonly name: { readonly slot: 'name' };
-  readonly category: AgentMenuCategory;
+  readonly category: AgentMenuCategoryInput;
   readonly price: { readonly slot: 'price' };
   readonly memo?: { readonly slot: 'memo' };
 }
@@ -361,7 +392,7 @@ export function agentProposalTool(command: string): AgentTool<'propose_action'> 
 export function validateAgentToolArgs<Name extends AgentToolName>(name: Name, args: unknown): args is AgentToolArgs[Name];
 export function validateAgentToolArgs(name: string, args: unknown): boolean;
 export function validateAgentCommandArgs(command: 'menu.create', args: unknown): args is {
-  readonly name: string; readonly category: AgentMenuCategory; readonly price: number; readonly memo?: string;
+  readonly name: string; readonly category: AgentMenuCategoryInput; readonly price: number; readonly memo?: string;
 };
 export function validateAgentCommandArgs(command: string, args: unknown): boolean;
 export function agentDraftSchema(command: string): object | undefined;
@@ -401,8 +432,9 @@ export interface AgentAmbiguity {
   readonly recordKind: AgentRecordKind;
   readonly querySlot: AgentSlot;
   readonly nextCursor?: string;
+  readonly queryBinding?: string;
   readonly choices: readonly (AgentHandleRef & {
-    readonly id: string; readonly label?: string; readonly category?: AgentMenuCategory; readonly price?: number;
+    readonly id: string; readonly label?: string; readonly category?: AgentMenuCategoryInput; readonly price?: number;
   })[];
 }
 export interface AgentHandoff {
@@ -473,7 +505,8 @@ export function agentHandoffFields(command: string, draft: AgentWireArgs): Agent
 // End N03 navigation routes.
 
 export type AgentDone =
-  | { readonly outcome: 'reply' | 'proposal' }
+  | { readonly outcome: 'reply'; readonly readStatuses?: readonly AgentReadStatus[] }
+  | { readonly outcome: 'proposal' }
   | { readonly outcome: 'refused'; readonly refusal?: AgentRefusal }
   | { readonly outcome: 'clarify'; readonly clarification: AgentClarification | AgentSlotClarification; readonly pendingId?: string }
   | { readonly outcome: 'ambiguous'; readonly clarification: AgentAmbiguity; readonly pendingId?: string }
@@ -500,3 +533,75 @@ export type AgentFrameName = keyof AgentFrameData;
 export type AgentFrame = { [Name in AgentFrameName]: { readonly event: Name; readonly data: AgentFrameData[Name] } }[AgentFrameName];
 export function validateAgentFrame<Name extends AgentFrameName>(event: Name, data: unknown): data is AgentFrameData[Name];
 export function validateAgentFrame(event: string, data: unknown): boolean;
+
+// N21 ordered plan and in-process sequence contract.
+export type AgentMultiIntent = Extract<AgentIntent, { kind: 'read' }>
+  | { readonly kind: 'command'; readonly command: AgentKnownCommand };
+export interface AgentMultiStep {
+  readonly id: string;
+  readonly intent: AgentMultiIntent;
+  readonly dependsOn?: readonly string[];
+}
+export interface AgentMultiPlan {
+  readonly planId: string;
+  readonly runId: string;
+  readonly steps: readonly AgentMultiStep[];
+}
+export function validateAgentMultiPlan(value: unknown): value is AgentMultiPlan;
+export type AgentMultiStepResult =
+  | { readonly stepId: string; readonly outcome: 'blocked'; readonly blockedBy: readonly string[] }
+  | { readonly stepId: string; readonly outcome: 'read' | 'navigated' | 'handoff' | 'refused'
+      | 'error' | 'unavailable' | 'applied' | 'unchanged' | 'invalid' | 'cancelled' | 'conflict';
+      readonly proposalId?: string; readonly revision?: number; readonly readStatuses?: readonly AgentReadStatus[];
+      readonly destination?: AgentMultiDestination; readonly createdRecord?: AgentMultiCreatedRecord };
+export type AgentMultiAttempt = Readonly<{ planId: string; stepId: string }>;
+export interface AgentMultiCreatedRecord {
+  readonly kind: AgentRecordKind;
+  readonly id: string;
+}
+export interface AgentMultiDestination {
+  readonly runId: string;
+  readonly layer: AgentLayer;
+  readonly page?: number;
+  readonly detail?: AgentDetailRef;
+}
+export type AgentMultiState = {
+  readonly results: readonly AgentMultiStepResult[];
+  /** Display pointer. Undo authority, expiry and token remain in the existing run/store. */
+  readonly latestUndo?: { readonly stepId: string; readonly proposalId: string };
+} & (
+  | { readonly phase: 'complete' }
+  | { readonly phase: 'ready' | 'preparing' | 'awaiting_input' | 'awaiting_card' | 'awaiting_navigation';
+      readonly step: AgentMultiStep;
+      readonly pending?: Extract<AgentDone, { outcome: 'clarify' | 'ambiguous' }> | { readonly outcome: 'conflict' } }
+);
+export interface AgentMultiSequence {
+  getState(): AgentMultiState;
+  begin(stepId: string, request: AgentRequest): AgentMultiAttempt | undefined;
+  recordLocal(stepId: string, outcome: 'clarify' | 'refused' | 'handoff' | 'invalid' | 'unavailable'): boolean;
+  cancelStep(stepId: string): boolean;
+  finishConflict(stepId: string): boolean;
+  recordTurn(attempt: AgentMultiAttempt, terminal: AgentDone | AgentFrameData['error'], proposal?: AgentActionProposal): boolean;
+  bindCard(attempt: AgentMultiAttempt, card: { readonly id: string; readonly command: AgentKnownCommand;
+    readonly snapshotRevision: number; readonly tier: AgentConfirmation; readonly wireProposalId?: string }): boolean;
+  recordPreparation(attempt: AgentMultiAttempt, outcome: 'clarify' | 'busy' | 'conflict' | 'unchanged' | 'invalid' | 'unavailable'): boolean;
+  /** Call only with the result returned by the bound browser card's press or cancel handler. */
+  recordCard(attempt: AgentMultiAttempt, receipt: { readonly frame: AgentActionResult; readonly requiresExtraConfirmation?: boolean;
+    readonly createdRecord?: AgentMultiCreatedRecord },
+    hasUndo?: boolean): boolean;
+  recordNavigation(attempt: AgentMultiAttempt, outcome: 'opened' | 'already' | 'busy' | 'invalid' | 'unavailable' | 'stale' | 'noHistory',
+    destination?: AgentMultiDestination): boolean;
+  clearUndo(proposalId: string): boolean;
+}
+// End N21 ordered plan and in-process sequence contract.
+
+// D-371 read-only intent classification: the owner's sentence, the browser's widget list and the validated plan.
+export const INTENT_PLAN_PERIODS: readonly ['today', 'yesterday', 'tomorrow', 'week', 'lastWeek', 'month', 'lastMonth', 'last30', 'default'];
+export type IntentPlanPeriod = (typeof INTENT_PLAN_PERIODS)[number];
+export type IntentPlan =
+  | { readonly kind: 'read'; readonly confidence: 'high' | 'low';
+      readonly compute?: { readonly op: 'sum' | 'diff' | 'ratio'; readonly left: number; readonly right: number };
+      readonly reads: readonly { readonly featureId: string; readonly period: IntentPlanPeriod; readonly hints?: readonly string[] }[] }
+  | { readonly kind: 'clarify'; readonly ask: string }
+  | { readonly kind: 'unsupported' };
+export function validateIntentPlan(value: unknown): value is IntentPlan;

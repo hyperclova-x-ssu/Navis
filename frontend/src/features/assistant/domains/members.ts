@@ -1,4 +1,4 @@
-import type { DetailRef, Locale, QueryCondition } from '../../../contracts';
+import type { DetailRef, Locale, QueryCondition, RunState } from '../../../contracts';
 import { handlers } from '../../../data/commands/handlers';
 import { findPhoneMatch, normalizeMemberPhone as normalizeStoredPhone, normalizeName, sameName } from '../../../data/commands/management-guards';
 import { selectMemberDeleteBlockers } from '../../../data/commands/member-guard';
@@ -7,6 +7,7 @@ import type { MemberGrade } from '../../../data/db/management-types';
 import { TODAY } from '../../../data/db/time';
 import { slotHasPassed } from '../../../data/commands/business-clock';
 import type { DataSnapshot } from '../../../data/db/types';
+import { maskCustomer } from '../../../data/derive/members';
 import { resolveDataText, selectMembers, selectWidget } from '../../../data/widget-data';
 import { selectMemberAccounts } from '../../../data/iteration7/accounts';
 import { selectMoneyRead } from '../../../data/pos/projection';
@@ -22,6 +23,8 @@ const members = 'members';
 const defaultCondition = { kind: 'default' } as const;
 const grades = ['regular', 'frequent', 'occasional', 'inactive'] as const;
 const bookingCreation = /예약\s*(?:해\s*줘|잡아|부탁|하고|요청(?:\s*해\s*줘|$))|\d+\s*(?:명|인)\s*예약(?=\s*(?:[.,!?]\s*)?(?:요청(?:사항)?[은에]\s|$))/u;
+const timedSeatRequest = (text: string) => /\d+\s*(?:명|인)/u.test(text) && /\d+\s*(?:시|:\d{2})/u.test(text)
+  && /자리(?:를)?\s*부탁|요청사항(?:은|에)?\s+.*자리/u.test(text);
 const bookingRead = /예약.*(?:있어|했어|이력|몇\s*시)/u;
 const bookingEdit = /예약\s*(?:메모|요청\s*사항)|예약.*(?:취소|캔슬|바꿔|바꾸|고쳐|수정|변경|옮겨|미뤄|지워|삭제|늘려|줄여)/u;
 const bookingLink = (text: string) => /회원/u.test(text) && /예약|회원이야\s*연결/u.test(text)
@@ -29,12 +32,21 @@ const bookingLink = (text: string) => /회원/u.test(text) && /예약|회원이�
 const moneyWords = /충전|선결제|외상|미수금/u;
 const refundWords = /환불\s*(?:해|처리|할)|(?:충전|수금)\s*취소/u;
 const noteWords = /메모|특이사항/u;
+const quotedNote = /[“"‘']([\s\S]+?)[”"’']/gu;
+const noteEditVerb = /(?:바꿔|고쳐|수정)(?:\s*해)?(?:\s*줘|할게|할래)?/u;
+const noteDeleteVerb = /(?:삭제|지워|없애)(?:\s*해)?(?:\s*줘|할게|할래)?/u;
 const passes = /이용권|회원권|구독권|\d+잔권|이용.*사용\s*취소/u;
 const passAction = /썼어|사용\s*(?:해|처리|취소|했|기록|한\s*거\s*취소)|차감|팔아|판매\s*(?:해|하)|결제\s*(?:해|진행)/u;
 const deleteWords = /삭제|지워|없애|탈퇴|보관(?:해|으로)/u;
 const changeWords = /바꿔|바뀌|변경|수정|고쳐/u;
 const readWords = /알려|보여|얼마|몇|언제|읽어|뭐|있어|내역|이력|여부|확인/u;
 const oldVisitors = /오랜\s*기간|오래|이탈|안\s*오/u;
+const lastVisitRead = /방문일|마지막.*(?:왔|방문)|최근(?:에)?\s*.*방문|최근에.*언제/u;
+const expiringPasses = /만료\s*임박\s*회원/u;
+const consentChange = /동의.*(?:바꿔|변경|수정|고쳐|체크해)|(?:바꿔|변경|수정|고쳐|체크해).*동의/u;
+// A permission question about marketing messages reads the stored consent; sending stays with the promotion widget.
+const consentQuestion = /(?:광고|문자|수신).*(?:받아도\s*(?:돼|되|괜찮)|보내도\s*(?:돼|되|괜찮)|수신\s*(?:가능|여부))/u;
+const visitEdit = /방문(?:\s*(?:기록|횟수))?.*(?:추가|고쳐|넣어)|(?:추가|고쳐|넣어).*방문/u;
 const gradeOf = (text: string): MemberGrade | undefined => /단골/u.test(text) ? 'regular' : /자주/u.test(text) ? 'frequent'
   : /가끔/u.test(text) ? 'occasional' : oldVisitors.test(text) ? 'inactive' : undefined;
 const stringValue = (value: unknown): value is string => typeof value === 'string';
@@ -60,6 +72,7 @@ function customerOf(snapshot: DataSnapshot, member: Member) {
   return customers.get(member.customerId);
 }
 const noteText = (row: Member['notes'][number], locale: Locale) => resolveDataText(tr(locale).t, row.body);
+const noteHandle = (snapshot: DataSnapshot, noteId: string) => `note-${snapshot.tables.memberNote.findIndex(note => note.noteId === noteId) + 1}`;
 const accounts = (snapshot: DataSnapshot) => selectWidget(snapshot, credit, defaultCondition, 'normal');
 const noValue = (locale: Locale) => tr(locale).t('common.navis.agent.none');
 const gradeLabel = (locale: Locale, grade: MemberGrade) => ({
@@ -85,7 +98,8 @@ function memberMatches(snapshot: DataSnapshot, query: string, locale: Locale) {
   if (/^\d{4}$/u.test(key)) return rows.filter(row => row.phone.endsWith(key));
   const exact = rows.filter(row => {
     const name = customerOf(snapshot, row)?.name ?? nameOf(row, locale);
-    return [row.memberCode, row.memberId].some(id => id && normalizeName(id) === key) || sameName(name, key);
+    return [row.memberCode, row.memberId].some(id => id && normalizeName(id) === key) ||
+      sameName(name, key) || key.includes('○') && sameName(nameOf(row, locale), key);
   });
   return exact.length ? exact : !/\d/u.test(key) && key.length >= 2 ? rows.filter(row => {
     const name = customerOf(snapshot, row)?.name;
@@ -128,24 +142,32 @@ const memberReader: RecordAdapter = {
     const label = row.name;
     const t = tr(locale);
     const l = (ko: string, en: string, hans: string, hant: string) => localized(locale, ko, en, hans, hant);
-    if (search.querySlot === 'lastVisit') return `${label} · ${member.lastVisit ? t.format.date(member.lastVisit, 'short') : noValue(locale)}`;
-    if (search.querySlot === 'consent') return `${label} · ${member.consentSms ? l('문자 수신 동의', 'SMS consent', '已同意接收短信', '已同意接收簡訊') : l('문자 수신 미동의', 'No SMS consent', '未同意接收短信', '未同意接收簡訊')}`;
-    if (search.querySlot === 'visitsToday' || search.querySlot === 'reservations') {
-      const rows = member.reservations.filter(booking => search.querySlot !== 'visitsToday' || booking.date === TODAY);
+    // The wire lookup stays canonical; the requested fact is `aspect` (older callers pass it as the slot name).
+    const aspect = (search as RecordSearch & { readonly aspect?: string }).aspect ?? search.querySlot;
+    if (aspect === 'lastVisit') {
+      const recent = t.format.number(member.recentVisits);
+      return `${label} · ${member.lastVisit ? t.format.date(member.lastVisit, 'short') : noValue(locale)} · ${l(`최근 4주 ${recent}회`, `${recent} visits in the last 4 weeks`, `近4周到访${recent}次`, `近4週到訪${recent}次`)} · ${gradeLabel(locale, member.grade)}`;
+    }
+    if (aspect === 'consent') return `${label} · ${member.consentSms ? l('문자 수신 동의', 'SMS consent', '已同意接收短信', '已同意接收簡訊') : l('문자 수신 미동의', 'No SMS consent', '未同意接收短信', '未同意接收簡訊')}`;
+    if (aspect === 'visitsToday' || aspect === 'reservations') {
+      const rows = member.reservations.filter(booking => aspect !== 'visitsToday' || booking.date === TODAY);
       return rows.length ? rows.map(booking => `${label} · ${t.format.date(booking.date, 'short')} ${booking.time}`).join('\n')
         : `${label} · ${l('예약이 없어요', 'No reservations', '没有预约', '沒有預約')}`;
     }
-    if (search.querySlot === 'charge' || search.querySlot === 'receivable' || search.querySlot === 'chargeHistory') {
+    if (aspect === 'charge' || aspect === 'receivable' || aspect === 'balance' || aspect === 'chargeHistory') {
       const view = accounts(search.snapshot);
       const account = view.status === 'ready' ? view.model.members.find(account => account.memberId === row.id) : undefined;
+      // No account row is an unavailable reading, never a claimed zero.
       if (!account) return;
-      if (search.querySlot === 'chargeHistory') {
+      if (aspect === 'chargeHistory') {
         const rows = account.transactions.filter(transaction => transaction.account === 'charge');
         return rows.length ? rows.slice(0, 10).map(transaction => `${t.format.date(transaction.at, 'short')} · ${t.format.money(transaction.amount, 'full')}`).join('\n')
           : l('충전금 내역이 없어요', 'No prepaid transactions', '没有预付记录', '沒有預付記錄');
       }
-      const charge = search.querySlot === 'charge';
-      return `${label} · ${charge ? l('충전금', 'Prepaid balance', '预付款', '預付款') : l('외상', 'Receivables', '应收款', '應收款')} ${t.format.money(charge ? account.chargeBalance : account.receivableBalance, 'full')}`;
+      const chargeText = `${l('충전금', 'Prepaid balance', '预付款', '預付款')} ${t.format.money(account.chargeBalance, 'full')}`;
+      const debtText = `${l('외상', 'Receivables', '应收款', '應收款')} ${t.format.money(account.receivableBalance, 'full')}`;
+      // A bare balance question shows both accounts so no figure is guessed.
+      return `${label} · ${aspect === 'balance' ? `${chargeText} · ${debtText}` : aspect === 'charge' ? chargeText : debtText}`;
     }
     return [label, row.phone].filter(Boolean).join(' · ');
   },
@@ -154,17 +176,20 @@ const memberReader: RecordAdapter = {
 function notesFor({ snapshot, query, locale }: RecordSearch) {
   let owner: string;
   let body = '';
+  let noteId: string | undefined;
   try {
     const parsed: unknown = JSON.parse(query);
     if (!object(parsed)) return [];
     owner = stringValue(parsed.owner) ? parsed.owner : '';
     body = stringValue(parsed.body) ? parsed.body : '';
+    noteId = stringValue(parsed.noteId) ? parsed.noteId : undefined;
   } catch { owner = query; }
-  if (!owner && !body) return [];
+  if (!owner && (!body || noteId)) return [];
   const rows = owner ? memberMatches(snapshot, owner, locale) : memberRows(snapshot);
   const keyword = body.trim().toLocaleLowerCase();
-  return rows.flatMap(member => member.notes.filter(note => !keyword || noteText(note, locale).toLocaleLowerCase().includes(keyword)).map(note => ({
-    note, member, handle: `note-${snapshot.tables.memberNote.findIndex(row => row.noteId === note.noteId) + 1}`,
+  return rows.flatMap(member => member.notes.filter(note => (!noteId || note.noteId === noteId) &&
+    (!keyword || noteText(note, locale).toLocaleLowerCase().includes(keyword))).map(note => ({
+    note, member, handle: noteHandle(snapshot, note.noteId),
   })));
 }
 
@@ -221,7 +246,12 @@ function memberAdapter(type: MemberCommandType): CommandAdapter<MemberCommand, M
       const result = handler(ctx, command);
       if (!result.ok) return { kind: result.code === 'CONFLICT' ? 'conflict' : 'invalid', field: result.field, messageKey: result.messageKey };
       const afterSnapshot = { ...snapshot, tables: result.tables };
-      const after = memberRows(afterSnapshot).find(row => row.memberId === (before?.memberId ?? (result.value as { memberId?: string }).memberId));
+      const projected = memberRows(afterSnapshot).find(row => row.memberId === (before?.memberId ?? (result.value as { memberId?: string }).memberId));
+      const after = projected && snapshot.tables.realMembers ? {
+        ...projected,
+        ...(command.type === 'members.update' && command.phone ? { phone: maskCustomer({ phone: command.phone, maskKey: '' }).phone } : {}),
+        ...(command.type === 'members.setGrade' ? { grade: command.grade ?? projected.automaticGrade } : {}),
+      } : projected;
       const afterNote = after?.notes.find(row => row.noteId === (args.noteId ?? ctx.nextId('note')));
       const l = (ko: string, en: string, hans: string, hant: string) => localized(locale, ko, en, hans, hant);
       const fields = [
@@ -240,6 +270,9 @@ function memberAdapter(type: MemberCommandType): CommandAdapter<MemberCommand, M
       if (command.type === 'members.update' && command.name && before && after && nameOf(before, locale) === nameOf(after, locale)) {
         fields.push({ label: l('이름', 'Name', '姓名', '姓名'), before: nameOf(before, locale), after: nameOf(after, locale) });
       }
+      if (command.type === 'members.create' && snapshot.tables.realMembers) {
+        fields.push({ label: '연락 동의', before: '없음', after: '예 · 마케팅 수신 아니요' });
+      }
       return { kind: 'ready', command, preview: { title: l('회원목록', 'Members', '会员', '會員'),
         target: before ? nameOf(before, locale) : after ? nameOf(after, locale) : '', fields } };
     },
@@ -257,13 +290,25 @@ function projectMembers(snapshot: DataSnapshot, featureId: string, condition: Qu
   const model = selectMembers(snapshot, {});
   if (featureId === members) return { facts: [
     count('members.count', l('회원', 'Members', '会员', '會員'), model.total),
-    ...grades.map(grade => count(`members.${grade}.count`, gradeLabel(locale, grade), model.gradeCounts[grade])),
+    ...grades.map(grade => {
+      const tally = count(`members.${grade}.count`, gradeLabel(locale, grade), model.gradeCounts[grade]);
+      const n = tally.display;
+      return { ...tally, unit: 'person', display: l(`${n}명`, `${n} members`, `${n}人`, `${n}人`) };
+    }),
     count('memberships.active.count', l('이용 중 회원권', 'Active passes', '有效会员券', '有效會員券'), model.membershipCount),
     count('memberships.endingThisWeek.count', l('이번 주 끝나는 회원권', 'Passes expiring this week', '本周到期会员券', '本週到期會員券'), model.endingThisWeekCount),
     ...model.rows.flatMap(row => row.memberships.filter(pass => pass.active && pass.endingThisWeek).map(pass => ({
       key: 'memberships.endingThisWeek.member', label: nameOf(row, locale), value: pass.endsOn,
-      unit: 'date', display: t.format.date(pass.endsOn, 'short'), source: members,
+      unit: 'date', display: [t.format.date(pass.endsOn, 'short'), pass.usesLeft === null || pass.usesLeft === undefined
+        ? '' : l(`남은 ${t.format.number(pass.usesLeft)}회`, `${t.format.number(pass.usesLeft)} uses left`,
+          `剩余${t.format.number(pass.usesLeft)}次`, `剩餘${t.format.number(pass.usesLeft)}次`)].filter(Boolean).join(' · '), source: members,
     }))).slice(0, 5),
+    // The members who visit most (CHAT-REAL-DEV: "방문 제일 많은 회원"), by the visit count the widget shows.
+    ...[...model.rows].filter(row => row.visitCount > 0).sort((a, b) => b.visitCount - a.visitCount).slice(0, 3).map((row): AgentFact => ({
+      key: 'members.visits.top', label: nameOf(row, locale), value: row.visitCount, unit: 'count',
+      display: l(`${t.format.number(row.visitCount)}회 방문`, `${t.format.number(row.visitCount)} visits`, `${t.format.number(row.visitCount)}次到店`, `${t.format.number(row.visitCount)}次到店`),
+      source: members,
+    })),
   ] };
   if (condition.kind === 'snapshot') return { status: 'unsupported_period' as const };
   const view = accounts(snapshot);
@@ -280,11 +325,17 @@ function projectMembers(snapshot: DataSnapshot, featureId: string, condition: Qu
   const holderFacts = (key: string, rows: typeof balances, field: 'chargeBalance' | 'receivableBalance') => rows
     .filter(row => row[field] > 0).sort((a, b) => b[field] - a[field]).slice(0, 5)
     .map(row => amount(key, row.name, row[field]));
+  const inactive = new Set(model.rows.filter(row => row.grade === 'inactive').map(row => row.memberId));
+  const inactiveHolders = balances.filter(row => row.chargeBalance > 0 && inactive.has(row.memberId));
+  const inactiveLabel = l('충전금이 남은 미방문 회원', 'Inactive members with prepaid credit', '有预付款的未到访会员', '有預付款的未到訪會員');
   return { facts: [
     amount('account.charge.total', chargeLabel, chargeBalance), count('account.charge.members', l('충전금 보유 회원', 'Prepaid holders', '持有预付款会员', '持有預付款會員'), chargeHolders),
     amount('account.receivable.total', debtLabel, receivableBalance), count('account.receivable.members', l('외상 회원', 'Members with receivables', '有应收款的会员', '有應收款的會員'), receivableHolders),
     ...holderFacts('account.charge.rank', balances, 'chargeBalance'), ...holderFacts('account.receivable.holder', balances, 'receivableBalance'),
-    ...holderFacts('account.charge.inactive', balances.filter(account => model.rows.some(row => row.memberId === account.memberId && row.grade === 'inactive')), 'chargeBalance'),
+    { ...count('account.charge.inactive.count', inactiveLabel, inactiveHolders.length),
+      display: l(`${t.format.number(inactiveHolders.length)}명`, t.format.number(inactiveHolders.length),
+        `${t.format.number(inactiveHolders.length)}人`, `${t.format.number(inactiveHolders.length)}人`) },
+    ...holderFacts('account.charge.inactive', inactiveHolders, 'chargeBalance'),
   ] };
 }
 
@@ -311,17 +362,18 @@ function personMention(snapshot: DataSnapshot, input: string, locale: Locale) {
   const id = /\bM-\d{4,}\b/iu.exec(input)?.[0];
   const last4 = /(?:^|\s)(\d{4})(?=\s*(?:회원|손님|인))|(?:끝\s*자리|뒷번호)\s*(\d{4})/u.exec(input);
   if (id || last4) return id ?? last4?.[1] ?? last4?.[2];
-  const candidates = [...input.matchAll(/(?:^|\s)([가-힣○]{2,6}(?:\d{4})?)(?=$|[\s?!.,:])/gu)]
+  const candidates = [...input.matchAll(/(?:^|\s)([가-힣○]{2,8}(?:\d{4})?)(?=$|[\s?!.,:])/gu)]
     .map(match => ({ key: match[1].replace(/(?:님|씨)$/u, ''), at: match.index })).filter(candidate => candidate.key.length >= 2);
   for (const { key } of candidates) {
     if (memberMatches(snapshot, key, locale).length) return key;
-    const alias = key.replace(/(?:으로|한테|에게|이가|이|로)$/u, '');
+    const alias = key.replace(/(?:이라는|이란|으로|한테|에게|이가|이|로)$/u, '');
     if (alias !== key && memberMatches(snapshot, alias, locale).length) return alias;
   }
   const ignored = /^(?:연락처|전화번호|가입한|단골로|손님이|회원이|신규로|미수금|충전금|예시로|오늘은|등록해|삭제해|보여줘|올려줘|메모에|회원권|특이사항|정해줘|알려줘|주차|예약한|끝나는|회원만|받았어|회원으로|손님한테)$/u;
   const prefixed = /(?:^|\s)([가-힣○]{3,5})(?=\s*(?:회원|손님|메모|연락처|전화번호|외상|충전|등급)(?:\s|[은는이을를]?\s|$))/u.exec(input)?.[1];
   return (prefixed && !ignored.test(prefixed) ? prefixed : undefined)
     ?? candidates.find(candidate => candidate.at <= 1 && /^(?:[가-힣○]{3}|예시회원)$/u.test(candidate.key) && !ignored.test(candidate.key))?.key
+    ?? candidates.find(candidate => /^[가-힣]○+[가-힣]?$/u.test(candidate.key))?.key
     ?? /(?:회원\s*(?:등록|추가)\s+|(?:새|신규)\s*손님\s+)([가-힣]{2,4})(?:\s|$)/u.exec(input)?.[1];
 }
 
@@ -354,16 +406,23 @@ function memberNavigation(input: string, snapshot: DataSnapshot, locale: Locale)
   if (readWords.test(text) && (moneyWords.test(text) || noteWords.test(text) || /회원|단골/u.test(text))) return null;
 }
 
-function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowMemberDelete: boolean): DomainRoute | undefined {
+function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowMemberDelete: boolean, selectedMemberId?: string): DomainRoute | undefined {
   const text = normalizeNavisInput(raw);
-  if (/^(?:["'“‘])|하지\s*마|말아/u.test(text)) return;
-  const link = bookingLink(text);
-  if (!link && bookingEdit.test(text)) return;
+  const unquoted = raw.replace(quotedNote, quote => ' '.repeat(quote.length));
+  const intentText = normalizeNavisInput(unquoted);
+  if (/^(?:["'“‘])/u.test(text) || /하지\s*마|말아/u.test(intentText)) return;
+  const link = bookingLink(intentText);
+  if (!link && bookingEdit.test(intentText)) return;
+  const noteMarker = /(?:메모(?:에|를|가)?|특이사항(?:에|을)?)\s*([:：])?\s*/u.exec(unquoted);
+  const targetText = noteMarker ? normalizeNavisInput(unquoted.slice(0, noteMarker.index)) : intentText;
   const l = (ko: string, en: string, hans: string, hant: string) => localized(locale, ko, en, hans, hant);
   const featureRead = (featureId: typeof members | typeof credit, factKeys: string[], condition: QueryCondition = defaultCondition) =>
     ({ intent: { kind: 'read', featureId, condition }, factKeys }) satisfies DomainRoute;
+  const missingMember = l('회원을 찾지 못했어요', 'Member not found', '未找到会员', '未找到會員');
+  // An unregistered member is reported as not found, which differs from a measured zero balance.
   const read = (kind: 'member' | 'note' | 'staff', querySlot: string, query: string, browse = false) =>
-    ({ intent: { kind: 'read', recordKind: kind, querySlot }, slots: { [querySlot]: query }, browse }) satisfies DomainRoute;
+    ({ intent: { kind: 'read', recordKind: kind, querySlot }, slots: { [querySlot]: query }, browse,
+      ...(kind === 'member' ? { onMissing: { answer: missingMember } } : {}) }) satisfies DomainRoute;
   const clarify = (field: string, answer: string, resume?: (value: string) => DomainRoute | undefined) =>
     ({ kind: 'clarification', field, answer, resume }) satisfies DomainRoute;
   const missing = l('회원을 찾지 못했어요', 'Member not found', '未找到会员', '未找到會員');
@@ -373,7 +432,7 @@ function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowM
   const refuse = (reason: 'widget_only' | 'invalid_target' | 'duplicate', answer: string, alternative?: { featureId: string; command?: string; draft?: Record<string, unknown> }) =>
     ({ kind: 'refusal', reason, answer, alternative }) satisfies DomainRoute;
   const answer = (copy: string) => ({ kind: 'answer', answer: copy }) satisfies DomainRoute;
-  const query = personMention(snapshot, text, locale);
+  const query = selectedMemberId ?? personMention(snapshot, targetText, locale);
   const matches = query ? memberMatches(snapshot, query, locale) : [];
   const member = matches.length === 1 ? matches[0] : undefined;
   const memberRead = (scope: string) => query ? read('member', scope, query) : clarify('member', targetQuestion, next => read('member', scope, next));
@@ -385,6 +444,18 @@ function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowM
   const membersScreen = l('회원목록에서 진행해 주세요', 'Continue in Members', '请在会员列表操作', '請在會員列表操作');
   const creditScreen = l('충전금·외상 관리에서 진행해 주세요', 'Continue in Credit and Receivables', '请在预付款与应收款页面操作', '請在預付款與應收款頁面操作');
   const askTarget = () => clarify('member', targetQuestion, next => routeMember(`${next} ${raw}`, snapshot, locale, allowMemberDelete));
+  const chooseMember = (field: string, resume: (id: string) => DomainRoute | undefined) => ({
+    ...clarify(field, '어느 회원인가요?', resume),
+    choices: matches.slice(0, 5).map(row => ({ id: row.memberId, label: [nameOf(row, locale), row.phone].filter(Boolean).join(' · ') })),
+  });
+  const verifyPhoneSuffix = (resume: (id: string) => DomainRoute | undefined) =>
+    clarify('memberDisambiguator', l('연락처 끝 4자리를 알려 주세요', 'Enter the last four digits', '请输入号码后四位', '請輸入號碼末四碼'),
+      input => {
+        const suffix = input.trim();
+        if (!/^\d{4}$/u.test(suffix)) return;
+        const candidates = matches.filter(row => row.phone.endsWith(suffix));
+        return candidates.length === 1 ? resume(candidates[0].memberId) : undefined;
+      });
   function proposal(command: MemberCommandType, args: AgentWireArgs, slots: LocalSlots, noteQuery?: string): DomainRoute {
     const creating = command === 'members.create';
     return { intent: { kind: 'command', command, args }, slots: { ...slots, memberQuery: creating ? slots.phone : query,
@@ -403,23 +474,27 @@ function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowM
   }
 
   // Memo content remains an opaque local slot. Its words never select another action.
-  if (noteWords.test(text) || /주차.*손님.*누구/u.test(text)) {
-    if (/주차/u.test(text) && /찾아|누구|사람/u.test(text) && !deleteWords.test(text) && !changeWords.test(text)) return read('note', 'noteQuery', JSON.stringify({ body: '주차' }), true);
-    if (!query) return /회원|손님/u.test(text) ? askTarget() : undefined;
-    if (matches.length > 1) return clarify('memberDisambiguator',
-      l('연락처 끝 4자리를 알려 주세요', 'Enter the last four digits', '请输入号码后四位', '請輸入號碼末四碼'),
-      next => /^\d{4}$/u.test(next.trim()) ? routeMember(`${next} 회원 ${raw}`, snapshot, locale, allowMemberDelete) : undefined);
+  if (noteWords.test(intentText) || /주차.*손님.*누구/u.test(intentText)) {
+    const marker = noteMarker;
+    if (/메뉴|공급처|발주사|재고\s*품목|상품|예약/u.test(targetText) && !/회원|손님/u.test(targetText)) return;
+    if (/주차/u.test(intentText) && /찾아|누구|사람/u.test(intentText) && !deleteWords.test(intentText) && !changeWords.test(intentText)) {
+      return read('note', 'noteQuery', JSON.stringify({ body: '주차' }), true);
+    }
+    if (!query) return /회원|손님/u.test(intentText) || /^\s*(?:메모|특이사항)/u.test(intentText) ? askTarget() : undefined;
+    if (matches.length > 1) return verifyPhoneSuffix(id => routeMember(raw, snapshot, locale, allowMemberDelete, id));
     const all = JSON.stringify({ owner: query });
-    const marker = /(?:메모(?:에)?|특이사항)\s*[:：]?\s*/u.exec(raw);
-    const remainder = marker ? raw.slice(marker.index + marker[0].length).trim() : '';
-    const quoted = /[“"‘']([\s\S]+?)[”"’']/u.exec(remainder)?.[1];
-    const adding = /추가|남겨|남길|적어|입력|메모\s*[:：]/u.test(text);
-    const removing = deleteWords.test(text) && !adding;
-    const editing = changeWords.test(text) && !adding;
-    if (!adding && !removing && !editing && readWords.test(text)) return read('note', 'noteQuery', all, true);
+    // Whitespace masking preserves quote offsets, so a quote after the marker
+    // belongs to the body rather than to the marker's trailing whitespace.
+    const bodyStart = marker ? marker.index + marker[0].trimEnd().length : raw.length;
+    const remainder = raw.slice(bodyStart).trim();
+    const arrow = /->|→/u.exec(unquoted.slice(bodyStart));
+    const adding = /추가|남겨|남길|적어|입력/u.test(intentText);
+    const editing = !!arrow || noteEditVerb.test(intentText) && !adding;
+    const removing = !editing && noteDeleteVerb.test(intentText) && !adding;
+    if (!adding && !removing && !editing && !marker?.[1] && readWords.test(intentText)) return read('note', 'noteQuery', all, true);
     if (matches.length === 0) return refuse('invalid_target', missing);
-    const byOwner = member?.notes ?? [];
-    if (adding || !editing && !removing) {
+    if (!editing && !removing) {
+      const quoted = [...remainder.matchAll(quotedNote)][0]?.[1];
       const body = quoted ?? remainder.replace(/^(?:추가(?:해\s*줘)?|남겨\s*줘)\s*/u, '')
         .replace(/\s*(?:라고\s*)?(?:추가해\s*줘|남겨\s*줘|적어\s*(?:놔|줘)|입력해\s*줘)[.!]?$/u, '').trim();
       if (!textField(body) || /(?:1[,.]?001\s*자|^남길래$|^추가$)/u.test(body)) return clarify('body',
@@ -427,18 +502,38 @@ function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowM
         next => textField(next) ? proposal('members.addNote', { body: slot('memo') }, { memo: next }) : undefined);
       return proposal('members.addNote', { body: slot('memo') }, { memo: body });
     }
-    const named = byOwner.find(note => text.includes(normalizeNavisInput(noteText(note, locale))));
-    if (!named && /샷\s*연하게/u.test(text)) return refuse('invalid_target', l('해당 메모가 없어요', 'Note not found', '未找到该备注', '未找到該備註'));
-    if (!byOwner.length && member) return answer(l('등록된 메모가 없어요', 'No notes', '没有备注', '沒有備註'));
-    if (!named && byOwner.length > 1) return clarify('noteId', l('어느 메모인가요?', 'Which note?', '是哪条备注？', '是哪條備註？'),
-      next => routeMember(`${raw} ${next}`, snapshot, locale, allowMemberDelete));
-    const selected = JSON.stringify({ owner: query, ...(named ? { body: noteText(named, locale) } : {}) });
-    if (removing) return proposal('members.deleteNote', {}, {}, selected);
-    const body = /\s*(?:->|→)\s*([\s\S]+)$/u.exec(remainder)?.[1]
-      ?? /(?:을|를)\s*([\s\S]+?)(?:으로|로)\s*(?:바꿔|고쳐|수정)/u.exec(remainder)?.[1]
-      ?? /(?:수정|고쳐\s*줘)\s+(.+?)(?:으로|로)?$/u.exec(remainder)?.[1];
-    const update = (memo: string) => proposal('members.updateNote', { body: slot('memo') }, { memo }, selected);
-    return textField(body) ? update(body) : clarify('body', noteQuestion, next => textField(next) ? update(next) : undefined);
+    if (!member) return;
+    const unquote = (value: string) => /^[“"‘']([\s\S]+)[”"’']$/u.exec(value.trim())?.[1] ?? value.trim();
+    const targetPrefix = marker ? raw.slice(0, marker.index).trim()
+      .replace(/^\S+\s*/u, '').replace(/^(?:회원|손님(?:한테)?)\s*/u, '').trim() : '';
+    const swap = /^(.*?)\s*[을를]\s+([\s\S]+?)\s*(?:으로|로)\s*(?:바꿔|고쳐|수정)/u.exec(remainder);
+    const change = noteEditVerb.exec(unquoted.slice(bodyStart));
+    const removal = remainder.replace(/\s*\(메모 여러 개\)\s*$/u, '').replace(noteDeleteVerb, '').trim();
+    const targetAfter = arrow ? raw.slice(bodyStart, bodyStart + arrow.index).replace(noteEditVerb, '').replace(/^\s*:\s*/u, '')
+      : swap ? swap[1] : removing ? removal
+        : change ? raw.slice(bodyStart, bodyStart + change.index).trim().replace(/[을를]$/u, '') : '';
+    const target = (targetPrefix || targetAfter).trim();
+    const requested = /^(?:하나|한\s*개)$/u.test(target) ? '' : unquote(target);
+    const body = arrow ? raw.slice(bodyStart + arrow.index + arrow[0].length).replace(/(?:으로|로)?\s*(?:바꿔|고쳐|수정)(?:해)?(?:\s*줘)?[.!]?\s*$/u, '')
+      : swap ? swap[2] : change ? raw.slice(bodyStart + change.index + change[0].length).trim().replace(/^:\s*|(?:으로|로)$/gu, '') : '';
+    const replacement = unquote(body);
+    const candidates = requested ? member.notes.filter(note => normalizeNavisInput(noteText(note, locale)) === normalizeNavisInput(requested)) : member.notes;
+    if (!candidates.length) return requested
+      ? refuse('invalid_target', '해당 회원의 메모에서 찾지 못했어요')
+      : answer(l('등록된 메모가 없어요', 'No notes', '没有备注', '沒有備註'));
+    const targetNote = (noteId: string) => {
+      const selected = JSON.stringify({ owner: member.memberId, noteId });
+      if (removing) return proposal('members.deleteNote', {}, {}, selected);
+      const update = (memo: string) => proposal('members.updateNote', { body: slot('memo') }, { memo }, selected);
+      return textField(replacement) ? update(replacement)
+        : clarify('body', noteQuestion, next => textField(next) ? update(next) : undefined);
+    };
+    if (candidates.length === 1) return targetNote(candidates[0].noteId);
+    const choices = candidates.slice(0, 5).map(note => ({ id: noteHandle(snapshot, note.noteId), label: `“${noteText(note, locale)}”` }));
+    return { ...clarify('noteId', '어느 메모인가요?', id => {
+      const note = candidates.find(row => noteHandle(snapshot, row.noteId) === id);
+      return note && targetNote(note.noteId);
+    }), choices };
   }
 
   if (passes.test(text) && passAction.test(text)) {
@@ -463,11 +558,10 @@ function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowM
     const transact = charge ? /충전해|충전\s*(?:좀|ㄱ|\d|영원)|넣어|충전금?\s*\d|충전\s*$/.test(text) || amount !== undefined && !readWords.test(text) : collection;
     if (/유효기간|언제까지|기한/u.test(text)) return answer(l('충전금은 유효기간이 없어요', 'Prepaid credit has no expiry', '预付款没有有效期限制', '預付款沒有有效期限制'));
     if (/감사|쿠폰/u.test(text)) return featureRead(credit, ['account.charge.total', 'account.charge.rank']);
-    if (charge && oldVisitors.test(text)) return featureRead(credit, ['account.charge.inactive']);
+    if (charge && oldVisitors.test(text)) return featureRead(credit, ['account.charge.inactive.count', 'account.charge.inactive']);
     if (transact) {
       if (!query) return askTarget();
-      if (matches.length > 1) return clarify('memberDisambiguator', l('연락처 끝 4자리를 알려 주세요', 'Enter the last four digits', '请输入号码后四位', '請輸入號碼末四碼'),
-        next => routeMember(`${next} 회원 ${charge ? '충전' : '외상 수금해줘'} ${amount ?? ''}`, snapshot, locale, allowMemberDelete));
+      if (matches.length > 1) return verifyPhoneSuffix(id => routeMember(raw, snapshot, locale, allowMemberDelete, id));
       if (!member) return refuse('invalid_target', missing, { featureId: members });
       const view = accounts(snapshot);
       const balance = view.status === 'ready' ? view.model.members.find(row => row.memberId === member.memberId)?.receivableBalance : undefined;
@@ -475,7 +569,8 @@ function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowM
       if (!positiveAmount(amount) || !charge && balance !== undefined && amount > balance) {
         const maximum = !charge && balance !== undefined && positiveAmount(amount) && amount > balance
           ? `${l('남은 외상', 'Receivables remaining', '剩余应收款', '剩餘應收款')} ${tr(locale).format.money(balance, 'full')}\n` : '';
-        return clarify('amount', maximum + l('얼마를 입력할까요?', 'Enter an amount', '要输入多少金额？', '要輸入多少金額？'),
+        return clarify('amount', maximum + (charge ? `${nameOf(member, locale)} 님, 얼마를 충전할까요?` :
+          l('얼마를 입력할까요?', 'Enter an amount', '要输入多少金额？', '要輸入多少金額？')),
           next => routeMember(`${member.memberId} 회원 ${charge ? '충전해줘' : '외상 수금해줘'} ${/원/u.test(next) ? next : `${next}원`}`, snapshot, locale, allowMemberDelete));
       }
       return refuse('widget_only', creditScreen, { featureId: credit, command: 'ui.openSettlement',
@@ -489,20 +584,21 @@ function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowM
       /누구|사람|손님/u.test(text) ? ['account.receivable.members', 'account.receivable.holder'] : ['account.receivable.total', 'account.receivable.members']);
   }
 
-  if (passes.test(text)) {
+  if (passes.test(text) || expiringPasses.test(text)) {
     if (/끝나|만료/u.test(text)) return featureRead(members, ['memberships.endingThisWeek.count', 'memberships.endingThisWeek.member']);
     if (/몇/u.test(text)) return featureRead(members, ['memberships.active.count']);
   }
-  if (/동의/u.test(text)) {
-    if (changeWords.test(text) || /체크해/u.test(text)) return refuse('widget_only', membersScreen,
-      member ? { featureId: members, command: 'members.setConsent', draft: { memberId: member.memberId } } : { featureId: members });
-    if (query) return memberRead('consent');
-  }
-  if (/방문/u.test(text) && /추가|고쳐|넣어/u.test(text) && (query || /방문\s*(?:기록|횟수)/u.test(text))) return refuse('widget_only', membersScreen, { featureId: members });
-  if (/방문일|마지막.*왔|최근에.*언제/u.test(text)) return memberRead('lastVisit');
-  if (/예약|회원이야\s*연결/u.test(text)) {
+  if (consentChange.test(text)) return refuse('widget_only', membersScreen,
+    member ? { featureId: members, command: 'members.setConsent', draft: { memberId: member.memberId } } : { featureId: members });
+  if (query && (/동의/u.test(text) || consentQuestion.test(text))) return memberRead('consent');
+  // A balance asked without naming prepaid or receivable money shows both accounts.
+  if (query && /잔액|잔고/u.test(text) && !/회원권|이용권|구독권/u.test(text)) return memberRead('balance');
+  if (visitEdit.test(text) && (query || /방문\s*(?:기록|횟수)/u.test(text))) return refuse('widget_only', membersScreen, { featureId: members });
+  if (lastVisitRead.test(text) && (query || /회원|손님/u.test(text))) return memberRead('lastVisit');
+  const namedSeatRequest = !!member && timedSeatRequest(text);
+  if (/예약|회원이야\s*연결/u.test(text) || namedSeatRequest) {
     const explicitMember = /회원/u.test(text);
-    if (link || bookingCreation.test(text) && (explicitMember || member)) {
+    if (link || namedSeatRequest || bookingCreation.test(text) && (explicitMember || member)) {
       if (!query || !matches.length) return clarify('memberId', targetQuestion);
       const memberLookup = { kind: 'member' as const, querySlot: 'memberQuery' };
       if (link) {
@@ -522,8 +618,9 @@ function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowM
       const time = clock && !/오전|오후|저녁|:/u.test(text) && Number(clock.slice(0, 2)) < 9 ? `${Number(clock.slice(0, 2)) + 12}${clock.slice(2)}` : clock;
       const field = !date || date < anchor ? 'date' : !time || slotHasPassed(date, time) ? 'time' : !partySize ? 'partySize' : undefined;
       if (field || !date || !time || !partySize) return clarify(field ?? 'date',
-        l('예약 날짜, 시간, 인원을 확인해 주세요', 'Check the reservation date, time and party size', '请确认预约日期、时间和人数', '請確認預約日期、時間和人數'));
-      const request = /요청(?:사항)?(?:은|에)?\s*[:：]?\s*(.+?)(?:\s*(?:적어\s*줘|부탁해))?$/u.exec(text)?.[1];
+        field === 'time' ? '예약 시간을 알려 주세요' : field === 'partySize' ? '몇 명이 오나요?' : '예약 날짜를 알려 주세요');
+      const request = /요청(?:사항)?(?:은|에)?\s*[:：]?\s*(.+?)(?:\s*(?:적어\s*줘|부탁해))?$/u.exec(text)?.[1]
+        ?? (namedSeatRequest ? /\d+\s*(?:명|인)\s+(.+?자리)(?:를)?\s*부탁해[.!]?$/u.exec(text)?.[1] : undefined);
       return {
         intent: { kind: 'command', command: 'booking.create', args: {
           date: slot('date'), time: slot('time'), partySize: slot('partySize'), tableChoice: 'auto', ...(request ? { request: slot('request') } : {}),
@@ -536,7 +633,7 @@ function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowM
     return;
   }
 
-  if ((/회원.*(?:등록|추가|넣어)|(?:등록|추가).*회원|신규.*(?:손님|추가)|새\s*(?:회원|손님)|\+82/u.test(text)
+  if ((/회원.*(?:등록|추가|넣어)|(?:등록|추가).*회원|신규.*(?:회원|손님|추가)|새\s*(?:회원|손님)|\+82/u.test(text)
     || /(?:^|\s)82[\s.-]*1[\d .-]+\s*추가/u.test(text)) && !/(?:몇\s*명|등록\s*수|언제)/u.test(text)) {
     const name = query;
     const phone = extractPhone(text);
@@ -556,20 +653,26 @@ function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowM
   if (query && (/(?:이름|번호|연락처)/u.test(text) || candidatePhone && changeWords.test(text)) &&
     (changeWords.test(text) || candidatePhone || /그대로\s*저장/u.test(text))) {
     if (!matches.length) return refuse('invalid_target', missing, { featureId: members });
+    const implicitName = /\s([가-힣]{2,4})\s+(?=0\d)/u.exec(text)?.[1];
     const name = /이름(?:을|은|이)?\s*(?:오타야\s*)?([\p{L}○]{2,40}?)(?=\s*(?:으로|로|번호|$))/u.exec(text)?.[1]
-      ?? /\s([가-힣]{2,4})\s+(?=0\d)/u.exec(text)?.[1];
+      ?? (implicitName && !/^(?:회원|손님|전화|번호|전화번호|연락처|휴대폰|변경|수정)$/u.test(implicitName) ? implicitName : undefined);
     const phone = candidatePhone;
+    if (!phone && !name && matches.length > 1 && /연락처|번호/u.test(text)) {
+      return chooseMember('memberId', id => routeMember(`${id} 회원 연락처 바꿔줘`, snapshot, locale, allowMemberDelete));
+    }
     const keptSuffix = /(?:연락처|번호)\s*(\d{4})\s*그대로/u.exec(text)?.[1];
     if (!phone && keptSuffix && member?.phone.endsWith(keptSuffix)) return answer(l('이미 같은 정보예요', 'The information is unchanged', '资料相同', '資料相同'));
     const update = (values: { name?: string; phone?: string }): DomainRoute => {
-      if (values.phone && member) {
-        const hit = duplicate(values.phone, member.customerId);
+      const customer = member && customerOf(snapshot, member);
+      const name = values.name === customer?.name ? undefined : values.name;
+      const phone = values.phone === normalizeStoredPhone(customer?.phone ?? '') ? undefined : values.phone;
+      if (member && !name && !phone) return answer(l('이미 같은 정보예요', 'The information is unchanged', '资料相同', '資料相同'));
+      if (phone && member) {
+        const hit = duplicate(phone, member.customerId);
         if (hit) return hit;
       }
-      const customer = member && customerOf(snapshot, member);
-      if (member && (!values.name || values.name === customer?.name) && (!values.phone || values.phone === customer?.phone)) return answer(l('이미 같은 정보예요', 'The information is unchanged', '资料相同', '資料相同'));
-      const { name, phone } = values;
-      return proposal('members.update', { ...(name ? { name: slot('name') } : {}), ...(phone ? { phone: slot('phone') } : {}) }, values);
+      return proposal('members.update', { ...(name ? { name: slot('name') } : {}), ...(phone ? { phone: slot('phone') } : {}) },
+        { ...(name ? { name } : {}), ...(phone ? { phone } : {}) });
     };
     if (phone || name) return update({ ...(name ? { name } : {}), ...(phone ? { phone } : {}) });
     if (/연락처|번호/u.test(text)) return clarify('phone', phoneQuestion, next => {
@@ -627,8 +730,11 @@ function routeMember(raw: string, snapshot: DataSnapshot, locale: Locale, allowM
     member ? { featureId: members, command: 'members.review', draft: { memberId: member.memberId } } : { featureId: members });
   if (query && /회원|손님|정보|알려|어떻게\s*돼|확인/u.test(text)) {
     if (!/회원|손님/u.test(text) && matches.length && snapshot.tables.staff.some(staff => !staff.archivedAt && sameName(staff.name, query))) {
-      return clarify('recordKind', l('회원과 직원 중 누구인가요?', 'Member or staff?', '是会员还是员工？', '是會員還是員工？'),
-        next => /회원/u.test(next) ? memberRead('memberQuery') : /직원/u.test(next) ? read('staff', 'name', query) : undefined);
+      return {
+        ...clarify('recordKind', '회원과 직원 중 누구인가요?', next =>
+          next === 'member' ? memberRead('memberQuery') : next === 'staff' ? read('staff', 'name', query) : undefined),
+        choices: [{ id: 'member', label: '회원' }, { id: 'staff', label: '직원' }],
+      };
     }
     if (matches.length || /회원/u.test(text)) return memberRead('memberQuery');
   }
@@ -648,13 +754,19 @@ export function createMembersDomain({ allowMemberDelete = false }: { readonly al
     reads: [memberReader, noteReader],
     projectWidget: projectMembers,
     navigation: memberNavigation,
-    routePresentation(text, snapshot, locale) {
-      const memo = noteWords.test(text) && !/공급처|발주사|재고\s*품목|상품\s*메모|예약\s*메모/u.test(text);
+    routePresentation(text, snapshot, locale, run?: RunState) {
+      const memo = noteWords.test(text) && !/공급처|발주사|재고\s*품목|상품\s*메모|예약\s*메모|새\s*메뉴|메뉴\s*(?:등록|추가)/u.test(text);
       const grade = /등급|단골|VIP/iu.test(text) && /올려|정해|처리|지정|고정|바꿔|수정|돌려|풀어|정할래|로\s*해|VIP/u.test(text);
       if (moneyWords.test(text) && refundWords.test(text) || passes.test(text) && passAction.test(text)
+        || consentChange.test(text) && /수신|광고|문자/u.test(text)
+        || visitEdit.test(text) && memberMention(snapshot, text, locale)
+        || oldVisitors.test(text) && /몇|수/u.test(text) && !moneyWords.test(text)
+          && (/회원/u.test(text) || run?.layer !== 'marketing' && /손님/u.test(text))
+        || lastVisitRead.test(text) && memberMention(snapshot, text, locale)
         || bookingLink(text)
         || bookingRead.test(text) && (/회원/u.test(text) || memberMention(snapshot, text, locale))
         || bookingCreation.test(text) && (/회원/u.test(text) || personMention(snapshot, text, locale))
+        || timedSeatRequest(text) && memberMention(snapshot, text, locale)
         || /회원|손님/u.test(text) && deleteWords.test(text)
         || (memo || grade) && personMention(snapshot, text, locale)) {
         return routeMember(text, snapshot, locale, allowMemberDelete);
@@ -663,6 +775,17 @@ export function createMembersDomain({ allowMemberDelete = false }: { readonly al
     route(text, snapshot, locale, run) {
       // The legacy contextless regular-count call returns a member widget candidate.
       if (!run && /^단골(?:손님)?\s*(?:몇\s*명|수\s*알려)/u.test(text)) return;
+      const askedMember = /회원|손님|단골|고객/u.test(text) && !deleteWords.test(text);
+      // This app keeps no member points (points belong to NAVER's own benefits); say so and offer what it does keep.
+      if (askedMember && /포인트|적립금|마일리지/u.test(text) && !/네이버|npay|엔페이|스탬프/iu.test(text)) {
+        return { kind: 'answer', answer: localized(locale, '이 앱에는 회원 포인트 기록이 없어요. 방문이 많은 회원이나 충전금·회원권 남은 횟수는 알려드릴 수 있어요.',
+          'This app keeps no member points. I can tell you which members visit most, or their prepaid balance and pass uses.',
+          '此应用不记录会员积分。可以告诉您到店最多的会员，或储值余额与会员券剩余次数。', '此應用不記錄會員積分。可以告訴您到店最多的會員，或儲值餘額與會員券剩餘次數。') };
+      }
+      if (askedMember && /(?:방문|왔|오는|온)/u.test(text) && /(?:제일|가장|젤|많이|자주|상위)/u.test(text) && /(?:많|자주|누구|누가|알려|\d)/u.test(text)
+        && !/지난|어제|오늘\s*방문|언제/u.test(text)) {
+        return { intent: { kind: 'read', featureId: members, condition: { kind: 'default' } }, factKeys: ['members.visits.top'] };
+      }
       return routeMember(text, snapshot, locale, allowMemberDelete);
     },
     handoff(command, fields) {

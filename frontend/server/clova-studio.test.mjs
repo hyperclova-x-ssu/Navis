@@ -259,3 +259,31 @@ test('42901 after a forwarded text or tool token is not retried', async () => {
     assert.equal(calls, 1); assert.equal(clock.timers.size, 0);
   }
 });
+
+// CLOVA Studio documents 40009 as "Unsupported function"; it showed up now and then on requests that normally work (gate stack, HTTP 200
+// with an error event), so one immediate retry is made before any text is emitted. A second 40009 stays UNAVAILABLE.
+test('an SSE 40009 before any text is retried once right away and a second 40009 stays UNAVAILABLE', async () => {
+  let calls = 0;
+  const unsupported = () => response([frame('error', { status: { code: '40009', message: 'private' } })]);
+  const client = createClovaStudio({ apiKey: 'fake', fetchImpl: async () => ++calls === 1 ? unsupported() : response([frame('result', result)]) });
+  assert.deepEqual(await collect(client.complete({ messages: [], maxTokens: 64 })), [{ event: 'result', data: result }]);
+  assert.equal(calls, 2);
+  calls = 0;
+  const failing = createClovaStudio({ apiKey: 'fake', fetchImpl: async () => { calls++; return unsupported(); } });
+  await assert.rejects(collect(failing.complete({ messages: [], maxTokens: 64 })), error => error.code === 'UNAVAILABLE');
+  assert.equal(calls, 2);
+});
+
+test('a JSON-mode 40009 is retried once, and a different 4xx code is not', async () => {
+  let calls = 0;
+  const body = code => JSON.stringify({ status: { code, message: 'private' } });
+  const jsonMode = createClovaStudio({ apiKey: 'fake', fetchImpl: async () => ++calls === 1
+    ? new Response(body('40009'), { headers: { 'content-type': 'application/json' } })
+    : new Response(JSON.stringify({ status: { code: '20000' }, result }), { headers: { 'content-type': 'application/json' } }) });
+  assert.equal((await collect(jsonMode.complete({ messages: [], maxTokens: 64, jsonResponse: true }))).at(-1).event, 'result');
+  assert.equal(calls, 2);
+  calls = 0;
+  const other = createClovaStudio({ apiKey: 'fake', fetchImpl: async () => { calls++; return new Response(body('40001'), { status: 400, headers: { 'content-type': 'application/json' } }); } });
+  await assert.rejects(collect(other.complete({ messages: [], maxTokens: 64, jsonResponse: true, onProviderCall() {} })), error => error.code === 'UNAVAILABLE');
+  assert.equal(calls, 1);
+});

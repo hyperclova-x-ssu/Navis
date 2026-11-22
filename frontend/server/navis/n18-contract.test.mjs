@@ -5,7 +5,7 @@ import { createServer } from 'vite';
 import { createBridge } from '../bridge.mjs';
 import { createNavisMenuHarness, navisAgentFakeFetch } from '../fixtures/navis-eval-fake.mjs';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame, validateAgentRequest } from '../../shared/navis-agent-schema.mjs';
-import { evidence, readTrace } from './scenario-fixtures.mjs';
+import { evidence, readCafeScenarios, readTrace, scenarioVariant } from './scenario-fixtures.mjs';
 
 const trace = readTrace();
 const assigned = trace.filter(row => row.slice_id === 'N18');
@@ -18,7 +18,8 @@ const vite = await createServer({
   server: { middlewareMode: true, watch: null, ws: false, hmr: false },
 });
 const load = path => vite.ssrLoadModule(`/src/${path}.ts`);
-let data, guards, state, testSession, presets, motion, catalog, provider, navigation, promo, fakePromo, locale;
+const reviewedPromo = new Set(['S6-009', 'S6-019', 'S6-023']);
+let data, guards, state, testSession, presets, motion, catalog, provider, navigation, promo, fakePromo, locale, reviewed;
 try {
   [data, guards, state, testSession, presets, motion, catalog, provider, navigation, promo, fakePromo, locale] = await Promise.all([
     load('data/widget-data'), load('data/marketing/commands'), load('state/index'), load('app/test-session'),
@@ -26,6 +27,7 @@ try {
     load('screens/dashboard/navis-navigation'), load('features/widgets/mkt-promo/promo-session'),
     load('features/widgets/mkt-promo/promo-test-server'), load('features/assistant/messages'),
   ]);
+  ({ corpus: reviewed } = await readCafeScenarios(vite));
 } finally {
   await vite.close();
 }
@@ -33,14 +35,14 @@ try {
 const tr = locale.navisTranslator('ko');
 const normal = { kind: 'default' };
 const posted = { 'S6-033': 'clip', 'S6-034': 'reels', 'S6-035': 'shorts', 'S6-040': 'clip' };
-const finished = new Set(['S6-032', ...Object.keys(posted), 'S6-036', 'S6-037', 'S6-039', 'S6-041', 'S6-042', 'S6-045', 'S6-010', 'S5-092']);
+const finished = new Set(['S6-032', ...Object.keys(posted), 'S6-036', 'S6-037', 'S6-039', 'S6-041', 'S6-042', 'S6-045', 'S6-010', 'S5-092', 'S8-170']);
 const assistedMake = new Set(['S6-028', 'S6-029', 'S8-170']);
+const completeMake = new Set(['S6-028', 'S8-170']);
 const neededEstimate = new Set([...assistedMake, 'S6-007']);
 const active = new Set(['S6-004', 'S6-005', 'S6-030', 'S6-031', 'S6-046']);
 const draftChanges = {
   'S6-016': { moods: ['warm'] }, 'S6-017': { moods: ['warm', 'clean'] },
-  'S6-019': { concepts: ['review-roundup'] }, 'S6-021': { memo: '비 오는 날 따뜻한 한 입' },
-  'S6-023': { referenceId: 'ref-2' }, 'S6-025': { lengthSec: 15 },
+  'S6-021': { memo: '비 오는 날 따뜻한 한 입' }, 'S6-025': { lengthSec: 15 },
 };
 const details = {
   'S5-096': { featureId: 'promo-video', view: 'create', focus: 'action' },
@@ -50,12 +52,6 @@ const details = {
   'S6-047': { featureId: 'promo-video', view: 'create', prefill: { tab: 2 } },
   'S6-161': { featureId: 'customer-groups', view: 'regular' },
   'S6-162': { featureId: 'customer-groups', view: 'reach-out', focus: 'action' },
-  'S6-191': { featureId: 'marketing-performance', view: 'route', focus: 'action' },
-  'S6-192': { featureId: 'marketing-performance', view: 'coupon' },
-  'S6-193': overlay['S6-193'].expected.tools[0].args,
-  'S6-194': { featureId: 'marketing-performance', view: 'video' },
-  'S7-086': { featureId: 'marketing-performance', view: 'coupon' },
-  'S7-087': { featureId: 'marketing-performance', view: 'video' },
 };
 
 function ok(result) {
@@ -101,7 +97,8 @@ async function fixture(t, id) {
   testSession.beginDashboard(run, 'cafe');
   run.actions.dismissCoach();
   if (!id.startsWith('S7-')) run.actions.switchLayer('marketing');
-  if (overlay[id]?.n18PromoDraft) run.actions.openDetailRef(overlay[id].n18PromoDraft, 'navis');
+  const draftRef = reviewed.get(id)?.n18PromoDraft ?? overlay[id]?.n18PromoDraft;
+  if (draftRef) run.actions.openDetailRef(draftRef, 'navis');
   const seed = data.createWidgetDataStore().getSnapshot().tables;
   const hasFinancier = ['S6-012', 'S6-013', 'S6-029'].includes(id);
   const marketing = hasFinancier ? {
@@ -182,7 +179,7 @@ async function fixture(t, id) {
     if (detail && plan) assert.equal(await nav.execute(plan.command, detail), 'opened');
     return { reply, detail, before };
   };
-  return { ask, store, promoSession, draft, videoId, requests, calls, simulated };
+  return { ask, store, run, nav, promoSession, draft, videoId, requests, calls, simulated };
 }
 
 function kind({ reply, detail }) {
@@ -225,22 +222,33 @@ async function press(env, result, command, tier = 'normal') {
   return { receipt, after };
 }
 
-async function verifyMake(env, result) {
-  const fields = result.reply.proposalSession?.getSnapshot().preview?.fields;
-  assert.ok(fields?.some(field => field.after.includes('예상 시간 약') && field.after.includes('예상 비용 약')), 'The start card must disclose the current estimate');
-  const { receipt, after } = await press(env, result, 'video.make');
-  assert.equal(receipt.frame.messageKey, 'data.marketing.notice.videoStarted');
-  const row = after.tables.marketing.promoVideo.at(-1);
-  assert.equal(receipt.notice.params.videoId, row.videoId);
-  assert.equal(row.status, 'making');
-  assert.equal(row.jobId, null);
-  assert.deepEqual(row.input, env.draft);
-  assert.equal(after.tables.marketing.promoVideo.length, result.before.tables.marketing.promoVideo.length + 1);
-  assert.equal(after.tables.marketing.couponCode, result.before.tables.marketing.couponCode);
+async function verifyMakeHandoff(env, result) {
+  assert.equal(kind(result), 'refuse', result.reply.answer);
+  assert.equal(result.reply.proposalSession, undefined);
+  assert.equal(result.reply.turn.alternative?.command, 'video.make');
+  assert.equal(await env.nav.handoff(result.reply.turn.alternative), 'opened');
+  const ref = env.run.getState().overlay.stack?.at(-1);
+  assert.equal(ref?.featureId, 'promo-video');
+  assert.deepEqual(ref?.prefill?.fields, { tab: 0, composing: true });
+  assert.equal(env.store.getSnapshot(), result.before);
   assert.equal(env.simulated.job, null);
-  assert.ok(env.simulated.calls.every(call => call.path === '/api/promo/estimate-model'));
-  assert.ok(env.requests.every(request => env.draft.photoIds.every(id => !JSON.stringify(request).includes(id))));
-  if (env.draft.memo) assert.ok(!JSON.stringify(env.requests).includes(env.draft.memo), 'Promo memo crossed the bridge');
+  assert.ok(env.requests.every(request => request.intent.command !== 'video.make'));
+}
+
+async function verifyMake(env, result) {
+  assert.equal(kind(result), 'proposal', result.reply.answer);
+  const fields = result.reply.proposalSession.getSnapshot().preview.fields;
+  assert.ok(fields.some(field => field.after === `${env.draft.photoIds.length}장`));
+  assert.ok(fields.some(field => field.after.includes('예상 시간') && field.after.includes('예상 비용')));
+  const { receipt } = await press(env, result, 'video.make');
+  assert.equal(receipt.frame.messageKey, 'data.marketing.notice.videoStarted');
+  const rows = env.store.getSnapshot().tables.marketing.promoVideo;
+  assert.equal(rows.length, result.before.tables.marketing.promoVideo.length + 1);
+  const row = rows.at(-1);
+  assert.deepEqual(row.input, env.draft);
+  assert.equal(row.status, 'failed');
+  assert.match(row.jobId, /^pj-/u);
+  assert.equal(env.simulated.job, null);
 }
 
 async function verifyPosted(env, result, route, expectedIssue) {
@@ -364,13 +372,32 @@ function readFragments(id, snapshot) {
   }
 }
 
+/**
+ * D-365: the 마케팅 성과 widget is gone. These rows opened it or read its numbers; the chat now answers plainly that the screen or
+ * the number is no longer shown, opens nothing and never reads the removed widget. (A-3 expectation patch for B17: each id below,
+ * kind answer, text from couponChatCopy.performanceGone / performanceStopped.)
+ */
+const retiredPerformance = new Set(['S6-169', 'S6-173', 'S6-177', 'S6-179', 'S6-184', 'S6-186', 'S6-191', 'S6-192', 'S6-193', 'S6-194', 'S7-086', 'S7-087']);
+
+async function verifyRetired(env, result) {
+  assert.equal(kind(result), 'answer', result.reply.answer);
+  assert.match(result.reply.answer, /마케팅 성과 화면은 없어졌어요|이제 따로 보여 드리지 않아요/u);
+  assert.equal(result.detail, undefined);
+  assert.ok(!JSON.stringify(env.calls).includes('marketing-performance'), 'The removed widget was read or opened');
+  assert.ok(!env.calls.some(call => call.name === 'propose_action'), 'A retired read admitted a write');
+  assert.equal(env.store.getSnapshot(), result.before);
+}
+
 async function verifyScenario(t, id, variant = 0) {
   const env = await fixture(t, id);
   const result = await env.ask(corpus.get(id).utterances[variant]);
+  // S6-193's first wording names no widget (a known TODO row); only its explicit second wording is retired.
+  if (retiredPerformance.has(id) && !(id === 'S6-193' && variant === 0)) return verifyRetired(env, result);
   const expected = expectedFor(id);
   // Cross-widget comparisons use a read-only reply with no proposal.
   // S6-015 uses the café's six real Americano photos, so selecting them is a valid draft patch.
-  const expectedKind = ['S6-015', 'S6-030'].includes(id) ? 'proposal' : expected.kind === 'multi' ? 'answer' : expected.kind;
+  const expectedKind = completeMake.has(id) || ['S6-015', 'S6-030'].includes(id) ? 'proposal'
+    : assistedMake.has(id) ? 'refuse' : expected.kind === 'multi' ? 'answer' : expected.kind;
   assert.equal(kind(result), expectedKind, result.reply.answer);
   if (id === 'S6-030') {
     const video = result.before.tables.marketing.promoVideo.find(row => row.videoId === env.videoId);
@@ -381,14 +408,23 @@ async function verifyScenario(t, id, variant = 0) {
     const retried = after.tables.marketing.promoVideo.find(row => row.videoId === env.videoId);
     assert.deepEqual(retried.input, video.input);
     assert.equal(retried.retryCount, video.retryCount + 1);
-    assert.equal(retried.status, 'making');
-    assert.equal(retried.jobId, null);
+    await Promise.resolve();
+    const settled = env.store.getSnapshot().tables.marketing.promoVideo.find(row => row.videoId === env.videoId);
+    assert.equal(settled.status, 'failed');
+    assert.equal(settled.failReason, 'AI_UNAVAILABLE');
+    assert.match(settled.jobId, /^pj-/);
     assert.equal(env.simulated.job, null);
     assert.ok(env.simulated.calls.every(call => call.path === '/api/promo/estimate-model'));
     return;
   }
   if (posted[id]) return verifyPosted(env, result, posted[id], id === 'S6-033' ? 10 : 0);
-  if (assistedMake.has(id)) return verifyMake(env, result);
+  if (completeMake.has(id)) return verifyMake(env, result);
+  if (assistedMake.has(id)) return verifyMakeHandoff(env, result);
+  if (id === 'S6-014') {
+    assert.equal(result.reply.turn.field, 'photoCount');
+    assert.deepEqual(env.calls, []);
+    assert.deepEqual(env.promoSession.getState().draft.photoIds, []);
+  }
   const patch = draftChanges[id] ?? (['S6-012', 'S6-013', 'S6-015'].includes(id) ? {
     menuIds: env.draft.menuIds, photoIds: env.draft.photoIds.slice(0, id === 'S6-013' ? 5 : undefined),
   } : undefined);
@@ -428,51 +464,113 @@ async function verifyScenario(t, id, variant = 0) {
   }
 }
 
+async function verifyReviewedPromo(t, id, variant) {
+  const scenario = scenarioVariant(reviewed.get(id), variant);
+  assert.equal(scenario.fixtureBlock, undefined);
+  const env = await fixture(t, id);
+  const beforeDraft = env.promoSession.getState().draft;
+  const result = await env.ask(scenario.utterances[variant]);
+  const { expected } = scenario;
+  assert.equal(kind(result), expected.kind, result.reply.answer);
+  for (const fragment of (expected.answer_must_contain ?? []).flat()) assert.ok(result.reply.answer.includes(fragment), fragment);
+  for (const fragment of expected.answer_must_not_contain ?? []) assert.ok(!result.reply.answer.includes(fragment), fragment);
+  if (expected.kind === 'proposal') {
+    const [{ args: { command, args } }] = expected.tools;
+    assert.deepEqual(env.calls.at(-1), { name: 'propose_action', args: { command, args } });
+    const { receipt } = await press(env, result, command);
+    checkFields(env.promoSession.getState().draft, args);
+    assert.ok(receipt.notice.undo, 'The local draft receipt offers undo');
+  } else {
+    assert.deepEqual(env.calls, expected.tools);
+    assert.equal(result.reply.proposalSession, undefined);
+    assert.equal(env.promoSession.getState().draft, beforeDraft);
+    if (expected.kind === 'clarify') assert.deepEqual([result.reply.turn.field], expected.ask);
+  }
+  assert.equal(env.store.getSnapshot(), result.before);
+}
+
 for (const { scenario_id: id } of assigned) {
-  test(`N18 ${id}`, { todo: id === 'S6-193' ? unnamedPeriod : undefined }, t => verifyScenario(t, id));
+  test(`N18 ${id}`, { todo: id === 'S6-193' ? unnamedPeriod : undefined }, async t => {
+    if (!reviewedPromo.has(id)) return verifyScenario(t, id);
+    for (const [variant] of reviewed.get(id).utterances.entries()) {
+      await t.test(`variant ${variant + 1}`, subtest => verifyReviewedPromo(subtest, id, variant));
+    }
+  });
 }
 test('N18 S6-193 explicit performance request', t => verifyScenario(t, 'S6-193', 1));
 
-test('N18 S6-029 gathers the missing reference before offering a separate job card', async t => {
+for (const [id, variant, field] of [['S6-014', 2, 'photoCount'], ['S6-020', 1, 'concept']]) {
+  test(`N18 ${id} clarifies ${field} on the marketing board`, async t => {
+    const env = await fixture(t, id);
+    const result = await env.ask(corpus.get(id).utterances[variant]);
+    assert.equal(kind(result), 'clarify', result.reply.answer);
+    assert.equal(result.reply.turn.field, field);
+    assert.deepEqual(env.calls, []);
+  });
+}
+
+test('N18 S6-029 asks for the missing design before offering a job', async t => {
   const env = await fixture(t, 'S6-029');
   const photos = await env.ask(corpus.get('S6-012').utterances[0]);
   await press(env, photos, 'promo.draft.set');
   assert.deepEqual(env.promoSession.getState().draft.photoIds, env.draft.photoIds);
-  const missing = await env.ask('영상 만들어줘');
-  assert.equal(kind(missing), 'clarify', missing.reply.answer);
-  assert.equal(missing.reply.turn.field, 'referenceId');
-  assert.equal(missing.reply.turn.choices.length, 6);
-  const design = await env.ask('', { clarificationId: missing.reply.turn.id, choiceId: 'ref-2' });
-  await press(env, design, 'promo.draft.set');
-  assert.equal(env.promoSession.getState().draft.referenceId, 'ref-2');
-  await verifyMake(env, await env.ask('영상 만들어줘'));
+  assert.equal(env.promoSession.getState().draft.referenceId, null);
+  const result = await env.ask('영상 만들어줘');
+  assert.equal(kind(result), 'clarify');
+  assert.equal(result.reply.turn.field, 'referenceId');
+  assert.equal(env.store.getSnapshot(), result.before);
+  assert.equal(env.simulated.job, null);
 });
 
-test('N18 S8-170 starts only from an eligible draft and the owner card', async t => {
+test('N18 S8-170 starts a complete draft despite an unposted video', async t => {
   const env = await fixture(t, 'S8-170');
-  await verifyMake(env, await env.ask(corpus.get('S8-170').utterances[0]));
+  const result = await env.ask(corpus.get('S8-170').utterances[0]);
+  assert.ok(result.reply.proposalSession?.getSnapshot().preview.fields.some(field => field.after === '아직 안 올린 영상이 1개 있어요'));
+  await verifyMake(env, result);
+  assert.equal(env.store.getSnapshot().tables.marketing.promoVideo.find(row => row.videoId === env.videoId).status, 'done');
 });
 
-test('N18 a draft without an available estimate does not offer a start card', async t => {
-  const unpriced = await fixture(t, 'no-estimate');
-  const draft = await unpriced.ask('영상 만들어줘');
-  assert.notEqual(kind(draft), 'proposal', draft.reply.answer);
-  assert.equal(unpriced.store.getSnapshot().tables.marketing.promoVideo.length, 0);
-  assert.equal(unpriced.simulated.job, null);
+test('N18 opens the widget for a new video without a cached estimate', async t => {
+  const env = await fixture(t, 'no-estimate');
+  await verifyMakeHandoff(env, await env.ask('영상 만들어줘'));
 });
 
-test('N18 a direct upload request cannot mark a video as posted', async t => {
+for (const text of ['완성된 영상 릴스에 올려줘', '영상 클립에 업로드해줘', '영상 클립에 아직 안 올렸어',
+  '“영상 클립에 올렸어”라고 손님이 말했어', '영상 클립에 올렸다고 표시하지 마',
+  '영상 클립에 올렸는지 확인해줘', '동료가 영상을 클립에 올렸대',
+  '손님이 영상을 클립에 올렸다고 했어요', '영상 클립에 올렸다고 표시해 달라는 건 아니에요']) {
+  test(`N18 cannot mark a video without attestation (${text})`, async t => {
+    const env = await fixture(t, 'S6-033');
+    const result = await env.ask(text);
+    assert.notEqual(kind(result), 'proposal', result.reply.answer);
+    assert.ok(!env.calls.some(call => call.name === 'propose_action'));
+    assert.equal(env.store.getSnapshot().tables.marketing.promoVideo.at(-1).status, 'done');
+  });
+}
+
+test('N18 asks which route when a video attestation names two publishing channels', async t => {
   const env = await fixture(t, 'S6-033');
-  const result = await env.ask('완성된 영상 릴스에 올려줘');
-  assert.notEqual(kind(result), 'proposal', result.reply.answer);
-  assert.ok(!env.calls.some(call => call.name === 'propose_action'));
-  assert.equal(env.store.getSnapshot().tables.marketing.promoVideo.at(-1).status, 'done');
+  const result = await env.ask('영상 클립하고 쇼츠에 올렸어');
+  assert.equal(kind(result), 'clarify');
+  assert.equal(result.reply.turn.field, 'route');
+  assert.deepEqual(env.calls, []);
+  assert.equal(env.store.getSnapshot(), result.before);
 });
 
 test('N18 S6-152 sends exactly the eligible group after the owner card', async t => {
   const env = await fixture(t, 'S6-152');
   await verifyReachOut(env, await env.ask(corpus.get('S6-152').utterances[0]));
 });
+
+for (const text of ['이탈 손님한테 쿠폰 보내지 말아줘', '이탈 손님에게 동의 여부와 상관없이 문자 쿠폰 보내줘']) {
+  test(`N18 keeps the reach-out card unavailable (${text})`, async t => {
+    const env = await fixture(t, 'S6-152');
+    const result = await env.ask(text);
+    assert.notEqual(kind(result), 'proposal', result.reply.answer);
+    assert.deepEqual(env.calls, []);
+    assert.equal(env.store.getSnapshot(), result.before);
+  });
+}
 
 test('N18 S6-163 sends only on the reach-out step after the group count', async t => {
   const env = await fixture(t, 'S6-163');
@@ -484,8 +582,8 @@ test('N18 S6-163 sends only on the reach-out step after the group count', async 
 });
 
 test('N18 stale and cancelled cards leave the widget tables untouched', async t => {
-  const env = await fixture(t, 'S6-028');
-  const first = await env.ask(corpus.get('S6-028').utterances[0]);
+  const env = await fixture(t, 'S6-030');
+  const first = await env.ask('홍보 영상 다시 만들기');
   const firstCard = first.reply.proposalSession;
   assert.ok(firstCard?.isPending(), first.reply.answer);
   const firstId = firstCard.getSnapshot().proposal.id;
@@ -494,7 +592,7 @@ test('N18 stale and cancelled cards leave the widget tables untouched', async t 
   const stale = env.store.getSnapshot();
   assert.equal(firstCard.confirm(env.store, firstId)?.frame.outcome, 'conflict');
   assert.equal(env.store.getSnapshot(), stale);
-  const second = await env.ask(corpus.get('S6-028').utterances[0]);
+  const second = await env.ask('홍보 영상 다시 만들기');
   const secondCard = second.reply.proposalSession;
   assert.ok(secondCard?.isPending(), second.reply.answer);
   const secondId = secondCard.getSnapshot().proposal.id;

@@ -47,17 +47,17 @@ function markInput(status, handle = markArgs.videoId.handle) {
 
 test('N18 approval schemas bind full widget inputs and preserve legacy handoffs', () => {
   for (const [command, args, tier] of [
-    ['video.make', makeArgs, 'normal'],
     ['video.markPosted', markArgs, 'extra-confirm'],
     ['coupon.sendReachOut', reachArgs, 'normal'],
     ['promo.draft.set', { memo: { slot: 'memo' } }, 'normal'],
+    ['video.make', makeArgs, 'normal'],
   ]) {
     assert.equal(agentCommandPolicy(command, args).policy, 'propose');
     assert.equal(agentCommandPolicy(command, args).confirmation, tier);
     assert.equal(validateAgentToolArgs('propose_action', { command, args }), true);
   }
   for (const [command, args] of [
-    ['video.make', { lengthSec: 15 }], ['video.retry', {}], ['video.markPosted', { route: 'clip' }],
+    ['video.make', {}], ['video.make', { lengthSec: 15 }], ['video.retry', {}], ['video.markPosted', { route: 'clip' }],
     ['coupon.sendReachOut', {}], ['coupon.sendReachOut', { groupId: 'regular' }],
     ['coupon.sendReachOut', { groupId: 'churn-risk', sendAt: { slot: 'sendAt' } }],
   ]) assert.equal(agentCommandPolicy(command, args).policy, 'widget-only');
@@ -70,21 +70,21 @@ test('N18 approval schemas bind full widget inputs and preserve legacy handoffs'
   assert.equal(validateAgentCommandArgs('promo.draft.set', { memo: '가'.repeat(101) }), false);
 });
 
-test('N18 bridge requires matching projected readiness to offer a fake video job card', async t => {
+test('D-329 bridge proposes a complete draft only with a clear make preflight', async t => {
   const { run } = harness(t);
-  const { terminal, calls, raw } = await run(makeInput(0));
-  assert.equal(terminal.outcome, 'proposal', raw);
-  assert.deepEqual(calls.map(({ name }) => name), ['get_promotion_preflight', 'propose_action']);
-  assert.deepEqual(calls.at(-1).args, { command: 'video.make', args: makeArgs });
-  assert.match(raw, /"tier":"normal"/u);
-  for (const input of [makeInput(1), makeInput(undefined), makeInput(2)]) {
-    const blocked = await run(input);
-    assert.equal(blocked.terminal.outcome, 'refused', blocked.raw);
-    assert.ok(blocked.calls.every(call => call.name !== 'propose_action'));
+  const ready = await run(makeInput(0));
+  assert.equal(ready.terminal.outcome, 'proposal', ready.raw);
+  assert.deepEqual(ready.calls.map(call => call.name), ['get_promotion_preflight', 'propose_action']);
+  assert.deepEqual(ready.calls.at(-1).args, { command: 'video.make', args: makeArgs });
+  for (const busy of [1, undefined, -1, 1.5]) {
+    const { terminal, calls, raw } = await run(makeInput(busy));
+    assert.equal(terminal.outcome, 'refused', raw);
+    assert.ok(calls.every(call => call.name !== 'propose_action'));
   }
-  const outOfScope = await run({ ...makeInput(0), layer: 'pos' });
-  assert.equal(outOfScope.terminal.refusal.reason, 'out_of_scope');
-  assert.deepEqual(outOfScope.calls, []);
+  const incomplete = await run(navigationRequest('video.make', { lengthSec: 15 }));
+  assert.equal(incomplete.terminal.refusal.reason, 'widget_only');
+  assert.equal(incomplete.terminal.refusal.alternative.featureId, 'promo-video');
+  assert.deepEqual(incomplete.calls, []);
 });
 
 test('N18 marking needs an exact finished video and emits an extra-confirm card', async t => {

@@ -56,6 +56,10 @@ test('a note proposal needs an exact note whose owner matches the scoped member 
   assert.deepEqual(adapter.prepare({ input: request, reads: [ready(member), ready(note)] }), { outcome: 'ready', args });
   assert.deepEqual(adapter.prepare({ input: request, reads: [ready(member), ready(exact(note.handle, { ownerHandle: 'wrong' }))] }),
     { outcome: 'refused', reason: 'invalid_target' });
+  assert.deepEqual(adapter.prepare({ input: request, reads: [ready(member), ready(note, exact('foreign-note', { ownerHandle: 'wrong' }))] }),
+    { outcome: 'refused', reason: 'invalid_target' });
+  assert.deepEqual(adapter.prepare({ input: request, reads: [ready(member), { status: 'unavailable' }] }),
+    { outcome: 'refused', reason: 'unavailable' });
 });
 
 test('member archive requires a current clear blocker result in the default registry', async () => {
@@ -66,6 +70,8 @@ test('member archive requires a current clear blocker result in the default regi
   assert.deepEqual(disabled.prepare({}), { outcome: 'refused', reason: 'widget_only' });
   const request = input(command, memberArgs);
   assert.deepEqual(existing.prepare({ input: request, reads: [ready(member)] }), { outcome: 'refused', reason: 'unavailable' });
+  assert.deepEqual(existing.prepare({ input: request, reads: [ready(exact(member.handle, { deleteBlocked: null }))] }),
+    { outcome: 'refused', reason: 'unavailable' });
   const blocked = exact(member.handle, { deleteBlocked: true });
   assert.equal(validateAgentRequest(input(command, memberArgs, [search('member', 'memberQuery', blocked)])), true);
   assert.deepEqual(existing.prepare({ input: request, reads: [ready(blocked)] }), { outcome: 'refused', reason: 'invalid_target' });

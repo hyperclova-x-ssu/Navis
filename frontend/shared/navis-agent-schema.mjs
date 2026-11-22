@@ -26,7 +26,8 @@ const date = { ...string(10, '^\\d{4}-\\d{2}-\\d{2}$'), format: 'date' };
 const time = string(5, '^(?:[01]\\d|2[0-3]):[0-5]\\d$');
 const dateTime = { ...string(16, '^\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d$'), format: 'local-date-time' };
 const clockStamp = { ...string(32, '^\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d{1,3})?)?(?:Z|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)?$'), format: 'local-date-time' };
-const category = oneOf('drink', 'dessert');
+// The old value remains readable on outstanding cards and earlier replay snapshots.
+const category = oneOf('coffee', 'tea', 'beverage', 'dessert', 'drink');
 const status = oneOf('selling', 'sold_out');
 const unit = oneOf('pcs', 'L', 'mL', 'kg', 'g');
 const price = integer(1);
@@ -138,7 +139,7 @@ const promoDraft = {
   referenceId: oneOf('ref-1', 'ref-2', 'ref-3', 'ref-4', 'ref-5', 'ref-6'),
   memo: string(200, '^[\\s\\S]{0,100}$'),
 };
-const promoMake = record({
+const promoMake = optional({
   ...promoDraft,
   menuIds: { ...promoDraft.menuIds, minItems: 1 }, photoIds: { ...promoDraft.photoIds, minItems: 5 },
   moods: { ...promoDraft.moods, minItems: 1 }, concepts: { ...promoDraft.concepts, minItems: 1 },
@@ -507,7 +508,7 @@ const proposal = either(...Object.values(proposalSchemas));
 // N09 purchase order lifecycle shared by orders and receipt lines.
 const supplierOrderStatus = oneOf('scheduled', 'partial', 'complete', 'canceled');
 const recordFields = {
-  menu: { category, price, status, kind: oneOf('menu', 'retail') },
+  menu: { category, seasonal: flag, price, status, kind: oneOf('menu', 'retail'), soldToday: integer(), cost: integer() },
   // N05 inventory record projection.
   stock: { kind: oneOf('ingredient', 'retail'), unit, sku: string(120), referenced: flag, store: integer(), online: integer(),
     expiryEligible: flag, expiryHandled: flag }, // D-326 coupon eligibility.
@@ -525,7 +526,7 @@ const recordFields = {
   shift: { date, kind: oneOf('work', 'off'), start: time, end: time, breakMinutes: integer(0, 1438) },
   // End N10 operational fields.
   // N15 operational evidence; write lookups do not need the notice text.
-  noticeDraft: { kind: noticeKind, date, revision: integer(1), sendAllowed: flag, scheduleAllowed: flag,
+  noticeDraft: { kind: noticeKind, date, revision: integer(1), businessTime: time, sendAllowed: flag, scheduleAllowed: flag,
     closureLink: oneOf('none', 'current', 'changed', 'removed', 'dates'), alreadySent: flag },
   recipe: { unit },
   // N09 supplier and order operational fields. Contacts and identities stay local.
@@ -551,7 +552,8 @@ const recordFields = {
   reservation: {
     kind: oneOf('visit', 'pickup'), date, time, partySize: price,
     status: oneOf('needs-check', 'confirmed', 'proposed', 'canceled', 'completed', 'no-show'),
-    source: oneOf('phone_ai', 'direct'), allocationWarning: oneOf('NO_MATCHING_TABLE', 'SEAT_LIMIT'), visitStarted: flag,
+    source: oneOf('phone_ai', 'direct'), origin: oneOf('local', 'call', 'naver'),
+    allocationWarning: oneOf('NO_MATCHING_TABLE', 'SEAT_LIMIT'), visitStarted: flag,
     paymentReversalRequired: flag, // N13 linked pickup only.
   },
   // End N06 reservation projection.
@@ -673,7 +675,7 @@ export function agentCommandPolicy(command, args = {}) {
     return { ...metadata, policy: 'widget-only' };
   }
   // N18 incomplete legacy drafts still open the widget.
-  if (command === 'video.make' && metadata.required.some(field => !Object.hasOwn(args, field))
+  if (command === 'video.make' && Object.keys(promoMake.properties).some(field => !Object.hasOwn(args, field))
     || command === 'video.retry' && !args.videoId
     || command === 'video.markPosted' && (!args.videoId || !args.route)
     || command === 'coupon.sendReachOut' && (args.groupId !== 'churn-risk' || Object.hasOwn(args, 'sendAt'))) {
@@ -683,6 +685,10 @@ export function agentCommandPolicy(command, args = {}) {
   if (command === 'tax.updatePayment' && (Object.hasOwn(args.patch ?? {}, 'paidOn') || Object.hasOwn(args.patch ?? {}, 'status'))
     || ['customOrder.cancel', 'pickup.cancel'].includes(command) && Object.hasOwn(args, 'confirmedCorrectionQuoteId')) {
     return { ...metadata, policy: 'widget-only' };
+  }
+  if (command === 'tax.setEvidence') {
+    if (args.evidence === 'example') return { ...metadata, policy: 'handoff' };
+    if (args.evidence === 'none') return { ...metadata, policy: 'widget-only' };
   }
   return metadata;
 }
@@ -772,7 +778,7 @@ const widgetPrefill = freeze({
   'expiry-coupon': { itemId: stockId, rate: integer(1, 100), withSet: flag },
   'coupon-status': { couponId, body: text, sendAt: dateTime },
   'customer-groups': { groupId: oneOf('regular', 'first-visit', 'churn-risk'), messageBody: text },
-  'promo-video': { ...promoDraft, tab: integer(0, 3) },
+  'promo-video': { ...promoDraft, tab: integer(0, 3), composing: oneOf(true) },
 });
 
 function detailViews(views, extra = {}) {
@@ -807,7 +813,7 @@ const detailWidgets = freeze({
   }),
   manuals: detailViews(['handover', 'store-info'], { itemId: manualId, focus: actionFocus }),
   grants: detailViews(['notices', 'applications', 'template', 'official'], { itemId: target('grantNotice', 'grantApplication'), focus: actionFocus }), // N14
-  'notice-send': detailViews(['drafts', 'history', 'compose'], { itemId: target('noticeDraft', 'noticeSent'), focus: actionFocus }),
+  'notice-send': detailViews(['drafts', 'history', 'compose', 'scheduled'], { itemId: target('noticeDraft', 'noticeSent'), focus: actionFocus }),
   briefing: detailViews(['alerts', 'closing']),
   'customer-analysis': detailViews(['setup', 'zones'], { date, hour: detailHours }),
   'store-environment': detailViews(['sensor', 'player']),
@@ -823,9 +829,6 @@ const detailWidgets = freeze({
   'coupon-status': detailViews(['active', 'ended', 'reminder'], { itemId: couponId, focus: actionFocus }),
   'customer-groups': detailViews(['regular', 'first-visit', 'churn-risk', 'reach-out'], { focus: actionFocus }),
   'promo-video': detailViews(['create'], { itemId: videoId, focus: actionFocus }),
-  'marketing-performance': detailViews(['route', 'coupon', 'video'], {
-    itemId: couponId, condition: detailPeriod, focus: actionFocus,
-  }),
 });
 
 const detailWidgetId = oneOf(...Object.keys(detailWidgets));
@@ -935,6 +938,11 @@ export function agentNavigationItemKinds(ref) {
 }
 
 export function agentNavigationHandoffIssue(command, draft, wire = false) {
+  if (command === 'tax.setEvidence') {
+    if (!draft?.taxPaymentId) return 'taxPaymentId';
+    if (draft.evidence !== 'example' || !(wire ? validateAgentDraft(command, draft) : validateAgentCommandArgs(command, draft))) return 'evidence';
+    return undefined;
+  }
   // N06 requires both scoped suggestion fields before opening the handoff.
   if (command === 'booking.propose') {
     if (!draft?.reservationId) return 'reservationId';
@@ -1066,7 +1074,7 @@ const searchProjection = either(...Object.entries(recordFields).map(([kind, prop
   matches: array(record({
     handle: id, match: searchMatch, label: string(180),
     ...(kind === 'menu' ? { category, price } : {}), fields: optional(properties),
-  }, ['handle', 'match']), 5), nextCursor: id, status: unavailableStatus,
+  }, ['handle', 'match']), 5), nextCursor: id, queryBinding: id, status: unavailableStatus,
 }, ['kind', 'querySlot', 'matches'])));
 const readingProjection = either(...AGENT_EXTRA_READ_TOOLS.map(name => {
   const params = AGENT_TOOLS[name].function.parameters;
@@ -1077,14 +1085,49 @@ const readingProjection = either(...AGENT_EXTRA_READ_TOOLS.map(name => {
 }));
 const commandIntent = either(...Object.entries(draftSchemas).map(([command, args]) => record({
   kind: oneOf('command'), command: oneOf(command), args, querySlot: fieldId,
-}, ['kind', 'command'])));
-const readIntent = record({ kind: oneOf('read'), featureId: id, sourceId: source, condition, recordKind, querySlot: fieldId, tool: oneOf(...AGENT_EXTRA_READ_TOOLS) }, ['kind']);
+}, ['kind', 'command'])),
+record({ kind: oneOf('command'), command: oneOf('menu.setSaleStatus'), clarify: oneOf('menuId') }),
+record({ kind: oneOf('command'), command: oneOf('menu.setSaleStatus'), clarify: oneOf('status'), querySlot: fieldId }),
+record({ kind: oneOf('command'), command: oneOf('ledger.confirmCandidate'), clarify: oneOf('expenseId') }));
+const compiledReadLimit = 4;
+const compiledRead = either(
+  record({ name: oneOf('get_widget'), args: record({ featureId: widgetId, condition }, ['featureId']) }),
+  record({ name: oneOf('get_source'), args: record({ sourceId: source, condition }, ['sourceId']) }),
+  record({ name: oneOf('search_records'), args: record({ ...searchArgs.properties,
+    kind: oneOf(...AGENT_RECORD_KINDS, 'order') }, searchArgs.required) }),
+);
+const readIntent = either(
+  record({ kind: oneOf('read'), reads: array(compiledRead, compiledReadLimit), queryBinding: id }, ['kind', 'reads']),
+  record({ kind: oneOf('read'), featureId: id, sourceId: source, condition, recordKind, querySlot: fieldId,
+    tool: oneOf(...AGENT_EXTRA_READ_TOOLS), queryBinding: id, cursor: id }, ['kind']),
+);
+
+/** Input aliases and defaults stop here. Model tool calls use strict canonical arguments. */
+export function normalizeAgentReadSelection(selection) {
+  if (!matches(compiledRead, selection)) return undefined;
+  const { name, args } = selection;
+  const normalized = name === 'search_records' ? { ...args, kind: args.kind === 'order' ? 'purchaseOrder' : args.kind }
+    : { ...args, condition: args.condition ?? { kind: 'default' } };
+  if (validateAgentToolArgs(name, normalized)) return { name, args: normalized };
+  return undefined;
+}
+
+function validReadIntent(intent, slots) {
+  if (intent.reads) return (!intent.queryBinding || intent.reads.length === 1 && intent.reads[0].name === 'search_records')
+    && intent.reads.every(selection => normalizeAgentReadSelection(selection)
+      && (!slots || selection.name !== 'search_records' || slots.includes(selection.args.querySlot)));
+  return [intent.featureId, intent.sourceId, intent.tool].filter(Boolean).length <= 1
+    && (!intent.condition || validCondition(intent.condition))
+    && (!intent.cursor || intent.queryBinding) && (!intent.queryBinding || intent.recordKind && intent.querySlot);
+}
 // N02 conversation controls. Private continuation values and undo tokens stay local.
 const conversationKind = oneOf('conversation');
 const conversationIntent = either(
   record({ kind: conversationKind, action: oneOf('confirm'), pendingId: id, target: id }, ['kind', 'action', 'pendingId']),
   record({ kind: conversationKind, action: oneOf('confirm_extra'), pendingId: id, challengeId: id }),
-  record({ kind: conversationKind, action: oneOf('cancel', 'edit', 'continue'), pendingId: id }),
+  record({ kind: conversationKind, action: oneOf('cancel', 'edit'), pendingId: id }),
+  record({ kind: conversationKind, action: oneOf('continue'), pendingId: id,
+    selection: either(record({ querySlot: fieldId, handle: id }), record({ recordKind, querySlot: fieldId, handle: id, queryBinding: id })) }, ['kind', 'action', 'pendingId']),
   record({ kind: conversationKind, action: oneOf('undo'), pendingId: id, featureId: id, previous: flag }, ['kind', 'action']),
   record({ kind: conversationKind, action: oneOf('refer'), ordinal: integer(1, 5), recordKind, featureId: id }, ['kind', 'action']),
   record({ kind: conversationKind, action: oneOf('repeat_read'), period: oneOf('yesterday', 'previous_month') }, ['kind', 'action']),
@@ -1092,7 +1135,7 @@ const conversationIntent = either(
   record({ kind: conversationKind, action: oneOf('repeat_command', 'hold') }),
 );
 const conversationChoice = either(
-  record({ type: oneOf('record'), recordKind, querySlot: fieldId, handle: id }),
+  record({ type: oneOf('record'), recordKind, querySlot: fieldId, handle: id, queryBinding: id }, ['type', 'recordKind', 'querySlot', 'handle']),
   record({ type: oneOf('widget'), featureId: id }),
   record({ type: oneOf('undo'), receiptId: id, target: oneOf('data', 'layout') }),
 );
@@ -1108,12 +1151,26 @@ const conversationResolution = either(
     'undo_expired', 'undo_unavailable'), featureId: id }, ['type', 'reason']),
 );
 // End N02 conversation controls.
+// D-371: the owner's sentence may go to the model for READ-ONLY intent classification. The request carries the sentence, the browser's
+// widget list (one "id|name|fact labels" line each) and an optional one-line summary of the previous turn. The answer is an intent plan.
+export const INTENT_PLAN_PERIODS = freeze(['today', 'yesterday', 'tomorrow', 'week', 'lastWeek', 'month', 'lastMonth', 'last30', 'default']);
+const classifyIntent = record({ kind: oneOf('classify'), text: string(240), widgets: array(string(400), 64, 1), previous: string(300) }, ['kind', 'text', 'widgets']);
+const planRead = record({ featureId: widgetId, period: oneOf(...INTENT_PLAN_PERIODS), hints: array(string(24), 4) }, ['featureId', 'period']);
+// `compute` asks the browser for one derived number from two reads (a sum, a difference or a ratio of their first matching amounts).
+const planCompute = record({ op: oneOf('sum', 'diff', 'ratio'), left: integer(0, 3), right: integer(0, 3) });
+const intentPlan = either(
+  record({ kind: oneOf('read'), reads: array(planRead, 4, 1), confidence: oneOf('high', 'low'), compute: planCompute }, ['kind', 'reads', 'confidence']),
+  record({ kind: oneOf('clarify'), ask: string(120) }),
+  record({ kind: oneOf('unsupported') }),
+);
+export const validateIntentPlan = value => matches(intentPlan, value);
 const intent = either(
   record({ kind: oneOf('menu.create'), category }),
   commandIntent,
   readIntent,
   record({ kind: oneOf('help', 'layout', 'unsupported') }),
   conversationIntent,
+  classifyIntent,
 );
 const request = record({
   runId: id, snapshotRevision: integer(), locale, layer, page, businessDate: date, intent,
@@ -1185,7 +1242,8 @@ export function validateAgentRequest(value) {
   if (!matches(request, navigationRequestForValidation(value))) return false; // N03
   const { intent, slots } = value;
   if (hasMultipleDeleteTargets(intent, value.searches)) return false; // D-325
-  if (intent.kind === 'read' && [intent.featureId, intent.sourceId, intent.tool].filter(Boolean).length > 1) return false;
+  if (intent.kind === 'read' && !validReadIntent(intent, slots)) return false;
+  if (intent.kind === 'conversation' && intent.action === 'continue' && intent.selection && !slots.includes(intent.selection.querySlot)) return false;
   if (intent.condition && !validCondition(intent.condition) || intent.querySlot && !slots.includes(intent.querySlot)) return false;
   const privateKinds = new Set(['member', 'customer', 'note', 'supplier', 'reservation', 'thread', 'customOrder']);
   const unmaskedContact = /(?:\p{Nd}[ .()-]*){8,}/u;
@@ -1195,7 +1253,7 @@ export function validateAgentRequest(value) {
     && (value.readings ?? []).every(validN08Reading)
     && (value.references ?? []).every(ref => validCondition(ref.condition))
     && (value.readings ?? []).every(validMenuReading)
-    && value.searches.every(search => (!search.status || search.matches.length === 0 && !search.nextCursor)
+    && value.searches.every(search => (!search.cursor || search.queryBinding) && (!search.status || search.matches.length === 0 && !search.nextCursor)
       && (!privateKinds.has(search.kind) || search.matches.every(match => !match.label || !unmaskedContact.test(match.label))));
 }
 
@@ -1220,7 +1278,7 @@ const clarificationChoice = either(
 const ambiguityChoice = record({ id, handle: id, label: string(180), category, price }, ['id', 'handle']);
 const clarification = record({ field: fieldId, promptKey: key, choices: array(clarificationChoice, 6, 1), command: knownCommands }, ['field', 'promptKey', 'choices']);
 const ambiguity = record({
-  field: fieldId, promptKey: key, recordKind, querySlot: fieldId, choices: array(ambiguityChoice, 5, 1), nextCursor: id,
+  field: fieldId, promptKey: key, recordKind, querySlot: fieldId, choices: array(ambiguityChoice, 5, 1), nextCursor: id, queryBinding: id,
 }, ['field', 'promptKey', 'recordKind', 'querySlot', 'choices']);
 const routes = either(...Object.entries(draftSchemas).map(([command, draft]) => record({
   featureId: id, command: oneOf(command), draft, runId: id, snapshotRevision: integer(),
@@ -1242,7 +1300,8 @@ const frameSchemas = {
     'command', 'args', 'snapshotRevision', 'proposalId', 'runId', 'layer', 'tier',
   ]))),
   done: either(
-    record({ outcome: oneOf('reply', 'proposal') }),
+    record({ outcome: oneOf('reply'), readStatuses: array(oneOf('ready', ...unavailableStatus.enum), compiledReadLimit) }, ['outcome']),
+    record({ outcome: oneOf('proposal') }),
     record({ outcome: oneOf('refused'), refusal }, ['outcome']),
     record({ outcome: oneOf('clarify'), clarification, pendingId: id }, ['outcome', 'clarification']),
     record({ outcome: oneOf('ambiguous'), clarification: ambiguity, pendingId: id }, ['outcome', 'clarification']),
@@ -1250,6 +1309,7 @@ const frameSchemas = {
     record({ outcome: oneOf('conversation'), resolution: conversationResolution }),
   ),
   error: record({ code: oneOf(...AGENT_ERROR_CODES) }),
+  intent_plan: record({ plan: intentPlan }),
   action_result: record({ proposalId: id, outcome: oneOf('applied', 'unchanged', 'invalid', 'busy', 'conflict', 'cancelled'), revision: integer(), messageKey: string(120) }, ['proposalId', 'outcome']),
 };
 
@@ -1295,3 +1355,29 @@ export function isAgentPriceClarification(value) {
   return plainObject(value) && value.promptKey === 'menu.price'
     && validateAgentFrame('done', { outcome: 'clarify', clarification: value });
 }
+
+// N21 ordered plans carry intent selectors. Projected values, handles, drafts
+// and confirmation controls belong to an individual turn, never to the plan.
+const multiStep = record({
+  id, intent: either(record({ kind: oneOf('command'), command: knownCommands }), readIntent),
+  dependsOn: unique(id, 11),
+}, ['id', 'intent']);
+const multiPlan = record({ planId: id, runId: id, steps: array(multiStep, 12, 2) });
+
+export function validateAgentMultiPlan(value) {
+  if (!matches(multiPlan, value)) return false;
+  const preceding = new Set();
+  let hasDelete = false;
+  for (const { id: stepId, intent, dependsOn } of value.steps) {
+    if (preceding.has(stepId) || dependsOn?.some(parent => !preceding.has(parent))) return false;
+    if (intent.kind === 'read') {
+      if (!validReadIntent(intent)) return false;
+    } else if (singleDeleteKinds.has(intent.command)) {
+      if (hasDelete) return false;
+      hasDelete = true;
+    }
+    preceding.add(stepId);
+  }
+  return true;
+}
+// End N21 ordered plans.

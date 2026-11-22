@@ -1,9 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { createWidgetDataStore, readModel, TODAY } from '../../../data/widget-data';
-import { addDays } from '../../../data/db/time';
+import type { PosCashReceipt } from '../../../contracts/pos';
+import { createWidgetDataStore, readModel, resolveDataText, TODAY } from '../../../data/widget-data';
+import { addDays, WEEK_START } from '../../../data/db/time';
 import { createAgentActions } from '../agent-actions';
 import { assistantDomains } from '../snapshot';
+import { navisTranslator } from '../messages';
+import { widgetHandoffRef } from '../widget-handoff';
 import { createDomainRegistry } from './registry';
 import { createMoneyDomain, moneyDetailPrefill, moneyDomain, projectMoneyFacts } from './money';
 import { validateAgentDetailRef } from '../../../../shared/navis-agent-schema.mjs';
@@ -11,7 +14,217 @@ import { validateAgentDetailRef } from '../../../../shared/navis-agent-schema.mj
 const feature = createMoneyDomain({ allowExpenseEntry: true, allowTaxDelete: true });
 const domains = createDomainRegistry([feature]);
 
+function taxSnapshot(today = addDays(TODAY, 4)) {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  const preview = {
+    from: today, to: today, asOf: `${today}T00:00:00Z`, sourceRevision: 1,
+    preview: {
+      sales: { total: 0 }, deposits: { total: 0 },
+      expenses: { total: 0, count: 0, evidenceRecorded: 0, missingEvidence: 0 },
+      reviews: { needsCheck: 0, checked: 0 },
+      taxPayments: { count: 0, paidTotal: 0, unpaidTotal: 0, withEvidenceFile: 0 },
+      cashReceipts: null, rowCount: 0,
+    },
+    verification: { status: 'verified' as const }, estimate: null, connections: [], officialLinks: { hometax: '' },
+  };
+  const period = { preview, reviews: [] };
+  return { ...snapshot, tables: { ...snapshot.tables, realTax: { today, month: period, last: period } } };
+}
+
 describe('N11 bookkeeping boundary', () => {
+  it('anchors same-day tax reads to the tax service date when POS is on a different day', () => {
+    const today = addDays(TODAY, 4);
+    const real = taxSnapshot(today);
+    expect(feature.route?.('오늘 현금영수증 몇 건 발행했어?', real, 'ko')).toMatchObject({
+      intent: { kind: 'read', featureId: 'tax', condition: { kind: 'dateRange', start: today, end: today } },
+    });
+    expect(projectMoneyFacts(real, 'tax', { kind: 'dateRange', start: today, end: today }, 'ko'))
+      .toMatchObject({ facts: expect.arrayContaining([expect.objectContaining({ key: 'tax.cashReceipts', value: 'unavailable', date: today })]) });
+  });
+
+  it('reads attached evidence and hands a file removal request to the tax widget', () => {
+    const snapshot = taxSnapshot();
+    const taxPaymentId = '3c90bbbb-6ad8-4b5b-8cd0-56b009936c93';
+    const withAttachment = {
+      ...snapshot, tables: {
+        ...snapshot.tables,
+        taxPayment: [{
+          taxPaymentId, type: { raw: '원천세' }, amount: 40000, dueOn: TODAY, paidOn: null,
+          status: 'unpaid' as const, evidence: 'none' as const,
+          real: { revision: 2, overdue: true, evidenceFiles: [{
+            fileId: 'ec215760-78f9-4d97-8f5c-7e0ccb8d77fa', contentType: 'application/pdf',
+            attachedAt: `${TODAY}T00:00:00Z`, size: 400, sha256: 'a'.repeat(64),
+          }] },
+        }],
+      },
+    };
+    const fact = projectMoneyFacts(withAttachment, 'tax', { kind: 'default' }, 'ko')?.facts?.find(row => row.key === 'tax.payment');
+    expect(fact?.display).toContain('증빙 있음');
+    const route = feature.route?.('원천세 증빙 지워줘', withAttachment, 'ko');
+    expect(route).toMatchObject({
+      kind: 'refusal', reason: 'widget_only', alternative: {
+        featureId: 'tax', step: 'tax-evidence-removal', itemId: taxPaymentId,
+      },
+    });
+    if (!route || !('alternative' in route) || !route.alternative) throw new Error('Missing evidence handoff');
+    expect(widgetHandoffRef(route.alternative)).toEqual({
+      featureId: 'tax', view: 'evidence', itemId: taxPaymentId, focus: 'action',
+    });
+    expect(withAttachment.tables.taxPayment[0].real.evidenceFiles).toHaveLength(1);
+  });
+
+  it('S1-278 uses Monday through the business day, distinct from the rolling week', () => {
+    const snapshot = createWidgetDataStore().getSnapshot();
+    const condition = { kind: 'dateRange', start: WEEK_START, end: TODAY } as const;
+    expect(feature.route?.('월요일부터 지금까지 매출', snapshot, 'ko')).toMatchObject({
+      intent: { kind: 'read', featureId: 'ledger', condition },
+    });
+    const expectedNet = snapshot.tables.dailySales.filter(row => row.businessDate >= WEEK_START && row.businessDate <= TODAY)
+      .reduce((sum, row) => sum + (row.recognizedNet ?? row.gross - row.discount - row.refund), 0);
+    expect(projectMoneyFacts(snapshot, 'ledger', condition, 'ko')).toMatchObject({
+      facts: expect.arrayContaining([expect.objectContaining({ key: 'ledger.sales.net', start: WEEK_START, end: TODAY, value: expectedNet })]),
+    });
+  });
+
+  it('reads one historical expense day with its confirmed expense and evidence only', () => {
+    const store = createWidgetDataStore();
+    const date = addDays(TODAY, -1);
+    expect(store.dispatch({ type: 'ledger.recordExpense', date, category: 'supplies', amount: 24_000, evidence: 'card', memo: '컵 보충' }).ok).toBe(true);
+    const projection = projectMoneyFacts(store.getSnapshot(), 'ledger', { kind: 'dateRange', start: date, end: date }, 'ko');
+    const expenses = projection?.facts?.filter(row => row.key === 'ledger.expense.row') ?? [];
+    expect(expenses).toEqual(expect.arrayContaining([expect.objectContaining({ label: '컵 보충', date, value: 24_000, display: expect.stringContaining('카드') })]));
+    expect(expenses.every(row => row.date === date)).toBe(true);
+  });
+
+  it.each([
+    ['A유통에 우유값 7만원 줬어 세금계산서 받았어', 'supplierId'],
+    ['우유 대금 70,000원 지출 기록해줘 A유통 세금계산서', 'supplierId'],
+    ['직원 간식 10,000원 지출 기록해줘', 'category'],
+    ['오늘 소모품 12.5원 기록', 'amount'],
+    ['소모품 30000원 날짜는 아무때나', 'date'],
+    ['지방소득세 영 원 11월 30일 납부 기록', 'amount'],
+    ['지방소득세 310000원 11월 31일 납부 일정', 'dueOn'],
+    ['지방소득세 31만 원 13월 5일까지', 'dueOn'],
+    ['원천세 금액 마이너스 십오만원', 'amount'],
+    ['31만 원 11월 30일까지 낼 세금 추가해줘', 'taxType'],
+  ])('asks for just the missing or invalid field in "%s"', (utterance, field) => {
+    const original = createWidgetDataStore().getSnapshot();
+    // A staff keyword must not win over explicit expense recording.
+    expect(assistantDomains.route(utterance, original, 'ko', 'staff-schedule')).toMatchObject({ kind: 'clarification', field });
+  });
+
+  it('S1-298 recognizes the supplier spoken alongside a category and amount', () => {
+    const original = createWidgetDataStore().getSnapshot();
+    expect(feature.route?.('오늘 에이유통 우유 70000원 원재료로 넣어줘', original, 'ko')).toMatchObject({
+      kind: 'clarification', field: 'supplierId',
+    });
+  });
+
+  it('S1-298 rechecks the corrected supplier before binding it and retains the expense fields', () => {
+    const snapshot = createWidgetDataStore().getSnapshot();
+    const tr = navisTranslator('ko');
+    const supplier = snapshot.tables.supplier.find(row => !row.deletedAt)!;
+    const supplierName = resolveDataText(tr.t, supplier.name ?? { key: supplier.nameKey });
+    const first = feature.route?.('A유통에 우유값 7만원 줬어 세금계산서 받았어', snapshot, 'ko');
+    if (!first || !('kind' in first) || first.kind !== 'clarification') throw Error('Missing supplier clarification');
+    expect(first.resume?.('네 해줘')).toMatchObject({ kind: 'clarification', field: 'supplierId' });
+    expect(first.resume?.(supplierName)).toMatchObject({
+      intent: { command: 'ledger.recordExpense' },
+      slots: { category: 'ingredients', date: TODAY, amount: 70_000, evidence: 'tax-invoice', name: supplierName },
+      lookups: [{ kind: 'supplier', querySlot: 'name', bind: ['supplierId'] }],
+    });
+  });
+
+  it.each([
+    '소모품 30,000원 지출 메모 냅킨 보충으로 기록해줘',
+    '오늘 소모품 삼만원 (냅킨 보충)',
+  ])('records the expense with its exact memo from "%s"', utterance => {
+    expect(feature.route?.(utterance, createWidgetDataStore().getSnapshot(), 'ko')).toMatchObject({
+      intent: { command: 'ledger.recordExpense' }, slots: { amount: 30_000, date: TODAY, category: 'supplies', memo: '냅킨 보충' },
+    });
+  });
+
+  it('S2-041 answers a paid-tax history read and keeps explicit payments navigation', () => {
+    const snapshot = createWidgetDataStore().getSnapshot();
+    expect(feature.navigation?.('세금 낸 내역 쭉 보여줘', snapshot, 'ko')).toBeNull();
+    expect(feature.route?.('세금 낸 내역 쭉 보여줘', snapshot, 'ko')).toMatchObject({
+      intent: { kind: 'read', featureId: 'tax' }, factKeys: ['tax.payment.paidCount', 'tax.payment.paid'],
+    });
+    expect(feature.navigation?.('세금 납부 이력 보여줘', snapshot, 'ko')?.args).toMatchObject({ featureId: 'tax', view: 'payments' });
+    expect(feature.navigation?.('ㅅㅁㄱㄹ 열어', snapshot, 'ko')?.args).toMatchObject({ featureId: 'tax', view: 'checks' });
+  });
+
+  it('S2-058 keeps shorthand paid-state requests at the exact widget target', () => {
+    const snapshot = createWidgetDataStore().getSnapshot();
+    expect(feature.route?.('원천세 낸 걸로 표시해', snapshot, 'ko')).toMatchObject({
+      kind: 'refusal', reason: 'widget_only', alternative: { command: 'tax.markPaid', draft: { taxPaymentId: 'sample-tax-1' } },
+    });
+    expect(feature.route?.('원천세 납부 처리해줘', snapshot, 'ko')).toMatchObject({
+      kind: 'refusal', reason: 'widget_only', alternative: { command: 'tax.markPaid', draft: { taxPaymentId: 'sample-tax-1' } },
+    });
+  });
+
+  it('distinguishes actual tax payment history from unpaid schedules and grounds receipt totals', () => {
+    const store = createWidgetDataStore();
+    const snapshot = store.getSnapshot();
+    expect(feature.route?.('소득세 언제 냈는지 알려줘', snapshot, 'ko')).toMatchObject({
+      intent: { kind: 'read', recordKind: 'taxPayment', querySlot: 'paidHistory' },
+    });
+    expect(feature.route?.('이번 달 현금영수증 얼마', snapshot, 'ko')).toMatchObject({
+      intent: { kind: 'read', featureId: 'tax', condition: { kind: 'default' } }, factKeys: ['tax.cashReceipts'],
+    });
+    expect(projectMoneyFacts(snapshot, 'tax', { kind: 'default' }, 'ko')).toMatchObject({
+      facts: expect.arrayContaining([expect.objectContaining({ key: 'tax.cashReceipts', value: 0, display: expect.stringContaining('0원') })]),
+    });
+  });
+
+  it('scopes this year’s tax history by paid date', () => {
+    const snapshot = createWidgetDataStore().getSnapshot();
+    const route = feature.route?.('올해 낸 세금 목록', snapshot, 'ko');
+    expect(route).toMatchObject({
+      intent: { kind: 'read', recordKind: 'taxPayment', querySlot: 'paidHistory' },
+      slots: { paidHistory: `*\n\n\n${TODAY.slice(0, 4)}-01-01\n${TODAY}` },
+    });
+    if (!route || !('intent' in route) || typeof route.slots?.paidHistory !== 'string') throw Error('Missing year scope');
+    const payment = (id: string, paidOn: string) => ({
+      ...snapshot.tables.taxPayment[0], taxPaymentId: id, paidOn, status: 'paid' as const,
+    });
+    const withHistory = { ...snapshot, tables: { ...snapshot.tables, taxPayment: [
+      ...snapshot.tables.taxPayment, payment('this-year', TODAY), payment('prior-year', '2025-12-31'),
+    ] } };
+    const matches = domains.reader('taxPayment')?.search({ snapshot: withHistory, locale: 'ko', query: route.slots.paidHistory, querySlot: 'paidHistory', privateLookup: false });
+    expect(matches?.map(row => row.fields?.paidOn)).toEqual([TODAY]);
+  });
+
+  it('uses the POS receipt projection for today and the tax widget projection for the month', () => {
+    const snapshot = createWidgetDataStore().getSnapshot();
+    const receipt = (id: string, date: string, cashAmount: number, status: PosCashReceipt['status']): PosCashReceipt => ({
+      cashReceiptId: id, paymentId: `payment-${id}`, kind: 'income', maskedIdentifier: '010-****-3344',
+      status, issuedAt: `${date}T10:00:00+09:00`, cashAmount,
+    });
+    const withReceipts = {
+      ...snapshot,
+      pos: {
+        ...snapshot.pos!,
+        cashReceipts: [
+          receipt('today', TODAY, 2200, 'issued'),
+          receipt('yesterday', addDays(TODAY, -1), 7500, 'issued'),
+          receipt('canceled', TODAY, 6500, 'canceled'),
+        ],
+      },
+    };
+    const today = { kind: 'dateRange', start: TODAY, end: TODAY } as const;
+    expect(feature.route?.('오늘 현금영수증 몇 건이야?', withReceipts, 'ko')).toMatchObject({
+      intent: { kind: 'read', featureId: 'tax', condition: today },
+    });
+    expect(projectMoneyFacts(withReceipts, 'tax', today, 'ko')).toMatchObject({
+      facts: [expect.objectContaining({ key: 'tax.cashReceipts', value: 1, display: expect.stringContaining('2,200원') })],
+    });
+    expect(projectMoneyFacts(withReceipts, 'tax', { kind: 'default' }, 'ko')).toMatchObject({
+      facts: expect.arrayContaining([expect.objectContaining({ key: 'tax.cashReceipts', value: 2, display: expect.stringContaining('9,700원') })]),
+    });
+  });
+
   it('leaves ingredient usage questions with inventory', () => {
     expect(feature.route?.('오늘 우유 얼마나 썼어?', createWidgetDataStore().getSnapshot(), 'ko')).toBeUndefined();
   });

@@ -1,0 +1,83 @@
+.ai-photo__camera.ui-button > .ui-press-surface {
+  padding: 0;
+  border-color: var(--input);
+  color: var(--foreground);
+}
+
+.ai-photo__camera .ui-progress { display: none; }
+
+.ai-photo__attachment {
+  display: grid;
+  grid-template-columns: var(--target-primary) minmax(0, 1fr) var(--target-default);
+  align-items: center;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.ai-photo__thumb {
+  display: grid;
+  place-items: center;
+  block-size: var(--target-primary);
+  overflow: hidden;
+  border: var(--stroke-hairline) solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  box-sizing: border-box;
+}
+
+.ai-photo__thumb img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.ai-photo__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ai-photo__status {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: var(--stroke-hairline) solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+}
+
+.ai-photo__status[data-recognized] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  border-color: var(--selection-foreground);
+  background: var(--selection);
+  color: var(--selection-foreground);
+}
+
+.ai-photo__status[data-error] {
+  border-color: var(--destructive);
+  background: var(--change-up-bg);
+}
+
+.ai-photo__status[data-error] > p {
+  display: flex;
+  align-items: start;
+  gap: var(--space-2);
+}
+
+.ai-photo__status[data-error] > p > .ui-icon { color: var(--destructive); flex: none; }
+
+.ai-photo__choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ai-photo__status[data-recognized] .ui-button { min-block-size: var(--target-min); }
+.ai-photo__required {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11em), 1fr));
+  gap: var(--space-2);
+}
+.ai-photo__category { display: grid; gap: var(--space-1); }
+.ai-photo__category .ui-choice-chip { padding-inline: var(--space-2); }
+.ai-photo__card .navis-agent-controls__actions > .ui-button--primary { min-block-size: var(--target-primary); }

@@ -55,20 +55,29 @@ test('D-326 proposes an edit for one open expense and hands closed days to the l
 });
 
 test('N11 rejects substituted and ambiguous tax targets before requesting a proposal', async () => {
-  const args = { taxPaymentId: target, evidence: 'none' };
-  const options = { slots: ['taxPayment'], querySlot: 'taxPayment' };
+  const args = { taxPaymentId: target, patch: { amount: slot('amount') } };
+  const options = { slots: ['taxPayment', 'amount'], querySlot: 'taxPayment' };
   const fields = { status: 'paid', amount: 2000, evidence: 'example', date: '2026-11-10', paidOn: '2026-11-09' };
   const records = search('taxPayment', 'taxPayment', fields, 'different');
-  const bad = await withBridge('tax.setEvidence', args, { ...options, searches: [records] });
+  const bad = await withBridge('tax.updatePayment', args, { ...options, searches: [records] });
   assert.equal(bad.terminal?.refusal?.reason, 'invalid_target', bad.raw);
   assert.deepEqual(bad.calls, [lookup('taxPayment', 'taxPayment')]);
 
-  const ambiguous = await withBridge('tax.setEvidence', args, {
+  const ambiguous = await withBridge('tax.updatePayment', args, {
     ...options, searches: [{ ...records, matches: [...records.matches, { handle: target.handle, match: 'exact', fields }] }],
   });
   assert.equal(ambiguous.terminal.outcome, 'ambiguous', ambiguous.raw);
   assert.deepEqual(ambiguous.terminal.clarification.choices.map(choice => choice.handle), ['different', 'target']);
   assert.equal(ambiguous.proposal, undefined);
+});
+
+test('N11 tax evidence removal emits neither a proposal nor prefill', async () => {
+  const result = await withBridge('tax.setEvidence', { taxPaymentId: target, evidence: 'none' }, {
+    slots: ['taxPayment'], querySlot: 'taxPayment', searches: [search('taxPayment', 'taxPayment', { evidence: 'example' })],
+  });
+  assert.deepEqual(result.terminal?.refusal, { reason: 'widget_only' });
+  assert.deepEqual(result.calls, []);
+  assert.equal(result.proposal, undefined);
 });
 
 test('N11 checks exact tax review eligibility and keeps paid corrections widget-only', async () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 import { createServer } from 'vite';
 import { agentCommandPolicy, validateAgentFrame, validateAgentToolArgs } from '../../shared/navis-agent-schema.mjs';
 import { createBridge } from '../bridge.mjs';
@@ -55,7 +55,10 @@ test('D-326 scopes coupon creation and changes to exact eligible targets', () =>
   assert.equal(agentCommandPolicy('coupon.endEarly', { couponId: handle }).confirmation, 'extra-confirm');
   assert.equal(agentCommandPolicy('coupon.unpublish', { codeId: handle }).confirmation, 'extra-confirm');
   const unpublish = fields => prepare('coupon.unpublish', { codeId: handle }, 'couponCode', 'codeQuery', [exact(fields)]);
-  assert.equal(unpublish({ route: 'place_news', activated: true, unpublished: false }).outcome, 'ready');
+  const published = { route: 'place_news', activated: true, unpublished: false };
+  assert.equal(unpublish({ ...published, eligible: true }).outcome, 'ready');
+  assert.deepEqual(unpublish(published), { outcome: 'refused', reason: 'unavailable' });
+  assert.deepEqual(unpublish({ ...published, eligible: false }), { outcome: 'refused', reason: 'invalid_target' });
   assert.equal(unpublish({ route: 'place_news', activated: false, unpublished: false }).outcome, 'refused');
   assert.equal(unpublish({ route: 'sms', activated: true, unpublished: false }).outcome, 'refused');
 });

@@ -288,15 +288,29 @@ async function checkScenario(id, scenario) {
     case '040':
     case '041': {
       assert.equal(tableLayoutEnabled(before.tables.shopSettings), expected.tableLayoutEnabled);
-      const args = { ...createWire, tableChoice: { tableId: handle('table-fixture') } };
-      const [search] = expected.tools;
-      const result = await run(before, { kind: 'command', command: 'booking.create', args },
-        { slots: ['date', 'time', 'partySize', 'name', 'tableId'], searches: [searchProjection('table', 'tableId', [])] }, [search]);
-      assert.equal(result.done.outcome, 'refused');
-      assert.equal(result.proposal, undefined);
       assert.equal(expected.kind, 'refuse');
-      assertAnswer(result.text);
-      assert.equal(result.done.refusal.alternative?.featureId, 'voice-booking');
+      const [search] = expected.tools;
+      // A3_BATCH2 B22/B26 keep the missing table lookup read-only and the widget link in the browser's fallback.
+      const route = bookingDomain.route(scenario.utterances[0], before, 'ko');
+      assert.deepEqual(route?.intent, { kind: 'read', recordKind: 'table', querySlot: 'tableId' });
+      assert.equal(route.onMissing?.reason, 'invalid_target');
+      assert.deepEqual(route.onMissing?.alternative, { featureId: 'voice-booking' });
+      assertAnswer(route.onMissing.answer);
+      const page = projectAgentSearch(assistantDomains, before, search.args, route.slots.tableId, 'ko');
+      assert.deepEqual(page, { ...search.args, matches: [], status: 'missing' });
+      const read = await run(before, route.intent, { slots: ['tableId'], searches: [page] }, [search]);
+      assert.equal(read.done.outcome, 'reply');
+      assert.equal(read.proposal, undefined);
+      const lookupResult = read.requests.at(-1).messages.find(message => message.role === 'tool');
+      assert.deepEqual(JSON.parse(lookupResult.content), { status: 'missing', matches: [] });
+
+      const args = { ...createWire, tableChoice: { tableId: handle('table-fixture') } };
+      const result = await run(before, { kind: 'command', command: 'booking.create', args },
+        { slots: ['date', 'time', 'partySize', 'name', 'tableId'], searches: [page] }, [search]);
+      assert.equal(result.done.outcome, 'refused');
+      assert.deepEqual(result.done.refusal, { reason: 'invalid_target' });
+      assert.equal(result.proposal, undefined);
+      assert.equal(result.requests.length, 1);
       break;
     }
     case '061': {

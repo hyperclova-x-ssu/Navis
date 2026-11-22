@@ -16,13 +16,19 @@ export function readTrace() {
   });
 }
 
+class MissingFixtureToken extends Error {
+  constructor(path) {
+    super(`missing-token ${path}`);
+  }
+}
+
 function resolveReferences(value, facts) {
   const lookup = path => {
     const result = path.split('.').reduce((record, field) => {
-      assert.ok(record && Object.hasOwn(record, field), `Unknown café fixture value ${path}`);
+      if (!record || !Object.hasOwn(record, field)) throw new MissingFixtureToken(path);
       return record[field];
     }, facts);
-    assert.notEqual(result, undefined, `Missing café fixture value ${path}`);
+    if (result === undefined) throw new MissingFixtureToken(path);
     return result;
   };
   if (Array.isArray(value)) return value.map(item => resolveReferences(item, facts));
@@ -30,22 +36,43 @@ function resolveReferences(value, facts) {
     if (Object.keys(value).length === 1 && Object.hasOwn(value, 'cafe')) return lookup(value.cafe);
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveReferences(item, facts)]));
   }
-  if (typeof value === 'string') return value.replace(/\{\{([\w.-]+)\}\}/gu, (_, key) => String(lookup(key)));
+  if (typeof value === 'string') {
+    const exact = /^\{\{([\w.-]+)\}\}$/u.exec(value);
+    if (exact) {
+      const resolved = lookup(exact[1]);
+      return Array.isArray(resolved) ? resolved : String(resolved);
+    }
+    return value.replace(/\{\{([\w.-]+)\}\}/gu, (_, key) => String(lookup(key)));
+  }
   return value;
 }
 
+function resolvePatch(patch, facts) {
+  try {
+    return resolveReferences(patch, facts);
+  } catch (error) {
+    if (!(error instanceof MissingFixtureToken)) throw error;
+    return { fixtureBlock: error.message };
+  }
+}
+
 async function cafeSelectorValues(vite) {
-  const [fixture, data, dates, reservations, messages] = await Promise.all([
+  const [fixture, data, dates, reservations, messages, marketing, promoMessages] = await Promise.all([
     vite.ssrLoadModule('/src/features/assistant/__fixtures__/scenario-cafe.ts'),
     vite.ssrLoadModule('/src/data/widget-data.ts'),
     vite.ssrLoadModule('/src/data/db/time.ts'),
     vite.ssrLoadModule('/src/data/derive/reservations.ts'),
     vite.ssrLoadModule('/src/features/assistant/messages.ts'),
+    vite.ssrLoadModule('/src/data/marketing/derive.ts'),
+    vite.ssrLoadModule('/src/features/widgets/mkt-promo/messages.ts'),
   ]);
   const facts = fixture.cafeScenarioValues();
   const snapshot = data.createWidgetDataStore().getSnapshot();
   const stock = data.deriveStock(snapshot, { date: facts.today });
   const tr = messages.navisTranslator('ko');
+  const references = marketing.REFERENCE_IDS.map((id, index) => ({
+    id, name: id === 'ref-2' ? `디자인 ${index + 1}번` : promoMessages.mktPromoBundle.ko[`promo.ref.${id}.name`],
+  }));
   const menuSeed = menuSelectorValues(data, snapshot, facts, tr);
   const quantity = (value, unit) => tr.format.quantity(value, unit);
   const ingredient = itemId => {
@@ -85,6 +112,10 @@ async function cafeSelectorValues(vite) {
   assert.ok(requestVisit, 'The café fixture needs a confirmed visit with a request');
   return {
     ...facts, menuSeed, tomorrow, tomorrowRange: { kind: 'dateRange', start: tomorrow, end: tomorrow },
+    promo: {
+      themes: marketing.CONCEPTS.map(id => tr.t(`data.marketing.concept.${id}`)),
+      designs: { ...references, names: references.map(reference => reference.name) },
+    },
     saturdayRange: { kind: 'dateRange', start: facts.thisSaturday, end: facts.thisSaturday },
     inventorySeed: { milk, beans, cup,
       edits: {
@@ -128,7 +159,7 @@ function menuSelectorValues(data, snapshot, facts, tr) {
     assert.ok(row, id);
     return row;
   };
-  const sold = row => row.category === 'drink'
+  const sold = row => row.category !== 'dessert'
     ? `${tr.format.number(row.soldQty)}${tr.t('common.navis.agent.menuCups')}`
     : tr.format.count(row.soldQty, 'count');
   const top = [...menus].sort((a, b) => b.soldQty - a.soldQty)[0];
@@ -200,7 +231,40 @@ const cardOnly = {
   'S8-054': 'Typed agreement and deletion requests leave the card pending. Press the card and its extra confirmation to delete the item.',
 };
 
-export async function readCafeScenarios(vite) {
+// The review used the gallery's field name. Keep the proposal oracle on the existing command argument.
+function normalizePromotionDesign(id, patch) {
+  if (id !== 'S6-023' || !patch.expected) return patch;
+  const { expected } = patch;
+  return { ...patch, expected: {
+    ...expected,
+    // The local editor and the stored draft have different undo receipts. N18 verifies the local receipt.
+    ...(expected.kind === 'proposal' && { undo: null }),
+    ...(expected.ask && { ask: expected.ask.map(field => field === 'designRef' ? 'referenceId' : field) }),
+    ...(expected.tools && { tools: expected.tools.map(call => {
+      if (call.name !== 'propose_action' || call.args.command !== 'promo.draft.set' || !Object.hasOwn(call.args.args ?? {}, 'designRef')) return call;
+      const { designRef, ...args } = call.args.args;
+      if (args.referenceId !== undefined && args.referenceId !== designRef) return call;
+      return { ...call, args: { ...call.args, args: { ...args, referenceId: designRef } } };
+    }) }),
+  } };
+}
+
+const taxEvidenceRemovals = new Set(['S2-088', 'S2-091']);
+
+function applyReviewedBoundaries(id, patch) {
+  if (taxEvidenceRemovals.has(id)) {
+    return { ...patch, writes: 'none', reason: 'B17: open the tax evidence workflow without a chat proposal or prefill.',
+      expected: { kind: 'refuse', widgetOnly: true, tools: [], ask: [], answer_must_contain: [],
+        result_state: 'No change.', reflect: [], undo: 'n/a' } };
+  }
+  if (id === 'S6-019') {
+    return { ...patch, n18PromoDraft: { featureId: 'promo-video', view: 'create' },
+      expected: { ...patch.expected, result_state: 'No change.', reflect: [], undo: 'n/a' } };
+  }
+  return patch;
+}
+
+export async function readCafeScenarios(vite, { overlay: suppliedOverlay, extendFacts } = {}) {
   const server = vite ?? await createServer({
     root: fileURLToPath(new URL('../../', import.meta.url)),
     configFile: false, envFile: false, envDir: false, logLevel: 'silent',
@@ -209,10 +273,11 @@ export async function readCafeScenarios(vite) {
   let facts;
   try {
     facts = await cafeSelectorValues(server);
+    if (extendFacts) facts = await extendFacts(facts);
   } finally {
     if (!vite) await server.close();
   }
-  const overlay = JSON.parse(evidence('CAFE-OVERLAY.json'));
+  const overlay = suppliedOverlay ? { ...suppliedOverlay } : JSON.parse(evidence('CAFE-OVERLAY.json'));
   for (const [id, rule] of Object.entries(cardOnly)) {
     const patch = overlay[id];
     overlay[id] = { ...patch, reason: rule, expected: { ...patch?.expected, kind: 'answer', tools: [], ask: [],
@@ -220,20 +285,30 @@ export async function readCafeScenarios(vite) {
     support_note: rule, tester_check: rule };
   }
   const corpus = new Map(JSON.parse(evidence('MERGED.json')).map(scenario => [scenario.id, scenario]));
-  for (const [id, patch] of Object.entries(overlay)) {
+  for (const [id, authoredPatch] of Object.entries(overlay)) {
+    const patch = applyReviewedBoundaries(id, authoredPatch);
     const scenario = corpus.get(id);
     assert.ok(scenario && patch.reason, `Invalid reviewed overlay entry ${id}`);
-    const { reason, expected, policyGap, ...rest } = resolveReferences(patch, facts);
+    const { variants, ...basePatch } = patch;
+    const { reason, expected, policyGap, ...rest } = normalizePromotionDesign(id, resolvePatch(basePatch, facts));
+    const resolvedVariants = variants && Object.fromEntries(Object.entries(variants)
+      .map(([index, variant]) => [index, normalizePromotionDesign(id, resolvePatch(variant, facts))]));
     const releasedExpected = { ...scenario.expected, ...expected };
     corpus.set(id, {
-      ...scenario, ...rest, review: reason,
+      ...scenario, ...rest, review: reason ?? patch.reason, ...(variants && { variants: resolvedVariants }),
       expected: { ...releasedExpected, ...policyGap?.expected },
       ...(policyGap ? { policyGap: { decision: policyGap.decision, slice: policyGap.slice }, releasedExpected } : {}),
     });
   }
   for (const [id, scenario] of corpus) {
     const precondition = scenario.precondition.replace(/2026-10-26 Mon(?: at)? 15:45/gu, `${facts.today} ${facts.weekday} ${facts.clock}`);
-    corpus.set(id, { ...scenario, precondition });
+    // D-353 keeps the authored menu creation case and uses the new beverage value for its explicit expected row.
+    const expected = id === 'S1-025' ? { ...scenario.expected,
+      tools: scenario.expected.tools?.map(call => call.name === 'propose_action' && call.args.command === 'menu.create'
+        && call.args.args.category === 'drink' ? { ...call, args: { ...call.args, args: { ...call.args.args, category: 'beverage' } } } : call),
+      result_state: scenario.expected.result_state.replace(' / drink / ', ' / beverage / '),
+    } : scenario.expected;
+    corpus.set(id, { ...scenario, precondition, expected });
   }
   return { corpus, facts, overlay };
 }

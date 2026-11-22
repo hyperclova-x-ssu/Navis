@@ -6,6 +6,7 @@ import { createBridge } from '../bridge.mjs';
 import { createNavisMenuHarness, navisAgentFakeFetch } from '../fixtures/navis-eval-fake.mjs';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame, validateAgentRequest } from '../../shared/navis-agent-schema.mjs';
 import { evidence, readTrace } from './scenario-fixtures.mjs';
+import { noticeAdapters } from './notices.mjs';
 
 const trace = readTrace();
 const assigned = trace.filter(row => row.slice_id === 'N15');
@@ -17,12 +18,12 @@ const vite = await createServer({
   logLevel: 'silent', server: { middlewareMode: true, watch: null, ws: false, hmr: false },
 });
 const load = path => vite.ssrLoadModule(`/src/${path}.ts`);
-let data, guard, session, catalog, state, presets, motion, provider, nav, noticeSeed, actions;
+let data, guard, session, catalog, state, presets, motion, provider, nav, noticeSeed;
 try {
-  [data, guard, session, catalog, state, presets, motion, provider, nav, noticeSeed, actions] = await Promise.all([
+  [data, guard, session, catalog, state, presets, motion, provider, nav, noticeSeed] = await Promise.all([
     load('data/widget-data'), load('data/commands/notice-guard'), load('app/test-session'), load('catalog/index'),
     load('state/index'), load('layout/presets'), load('ui/motion'), load('features/assistant/provider'),
-    load('screens/dashboard/navis-navigation'), load('data/iteration7/notices/seed'), load('features/assistant/agent-actions'),
+    load('screens/dashboard/navis-navigation'), load('data/iteration7/notices/seed'),
   ]);
 } finally {
   await vite.close();
@@ -36,6 +37,27 @@ const accept = result => {
   assert.equal(result?.ok, true, JSON.stringify(result));
   return result;
 };
+
+test('D-331 before 08:00 requires a browser-bound schedule slot and an eligible current draft', () => {
+  const adapter = noticeAdapters.find(value => value.command === 'notice.send');
+  const command = 'notice.send';
+  const args = { noticeId: { handle: 'draft' }, draftRevision: { slot: 'draftRevision' } };
+  const scheduled = { ...args, sendAt: { slot: 'sendAt' } };
+  const query = { kind: 'noticeDraft', querySlot: 'noticeQuery' };
+  const fields = { revision: 1, businessTime: '03:00', sendAllowed: true, scheduleAllowed: true, alreadySent: false, closureLink: 'current' };
+  const prepare = (draft, projected = fields, slots = ['noticeQuery', 'draftRevision', 'sendAt']) => {
+    const input = { intent: { command, args: draft }, slots, searches: [query] };
+    const reads = [{ status: 'ready', matches: [{ handle: 'draft', match: 'exact', fields: projected }] }];
+    return adapter.prepare({ input, reads });
+  };
+  assert.deepEqual(prepare(args), { outcome: 'refused', reason: 'invalid_target' });
+  assert.deepEqual(prepare(scheduled), { outcome: 'ready', args: scheduled });
+  assert.deepEqual(prepare(scheduled, { ...fields, scheduleAllowed: false }), { outcome: 'refused', reason: 'invalid_target' });
+  assert.deepEqual(prepare(scheduled, { ...fields, closureLink: 'changed' }), { outcome: 'refused', reason: 'invalid_target' });
+  assert.deepEqual(prepare(scheduled, fields, ['noticeQuery', 'draftRevision']), { outcome: 'refused', reason: 'invalid_target' });
+  assert.deepEqual(prepare({ ...args, sendAt: { slot: 'draftRevision' } }), { outcome: 'refused', reason: 'invalid_target' });
+  assert.deepEqual(prepare(args, { ...fields, businessTime: '08:00' }), { outcome: 'ready', args });
+});
 
 function context(t, id, { historical = false } = {}) {
   const run = state.createRunStore({ screenPreset: presets.screenPresets.A, catalog: catalog.getRegistry('A'), time: motion.timePolicy,
@@ -134,7 +156,7 @@ async function confirm(env, result, command, id, fields) {
       env.run.actions.showNotice(receipt.notice);
       await env.ask('되돌려 줘');
       assert.equal(env.store.getSnapshot(), after);
-      assert.ok(actions.applyAgentRunUndo(env.run, env.store, receipt.undoToken));
+      assert.ok(receipt.scheduledNotice.cancel());
       assert.deepEqual(env.store.getSnapshot().tables.noticeSent, snapshot.tables.noticeSent);
       return;
     }

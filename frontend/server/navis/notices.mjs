@@ -40,11 +40,17 @@ function prepare({ input, reads }) {
     return refused('invalid_target');
   }
   if (command === 'notice.send') {
+    if (args.sendAt !== undefined && (args.sendAt?.slot !== 'sendAt' || !input.slots.includes('sendAt'))) return refused('invalid_target');
     const draft = resolved.get('noticeId');
     if (!Number.isSafeInteger(draft?.revision) || draft.revision < 1) return refused('unavailable');
     if (draft.alreadySent === true) return refused('duplicate');
-    // The browser validates the exact scheduled time in its private slot.
-    const allowed = draft.sendAllowed === true || !!args.sendAt && draft.scheduleAllowed === true;
+    // The time is the projected store-local clock. The exact scheduled time stays in the browser's private slot.
+    const time = draft.businessTime;
+    if (typeof time !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(time)) return refused('unavailable');
+    const atNight = time < '08:00' || time >= '21:00';
+    const allowed = args.sendAt
+      ? draft.scheduleAllowed === true || !atNight && draft.sendAllowed === true
+      : !atNight && draft.sendAllowed === true;
     if (!allowed || draft.alreadySent !== false || !['none', 'current'].includes(draft.closureLink)) {
       return refused('invalid_target');
     }

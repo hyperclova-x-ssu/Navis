@@ -1,20 +1,24 @@
 import type { Locale } from '../../../contracts';
-import { IconButton } from '../../../ui/components/controls';
+import { ActionButton } from '../../../ui/components/controls';
 import { Icon } from '../../../ui/icons';
+import { ChatGlyph } from '../chat-glyphs';
 import type { VoiceInputState } from './use-voice-input';
+import { voiceCopy, voiceNoteText } from './voice-copy';
 
-const copy = {
-  ko: { start: '말로 입력', stop: '듣기 멈추기', listening: '듣고 있어요', processing: '음성을 글로 바꾸고 있어요', error: '듣지 못했어요. 글로 입력해 주세요' },
-  en: { start: 'Voice input', stop: 'Stop listening', listening: 'Listening', processing: 'Turning speech into text', error: "Couldn't hear you. Type it instead" },
-  'zh-Hans': { start: '语音输入', stop: '停止收听', listening: '正在听', processing: '正在将语音转成文字', error: '没听清，请打字输入' },
-  'zh-Hant': { start: '語音輸入', stop: '停止收聽', listening: '正在聽', processing: '正在將語音轉成文字', error: '沒聽清，請打字輸入' },
-} satisfies Record<Locale, Record<string, string>>;
+const copy = voiceCopy;
+
+/** C-16 / M-23: the one short caption under the field after a dictation, until the first edit or send. */
+export function VoiceInputNote({ locale }: { locale: Locale }) {
+  // Not a live region of its own: the chat's polite announcer says it once (C-21).
+  return <p className="ai-conversation__voice-status" data-voice-state="captured"><Icon name="voice-booking" />{voiceNoteText(locale)}</p>;
+}
 
 export function VoiceInputButton({ status, toggle, locale }: { status: VoiceInputState; toggle: () => Promise<void>; locale: Locale }) {
   const words = copy[locale];
-  return <IconButton icon="voice-booking" label={status === 'listening' ? words.stop : words.start} className="ai-conversation__mic"
+  // M-23: listening swaps the mic for the stop glyph; the accessible name already says "듣기 멈추기".
+  return <ActionButton size="icon" aria-label={status === 'listening' ? words.stop : words.start} className="ai-conversation__mic"
     variant="secondary" data-voice-state={status} aria-pressed={status === 'listening'} disabled={status === 'starting'}
-    loading={status === 'processing'} onClick={() => void toggle()} />;
+    loading={status === 'processing'} onClick={() => void toggle()}>{status === 'listening' ? <ChatGlyph name="stop" /> : <Icon name="voice-booking" />}</ActionButton>;
 }
 
 export function VoiceInputStatus({ status, locale }: { status: VoiceInputState; locale: Locale }) {

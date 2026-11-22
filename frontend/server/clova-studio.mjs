@@ -41,6 +41,8 @@ function resetDelay(headers) {
   });
   return delays.length ? Math.max(...delays) : 2000;
 }
+// Code 40009 ("Unsupported function", a 4xx in the CLOVA Studio docs) turns up now and then on requests that normally work. One retry before any text.
+const unsupportedFunction = () => Object.assign(failure('UNAVAILABLE'), { transient: true });
 const rateLimited = headers => Object.assign(failure('UNAVAILABLE'), { rateExceeded: true, delayMs: resetDelay(headers) });
 function waitForReset(ms, signal, clock) {
   return new Promise((resolve, reject) => {
@@ -145,6 +147,7 @@ export function createClovaStudio({ apiKey, baseUrl = 'https://clovastudio.strea
         }
         if (responseInfo) responseInfo.providerCode = code;
         if (httpRateLimited && code === '42901') throw rateLimited(response.headers);
+        if (code === '40009') throw unsupportedFunction();
         throw failure('UNAVAILABLE');
       }
       if (expectJson) {
@@ -158,6 +161,7 @@ export function createClovaStudio({ apiKey, baseUrl = 'https://clovastudio.strea
         if (envelope?.status?.code == null) throw new InvalidOutputError('provider_response_status');
         if (String(envelope.status.code) !== '20000') {
           if (responseInfo) responseInfo.providerCode = providerErrorCode(envelope);
+          if (providerErrorCode(envelope) === '40009') throw unsupportedFunction();
           throw failure('UNAVAILABLE');
         }
         const result = envelope.result;
@@ -180,6 +184,7 @@ export function createClovaStudio({ apiKey, baseUrl = 'https://clovastudio.strea
             const code = providerErrorCode(error);
             if (responseInfo) responseInfo.providerCode = code;
             if (code === '42901') throw rateLimited(response.headers);
+            if (code === '40009') throw unsupportedFunction();
             throw failure('UNAVAILABLE');
           }
           if (name !== 'token' && name !== 'result') throw new InvalidOutputError('provider_event_type');
@@ -216,7 +221,7 @@ export function createClovaStudio({ apiKey, baseUrl = 'https://clovastudio.strea
       if (buffer || event || data.length) throw new InvalidOutputError('provider_event_incomplete');
     } catch (error) {
       if (signal?.aborted || error?.name === 'AbortError') throw aborted();
-      if (error?.rateExceeded) throw error;
+      if (error?.rateExceeded || error?.transient) throw error;
       if (error instanceof InvalidOutputError) throw error;
       if (error?.code === 'INVALID_OUTPUT' || error instanceof TypeError && reader) throw new InvalidOutputError('provider_body_read');
       throw failure('UNAVAILABLE');
@@ -256,6 +261,7 @@ export function createClovaStudio({ apiKey, baseUrl = 'https://clovastudio.strea
         outcome = error?.rateExceeded ? 'rate_limited' : error?.code === 'AI_FILTER' ? 'filtered'
           : error?.code === 'INVALID_OUTPUT' ? error.code : 'UNAVAILABLE';
         if (retryRateLimit && error?.rateExceeded && attempt === 0 && !emitted) retryDelay = error.delayMs;
+        else if (error?.transient && attempt === 0 && !emitted) retryDelay = 0;
         else if (error?.name === 'AbortError' || ['AI_FILTER', 'INVALID_OUTPUT'].includes(error?.code)) throw error;
         else throw failure('UNAVAILABLE');
       } finally {

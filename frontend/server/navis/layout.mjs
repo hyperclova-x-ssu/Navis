@@ -108,7 +108,8 @@ function prepare({ input, reads }) {
   const ids = args.featureIds ?? (command === 'layout.swap_widgets' ? [args.a, args.b] : [args.featureId]);
   const targets = ids.map(id => input.catalog.find(entry => entry.id === id));
   if (targets.some(target => target?.layer !== layer)) return refused('out_of_scope');
-  if (ids.some(id => board.pages.get(id) !== board.selected)) return refused('invalid_target');
+  const acrossPages = command === 'layout.remove_widgets' && args.page === undefined;
+  if (ids.some(id => acrossPages ? !board.pages.has(id) : board.pages.get(id) !== board.selected)) return refused('invalid_target');
   if (command === 'layout.remove_widget' || command === 'layout.remove_widgets') return ready(args);
   if (command === 'layout.set_condition') {
     return supportsCondition(targets[0], args.condition) ? ready(args) : clarify('condition');

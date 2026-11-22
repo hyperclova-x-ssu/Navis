@@ -5,6 +5,7 @@ import { fromBase, toBase, unitDimension } from '../../../data/derive/common';
 import { purchaseQuantityBase } from '../../../data/derive/stock';
 import { addDays, isIsoDate, TODAY } from '../../../data/db/time';
 import type { DataSnapshot, DataText, UnitCode } from '../../../data/db/types';
+import type { PurchasingReceipt } from '../../../data/reality/04/adapter';
 import { deriveOpenOrders, deriveStock, readModel, resolveDataText } from '../../../data/widget-data';
 import { createTranslator } from '../../../i18n';
 import { validateAgentCommandArgs, validateAgentDraft, validateAgentPrefill, type AgentFact, type AgentRefusal } from '../../../../shared/navis-agent-schema.mjs';
@@ -46,6 +47,7 @@ const orderStatus = (order: Pick<Order, 'status'>, locale: Locale) => order.stat
   ? inLocale(locale, '취소', 'Canceled', '已取消', '已取消')
   : text(locale).supply(`widget.suppliers.status.${order.status}`);
 const dateText = (date: string | null, locale: Locale) => date ? text(locale).format.date(date, 'short') : '—';
+const receiptDate = (receipt: PurchasingReceipt) => receipt.businessDate ?? receipt.receivedAt.slice(0, 10);
 
 function purchaseReferenced(snapshot: DataSnapshot, itemId: string) {
   return snapshot.tables.recipeLine.some(row => row.itemId === itemId) ||
@@ -102,14 +104,17 @@ export function projectSupplierFacts(snapshot: DataSnapshot, feature: FeatureId,
   return { facts };
 }
 
-type Row = { id: string; label: string; aliases?: readonly string[]; supplier?: string; choice?: string; fields: Record<string, string | number | boolean> };
+type Row = { id: string; label: string; aliases?: readonly string[]; supplier?: string; supplierId?: string; dueDate?: string | null;
+  orderLines?: Order['lines']; choice?: string; fields: Record<string, string | number | boolean> };
 const shortName = (name: string) => name.split(/\s+/u).at(-1) ?? name;
 const normalize = (name: string) => normalizeNavisName(name).replace(/[·ㆍ]/gu, '');
 const trimQuery = (query: string) => normalizeNavisInput(query).replace(/(?:으로|에서|에게|을|를|은|는|이|가|에)$/u, '').trim();
 function nameMatches(query: string, name: string) {
   const input = normalize(query), key = normalize(name);
   if (!input || !key) return false;
+  const terms = query.trim().split(/\s+/u).map(normalize);
   return input === key || input.length >= 2 && key.includes(input) ||
+    terms.length > 1 && terms.every(term => term.length >= 2 && key.includes(term)) ||
     input.length === 1 && name.split(/[^\p{L}\p{N}]+/u).some(word => normalize(word) === input);
 }
 
@@ -120,6 +125,7 @@ function supplierRows(snapshot: DataSnapshot, locale: Locale, kind: SupplyKind):
     return snapshot.tables.purchaseItem.flatMap(p => {
       const item = inventoryItem(snapshot, p.itemId);
       return item ? [{ id: p.purchaseItemId, label: tr.name(item), aliases: item.sku ? [item.sku] : undefined,
+        supplierId: p.supplierId, supplier: supplierName(snapshot, p.supplierId, locale),
         fields: { unit: purchaseUnit(snapshot, p), minimumQty: p.minimumQty, unitPrice: p.unitPrice, orderStep: p.orderStep,
           leadDays: p.leadDays, referenced: purchaseReferenced(snapshot, p.itemId), suggested: suggested.has(p.purchaseItemId) } }] : [];
     });
@@ -133,30 +139,41 @@ function supplierRows(snapshot: DataSnapshot, locale: Locale, kind: SupplyKind):
     const supplier = supplierName(snapshot, order.supplierId, locale);
     const fields = { status: order.status, open: order.open };
     const choice = `${supplier} · ${dateText(order.dueDate, locale)}`;
-    return kind === 'purchaseOrder' ? [{ id: order.poId, label: orderName(order, locale), supplier, choice, aliases: [supplier, ...order.lines.map(line => lineName(line, locale))],
+    return kind === 'purchaseOrder' ? [{ id: order.poId, label: orderName(order, locale), supplier, dueDate: order.dueDate, choice, orderLines: order.lines,
+      aliases: [supplier, ...order.lines.map(line => lineName(line, locale))],
       fields: { ...fields, ...(order.dueDate ? { date: order.dueDate } : {}) } }]
-      : order.lines.map(line => ({ id: line.polId, label: lineName(line, locale), supplier, choice, aliases: [supplier],
+      : order.lines.map(line => ({ id: line.polId, label: lineName(line, locale), supplier, dueDate: order.dueDate, choice, aliases: [supplier],
         fields: { ...fields, open: order.open && line.remaining > 0, unit: line.unit, remaining: line.remaining, unitPrice: line.unitPrice } }));
   });
 }
 
-function findRows(rows: readonly Row[], query: string, openFirst: boolean) {
-  const [item, supplier] = query.split('\n');
+function findRows(rows: readonly Row[], query: string, openFirst: boolean, locale: Locale = 'ko') {
+  const [item, supplier, dueDate, orderQuantity] = query.split('\n');
   const wanted = trimQuery(item);
-  const matches = rows.filter(row => (!supplier || row.supplier && nameMatches(supplier, row.supplier)) &&
-    [row.label, ...(row.aliases ?? [])].some(name => nameMatches(wanted, name)));
-  const exact = matches.filter(row => normalize(row.label) === normalize(wanted) || row.aliases?.some(alias => normalize(alias) === normalize(wanted)));
-  const narrowed = exact.length ? exact : matches;
+  const quantity = orderQuantity ? explicitQty(orderQuantity) : undefined;
+  const scope = rows.filter(row => (!supplier || row.supplier && nameMatches(supplier, row.supplier)) && (!dueDate || row.dueDate === dueDate) &&
+    (!orderQuantity || row.orderLines?.some(line => (nameMatches(wanted, lineName(line, locale)) || row.supplier && nameMatches(wanted, row.supplier)) &&
+      toPurchaseQty(quantity, line.unit, line.basePerUnit) === line.ordered)));
+  const names = (row: Row) => [row.label, ...(row.aliases ?? [])];
+  const exact = scope.filter(row => names(row).some(name => normalize(name) === normalize(item)));
+  const narrowed = exact.length ? exact : scope.filter(row => names(row).some(name => nameMatches(wanted, name)));
   const open = openFirst ? narrowed.filter(row => row.fields.open === true) : [];
   return open.length ? open : narrowed;
 }
 
+/** `aspect` is the requested fact, kept apart from the canonical `name` lookup slot; it is browser-local and never sent. */
+type AspectSearch = RecordSearch & { readonly aspect?: string };
 const handle = (kind: SupplyKind, snapshot: DataSnapshot, index: number) => `supply-${kind}-${snapshot.revision}-${index}`;
 function lookupRows(input: RecordSearch, kind: SupplyKind) {
   const { snapshot, locale, command } = input;
   const query = input.querySlot === 'estimate' ? input.query.split('\n')[0] : input.query;
   const rows = supplierRows(snapshot, locale, kind);
-  let matched = findRows(rows, query, !!command && (kind === 'purchaseOrder' || kind === 'purchaseOrderLine'));
+  let matched = findRows(rows, query, !!command && (kind === 'purchaseOrder' || kind === 'purchaseOrderLine'), locale);
+  // A read for a supplier's name lists the purchase rows tied to that supplier; commands never resolve through a supplier name.
+  if (!matched.length && !query.includes('\n') && kind === 'purchaseItem' && !command && input.querySlot !== 'estimate') {
+    const wanted = trimQuery(query);
+    matched = rows.filter(row => row.supplier && nameMatches(wanted, row.supplier));
+  }
   if (kind === 'purchaseOrder' && input.querySlot === 'receiptHistory') {
     const results = currentOrders(snapshot).orders;
     const last = (id: string) => results.find(order => order.poId === id)?.lines.flatMap(line => line.receipts)
@@ -194,7 +211,7 @@ function makeReader(kind: SupplyKind): RecordAdapter {
         const order = currentOrders(snapshot).orders.find(order => order.poId === found.id);
         if (order && querySlot === 'receiptHistory') {
           const latest = order.lines.flatMap(line => line.receipts).sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))[0];
-          return latest ? [orderSummary(order, snapshot, locale), dateText(latest.receivedAt.slice(0, 10), locale)].join(' · ') : undefined;
+          return latest ? [orderSummary(order, snapshot, locale), dateText(receiptDate(latest), locale)].join(' · ') : undefined;
         }
         return order && orderSummary(order, snapshot, locale);
       }
@@ -212,11 +229,29 @@ function makeReader(kind: SupplyKind): RecordAdapter {
         const waiting = inLocale(locale, '이미 입고 대기 중인 발주가 있어요', 'An order is already awaiting delivery', '已有订单等待到货', '已有訂單等待到貨');
         return open ? `${summary}\n${waiting}` : summary;
       }
-      const display = querySlot === 'minimumQty' || querySlot === 'orderStep' ? tr.format.quantity(purchase[querySlot], unit)
-        : querySlot === 'supplier' ? supplierName(snapshot, purchase.supplierId, locale)
-        : querySlot === 'leadDays' ? tr.format.quantity(purchase.leadDays, 'day')
-        : tr.money(purchase.unitPrice);
-      return `${found.label} ${display}`;
+      // The canonical lookup slot is `name`; the requested fact travels as `aspect` (older callers still pass it as the slot).
+      const asked = (input as AspectSearch).aspect ?? (querySlot === 'name' ? undefined : querySlot);
+      const unitSymbol = tr.format.quantity(1, unit).replace(/^1\s*/u, '');
+      const caption = {
+        supplier: inLocale(locale, '발주사', 'Supplier', '供应商', '供應商'),
+        unitPrice: inLocale(locale, '단가', 'Unit price', '单价', '單價'),
+        minimumQty: inLocale(locale, '최소 주문', 'Minimum order', '最低订购量', '最低訂購量'),
+        orderStep: inLocale(locale, '주문 단위', 'Order step', '订购单位', '訂購單位'),
+        leadDays: inLocale(locale, '입고 예정', 'Lead time', '到货时间', '到貨時間'),
+      };
+      const facts = {
+        supplier: supplierName(snapshot, purchase.supplierId, locale),
+        unitPrice: `${tr.money(purchase.unitPrice)}/${unitSymbol}`,
+        minimumQty: tr.format.quantity(purchase.minimumQty, unit),
+        orderStep: tr.format.quantity(purchase.orderStep, unit),
+        leadDays: tr.format.quantity(purchase.leadDays, 'day'),
+      };
+      const field = asked === 'products' ? 'supplier' : asked;
+      if (field === 'supplier' || field === 'unitPrice' || field === 'minimumQty' || field === 'orderStep' || field === 'leadDays') {
+        return `${found.label} · ${caption[field]} ${facts[field]}`;
+      }
+      // Without a named fact the answer is the row the purchase-items tab shows.
+      return [found.label, ...(['supplier', 'unitPrice', 'minimumQty', 'orderStep', 'leadDays'] as const).map(key => `${caption[key]} ${facts[key]}`)].join(' · ');
     },
   };
 }
@@ -375,7 +410,21 @@ function makeCommand(commandName: CommandName, allowLocalScheduling: boolean): C
         locale: locale === 'en' || locale === 'zh-Hans' || locale === 'zh-Hant' ? locale : 'ko' };
     },
     preflight({ command, locale }, { snapshot, idempotencyKey }) {
-      if (command.type === 'suppliers.createOrder' && !allowLocalScheduling) return { kind: 'invalid' };
+      const newPrice = command.type === 'suppliers.createPurchaseItem' ? command.unitPrice
+        : command.type === 'suppliers.updatePurchaseItem' ? command.patch.unitPrice : undefined;
+      if (newPrice !== undefined && newPrice <= 0) return { kind: 'invalid', field: 'unitPrice' };
+      if (command.type === 'suppliers.createOrder') {
+        if (!allowLocalScheduling) return { kind: 'invalid' };
+        const purchase = snapshot.tables.purchaseItem.find(row => row.purchaseItemId === command.purchaseItemId);
+        if (purchase && purchase.unitPrice <= 0) return { kind: 'invalid', field: 'unitPrice' };
+        if (command.suggestionItemId) {
+          const suggestion = readModel(snapshot, featureId).suggestions.find(row =>
+            row.itemId === command.suggestionItemId && row.purchaseItemId === command.purchaseItemId);
+          if (!suggestion || suggestion.qty !== command.qty || suggestion.dueDate !== command.dueDate) {
+            return { kind: 'conflict', field: 'suggestionItemId' };
+          }
+        }
+      }
       if (command.type === 'suppliers.changeDueDate' && currentOrders(snapshot).open.find(order => order.poId === command.poId)?.dueDate === command.date) return { kind: 'unchanged' };
       const outcome = simulate(snapshot, command, idempotencyKey);
       if (!outcome.ok) return { kind: outcome.code === 'CONFLICT' ? 'conflict' : 'invalid', field: outcome.field, messageKey: outcome.messageKey };
@@ -437,13 +486,33 @@ function toPurchaseQty(amount: ReturnType<typeof explicitQty>, unit: UnitCode, b
   return base === null ? undefined : basePerUnit ? base / basePerUnit : fromBase(base, unit);
 }
 const pastDate = (value: string) => /지난\s*주|저번\s*주/u.test(value);
-const destinationDate = (value: string) => {
-  const datesOnly = value.replace(/(?<![\d.])\d+\.\d+(?=\s*(?:리터|밀리리터|개|kg|mL|L|g)\b|\s*(?:리터|밀리리터|개))/giu, '');
-  return parseNavisDate(datesOnly, TODAY) ?? parseNavisDate(datesOnly.replace(/(?:내일|오늘|모레)\s*(?:오는|들어오는)/u, ''), TODAY);
-};
+const explicitDate = /\d{1,2}\s*월\s*\d{1,2}\s*일|\d{1,2}[-./]\d{1,2}|[월화수목금토일]요일|어제|그저께|오늘|내일|모레|글피|(?:이번|다음|지난|저번)\s*달/u;
+const withoutDecimalQty = (value: string) => value.replace(/(?<![\d.])\d+\.\d+\s*(?:리터|밀리리터|개|kg|mL|L|g\b)/giu, '');
+const destinationDate = (value: string) => parseNavisDate(withoutDecimalQty(value), TODAY);
 const readWidget = (...factKeys: string[]): DomainTurnInput => ({ intent: { kind: 'read', featureId }, factKeys });
 const readRecord = (recordKind: SupplyKind, querySlot: string, query: string): DomainTurnInput =>
   ({ intent: { kind: 'read', recordKind, querySlot }, slots: { [querySlot]: query } });
+type PurchaseAspect = 'unitPrice' | 'minimumQty' | 'orderStep' | 'leadDays' | 'supplier' | 'products' | 'summary';
+/** A purchase-item fact read: the wire lookup is always `name`, the asked fact is the local `aspect`. */
+const readPurchaseItem = (query: string, aspect: PurchaseAspect, extra: { readonly browse?: boolean; readonly missing: string }): DomainTurnInput & { readonly aspect: PurchaseAspect } => ({
+  intent: { kind: 'read', recordKind: 'purchaseItem', querySlot: 'name' }, slots: { name: query }, aspect,
+  ...(extra.browse ? { browse: true } : {}), onMissing: { answer: extra.missing },
+});
+/** A receipt that names no known order is refused after a scoped lookup, but only when the reviewed selector finds zero order rows. */
+function unmatchedReceipt(snapshot: DataSnapshot, locale: Locale, value: string, supplier: string | undefined, fallback: string | undefined): DomainRoute {
+  const noOrder = inLocale(locale, '해당 발주 내역이 없어요', 'No matching order', '未找到该订单', '未找到該訂單');
+  const subject = receiptSubject(value, supplier) ?? fallback;
+  if (subject && !findRows(supplierRows(snapshot, locale, 'purchaseOrder'), subject, true, locale).length) {
+    return { ...readRecord('purchaseOrder', 'name', subject), onMissing: { answer: noOrder, reason: 'invalid_target' } };
+  }
+  return refuse('invalid_target', noOrder);
+}
+/** First plain word of a receipt phrase once the supplier, the quantity and the receipt verbs are removed. */
+function receiptSubject(value: string, supplier: string | undefined) {
+  const rest = (supplier ? value.replace(supplier, ' ') : value).replace(/\d[\d.,]*\s*[가-힣A-Za-z]*/gu, ' ')
+    .replace(/입고|처리|확인|기록|도착했어|도착|왔어|받았어|됐어|했어|해\s*줘|일부|전부|먼저/gu, ' ');
+  return rest.split(/\s+/u).map(token => token.replace(/(?<=[가-힣]{2})(?:은|는|이|가|을|를)$/u, '')).find(token => [...token].length >= 2);
+}
 
 const lookup = (kind: DomainLookup['kind'], querySlot: string, ...bind: string[]): DomainLookup => ({ kind, querySlot, ...(bind.length ? { bind } : {}) });
 function turn(command: CommandName, locale: Locale, values: LocalSlots, queries: LocalSlots, lookups: readonly DomainLookup[], patch = false): DomainTurnInput {
@@ -532,7 +601,7 @@ function editPurchase(snapshot: DataSnapshot, value: string, locale: Locale, ite
       return clarify('supplierId', l('어느 발주사에서 받을까요?', 'Which supplier?', '从哪个供应商订购？', '從哪個供應商訂購？'),
         next => editPurchase(snapshot, value, locale, item, next));
     }
-    if (fields.unitPrice === undefined || !Number.isSafeInteger(fields.unitPrice) || fields.unitPrice < 0) return clarify('unitPrice', priceQuestion);
+    if (fields.unitPrice === undefined || !Number.isSafeInteger(fields.unitPrice) || fields.unitPrice <= 0) return clarify('unitPrice', priceQuestion);
     if (fields.minimumQty === undefined) return clarify('minimumQty', l('최소 주문 수량은 얼마예요?', 'What is the minimum quantity?', '最低订购量是多少？', '最低訂購量是多少？'));
     if (fields.orderStep === undefined) return clarify('orderStep', l('주문 단위는 얼마예요?', 'What is the order increment?', '订购单位是多少？', '訂購單位是多少？'));
     if (fields.leadDays === undefined) return clarify('leadDays', l('입고까지 며칠 걸려요?', 'How many days to delivery?', '几天到货？', '幾天到貨？'));
@@ -545,7 +614,7 @@ function editPurchase(snapshot: DataSnapshot, value: string, locale: Locale, ite
     return turn('suppliers.updatePurchaseItem', locale, {}, { ...query, supplierId: supplier }, [target, supplierLookup], true);
   }
   if (/단가|우유값/u.test(value)) {
-    if (fields.unitPrice === undefined || !Number.isSafeInteger(fields.unitPrice) || fields.unitPrice < 0) return clarify('unitPrice', priceQuestion,
+    if (fields.unitPrice === undefined || !Number.isSafeInteger(fields.unitPrice) || fields.unitPrice <= 0) return clarify('unitPrice', priceQuestion,
       next => editPurchase(snapshot, `${item} 단가 ${next.replace(/원$/u, '')}원으로 변경`, locale, item, undefined));
     return turn('suppliers.updatePurchaseItem', locale, { unitPrice: fields.unitPrice }, query, [target], true);
   }
@@ -556,7 +625,8 @@ function editPurchase(snapshot: DataSnapshot, value: string, locale: Locale, ite
   return clarify('patch', l('어떤 발주 조건을 고칠까요?', 'Which purchase condition?', '要修改哪个采购条件？', '要修改哪個採購條件？'));
 }
 
-function routeOrder(snapshot: DataSnapshot, value: string, locale: Locale, item: string | undefined, supplier: string | undefined, allowLocalScheduling: boolean): DomainRoute {
+function routeOrder(snapshot: DataSnapshot, value: string, locale: Locale, item: string | undefined, supplier: string | undefined, allowLocalScheduling: boolean,
+  correction: { qty?: string; date?: string } = {}): DomainRoute {
   const tr = text(locale);
   const l = (ko: string, en: string, hans: string, hant: string) => inLocale(locale, ko, en, hans, hant);
   const askItem = l('어느 품목을 발주할까요?', 'Which item should I order?', '要订购哪个品项？', '要訂購哪個品項？');
@@ -582,82 +652,102 @@ function routeOrder(snapshot: DataSnapshot, value: string, locale: Locale, item:
     if (!supplier && /^\S+\s+.+(?:발주|주문|시켜)/u.test(value) && !/^(?:새|그냥|한|발주|주문)/u.test(value)) return refuse('invalid_target', missing);
     return clarify('purchaseItem', askItem, next => routeOrder(snapshot, value, locale, next, supplier, allowLocalScheduling));
   }
-  const rows = findRows(supplierRows(snapshot, locale, 'purchaseItem'), item, false);
-  const filtered = supplier ? rows.filter(row => {
-    const purchase = snapshot.tables.purchaseItem.find(p => p.purchaseItemId === row.id);
-    return purchase && nameMatches(supplier, supplierName(snapshot, purchase.supplierId, locale));
-  }) : rows;
+  const query = supplier ? `${item}\n${supplier}` : item;
+  const filtered = findRows(supplierRows(snapshot, locale, 'purchaseItem'), query, false);
   if (!filtered.length) return refuse('invalid_target', missing);
   if (filtered.length > 1) return clarify('purchaseItem', askItem, next => routeOrder(snapshot, value, locale, next, supplier, allowLocalScheduling));
   const purchase = snapshot.tables.purchaseItem.find(p => p.purchaseItemId === filtered[0].id)!;
-  const unit = purchaseUnit(snapshot, purchase), qty = toPurchaseQty(explicitQty(value), unit, purchase.basePerUnit);
-  const resume = (next: string) => routeOrder(snapshot, `${filtered[0].label} ${next} ${/초안|얼마|견적/u.test(value) ? '발주 견적' : '발주해줘'}`, locale, filtered[0].label, supplier, allowLocalScheduling);
+  if (purchase.unitPrice <= 0) return refuse('unavailable', '발주 품목의 단가를 확인해 주세요');
+  const unit = purchaseUnit(snapshot, purchase), qty = toPurchaseQty(explicitQty(correction.qty ?? value), unit, purchase.basePerUnit);
+  const resume = (next: string) => routeOrder(snapshot, value, locale, item, supplier, allowLocalScheduling, { ...correction, qty: next });
   if (!qty || qty < 0 || purchaseQuantityBase(qty, unit, purchase.basePerUnit) === null || !Number.isSafeInteger(Math.round(qty * purchase.unitPrice))) return clarify('qty', askQty, resume);
-  const due = destinationDate(value) ?? addDays(TODAY, purchase.leadDays);
-  if (due < TODAY || pastDate(value)) return refuse('invalid_target', l('지난 날짜로 발주할 수 없어요', 'Choose a current or future date', '请选择今天或将来的日期', '請選擇今天或將來的日期'));
+  const dateInput = correction.date ?? value;
+  const dueDate = destinationDate(dateInput);
+  if (dueDate && dueDate < TODAY || pastDate(dateInput)) return refuse('invalid_target', l('지난 날짜로 발주할 수 없어요', 'Choose a current or future date', '请选择今天或将来的日期', '請選擇今天或將來的日期'));
   const min = tr.format.quantity(purchase.minimumQty, unit), step = tr.format.quantity(purchase.orderStep, unit);
   if (qty < purchase.minimumQty) return clarify('qty', l(`최소 ${min}부터 주문할 수 있어요`, `Minimum order: ${min}`, `最低订购量：${min}`, `最低訂購量：${min}`), resume);
   if (Math.abs(qty / purchase.orderStep - Math.round(qty / purchase.orderStep)) > 1e-9) {
     return clarify('qty', l(`${step} 단위로 주문해 주세요`, `Order in increments of ${step}`, `请按 ${step} 的倍数订购`, `請按 ${step} 的倍數訂購`), resume);
   }
+  if (!dueDate && (correction.date || explicitDate.test(withoutDecimalQty(dateInput)))) return clarify('dueDate',
+    l('입고 예정일을 언제로 바꿀까요?', 'What is the new due date?', '到货日期改到哪天？', '到貨日期改到哪天？'),
+    next => routeOrder(snapshot, value, locale, item, supplier, allowLocalScheduling, { ...correction, date: next }));
+  const due = dueDate ?? addDays(TODAY, purchase.leadDays);
   const explicitEstimate = /초안|얼마|견적|하면|하면요/u.test(value);
   if (!allowLocalScheduling || explicitEstimate) {
     return readRecord('purchaseItem', 'estimate', `${normalizeNavisInput(filtered[0].label)}\n${qty}\n${due}`);
   }
-  return turn('suppliers.createOrder', locale, { qty, dueDate: due }, { name: filtered[0].label }, [lookup('purchaseItem', 'name', 'purchaseItemId')]);
+  return turn('suppliers.createOrder', locale, { qty, dueDate: due }, { name: supplier ? `${filtered[0].label}\n${supplier}` : filtered[0].label },
+    [lookup('purchaseItem', 'name', 'purchaseItemId')]);
 }
 
-function changeOrder(snapshot: DataSnapshot, value: string, locale: Locale, item: string | undefined, supplier: string | undefined): DomainRoute {
+function changeOrder(snapshot: DataSnapshot, value: string, locale: Locale, item: string | undefined, supplier: string | undefined,
+  correction: { qty?: string; date?: string } = {}): DomainRoute {
   const l = (ko: string, en: string, hans: string, hant: string) => inLocale(locale, ko, en, hans, hant);
   const cancel = /취소|캔슬|없던\s*걸로/u.test(value);
-  const dateChange = /날짜|입고일|예정일|도착일|날로|미뤄|미룰/u.test(value) ||
-    destinationDate(value) !== undefined && editWords.test(value) || pastDate(value) && editWords.test(value);
-  const query = item ?? supplier ?? value.match(/^([^\s]+)\s+(?:\S+\s+)*발주/u)?.[1];
+  const source = value.match(/^(.*?)\s*(?:들어오는|오는)\s/u);
+  const sourceDate = source && destinationDate(source[1]);
+  const dateInput = correction.date ?? (source && sourceDate ? value.slice(source[0].length) : value);
+  const dateChange = /날짜|입고일|예정일|도착일|날로|미뤄|미룰|변경|바꿔|수정/u.test(value) ||
+    (destinationDate(dateInput) !== undefined || pastDate(dateInput)) && editWords.test(value);
+  const query = item ?? supplier ?? value.match(/^([^\s]+)\s+(?:\S+\s+)*(?:발주|주문)/u)?.[1];
   const kind = cancel || dateChange ? 'purchaseOrder' : 'purchaseOrderLine';
   if (!cancel && /시간|(?:오전|오후)\s*\d|\d+\s*시/u.test(value) && /바꿔|수정|변경|미뤄/u.test(value)) {
     return refuse('unsupported', l('입고 예정일만 바꿀 수 있어요', 'Only the due date can be changed', '可修改到货日期', '可修改到貨日期'));
   }
   if (!query) return clarify('name', l('어느 발주 건인가요?', 'Which order?', '是哪笔订单？', '是哪筆訂單？'),
     next => changeOrder(snapshot, value, locale, next, supplier));
-  const matching = findRows(supplierRows(snapshot, locale, kind), item && supplier ? `${item}\n${supplier}` : query, true);
+  const amount = explicitQty(correction.qty ?? value);
+  const supplierFilter = item ? supplier ?? '' : '';
+  const scope = cancel && amount ? `${query}\n${supplierFilter}\n${sourceDate ?? ''}\n${value}`
+    : sourceDate ? `${query}\n${supplierFilter}\n${sourceDate}` : supplierFilter ? `${query}\n${supplierFilter}` : query;
+  const matching = findRows(supplierRows(snapshot, locale, kind), scope, false, locale);
   const active = matching.filter(row => row.fields.open);
   const repeat = /한\s*번\s*더|또\s*기록|같은\s*입고/u.test(value);
-  const amount = explicitQty(value);
   if (repeat && kind === 'purchaseOrderLine' && matching.some(row => {
     const line = snapshot.tables.purchaseOrderLine.find(candidate => candidate.polId === row.id);
     const unit = line?.unitSnapshot ?? (line && inventoryItem(snapshot, line.itemId)?.unit);
     const qty = unit && toPurchaseQty(amount, unit, line?.basePerUnit);
-    return snapshot.tables.receipt.some(receipt => receipt.polId === row.id && receipt.receivedAt.slice(0, 10) === TODAY && (!amount || receipt.qty === qty));
+    return snapshot.tables.receipt.some(receipt => receipt.polId === row.id && receiptDate(receipt) === TODAY && (!amount || receipt.qty === qty));
   })) {
     return { kind: 'answer', answer: l('이미 입고를 기록했어요', 'Delivery already recorded', '已记录到货', '已記錄到貨') };
   }
-  if (!active.length) return refuse('invalid_target', matching.length
-    ? l('이미 끝난 발주예요', 'This order is closed', '订单已结束', '訂單已結束')
-    : l('해당 발주 내역이 없어요', 'No matching order', '未找到该订单', '未找到該訂單'));
-  const target = { name: item && supplier ? `${item}\n${supplier}` : query };
+  if (!active.length) {
+    if (matching.length) return refuse('invalid_target', l('이미 끝난 발주예요', 'This order is closed', '订单已结束', '訂單已結束'));
+    // A receipt with no order row is refused after a scoped lookup; cancel and date changes keep the local refusal.
+    return kind === 'purchaseOrderLine' ? unmatchedReceipt(snapshot, locale, value, supplier, query)
+      : refuse('invalid_target', l('해당 발주 내역이 없어요', 'No matching order', '未找到该订单', '未找到該訂單'));
+  }
+  const target = { name: scope };
   if (cancel) return turn('suppliers.cancelOrder', locale, {}, target, [lookup(kind, 'name', 'poId')]);
-  if (dateChange || /변경|바꿔|수정/u.test(value)) {
-    const date = destinationDate(value) ?? (/하루\s*미/u.test(value) && active.length === 1 && typeof active[0].fields.date === 'string'
+  if (dateChange) {
+    const date = destinationDate(dateInput) ?? (!correction.date && /하루\s*미/u.test(dateInput) && active.length === 1 && typeof active[0].fields.date === 'string'
       ? addDays(active[0].fields.date, 1) : undefined);
-    if (pastDate(value) || date && date < TODAY) return refuse('invalid_target', l('지난 날짜로 바꿀 수 없어요', 'Choose a current or future date', '请选择今天或将来的日期', '請選擇今天或將來的日期'));
+    if (pastDate(dateInput) || date && date < TODAY) return refuse('invalid_target', l('지난 날짜로 바꿀 수 없어요', 'Choose a current or future date', '请选择今天或将来的日期', '請選擇今天或將來的日期'));
     if (!date) return clarify('date', l('입고 예정일을 언제로 바꿀까요?', 'What is the new due date?', '到货日期改到哪天？', '到貨日期改到哪天？'),
-      next => changeOrder(snapshot, `${query} 입고일 ${next}로 바꿔줘`, locale, item, supplier));
+      next => changeOrder(snapshot, value, locale, item, supplier, { date: next }));
     if (active.length === 1 && active[0].fields.date === date) return { kind: 'answer', answer: l('이미 같은 날짜예요', 'The due date is already set', '日期已经相同', '日期已經相同') };
     return turn('suppliers.changeDueDate', locale, { date }, target, [lookup('purchaseOrder', 'name', 'poId')]);
   }
-  if (new Set(active.map(row => row.fields.unit)).size > 1) {
+  const receiptQty = (row: Row) => {
+    const line = snapshot.tables.purchaseOrderLine.find(line => line.polId === row.id);
+    const unit = line?.unitSnapshot ?? (line && inventoryItem(snapshot, line.itemId)?.unit);
+    return unit && toPurchaseQty(amount, unit, line?.basePerUnit);
+  };
+  const quantities = new Set(active.map(receiptQty));
+  if (quantities.size > 1 || new Set(active.map(row => row.fields.unit)).size > 1) {
     return clarify('purchaseOrderLine', l('어느 발주 건인가요?', 'Which order?', '是哪笔订单？', '是哪筆訂單？'));
   }
   const line = active.length === 1 ? snapshot.tables.purchaseOrderLine.find(line => line.polId === active[0].id) : undefined;
   const unit = line?.unitSnapshot ?? (line ? inventoryItem(snapshot, line.itemId)?.unit : undefined);
-  const qty = unit ? toPurchaseQty(amount, unit, line?.basePerUnit) : amount?.value;
+  const [qty] = quantities;
   const remaining = active.length === 1 && typeof active[0].fields.remaining === 'number' ? active[0].fields.remaining : undefined;
   if (qty === undefined || qty < 1 || remaining !== undefined && qty > remaining) {
     const answer = qty !== undefined && remaining !== undefined && qty > remaining && unit
       ? l(`남은 수량은 ${text(locale).format.quantity(remaining, unit)}예요`, `Remaining: ${text(locale).format.quantity(remaining, unit)}`,
         `剩余：${text(locale).format.quantity(remaining, unit)}`, `剩餘：${text(locale).format.quantity(remaining, unit)}`)
       : l('얼마나 받았어요?', 'How much arrived?', '收到了多少？', '收到了多少？');
-    return clarify('qty', answer, next => changeOrder(snapshot, `${query} ${next} 입고`, locale, item, supplier));
+    return clarify('qty', answer, next => changeOrder(snapshot, value, locale, item, supplier, { qty: next }));
   }
   return turn('suppliers.recordReceipt', locale, { qty }, target, [lookup('purchaseOrderLine', 'name', 'polId')]);
 }
@@ -742,11 +832,22 @@ function routeSupplier(input: string, snapshot: DataSnapshot, locale: Locale, al
       : clarify('supplierId', l('어느 발주사 연락처를 볼까요?', 'Which supplier’s number?', '要查看哪个供应商的号码？', '要查看哪個供應商的號碼？'),
         next => readRecord('supplier', 'contact', next));
   }
-  if (/어디서\s*받|거래처가\s*어디|발주사가\s*어디/u.test(value) && item) return readRecord('purchaseItem', 'supplier', item);
-  if (supplier && /뭐\s*받|공급\s*품목/u.test(value)) return readRecord('supplier', 'products', supplier);
+  const unregisteredItem = l('등록된 발주 품목이 없어요', 'No registered purchase item', '没有已登记的采购品项', '沒有已登記的採購品項');
+  if (/어디서\s*받|거래처가\s*어디|발주사가\s*어디/u.test(value) && item) {
+    // Rows that share one supplier are all listed with it; the wire lookup stays the purchase item.
+    const rows = findRows(supplierRows(snapshot, locale, 'purchaseItem'), item, false);
+    // "거래처가 어디고 언제 주문해야 해?" also asks about timing: show the supplier with price, minimum and lead time (the item's whole line).
+    const timing = /언제|며칠|얼마나\s*걸|몇\s*일/u.test(value);
+    return readPurchaseItem(item, timing ? 'summary' : 'supplier', { browse: rows.length > 1, missing: unregisteredItem });
+  }
+  if (supplier && /뭐\s*받|공급\s*품목/u.test(value)) {
+    const registered = liveSuppliers(snapshot).some(row => nameMatches(supplier, text(locale).name(row)));
+    return readPurchaseItem(supplier, 'products', { browse: true, missing: registered ? unregisteredItem
+      : l('등록된 발주사가 없어요', 'No registered supplier', '没有已登记的供应商', '沒有已登記的供應商') });
+  }
   if ((item || /^\S+\s+(?:최소|MOQ)/u.test(value)) && (price || purchaseCondition) && (question.test(value) && !/\d+\s*일\s*뒤에/u.test(value) || !editWords.test(value) && !addWords.test(value) && !removeWords.test(value) && !/\d/u.test(value))) {
     const field = price ? 'unitPrice' : /최소|MOQ/u.test(value) ? 'minimumQty' : /납기|리드타임|소요일/u.test(value) ? 'leadDays' : 'orderStep';
-    return readRecord('purchaseItem', field, item ?? value.split(/\s/u)[0]);
+    return readPurchaseItem(item ?? value.split(/\s/u)[0], field, { missing: unregisteredItem });
   }
   if (item && (price || purchaseCondition || supplier && (supplierWords.test(value) || /받을래/u.test(value))) &&
     (price || addWords.test(value) || removeWords.test(value) || editWords.test(value) || /\d/u.test(value))) return editPurchase(snapshot, value, locale, item, supplier);
@@ -759,18 +860,25 @@ function routeSupplier(input: string, snapshot: DataSnapshot, locale: Locale, al
   const hasOpenOrder = (item || supplier) && currentOrders(snapshot).open.some(order =>
     (!item || order.lines.some(line => nameMatches(item, lineName(line, locale)))) &&
     (!supplier || nameMatches(supplier, supplierName(snapshot, order.supplierId, locale))));
-  if (isOrder && /취소|캔슬|없던\s*걸로/u.test(value) && (/발주/u.test(value) || hasOpenOrder || supplier) || isIntake && (item || supplier) &&
-    (hasOpenOrder || supplier || /또\s*기록|같은\s*입고|시간|오[전후]\s*\d|\d+\s*시|입고\s*(?:일|시간|처리|확인|기록)|입고일|도착일|발주/u.test(value)) &&
-    (/입고(?:일|\s*시간|\s*날짜|\s*확인|\s*처리|\s*오전|\s*오후|\s*\d+\s*시)|입고\s*또\s*기록|같은\s*입고|도착|들어왔|받았|왔어|왔다|받고|오는|미뤄|미룰/u.test(value) || pastDate(value) || explicitQty(value))) {
+  const amount = isOrder || isIntake ? explicitQty(value) : undefined;
+  const purchaseQty = amount && ['pcs', 'tray', 'box', 'kg', 'g', 'L', 'mL'].includes(amount.unit);
+  const cancelOrder = isOrder && /취소|캔슬|없던\s*걸로/u.test(value) && (/발주/u.test(value) || hasOpenOrder || supplier || purchaseQty);
+  const receiptRequest = /입고.*(?:처리|기록|확인|한\s*번\s*더)|(?:일부|전부|부분)\s*입고|같은\s*입고|(?:먼저|전부|다)\s*(?:받았|들어왔|왔어|도착했)|나머지.*아직/u.test(value);
+  const trackedReceipt = (hasOpenOrder || supplier) && (/도착했|들어왔|받았|왔어|왔다|입고\s*됐/u.test(value) ||
+    amount && /입고/u.test(value) && !explicitDate.test(withoutDecimalQty(value)));
+  const deliveryEdit = /입고\s*(?:일(?!부)|시간|날짜|오전|오후|\d+\s*시)|도착\s*(?:일|시간)|미뤄|미룰/u.test(value) ||
+    explicitDate.test(withoutDecimalQty(value)) && /도착|입고|오는/u.test(value) && editWords.test(value);
+  if (cancelOrder || isIntake && (item || supplier) && (deliveryEdit || !/[?？]$/u.test(value) && (receiptRequest || trackedReceipt))) {
     return changeOrder(snapshot, value, locale, item, supplier);
   }
   if (!item && /발주\s*품목/u.test(value) && addWords.test(value)) {
     return refuse('invalid_target', l('먼저 재고 품목을 등록해 주세요', 'Register the inventory item first', '请先登记库存品项', '請先登記庫存品項'));
   }
   if (!item && isIntake && /입고\s*(?:일|처리|확인|기록)|입고일|도착일|받았어|왔어/u.test(value) && (supplier || explicitQty(value) || /입고|도착일/u.test(value))) {
-    return refuse('invalid_target', l('해당 발주 내역이 없어요', 'No matching order', '未找到该订单', '未找到該訂單'));
+    return unmatchedReceipt(snapshot, locale, value, supplier, undefined);
   }
-  if (isOrder && (item || supplier || /발주|제안/u.test(value)) && !/어떻게|방법|하는\s*법/u.test(value)) {
+  if (isOrder && (item || supplier || /발주|제안/u.test(value) || purchaseQty && /주문\s*(?:넣어|해\s*줘)/u.test(value)) &&
+    !/어떻게|방법|하는\s*법/u.test(value)) {
     return routeOrder(snapshot, value, locale, item, supplier, allowLocalScheduling);
   }
 }

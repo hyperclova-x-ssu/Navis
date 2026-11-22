@@ -71,7 +71,8 @@ function eligibility(command, args, kind, fields) {
       return receiptChanges.some(field => Object.hasOwn(args, field)) && fields.paymentReversalRequired === undefined
         ? refused('unavailable') : undefined;
     case 'customOrder.recordDecision':
-      return decisionStages.has(stage) ? paymentGate(fields) : refused('invalid_target');
+      if (!decisionStages.has(stage) || fields.quoteRevision === 0) return refused('invalid_target');
+      return paymentGate(fields) ?? (fields.quoteRevision === undefined || !fields.proposedPickupAt ? refused('unavailable') : undefined);
     case 'customOrder.setStage':
       if (stage === 'received' && args.nextStage === 'quote_pending') return undefined;
       if (fields.approvalCurrent !== true) return refused('invalid_target');

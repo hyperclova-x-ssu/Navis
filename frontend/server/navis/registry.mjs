@@ -1,4 +1,6 @@
 import { AGENT_COMMAND_CATALOG } from '../../shared/navis-agent-schema.mjs';
+import { realCommandFor } from '../../shared/navis-real-commands.mjs';
+export { realCommandFor, realCommandRegistry } from '../../shared/navis-real-commands.mjs';
 import { menuCreateAdapter, menuEditAdapters } from './menu.mjs';
 import { navigationAdapters } from './navigation.mjs';
 import { createAgentConversation } from './conversation.mjs';
@@ -39,14 +41,14 @@ export function createAgentDomainRegistry(adapters = [menuCreateAdapter, ...menu
       throw new TypeError('Invalid Navis domain adapter');
     }
     if (commands.has(command)) throw new TypeError(`Duplicate Navis command adapter: ${command}`);
-    commands.set(command, Object.freeze({ ...adapter }));
+    const realCommand = realCommandFor(command);
+    commands.set(command, Object.freeze({ ...adapter, ...(realCommand && { realCommand }) }));
   }
   return Object.freeze({ get: command => commands.get(command), createConversation: createAgentConversation });
 }
 
-export function resolveAgentTarget(search) {
-  if (search?.status !== 'ready') return { choices: [] };
-  const exact = search.matches.filter(match => match.match === 'exact');
-  if (exact.length === 1 && !search.nextCursor) return { match: exact[0] };
-  return { choices: exact.length ? exact : search.matches };
-}
+export { resolveAgentTarget } from './record-projection.mjs';
+
+// N21 in-process orchestration, outside the per-command/model tool registry.
+export { createAgentMultiSequence } from './multi.mjs';
+// End N21 in-process orchestration.

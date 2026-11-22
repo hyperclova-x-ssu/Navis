@@ -33,7 +33,9 @@ function targetIssue(command, fields) {
   if (command === 'coupon.unpublish') {
     if (fields?.route === undefined || typeof fields.activated !== 'boolean' || typeof fields.unpublished !== 'boolean') return 'unavailable';
     if (fields.unpublished) return 'duplicate';
-    return fields.route === 'place_news' && fields.activated ? undefined : 'invalid_target';
+    if (fields.route !== 'place_news' || !fields.activated) return 'invalid_target';
+    if (typeof fields.eligible !== 'boolean') return 'unavailable';
+    return fields.eligible ? undefined : 'invalid_target';
   }
   if (command === 'coupon.sendSlot') {
     if (fields?.handled === true) return 'duplicate';

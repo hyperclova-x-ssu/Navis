@@ -10,6 +10,7 @@ import { createRunStore } from '../../../state';
 import { timePolicy } from '../../../ui';
 import { createAssistantProvider } from '../provider';
 import { assistantDomains, projectAgentWidget } from '../snapshot';
+import { manualsGrantsDomain } from './manuals-grants';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame, validateAgentRequest } from '../../../../shared/navis-agent-schema.mjs';
 // @ts-expect-error The in-process bridge is JavaScript.
 import { createBridge } from '../../../../server/bridge.mjs';
@@ -69,6 +70,82 @@ function proposal(result: Awaited<ReturnType<typeof replay>>, command: string) {
 }
 
 describe('N14 manuals and grants', () => {
+  it.each([
+    '배달 포장 매뉴얼 만들어줘 위생으로',
+    '새 매뉴얼 하나 만들어줘 제목은 환불 처리',
+    '매뉴얼 추가해줘 이름은 택배 받기',
+  ])('S3-060 asks for the missing procedure in %s and keeps each supplied line', text => {
+    const snapshot = cafe().getSnapshot();
+    const first = manualsGrantsDomain.route?.(text, snapshot, 'ko');
+    expect(first).toMatchObject({ kind: 'clarification', field: 'steps' });
+    if (!first || !('kind' in first) || first.kind !== 'clarification') throw Error('Expected a steps question');
+    const resumed = first.resume?.('송장 확인\n파손 확인');
+    if (text.includes('위생')) {
+      expect(resumed).toMatchObject({ intent: { command: 'manuals.create' }, slots: { steps: ['송장 확인', '파손 확인'] } });
+    } else {
+      expect(resumed).toMatchObject({ kind: 'clarification', field: 'category' });
+    }
+  });
+
+  it('S3-061 recognizes an unclassified document with supplied steps', () => {
+    expect(manualsGrantsDomain.route?.('택배받기 문서 만들어줘: 송장 → 파손', cafe().getSnapshot(), 'ko'))
+      .toMatchObject({ kind: 'clarification', field: 'category' });
+  });
+
+  it('previews only the edited closing step and stores the owner’s exact wording', async () => {
+    const result = await replay('마감 3번 단계 수정 -> 바닥 청소 + 음식물 쓰레기');
+    const card = proposal(result, 'manuals.update');
+    const id = result.before.tables.manual.find(row => row.category === 'closing')!.manualId;
+    const steps = (snapshot: typeof result.before) => snapshot.tables.manualStep.filter(row => row.manualId === id);
+    const session = 'proposalSession' in result.reply ? result.reply.proposalSession : undefined;
+    expect(session?.getSnapshot().preview?.fields).toEqual([
+      expect.objectContaining({ after: '바닥 청소 + 음식물 쓰레기' }),
+    ]);
+    const receipt = card.confirm(result.store);
+    expect(receipt.frame.outcome).toBe('applied');
+    const updated = steps(result.store.getSnapshot());
+    expect(updated[2].body).toEqual({ raw: '바닥 청소 + 음식물 쓰레기' });
+    expect(updated.filter(row => row.stepNo !== 3)).toEqual(steps(result.before).filter(row => row.stepNo !== 3));
+    expect(receipt.undoToken && result.store.undo(receipt.undoToken).ok).toBe(true);
+    expect(steps(result.store.getSnapshot())).toEqual(steps(result.before));
+  });
+
+  it('retains the named checklist and step number while asking for replacement text', () => {
+    const snapshot = cafe().getSnapshot();
+    const route = manualsGrantsDomain.route?.('마감 3단계 문구 바꿔줘', snapshot, 'ko');
+    expect(route).toMatchObject({ kind: 'clarification', field: 'steps' });
+    if (!route || !('kind' in route) || route.kind !== 'clarification') throw Error('Expected a step question');
+    const resumed = route.resume?.('바닥 청소를 마쳐요');
+    expect(resumed).toMatchObject({ intent: { command: 'manuals.update' } });
+    if (!resumed || !('intent' in resumed)) throw Error('Expected an update intent');
+    expect(resumed.slots?.steps).toHaveLength(5);
+    expect((resumed.slots?.steps as readonly unknown[])[2]).toBe('바닥 청소를 마쳐요');
+  });
+
+  it('asks which unsaved memo draft to save and scopes the continuation to that draft', () => {
+    const store = cafe();
+    for (const memo of ['우유는 냉장고에 넣어요', '송장은 수령인이 확인해요']) {
+      expect(store.dispatch({ type: 'manuals.createDraftFromMemo', memo }).ok).toBe(true);
+    }
+    const snapshot = store.getSnapshot();
+    const route = manualsGrantsDomain.route?.('그 초안 저장해줘', snapshot, 'ko');
+    const [first, second] = snapshot.tables.manualDraft;
+    expect(route).toMatchObject({ kind: 'clarification', field: 'draftId', choices: [{ id: first.draftId }, { id: second.draftId }] });
+    if (!route || !('kind' in route) || route.kind !== 'clarification') throw Error('Expected a draft choice');
+    expect(route.resume?.(second.draftId)).toMatchObject({ intent: { command: 'manuals.saveDraft' }, slots: { name: second.draftId } });
+    expect(store.getSnapshot()).toBe(snapshot);
+  });
+
+  it('reports a named manual already unpublished without offering a second write', async () => {
+    const { reply, before, store, calls } = await replay('오픈 매뉴얼 게시 취소해줘', store => {
+      const manual = opening(store);
+      expect(store.dispatch({ type: 'manuals.setPublished', manualId: manual.manualId, published: false, idempotencyKey: 'unpublish' }).ok).toBe(true);
+    });
+    expect(reply.answer).toContain('이미');
+    expect(reply.turn?.kind).not.toBe('proposal');
+    expect(calls).toEqual([]);
+    expect(store.getSnapshot()).toBe(before);
+  });
   it('S3-044 reads actual café opening progress and keeps unsaved drafts private', async () => {
     const result = await replay('오픈 체크리스트 어디까지 했어?', store => {
       expect(store.dispatch({ type: 'manuals.createDraftFromMemo', memo: '숨겨진 메모' }).ok).toBe(true);
@@ -244,6 +321,15 @@ describe('D-326 Q3 manual unpublish', () => {
 });
 
 describe('N14 café corpus', () => {
+  it.each(['카페라떼 우유 양 250으로', '카페라떼 우유 양 250 mL로 바꿔줘'])('keeps "%s" on the menu recipe card', async text => {
+    const result = await replay(text);
+    proposal(result, 'menu.setRecipe');
+    const session = 'proposalSession' in result.reply ? result.reply.proposalSession : undefined;
+    expect(session?.getSnapshot().preview?.fields).toContainEqual({ label: '목장 1등급 우유', before: '260 mL', after: '250 mL' });
+    await result.ask('확인');
+    expect(result.store.getSnapshot()).toBe(result.before);
+  });
+
   it.each(scenarios)('$id replays each authored utterance', async row => {
     for (const [index, text] of row.utterances.entries()) {
       const result = await replay(text, ['S3-078', 'S3-080'].includes(row.id) ? store => {
@@ -273,6 +359,10 @@ describe('N14 café corpus', () => {
       }
       if (expected === 'clarify' && (patch?.variants?.[index + 1] || patch?.expected?.kind === 'clarify')) {
         expect.soft(reply.turn && 'field' in reply.turn && reply.turn.field, label).toBe(reviewed.ask?.[0]);
+        if (row.id === 'S3-043') {
+          for (const part of reviewed.answer_must_contain ?? []) expect.soft(reply.answer, label).toContain(part);
+          expect.soft(tools, label).toEqual([]);
+        }
       }
       if (expected === 'refuse' || expected === 'clarify' || expected === 'navigate') {
         expect.soft(tools, label).not.toContain('propose_action');

@@ -148,11 +148,12 @@ describe('N13 café custom-order corpus', () => {
       }) + '\n');
       expect.soft(actual, input).toBe(expected);
       expect(store.getSnapshot()).toBe(before);
-      // N13 R5 owns the third guest-name variant.
-      const guestNameGap = row.id === 'S1-083' && index === 2 && reply.turn?.kind === 'clarification' && reply.turn.field === 'guestName';
-      if (guestNameGap) {
+      if (row.id === 'S1-083') {
+        expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'answers', choices: [
+          { id: 'one', label: '기본' }, { id: 'large', label: '크게' },
+        ] });
+        expect(reply.answer).toContain('크게(+5,000원)');
         expect(calls).toEqual([]);
-        continue;
       }
       if (overlay[row.id]?.expected?.ask && expected === 'clarify') {
         expect(reply.turn?.kind === 'clarification' && reply.turn.field, input).toBe(reviewed.ask?.[0]);
@@ -286,5 +287,99 @@ it('keeps a new guest separate when a member shares the name but has a different
   expect(reply.turn.proposal.confirm(store).frame.outcome).toBe('applied');
   expect(selectCustomOrders(selectCustomOrderRead(store.getSnapshot())).orders.at(-1)).toMatchObject({
     memberId: null, guest: { name: '김도현', phone: '01023456789' },
+  });
+});
+
+it('keeps the selected order and pickup date when the owner corrects only the requested time', () => {
+  const store = fixtureStore('S1-117', 'pickup-time');
+  const before = store.getSnapshot();
+  const turn = customDomain.route?.('CO-001 픽업 5시 45분으로 바꿔줘', before, 'ko');
+  if (!turn || !('kind' in turn) || turn.kind !== 'clarification') throw Error('Expected a time question');
+  expect(turn.field).toBe('time');
+  expect(turn.resume?.('오후 6시')).toMatchObject({
+    intent: { command: 'pickup.reschedule' }, slots: { date: '2026-11-17', time: '18:00' },
+  });
+  expect(store.getSnapshot()).toBe(before);
+});
+
+it('keeps the entered quote amount and date when the owner corrects a non-half-hour time', () => {
+  const store = fixtureStore('S1-097', 'quote-time');
+  const before = store.getSnapshot();
+  const turn = customDomain.route?.('CO-002 견적 65,000원 내일 오후 2시 15분 픽업으로 해줘', before, 'ko');
+  if (!turn || !('kind' in turn) || turn.kind !== 'clarification') throw Error('Expected a time question');
+  expect(turn.field).toBe('time');
+  expect(turn.resume?.('2시 반')).toMatchObject({
+    intent: { command: 'customOrder.quote' }, slots: { quoteAmount: 65000, proposedPickupAt: '2026-11-18T14:30' },
+  });
+  expect(store.getSnapshot()).toBe(before);
+});
+
+it('asks for a single order before starting a refund handoff', () => {
+  const store = fixtureStore('S1-115', 'refund-target');
+  const before = store.getSnapshot();
+  const turn = customDomain.route?.('CO-001하고 CO-002 주문 환불해줘', before, 'ko');
+  if (!turn || !('kind' in turn) || turn.kind !== 'clarification') throw Error('Expected a target question');
+  expect(turn.field).toBe('name');
+  expect(turn.resume?.('CO-001')).toMatchObject({ kind: 'refusal', reason: 'widget_only', alternative: {
+    command: 'customOrder.openRefund', draft: { customOrderId: 'CO-001' },
+  } });
+  expect(store.getSnapshot()).toBe(before);
+});
+
+it('asks which order to cancel when the owner names two customers', () => {
+  const store = fixtureStore('S1-114', 'multiple-customers');
+  const before = store.getSnapshot();
+  const turn = customDomain.route?.('김도현이랑 한○○ 주문 둘 다 취소해줘', before, 'ko');
+  if (!turn || !('kind' in turn) || turn.kind !== 'clarification') throw Error('Expected a target question');
+  expect(turn.field).toBe('name');
+  expect(turn.resume?.('CO-003')).toBeUndefined();
+  expect(turn.resume?.('CO-002')).toMatchObject({
+    intent: { command: 'customOrder.cancel' }, slots: { name: 'CO-002' },
+  });
+  expect(store.getSnapshot()).toBe(before);
+});
+
+it('recognizes a single masked customer followed by a Korean particle', () => {
+  const snapshot = fixtureStore('S1-114', 'masked-customer').getSnapshot();
+  expect(customDomain.routePresentation?.('한○○도 주문 취소해줘', snapshot, 'ko')).toMatchObject({
+    intent: { command: 'customOrder.cancel' }, slots: { name: 'CO-002' },
+  });
+});
+
+it('asks for the guest name when only the channel precedes the entered contact', () => {
+  const store = fixtureStore('S1-083', 'missing-guest-name');
+  const before = store.getSnapshot();
+  const turn = customDomain.route?.("레터링 케이크 1호 한 개 기본 문구 '축하해요' 내일 오후 3시 픽업 전화 010-2345-6789 주문 접수", before, 'ko');
+  if (!turn || !('kind' in turn) || turn.kind !== 'clarification') throw Error('Expected a guest name question');
+  expect(turn.field).toBe('guestName');
+  expect(turn.resume?.('박서연')).toMatchObject({
+    intent: { command: 'customOrder.create' }, slots: { guestName: '박서연', phone: '01023456789' },
+  });
+  expect(store.getSnapshot()).toBe(before);
+});
+
+it('does not arrange a different customer’s confirmed pickup when the named order and product disagree', () => {
+  const store = fixtureStore('S1-116', 'pickup-owner');
+  const before = store.getSnapshot();
+  expect(customDomain.route?.('한○○ 케이크 픽업 6시로 미뤄줘', before, 'ko')).toMatchObject({
+    kind: 'refusal', reason: 'invalid_target',
+  });
+  expect(store.getSnapshot()).toBe(before);
+});
+
+it('explains the approval and confirmed-pickup requirements without proposing a write', () => {
+  const snapshot = fixtureStore('S1-106', 'approval-needed').getSnapshot();
+  expect(customDomain.route?.('CO-002 제작 시작해줘', snapshot, 'ko')).toMatchObject({
+    kind: 'refusal', answer: '손님 승인을 먼저 기록해 주세요.',
+  });
+  expect(customDomain.route?.('CO-002 픽업 내일 3시로 바꿔줘', snapshot, 'ko')).toMatchObject({
+    kind: 'refusal', answer: '확정된 픽업이 없어요. 희망 픽업이나 견적을 바꿀 수 있어요.',
+  });
+});
+
+it('keeps words about canceling a pickup inside the quoted order note', () => {
+  const snapshot = fixtureStore('S1-090', 'quoted-order-note').getSnapshot();
+  expect(customDomain.route?.("CO-001 요청사항에 '픽업 취소 후 다시 전화' 적어줘", snapshot, 'ko')).toMatchObject({
+    intent: { command: 'customOrder.update' }, slots: { request: '픽업 취소 후 다시 전화' },
   });
 });

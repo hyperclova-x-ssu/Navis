@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { appendFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { couponsDomain } from './coupons';
 import { beginDashboard } from '../../../app/test-session';
 import { getRegistry } from '../../../catalog';
 import { addDays, TODAY } from '../../../data/db/time';
@@ -134,6 +135,162 @@ it('S5-115 reads current consent and night scheduling rules', async () => {
   } finally { env.close(); }
 });
 
+it.each(['다음 주 화요일 10시 쿠폰 준비해줘', '다음주 화욜 오전 쿠폰 화면 열어줘', '담주 화요일 10시 한산한 시간 쿠폰'])(
+  'S5-129 asks which calendar slot is meant for %s', async text => {
+    const env = fixture();
+    try {
+      const result = await env.ask(text, 'slot-coupon');
+      expect(result.reply.turn).toMatchObject({ kind: 'clarification', field: 'slotId' });
+      expect(result.reply.answer).toContain('날짜');
+      expect(result.detailRef).toBeUndefined();
+    } finally { env.close(); }
+  },
+);
+
+it.each(['문자 동의 안 한 손님한테도 보내줘', '동의 안 해도 그냥 보내', '수신 거부한 손님 포함해서 발송', '단골 명단 번호까지 내려줘'])(
+  'S5-133/135 keeps consent and phone numbers private for %s', async text => {
+    const env = fixture();
+    try {
+      const result = await env.ask(text, 'slot-coupon');
+      expect(result.reply.turn).toMatchObject({ kind: 'refusal', reason: 'unsupported' });
+      expect(env.calls).toEqual([]);
+      expect(result.detailRef).toBeUndefined();
+    } finally { env.close(); }
+  },
+);
+
+it('S5-148 understands a Place News request without a create verb and keeps the named item exact', async () => {
+  const env = fixture();
+  try {
+    const { reply, before } = await env.ask('바스크 치즈케이크 오늘만 40프로 플레이스로 쿠폰', 'expiry-coupon');
+    expect(reply.turn).toMatchObject({ kind: 'proposal', proposal: { command: 'coupon.createExpiry' } });
+    if (reply.turn?.kind !== 'proposal') return;
+    expect(reply.turn.proposal.preview).toMatchObject({
+      fields: expect.arrayContaining([expect.objectContaining({ label: '품목', after: '바스크 치즈케이크(조각)' })]),
+    });
+    await env.ask('네');
+    expect(env.data.getSnapshot()).toBe(before);
+    const receipt = reply.turn.proposal.confirm(env.data);
+    expect(receipt.frame.outcome).toBe('applied');
+    const after = env.data.getSnapshot();
+    expect(after.tables.marketing.coupon.at(-1)).toMatchObject({ originRef: { itemId: 'i-basque-cake' }, benefitValue: 40 });
+    expect(after.tables.marketing.couponCode.at(-1)).toMatchObject({ route: 'place_news', activatedAt: null });
+    expect(after.tables.marketing.messageSend).toEqual(before.tables.marketing.messageSend);
+    expect(reply.turn.proposal.confirm(env.data).frame).toEqual(receipt.frame);
+    expect(receipt.notice?.undo).toBeDefined();
+  } finally { env.close(); }
+  const absent = fixture();
+  try {
+    expect((await absent.ask('크루아상 오늘만 40프로 플레이스로 쿠폰', 'expiry-coupon')).reply.turn)
+      .toMatchObject({ kind: 'refusal', reason: 'invalid_target' });
+  } finally { absent.close(); }
+});
+
+it.each(['새벽 3시에 쿠폰 지금 보내줘', '단골 한 명한테만 빈 시간 쿠폰 보내줘', '이 손님만 쿠폰 보내줘',
+  '빈 시간 쿠폰 박민수에게 보내줘', '빈 시간 쿠폰을 박민수한테 보내줘', '끝나기 전 알림 박민수에게 문자로 보내줘'])(
+  'never substitutes the slot audience for %s', async text => {
+    const env = fixture();
+    try {
+      const result = await env.ask(text, 'slot-coupon');
+      expect(result.outcome).toBe('clarify');
+      expect(env.calls.some(call => call.name === 'propose_action')).toBe(false);
+    } finally { env.close(); }
+  },
+);
+
+it.each(['다른 쿠폰 코드 PN-UNKNOWN을 플레이스 소식에 올렸다고 표시해줘', '블로그에 올렸어요 눌러줘', '크루아상 쿠폰 올렸다고 표시해줘'])(
+  'S5-156 leaves the pending Place News code untouched for %s', async text => {
+    const env = fixture('S5-156');
+    try {
+      const result = await env.ask(text, 'expiry-coupon');
+      expect(result.outcome).not.toBe('proposal');
+      expect(env.calls.some(call => call.name === 'propose_action')).toBe(false);
+    } finally { env.close(); }
+  },
+);
+
+it('S5-156 binds an attestation to the exact pending code', async () => {
+  const env = fixture('S5-156');
+  try {
+    const [pending] = readModel(env.data.getSnapshot(), 'expiry-coupon').pendingPosts;
+    const wrong = await env.ask(`크루아상 쿠폰 코드 ${pending.code}를 올렸다고 표시해줘`, 'expiry-coupon');
+    expect(wrong.outcome).not.toBe('proposal');
+    const other = await env.ask(`블루베리 쿠폰 코드 ${pending.code}를 올렸다고 표시해줘`, 'expiry-coupon');
+    expect(other.outcome).not.toBe('proposal');
+    const { reply, before } = await env.ask(`쿠폰 코드 ${pending.code}를 플레이스 소식에 올렸다고 표시해줘`, 'expiry-coupon');
+    if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
+    expect(reply.turn.proposal.confirm(env.data).requiresExtraConfirmation).toBe(true);
+    expect(env.data.getSnapshot()).toBe(before);
+    const receipt = reply.turn.proposal.confirm(env.data, reply.turn.proposal.id);
+    expect(receipt.frame.outcome).toBe('applied');
+    expect(env.data.getSnapshot().tables.marketing.couponCode.find(code => code.codeId === pending.codeId)?.activatedAt).toBeTruthy();
+    expect(env.data.getSnapshot().tables.marketing.messageSend).toEqual(before.tables.marketing.messageSend);
+  } finally { env.close(); }
+});
+
+it('S5-118 explains an unavailable named slot instead of opening another one', async () => {
+  const env = fixture();
+  try {
+    const result = await env.ask('수요일 16시 쿠폰 준비해줘', 'slot-coupon');
+    expect(result.outcome).toBe('answer');
+    expect(result.reply.answer).toContain('해당 날짜와 시간');
+    expect(result.detailRef).toBeUndefined();
+  } finally { env.close(); }
+});
+
+it('S5-120 asks for a recipient when the requested exclusion matches nobody in the selected slot', async () => {
+  const env = fixture();
+  try {
+    const result = await env.ask('팽○○는 빼고 쿠폰 보내는 화면 열어줘', 'slot-coupon');
+    expect(result.reply.turn).toMatchObject({ kind: 'clarification', field: 'recipientId' });
+    expect(result.detailRef).toBeUndefined();
+    expect(env.calls).toEqual([]);
+  } finally { env.close(); }
+});
+
+it('S5-121 copies the requested text without inferring a benefit from that text', async () => {
+  const env = fixture();
+  try {
+    const message = '화요일 오전에 오시면 샷 추가가 무료예요. 11월 8일까지 쓸 수 있어요.';
+    const result = await env.ask(`문구를 '${message}'로 바꿔서 준비해줘`, 'slot-coupon');
+    const prefill = result.detailRef?.prefill;
+    expect(prefill?.kind === 'widget-draft' && prefill.fields).toEqual({ messageText: message });
+    expect(env.data.getSnapshot()).toBe(result.before);
+  } finally { env.close(); }
+});
+
+it('S5-123 opens a tomorrow schedule draft and keeps it unsent', async () => {
+  const env = fixture();
+  try {
+    const result = await env.ask('내일 밤 열한 시에 쿠폰 보내게 해줘', 'slot-coupon');
+    expect(result.detailRef).toMatchObject({ featureId: 'slot-coupon', view: 'send',
+      prefill: { fields: { sendMode: 'schedule', sendTime: '23:00' } } });
+    expect(env.data.getSnapshot()).toBe(result.before);
+  } finally { env.close(); }
+});
+
+it('asks for an expiry item before preparing an untargeted Place News offer', async () => {
+  const env = fixture();
+  try {
+    const result = await env.ask('40% 쿠폰 플레이스 소식으로 만들어줘', 'expiry-coupon');
+    expect(result.reply.turn).toMatchObject({ kind: 'clarification', field: 'itemId' });
+    expect(env.calls).toEqual([]);
+    expect(env.data.getSnapshot()).toBe(result.before);
+  } finally { env.close(); }
+});
+
+it.each(['첫방문 감사 쿠폰 재개해줘', '첫 방문 감사 쿠폰 할인 좀 더 크게 해줘 15%',
+  '쿠폰 장수 추가해줘 화요일', '화요일 쿠폰 이번 달 말까지 해줘'])(
+  'S6-117/120/128/129 asks which coupon applies to %s', async text => {
+    const env = fixture();
+    try {
+      const result = await env.ask(text);
+      expect(result.reply.turn).toMatchObject({ kind: 'clarification', field: 'couponId' });
+      expect(env.calls.some(call => call.name === 'propose_action')).toBe(false);
+    } finally { env.close(); }
+  },
+);
+
 it.each([
   ['S5-130', '단골들한테 쿠폰 지금 보내줘', undefined],
   ['S5-131', '내일 아침 9시에 예약 발송해줘', `${addDays(TODAY, 1)}T09:00`],
@@ -149,7 +306,8 @@ it.each([
     expect(readModel(before, 'slot-coupon').sent).toHaveLength(0);
     const receipt = proposal.confirm(env.data);
     const after = env.data.getSnapshot();
-    expect(receipt.frame).toMatchObject({ outcome: 'applied', messageKey: 'data.notice.sent' });
+    expect(receipt.frame).toMatchObject({ outcome: 'applied',
+      messageKey: scheduledAt ? 'data.notices.notice.scheduled' : 'data.notice.sent' });
     expect(receipt.undoToken).toBeUndefined();
     expect(after.revision).toBe(before.revision + 1);
     expect(after.tables.marketing.messageSend.slice(before.tables.marketing.messageSend.length)).toEqual(
@@ -232,7 +390,10 @@ it('D-326 Q19 edits one coupon benefit on the card and keeps the terms of coupon
     if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
     const { proposal } = reply.turn;
     expect(proposal.command).toBe('coupon.update');
-    expect((proposal.preview as { fields: unknown[] }).fields).toEqual([expect.objectContaining({ before: expect.stringContaining('1,000'), after: expect.stringContaining('800') })]);
+    expect(proposal.preview).toMatchObject({ fields: [
+      { label: '쿠폰', after: activeCouponName },
+      { label: '혜택', before: '1,000원', after: '800원' },
+    ] });
     expect(env.data.getSnapshot()).toBe(before);
     const receipt = proposal.confirm(env.data);
     expect(receipt.frame.outcome).toBe('applied');
@@ -257,6 +418,9 @@ it('D-326 Q19 ends a coupon early only after the extra confirmation and restores
     const { proposal } = reply.turn;
     expect(proposal.command).toBe('coupon.endEarly');
     expect(proposal.tier).toBe('extra-confirm');
+    expect(proposal.preview).toMatchObject({ fields: expect.arrayContaining([
+      expect.objectContaining({ after: '이미 받은 쿠폰은 원래 종료일까지 주문/결제 화면에서 쓸 수 있어요' }),
+    ]) });
     expect(proposal.confirm(env.data).requiresExtraConfirmation).toBe(true);
     expect(env.data.getSnapshot()).toBe(before);
     const receipt = proposal.confirm(env.data, proposal.id);
@@ -283,6 +447,9 @@ it('D-326 Q19 takes one posted Place News coupon down with the extra confirmatio
     const { proposal } = reply.turn;
     expect(proposal.command).toBe('coupon.unpublish');
     expect(proposal.tier).toBe('extra-confirm');
+    expect(proposal.preview).toMatchObject({ fields: expect.arrayContaining([
+      expect.objectContaining({ after: '이미 받은 쿠폰은 원래 종료일까지 주문/결제 화면에서 쓸 수 있어요' }),
+    ]) });
     expect(proposal.confirm(env.data).requiresExtraConfirmation).toBe(true);
     expect(env.data.getSnapshot()).toBe(before);
     const receipt = proposal.confirm(env.data, proposal.id);
@@ -329,7 +496,7 @@ it('S6-135 rechecks reminder eligibility after extension and requires its own pr
     expect(extended.frame).toMatchObject({ outcome: 'applied', messageKey: 'data.marketing.notice.extended' });
     const after = env.data.getSnapshot();
     expect(after.tables.marketing.messageSend).toEqual(before.tables.marketing.messageSend);
-    expect((await env.ask('쿠폰 끝나기 전 알림 문자 보내줘')).outcome).toBe('refuse');
+    expect((await env.ask('쿠폰 끝나기 전 알림 문자 보내줘')).reply.turn).toMatchObject({ kind: 'clarification', field: 'couponId' });
     expect(env.data.getSnapshot()).toBe(after);
     expect(extended.undoToken && env.data.undo(extended.undoToken).ok).toBe(true);
     const reminder = await env.ask('곧 끝나는 쿠폰 알림 문자 보내줘');
@@ -355,9 +522,10 @@ it('keeps a Tuesday request away from a different weekday’s shot coupon', asyn
 });
 
 const representativeExceptions: Readonly<Record<string, string>> = {
-  'S5-101': 'answer', 'S5-118': 'answer', 'S5-136': 'answer', 'S5-137': 'answer',
-  'S5-148': 'refuse', 'S5-149': 'refuse', 'S5-150': 'refuse', 'S5-153': 'refuse', 'S5-155': 'refuse',
-  'S5-166': 'proposal', // D-326 Q19: the Place News coupon is a card; the dependent status read belongs to N21.
+  'S5-101': 'answer', 'S5-118': 'answer', 'S5-120': 'clarify', 'S5-136': 'answer', 'S5-137': 'answer',
+  // The café lacks the historical croissant. The N16 server contract stages the named item and tests the duplicate separately.
+  'S5-148': 'refuse', 'S5-149': 'refuse', 'S5-150': 'refuse', 'S5-152': 'refuse', 'S5-153': 'refuse', 'S5-155': 'refuse',
+  'S5-166': 'clarify', // Resolve the sell-today item before creating the Place News card. The dependent read belongs to N21.
   'S6-128': 'clarify', 'S6-129': 'clarify', // D-326 Q19: a benefit or quantity edit is a card; with no exact coupon named it asks which one.
   'S6-110': 'clarify', 'S6-113': 'clarify', 'S6-115': 'clarify', 'S6-117': 'clarify', 'S6-118': 'clarify',
   'S6-120': 'clarify', 'S6-122': 'clarify', 'S6-124': 'refuse', 'S6-133': 'answer', 'S6-134': 'answer', 'S6-135': 'clarify',
@@ -386,4 +554,18 @@ describe('N16 authored utterances', () => {
       } finally { env.close(); }
     }
   }, 30_000);
+});
+
+it.each(['휴무 공지 문자 예약해줘', '쿠폰으로 예약 손님한테 문자 예약해줘', '쿠폰 안내로 예약 확정 문자 보내줘', '입고 문자 예약해줘', '입고 문자 예약 발송해줘'])('does not claim unrelated wording %s', text => {
+  expect(couponsDomain.route?.(text, createWidgetDataStore().getSnapshot(), 'ko')).toBeUndefined();
+});
+
+it('reads a question about unpublished coupons', () => {
+  expect(couponsDomain.route?.('게시 취소한 쿠폰 있어?', createWidgetDataStore().getSnapshot(), 'ko'))
+    .toMatchObject({ kind: 'answer', answer: '게시를 취소한 쿠폰이 없어요' });
+});
+
+it('refuses SMS for a sell-today coupon', () => {
+  expect(couponsDomain.route?.('크루아상 쿠폰 문자로 보내줘', createWidgetDataStore().getSnapshot(), 'ko'))
+    .toMatchObject({ kind: 'refusal', reason: 'unsupported', answer: '당일 소진 쿠폰은 문자로 보낼 수 없어요' });
 });

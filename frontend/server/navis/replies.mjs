@@ -8,7 +8,9 @@ const commands = [
 const refused = reason => ({ outcome: 'refused', reason });
 
 function lookup({ intent, slots, searches }, kind, field) {
-  const candidates = [intent.querySlot, field, kind === 'thread' ? 'threadQuery' : 'offerQuery'];
+  const candidates = intent.querySlot === undefined
+    ? [field, kind === 'thread' ? 'threadQuery' : 'offerQuery']
+    : [intent.querySlot];
   const querySlot = candidates.find(slot => slots.includes(slot)
     && searches.some(search => search.kind === kind && search.querySlot === slot && !search.cursor));
   return querySlot ? { name: 'search_records', args: { kind, querySlot } } : undefined;

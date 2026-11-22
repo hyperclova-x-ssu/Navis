@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createServer, request as httpRequest } from 'node:http';
 import { Readable, Writable } from 'node:stream';
 import { readFileSync } from 'node:fs';
-import { createBridge } from './bridge.mjs';
+import { bridgeOptionsFromEnv } from './bridge-env.mjs';
+import { createBridge, replyShape } from './bridge.mjs';
 import { clovaMessageError, createNavisEvalFake } from './fixtures/navis-eval-fake.mjs';
 
 const condition = { kind: 'default' };
@@ -15,7 +16,6 @@ const frame = (event, data) => `event:${event}\ndata:${JSON.stringify(data)}\n\n
 const token = content => frame('token', { message: { role: 'assistant', content } });
 const result = (content = '매출 {{fact:f0}}이에요.', finishReason = 'stop') => frame('result', { message: { role: 'assistant', content }, finishReason });
 const safeFilter = [{ groupName: 'curse', name: 'insult', score: '2' }];
-const filteredResult = content => frame('result', { message: { role: 'assistant', content }, finishReason: 'stop', aiFilter: safeFilter });
 const missingUsage = { promptTokens: null, completionTokens: null, totalTokens: null, reportedCalls: 0 };
 const toolsResult = (panels = [panel], name = 'select_panels') => frame('result', { message: { role: 'assistant', content: '', toolCalls: [{ id: 'fake-call', type: 'function', function: { name, arguments: { panels } } }] }, finishReason: 'tool_calls' });
 const pump = () => new Promise(resolve => setImmediate(resolve));
@@ -45,7 +45,7 @@ function client(bridge, value = body, extra = {}) {
   res.writeHead = (status, headers) => { res.statusCode = status; res.headers = headers; res.headersSent = true; return res; };
   res.flushHeaders = () => {};
   const done = bridge(req, res, () => { res.writeHead(404, {}).end(); });
-  return { req, res, done, raw: () => raw, events: () => raw.split('\n\n').filter(Boolean).map(rawFrame => { const lines = rawFrame.split('\n'); return { event: lines[0].slice(7), data: JSON.parse(lines[1].slice(6)) }; }) };
+  return { req, res, done, raw: () => raw, events: () => raw.split('\n\n').filter(frame => frame && !frame.startsWith(':')).map(rawFrame => { const lines = rawFrame.split('\n'); return { event: lines[0].slice(7), data: JSON.parse(lines[1].slice(6)) }; }) };
 }
 class Clock {
   time = 0; id = 0; timers = new Map();
@@ -60,6 +60,27 @@ function make(fake, { fetchImpl = fake.fetchImpl, ...options } = {}) {
   return createBridge({ apiKey: 'fake-sentinel', ...options, fetchImpl: strictClovaFetch(fetchImpl) });
 }
 const realRequest = JSON.parse(readFileSync(new URL('./fixtures/navis-real-request.json', import.meta.url), 'utf8'));
+
+test('a silent legacy stream sends a comment at 15 seconds and clears its timer on request abort', async t => {
+  const clock = new Clock();
+  const fake = upstream({ prelude: false });
+  const bridge = make(fake, { clock });
+  t.after(() => bridge.close());
+  const run = client(bridge);
+  await pump();
+
+  clock.tick(14_999);
+  assert.equal(run.raw(), '');
+  clock.tick(1);
+  assert.equal(run.raw(), ': keep-alive\n\n');
+  run.req.emit('aborted');
+  await run.done;
+  assert.deepEqual(run.events(), [{ event: 'error', data: { code: 'CANCELLED' } }]);
+  assert.equal(clock.timers.size, 0);
+  const terminal = run.raw();
+  clock.tick(60_000);
+  assert.equal(run.raw(), terminal);
+});
 
 test('M1 staff catalog and changed source facts produce readable numeric answers and a valid card', async t => {
   for (const [working, handoff, hourly] of [[4, '17:30', 2], [5, '18:00', 3]]) {
@@ -924,7 +945,7 @@ test('T300B drops generic lead-ins and preserves grounded prose and requested li
   }
 });
 test('T300B Korean actions send the fixed guide without model prose or repeated routes', async () => {
-  for (const [question, route] of [['캬라멜마키야또 메뉴 추가해줄 수 있어?', '관리 > 상품 > 메뉴 관리 > "메뉴 추가"'], ['메뉴 등록해줘', '메뉴 관리'], ['쿠폰 발송해줘', '쿠폰 보내기'], ['휴무 문자 보내줘', '공지 보내기'], ['홍보 영상 만들어줘', '영상 만들기']]) {
+  for (const [question, route] of [['캬라멜마키야또 메뉴 추가해줄 수 있어?', '관리 > 상품 > 메뉴 > "메뉴 추가하기"'], ['메뉴 등록해줘', '관리 > 상품 > 메뉴'], ['쿠폰 발송해줘', '쿠폰 보내기'], ['휴무 문자 보내줘', '공지 보내기'], ['홍보 영상 만들어줘', '영상 만들기']]) {
     const { run, calls } = await qualityReply(question, ['[IN]\n사장님께 문의하세요. 오늘 매출은 128.4만 원이에요. 매출은 128.4만 원으로 표시돼요. 현재 매출은 128.4만 원이에요.']);
     const answer = answerText(run); assert.ok(answer.startsWith('그 일은 제가 직접 할 수 없어요.')); assert.ok(answer.includes(route));
     assert.doesNotMatch(answer, /사장님께|128\.4만 원/u);
@@ -954,16 +975,16 @@ test('T301B supported action step questions emit the fixed numbered guide withou
   const { loadQuestions } = await import('./dev/navis-eval.mjs');
   const menu = (await loadQuestions()).find(item => item.id === 'how-steps');
   for (const [question, expected] of [
-    [menu.question, menu.expectedAnswer],
+    [menu.question, menu.expectedAnswer.replace('메뉴 관리를', '메뉴를').replace('"메뉴 추가"', '"메뉴 추가하기"')],
     ['단골 쿠폰 보내는 차례 알려줘', [
       '1. 마케팅 탭을 눌러요.', '2. 빈 시간 단골 쿠폰을 열어요.',
       '3. 쿠폰을 보낼 빈 시간 구간과 손님을 골라요.', '4. 혜택과 문자 문구를 확인해요.',
-      '5. "쿠폰 보내기"를 누르고 확인해요.', '6. 발송은 예시로 표시돼요.',
+      '5. "쿠폰 보내기"를 누르고 확인해요.',
     ].join('\n')],
     ['휴무 문자 공지 순서를 알려줘', [
       '1. 마케팅 탭을 눌러요.', '2. 소식 탭을 눌러요.', '3. 공지 발송을 열어요.',
       '4. 날짜, 종류, 제목, 내용을 입력하고 받는 사람을 정해요.',
-      '5. "미리보기"에서 문구를 확인해요.', '6. "공지 보내기"를 눌러요. 발송은 예시로 표시돼요.',
+      '5. "미리보기"에서 문구를 확인해요.', '6. "공지 보내기"를 눌러요.',
     ].join('\n')],
     ['홍보 영상 제작 step 알려줘', [
       '1. 마케팅 탭을 눌러요.', '2. 소식 탭을 눌러요.', '3. AI 홍보 영상을 열어요.',
@@ -1589,27 +1610,184 @@ function agentClient(bridge, request = agentMenu, headers = {}) {
   return client(bridge, request, { headers: { ...agentHeaders, ...headers } });
 }
 
+const liveWidgetRead = {
+  ...agentMenu, intent: { kind: 'read', featureId: 'ledger', condition }, slots: [], searches: [],
+  catalog: body.catalog, snapshot: body.snapshot,
+};
+const ledgerToolArgs = { featureId: 'ledger', condition };
+const fencedReply = '```json\n{"outcome":"reply","facts":["f0"]}\n```';
+
+test('a silent agent tool call sends comments at the configured interval until done', async t => {
+  const clock = new Clock();
+  const fake = upstream({ prelude: false, replayRetries: false });
+  const options = bridgeOptionsFromEnv({ NAVIS_SSE_HEARTBEAT_MS: '5000' });
+  const bridge = createBridge({ ...options, clock, agentFetchImpl: fake.fetchImpl });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, {
+    ...liveWidgetRead, intent: { kind: 'read', reads: [{ name: 'get_widget', args: ledgerToolArgs }] },
+  });
+  await pump();
+  const accepted = run.raw();
+  assert.deepEqual(run.events().map(({ event }) => event), ['status']);
+
+  clock.tick(4_999);
+  assert.equal(run.raw(), accepted);
+  clock.tick(1);
+  assert.equal(run.raw(), accepted + ': keep-alive\n\n');
+  clock.tick(5_000);
+  assert.equal(run.raw(), accepted + ': keep-alive\n\n: keep-alive\n\n');
+
+  fake.calls[0].push(agentCall('get_widget', ledgerToolArgs));
+  fake.calls[0].end();
+  await pump();
+  fake.calls[1].push(result(fencedReply));
+  fake.calls[1].end();
+  await run.done;
+  assert.equal(run.events().at(-1).event, 'done', run.raw());
+  assert.equal(clock.timers.size, 0);
+  const terminal = run.raw();
+  clock.tick(60_000);
+  assert.equal(run.raw(), terminal);
+});
+
+test('compiled agent reads bind each canonical call and ground the reply across the ordered scopes', async t => {
+  const sourceArgs = { sourceId: 'pos', condition };
+  const request = {
+    ...liveWidgetRead,
+    intent: { kind: 'read', reads: [
+      { name: 'get_widget', args: ledgerToolArgs }, { name: 'get_source', args: { sourceId: 'pos' } },
+    ] },
+    snapshot: [...liveWidgetRead.snapshot, {
+      ...sourceArgs, facts: [{ ...fact, key: 'pos.orders.count', label: '주문', value: 0, unit: 'count', display: '0건' }],
+    }],
+  };
+  const fake = fakeAgentScript(agentCall('get_widget', ledgerToolArgs), agentCall('get_source', sourceArgs, 'pos-call'),
+    result('{"outcome":"reply","facts":["f0","f1"]}'));
+  const bridge = createBridge({ agentFetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, request);
+  await run.done;
+  assert.deepEqual(fake.calls.map(call => call.toolChoice?.function?.name), ['get_widget', 'get_source', undefined]);
+  assert.deepEqual(fake.calls.slice(0, 2).map(call => JSON.parse(call.messages[1].content).nextLookup), [
+    { name: 'get_widget', args: ledgerToolArgs }, { name: 'get_source', args: sourceArgs },
+  ]);
+  assert.match(answerText(run), /매출.*128\.4만 원.*주문.*0건/u);
+  assert.deepEqual(run.events().at(-1).data, { outcome: 'reply', readStatuses: ['ready', 'ready'] });
+  assert.deepEqual(run.events().find(item => item.event === 'panels').data.panels.map(panel => panel.featureId), ['ledger']);
+});
+
+test('compiled agent reads require a matching projection and reject a different model-selected condition', async t => {
+  const args = { featureId: 'ledger', condition };
+  const alternate = { ...args, condition: { kind: 'dateRange', start: '2026-10-26', end: '2026-10-26' } };
+  const request = { ...liveWidgetRead, intent: { kind: 'read', reads: [{ name: 'get_widget', args }] } };
+  const fake = fakeAgentScript(agentCall('get_widget', alternate));
+  const bridge = createBridge({ agentFetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const missing = agentClient(bridge, { ...request, snapshot: [] });
+  await missing.done;
+  assert.equal(missing.res.statusCode, 400);
+  assert.equal(fake.calls.length, 0);
+  const wrong = agentClient(bridge, request);
+  await wrong.done;
+  assert.equal(wrong.res.statusCode, 200);
+  assert.deepEqual(wrong.events().at(-1).data, { code: 'INVALID_OUTPUT' });
+  assert.equal(fake.calls.length, 1);
+  assert.equal(wrong.events().some(({ event }) => event === 'text_delta' || event === 'action_proposal'), false);
+});
+
+test('an explicitly empty compiled read returns a Korean terminal without tools', async t => {
+  const fake = fakeAgentScript();
+  const bridge = createBridge({ agentFetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, { ...liveWidgetRead, locale: 'en', intent: { kind: 'read', reads: [] } });
+  await run.done;
+  assert.equal(run.res.statusCode, 200);
+  assert.equal(fake.calls.length, 0);
+  assert.match(answerText(run), /확인할 수 있는 매장 자료가 없어요/u);
+  assert.deepEqual(run.events().at(-1).data, { outcome: 'reply', readStatuses: [] });
+});
+
+test('the default agent fake cites returned facts from both compiled widget reads', async t => {
+  const marginArgs = { featureId: 'margin', condition };
+  const bridge = createBridge();
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, {
+    ...liveWidgetRead,
+    intent: { kind: 'read', reads: [{ name: 'get_widget', args: ledgerToolArgs }, { name: 'get_widget', args: marginArgs }] },
+    catalog: [...body.catalog, { id: 'margin', name: '마진', layer: 'management', conditions: [condition] }],
+    snapshot: [...body.snapshot, { ...marginArgs, facts: [{ ...fact, key: 'margin.rate', label: '마진율', value: 12, unit: '%', display: '12%' }] }],
+  });
+  await run.done;
+  assert.equal(run.res.statusCode, 200);
+  assert.match(answerText(run), /매출.*128\.4만 원.*마진율.*12%/u);
+  assert.deepEqual(run.events().at(-1).data, { outcome: 'reply', readStatuses: ['ready', 'ready'] });
+});
+
+test('a compiled record cursor resumes only after the bridge presents its bound lookup', async t => {
+  const bridge = createBridge();
+  t.after(() => bridge.close());
+  const root = { kind: 'purchaseOrder', querySlot: 'name', queryBinding: 'binding-a', nextCursor: 'p2',
+    matches: [{ handle: 'order-a', match: 'similar', label: '첫 발주' }] };
+  const second = { kind: root.kind, querySlot: root.querySlot, queryBinding: root.queryBinding, cursor: 'p2',
+    matches: [{ handle: 'order-b', match: 'exact', label: '둘째 발주' }] };
+  const read = (args, queryBinding) => ({ ...agentMenu, conversation: true,
+    intent: { kind: 'read', reads: [{ name: 'search_records', args }], ...(queryBinding && { queryBinding }) },
+    searches: [root, second],
+  });
+  const args = { kind: 'order', querySlot: 'name' };
+  const page = read({ ...args, cursor: 'p2' }, root.queryBinding);
+  let run = agentClient(bridge, page);
+  await run.done;
+  assert.equal(run.res.statusCode, 200);
+  assert.deepEqual(run.events().at(-1).data, { code: 'INVALID_OUTPUT' });
+  run = agentClient(bridge, read(args));
+  await run.done;
+  assert.equal(run.events().at(-1).data.clarification.queryBinding, root.queryBinding);
+  assert.equal(run.events().at(-1).data.clarification.nextCursor, 'p2');
+  run = agentClient(bridge, { ...page, snapshotRevision: page.snapshotRevision + 1 });
+  await run.done;
+  assert.deepEqual(run.events().at(-1).data, { code: 'INVALID_OUTPUT' });
+  run = agentClient(bridge, page);
+  await run.done;
+  assert.deepEqual(run.events().at(-1).data, { outcome: 'reply', readStatuses: ['ready'] });
+});
+
+test('a clarify-only ledger intent performs its prerequisite read and cannot propose a write', async t => {
+  const fake = fakeAgentScript(agentCall('get_widget', ledgerToolArgs));
+  const bridge = createBridge({ agentFetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, { ...liveWidgetRead,
+    intent: { kind: 'command', command: 'ledger.confirmCandidate', clarify: 'expenseId' },
+  });
+  await run.done;
+  assert.equal(run.res.statusCode, 200);
+  assert.deepEqual(fake.calls.map(call => call.toolChoice?.function?.name), ['get_widget']);
+  assert.equal(run.events().at(-1).data.clarification.field, 'expenseId');
+  assert.equal(run.events().some(({ event }) => event === 'action_proposal'), false);
+});
+
 test('live text finalization checks AI Filter before returning the existing safe refusal', async t => {
   for (const aiFilter of [[{ score: '0' }], [{ score: '2', result: 'ERROR' }], [{ score: '-1' }], [], undefined]) {
-    const content = '{"outcome":"clarify","field":"price"}';
-    const fake = fakeAgentScript(agentCall('search_records', menuSearchCall), token(content) + frame('result', {
-      finishReason: 'stop', message: { role: 'assistant', content }, aiFilter,
-    }));
+    const content = '{"outcome":"reply","facts":["f0"]}';
+    const fake = fakeAgentScript(agentCall('get_widget', ledgerToolArgs), agentCall('get_widget', ledgerToolArgs, 'repeat-read'),
+      token(content) + frame('result', {
+        finishReason: 'stop', message: { role: 'assistant', content }, aiFilter,
+      }));
     const bridge = createBridge({ agentMode: 'live', apiKey: 'test-key', fetchImpl: fake.agentFetchImpl, onDiagnostics() {} });
     t.after(() => bridge.close());
-    const run = agentClient(bridge);
+    const run = agentClient(bridge, { ...liveWidgetRead, intent: { kind: 'read' } });
     await run.done;
     assert.equal(fake.calls[0].includeAiFilters, undefined);
-    assert.equal(fake.calls[1].includeAiFilters, true);
-    assert.deepEqual(fake.calls[1].messages.map(item => item.role), ['system', 'user']);
-    const { toolHistory } = JSON.parse(fake.calls[1].messages[1].content);
+    assert.equal(fake.calls[2].includeAiFilters, true);
+    assert.deepEqual(fake.calls[2].messages.map(item => item.role), ['system', 'user']);
+    const { toolHistory } = JSON.parse(fake.calls[2].messages[1].content);
     assert.equal(toolHistory[0].toolCalls[0].id, toolHistory[1].toolCallId);
     assert.deepEqual(run.events().filter(event => event.event !== 'status'), [
       { event: 'text_delta', data: { delta: '이 요청은 준비할 수 없어요. 앱에서 직접 입력해 주세요.' } },
       { event: 'panels', data: { panels: [] } },
       { event: 'done', data: { outcome: 'refused' } },
     ]);
-    assert.doesNotMatch(run.raw(), /aiFilter|clarify|price/u);
+    assert.doesNotMatch(run.raw(), /aiFilter|128\.4만 원|"facts"/u);
   }
 });
 
@@ -1678,6 +1856,11 @@ test('live agent uses native v3 tools and reports actual usage for each provider
   const fetchImpl = async (url, options) => {
     calls.push({ url, ...options, body: JSON.parse(options.body) });
     clock.tick(7);
+    const { messages, toolChoice } = calls.at(-1).body;
+    if (toolChoice.function.name === 'propose_action' && messages.some(message => message.role === 'tool')) {
+      return new globalThis.Response(frame('error', { status: { code: '40009', message: 'Unsupported function' } }),
+        { headers: { 'content-type': 'text/event-stream' } });
+    }
     const [id, name, args] = calls.length === 1 ? ['provider-search', 'search_records', menuSearchCall]
       : ['provider-proposal', 'propose_action', { command: 'menu.create', args: menuProposalArgs }];
     return new Response(frame('result', { usage: { ...usage, extra: 'do-not-log' }, finishReason: 'tool_calls', message: {
@@ -1697,8 +1880,7 @@ test('live agent uses native v3 tools and reports actual usage for each provider
   assert.ok(calls.every(call => call.body.maxTokens >= 1024 && call.body.maxTokens <= 2048));
   assert.equal(search.headers.Authorization, 'Bearer test-key');
   assert.equal(search.headers.Accept, 'text/event-stream');
-  assert.equal(propose.body.messages.at(-2).toolCalls[0].id, 'provider-search');
-  assert.equal(propose.body.messages.at(-1).toolCallId, 'provider-search');
+  assert.deepEqual(propose.body.messages.map(message => message.role), ['system', 'user']);
   const [startup, ...turnRecords] = records;
   assert.deepEqual(startup, { event: 'navis_agent_startup', mode: 'live', model: 'HCX-005', outcome: 'ready' });
   const correlationId = turnRecords[0]?.correlationId;
@@ -1721,14 +1903,14 @@ test('live agent uses native v3 tools and reports actual usage for each provider
 
 test('live server diagnostics stay private without the opt-in request header', async t => {
   const malformedReply = '{"private-provider-reply"';
-  const fake = fakeAgentScript(agentCall('search_records', menuSearchCall), filteredResult(malformedReply));
+  const fake = fakeAgentScript(agentCall('get_widget', ledgerToolArgs), result(malformedReply));
   const records = [];
   const bridge = createBridge({ agentMode: 'live', apiKey: 'test-key', fetchImpl: fake.agentFetchImpl,
     onDiagnostics: record => records.push(record) });
   t.after(() => bridge.close());
-  const run = agentClient(bridge);
+  const run = agentClient(bridge, liveWidgetRead);
   await run.done;
-  assert.deepEqual(Object.keys(run.res.headers).filter(header => header.startsWith('x-navis-')), ['x-navis-protocol']);
+  assert.deepEqual(Object.keys(run.res.headers).filter(header => header.startsWith('x-navis-')), ['x-navis-protocol', 'x-navis-agent-mode']);
   assert.doesNotMatch(run.raw(), /: navis-metrics|private-provider-reply/u);
   assert.deepEqual(run.events().at(-1), { event: 'error', data: { code: 'INVALID_OUTPUT' } });
   const providerCalls = records.filter(record => record.event === 'navis_agent_provider_call');
@@ -1736,13 +1918,12 @@ test('live server diagnostics stay private without the opt-in request header', a
   assert.deepEqual(records.at(-1), { event: 'navis_agent_turn', correlationId: providerCalls[0].correlationId,
     outcome: 'INVALID_OUTPUT', providerCalls: 2, reservedTokens: providerCalls[0].reservedTokens + providerCalls[1].reservedTokens,
     actualUsage: missingUsage, invalidReason: 'reply_json', finishReason: 'stop',
-    toolCallCount: 0, hasContent: true, contentLength: malformedReply.length });
+    toolCallCount: 0, hasContent: true, contentLength: malformedReply.length, replyShape: replyShape(malformedReply) });
   assert.doesNotMatch(JSON.stringify(records), /private-provider-reply|test-key|demo-run/u);
 });
 
 test('HCX-007 live turns use its completion cap and preserve native function calling', async t => {
-  const fake = fakeAgentScript(agentCall('search_records', menuSearchCall),
-    filteredResult('A private provider completion asking about the price.'));
+  const fake = fakeAgentScript(agentCall('get_widget', ledgerToolArgs), result(fencedReply));
   const urls = [];
   const bridge = createBridge({ agentMode: 'live', agentModel: 'HCX-007', apiKey: 'test-key',
     fetchImpl(url, options) {
@@ -1757,17 +1938,15 @@ test('HCX-007 live turns use its completion cap and preserve native function cal
     },
     onDiagnostics() {} });
   t.after(() => bridge.close());
-  const run = agentClient(bridge);
+  const run = agentClient(bridge, liveWidgetRead);
   await run.done;
-  assert.equal(run.events().at(-1).data.outcome, 'clarify');
-  assert.equal(run.events().at(-1).data.clarification.field, 'price');
-  assert.doesNotMatch(run.raw(), /private provider completion/u);
+  assert.equal(run.events().at(-1).data.outcome, 'reply');
   assert.deepEqual(urls, Array(2).fill('https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007'));
   assert.ok(fake.calls.every(call => call.maxCompletionTokens === 2048 && !Object.hasOwn(call, 'maxTokens')));
   assert.deepEqual(fake.calls[0].thinking, { effort: 'none' });
   assert.deepEqual(fake.calls[1].thinking, { effort: 'none' });
-  assert.equal(fake.calls[0].tools[0].function.name, 'search_records');
-  assert.equal(JSON.parse(fake.calls[1].messages.at(-1).content).toolHistory.at(-1).toolCallId, 'fake-agent-call');
+  assert.equal(fake.calls[0].tools[0].function.name, 'get_widget');
+  assert.equal(fake.calls[1].messages.at(-1).toolCallId, 'fake-agent-call');
 });
 
 test('live model override uses one bounded rate-limit retry and records incomplete or cancelled streams', async t => {
@@ -1797,7 +1976,7 @@ test('live model override uses one bounded rate-limit retry and records incomple
   assert.equal(providerRecords()[1].correlationId, correlationId);
   assert.deepEqual(turnRecords(), [{ event: 'navis_agent_turn', correlationId, outcome: 'INVALID_OUTPUT', providerCalls: 2,
     reservedTokens: providerRecords()[0].reservedTokens + providerRecords()[1].reservedTokens, actualUsage: missingUsage,
-    invalidReason: 'missing_result', finishReason: null, toolCallCount: 0, hasContent: true, contentLength: 10 }]);
+    invalidReason: 'missing_result', finishReason: null, toolCallCount: 0, hasContent: true, contentLength: 10, replyShape: { kind: 'text' } }]);
 
   const stopped = agentClient(bridge);
   await pump();
@@ -1872,9 +2051,8 @@ test('live menu rejects text and invented arguments even with a required proposa
   }
 });
 
-test('HCX-DASH-002 menu clarification uses the missing slot even if the provider answers with reply JSON', async t => {
-  const fake = fakeAgentScript(agentCall('search_records', menuSearchCall),
-    filteredResult(JSON.stringify({ outcome: 'reply', text: '가격을 알려주세요. 예를 들면 9999원이에요.' })));
+test('HCX-DASH-002 menu clarification follows the duplicate lookup', async t => {
+  const fake = fakeAgentScript(agentCall('search_records', menuSearchCall));
   const bridge = createBridge({ agentMode: 'live', agentModel: 'HCX-DASH-002', apiKey: 'test-key',
     fetchImpl: fake.agentFetchImpl, onDiagnostics() {} });
   t.after(() => bridge.close());
@@ -1886,16 +2064,137 @@ test('HCX-DASH-002 menu clarification uses the missing slot even if the provider
       choices: [{ id: '4500', value: 4500 }, { id: '5000', value: 5000 }, { id: '5500', value: 5500 }, { id: 'manual' }],
     } } },
   ]);
-  assert.equal(fake.calls.length, 2);
-  assert.equal(fake.calls[1].tools, undefined);
+  assert.equal(fake.calls.length, 1);
 });
 
-const liveWidgetRead = {
-  ...agentMenu, intent: { kind: 'read', featureId: 'ledger', condition }, slots: [], searches: [],
-  catalog: body.catalog, snapshot: body.snapshot,
-};
-const ledgerToolArgs = { featureId: 'ledger', condition };
-const fencedReply = '```json\n{"outcome":"reply","facts":["f0"]}\n```';
+for (const model of ['HCX-005', 'HCX-007']) {
+  test(`${model} finalizes a scoped widget read with its native tool result`, async t => {
+    const fake = fakeAgentScript(agentCall('get_widget', ledgerToolArgs), result(fencedReply));
+    const bridge = createBridge({ agentMode: 'live', agentModel: model, apiKey: 'test-key', fetchImpl: fake.agentFetchImpl });
+    t.after(() => bridge.close());
+    const run = agentClient(bridge, liveWidgetRead);
+    await run.done;
+    assert.equal(run.events().at(-1).data.outcome, 'reply');
+    assert.match(run.raw(), /128.4만 원/u);
+    assert.deepEqual(fake.calls[0].toolChoice, { type: 'function', function: { name: 'get_widget' } });
+    assert.deepEqual(fake.calls[0].tools.map(tool => tool.function.name), ['get_widget']);
+    assert.deepEqual(fake.calls[0].tools[0].function.parameters.properties.featureId, { type: 'string', enum: ['ledger'] });
+    assert.equal(fake.calls[1].tools, undefined);
+    assert.equal(fake.calls[1].includeAiFilters, undefined);
+    const [call, toolResult] = fake.calls[1].messages.slice(2);
+    assert.equal(call.toolCalls[0].id, 'fake-agent-call');
+    assert.equal(toolResult.toolCallId, 'fake-agent-call');
+    assert.equal(JSON.parse(toolResult.content).facts[0].display, '128.4만 원');
+  });
+}
+
+// CHAT-REAL-DEV: agentDirect lets the bridge skip model calls that can only repeat a fixed value.
+test('direct live mode answers a one-fact scoped read without any model call', async t => {
+  const fake = fakeAgentScript();
+  const bridge = createBridge({ agentMode: 'live', agentDirect: true, apiKey: 'test-key', fetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, liveWidgetRead);
+  await run.done;
+  assert.equal(run.events().at(-1).data.outcome, 'reply');
+  assert.match(run.raw(), /128.4만 원/u);
+  assert.equal(fake.calls.length, 0);
+});
+
+test('direct live mode keeps one model call to choose among many facts', async t => {
+  const many = Array.from({ length: 10 }, (_, index) => ({ ...fact, key: `${fact.key}.${index}`, label: `${fact.label} ${index}` }));
+  const fake = fakeAgentScript(result('{"outcome":"reply","facts":["f1"]}'));
+  const bridge = createBridge({ agentMode: 'live', agentDirect: true, apiKey: 'test-key', fetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, { ...liveWidgetRead, snapshot: [{ featureId: 'ledger', condition, facts: many }] });
+  await run.done;
+  assert.equal(run.events().at(-1).data.outcome, 'reply');
+  assert.equal(fake.calls.length, 1);
+  assert.equal(fake.calls[0].tools, undefined);
+  const [call, toolResult] = fake.calls[0].messages.slice(2);
+  assert.match(call.toolCalls[0].id, /^read-\d+$/u);
+  assert.equal(toolResult.toolCallId, call.toolCalls[0].id);
+});
+
+test('direct live mode prepares a menu card without asking the model to repeat it', async t => {
+  const fake = fakeAgentScript();
+  const bridge = createBridge({ agentMode: 'live', agentDirect: true, apiKey: 'test-key', fetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, pricedMenu);
+  await run.done;
+  assert.equal(run.events().at(-1).data.outcome, 'proposal');
+  assert.equal(fake.calls.length, 0);
+});
+
+test('direct live mode checks a record lookup itself: one match replies and several ask which, with no model call', async t => {
+  const fake = fakeAgentScript();
+  const bridge = createBridge({ agentMode: 'live', agentDirect: true, apiKey: 'test-key', fetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const one = agentClient(bridge, { ...agentMenu, intent: { kind: 'read', recordKind: 'menu', querySlot: 'name' }, slots: ['name'],
+    searches: [{ ...menuSearchCall, matches: [{ handle: 'r1', match: 'exact', label: '아메리카노', category: 'coffee', price: 3000 }] }] });
+  await one.done;
+  assert.equal(one.events().at(-1).data.outcome, 'reply');
+  const many = agentClient(bridge, { ...agentMenu, intent: { kind: 'read', recordKind: 'menu', querySlot: 'name' }, slots: ['name'],
+    searches: [{ ...menuSearchCall, matches: [
+      { handle: 'r1', match: 'similar', label: '바닐라 라테', category: 'drink', price: 5500 },
+      { handle: 'r2', match: 'similar', label: '카페 라테', category: 'drink', price: 5000 },
+    ] }] });
+  await many.done;
+  assert.equal(many.events().at(-1).data.outcome, 'ambiguous');
+  assert.equal(fake.calls.length, 0);
+});
+
+test('live missing menu price uses the adapter result and never requests a model refusal', async t => {
+  const fake = fakeAgentScript(agentCall('search_records', menuSearchCall), result('{"outcome":"refused"}'));
+  const bridge = createBridge({ agentMode: 'live', agentModel: 'HCX-007', apiKey: 'test-key', fetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge);
+  await run.done;
+  assert.equal(run.events().at(-1).data.clarification?.field, 'price');
+  assert.equal(fake.calls.length, 1);
+});
+
+test('live reply lookup declares the exact opaque thread query in the native schema', async t => {
+  const args = { threadId: { handle: 'review-1' } };
+  const lookup = { kind: 'thread', querySlot: 'threadQuery' };
+  const fake = fakeAgentScript(agentCall('search_records', lookup),
+    agentCall('propose_action', { command: 'reply.draft', args }, 'draft-call'));
+  const bridge = createBridge({ agentMode: 'live', apiKey: 'test-key', fetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, { ...agentMenu, layer: 'marketing', intent: { kind: 'command', command: 'reply.draft', args },
+    slots: ['threadQuery'], searches: [{ ...lookup, matches: [{ handle: 'review-1', match: 'exact', fields: {
+      type: 'review', isPublic: true, connected: true, status: 'waiting', revision: 1, canDraft: true,
+    } }] }] });
+  await run.done;
+  assert.equal(run.events().at(-1).data.outcome, 'proposal');
+  assert.deepEqual(fake.calls[0].tools[0].function.parameters, { type: 'object', required: ['kind', 'querySlot'], properties: {
+    kind: { type: 'string', enum: ['thread'] }, querySlot: { type: 'string', enum: ['threadQuery'] },
+  } });
+});
+
+test('HCX-005 sends only the read intent and query slot during forced record lookups', async () => {
+  const { parseArgs, runPreview } = await import('./dev/navis-live-smoke.mjs');
+  const { navisAgentFakeFetch } = await import('./fixtures/navis-eval-fake.mjs');
+  const rows = [], lookups = [];
+  const passed = await runPreview({
+    ...parseArgs(['--preview', '--only', 'menu-create,video-retry-failed,review-reply-draft', '--max-provider-calls', '7']),
+    bridgeOptions: { agentMode: 'live', agentModel: 'HCX-005', apiKey: 'test-key' },
+    emit: row => rows.push(row),
+    async fetchImpl(url, options) {
+      const { messages, toolChoice } = JSON.parse(options.body);
+      const user = JSON.parse(messages[1].content);
+      if (toolChoice?.function?.name === 'search_records') lookups.push(user);
+      const response = await navisAgentFakeFetch(url, options);
+      const payload = JSON.parse((await response.text()).split('\n')[1].slice('data: '.length));
+      return new Response(frame('result', { ...payload, usage: { promptTokens: 20, completionTokens: 10, totalTokens: 30 } }),
+        { headers: { 'content-type': 'text/event-stream' } });
+    },
+  });
+  assert.equal(passed, true, JSON.stringify(rows));
+  assert.deepEqual(lookups, [['menu', 'name'], ['promoVideo', 'videoQuery'], ['thread', 'threadQuery']].map(([recordKind, querySlot]) => ({
+    intent: { kind: 'read', recordKind, querySlot }, slots: [querySlot],
+    nextLookup: { name: 'search_records', args: { kind: recordKind, querySlot } },
+  })));
+});
 
 test('live read consumes every validated native tool call and discards text sent alongside tools', async t => {
   const mixed = frame('result', { message: { role: 'assistant', content: 'private-mixed-result', toolCalls: [
@@ -1905,7 +2204,7 @@ test('live read consumes every validated native tool call and discards text sent
   const fake = fakeAgentScript(token('private-mixed-token') + mixed, result(fencedReply));
   const bridge = createBridge({ agentMode: 'live', apiKey: 'test-key', fetchImpl: fake.agentFetchImpl, onDiagnostics() {} });
   t.after(() => bridge.close());
-  const run = agentClient(bridge, liveWidgetRead);
+  const run = agentClient(bridge, { ...liveWidgetRead, intent: { kind: 'read' } });
   await run.done;
   assert.equal(run.events().at(-1).data.outcome, 'reply');
   assert.match(run.raw(), /128.4만 원/u);
@@ -1980,7 +2279,7 @@ test('live menu records the HTTP status and provider code when the first call is
 });
 
 test('live smoke sends eight typed requests to loopback and reports only allowlisted metrics', { timeout: 5000 }, async t => {
-  const { runLiveSmoke } = await import('./dev/navis-live-smoke.mjs');
+  const { parseArgs, runLiveSmoke } = await import('./dev/navis-live-smoke.mjs');
   const calls = [], records = [], rows = [];
   const clock = new Clock();
   let observeCancellation;
@@ -1998,10 +2297,10 @@ test('live smoke sends eight typed requests to loopback and reports only allowli
     else if (onlyTool === 'propose_action') raw = agentCall('propose_action', {
       command: 'menu.create', args: menuProposalArgs,
     }, 'native-proposal-id');
-    else if (intent.kind === 'read' && messages.length === 2) raw = agentCall('get_widget', {
+    else if (onlyTool === 'get_widget') raw = agentCall('get_widget', {
       featureId: intent.featureId, condition: intent.condition,
     }, 'native-widget-id');
-    else if (calls.length === 14) return new Response(new ReadableStream(), { headers: { 'content-type': 'text/event-stream' } });
+    else if (calls.length === 13) return new Response(new ReadableStream(), { headers: { 'content-type': 'text/event-stream' } });
     else raw = result(reply);
     const final = JSON.parse(raw.split('\n')[1].slice(5));
     return new Response(frame('result', { ...final, usage, ...(includeAiFilters && { aiFilter: safeFilter }) }),
@@ -2015,20 +2314,22 @@ test('live smoke sends eight typed requests to loopback and reports only allowli
   const server = createServer((req, res) => { requests++; void bridge(req, res); });
   t.after(() => { bridge.close(); server.closeAllConnections(); server.close(); });
   await new Promise((resolve, reject) => server.listen(0, '127.0.0.1', resolve).once('error', reject));
-  const passed = await runLiveSmoke(`http://127.0.0.1:${server.address().port}`, row => rows.push(row), ms => clock.tick(ms));
+  const originalPrompts = parseArgs(['--preview']).only.slice(0, 8);
+  const passed = await runLiveSmoke(`http://127.0.0.1:${server.address().port}`, row => rows.push(row), ms => clock.tick(ms),
+    { only: originalPrompts });
   assert.equal(passed, true, JSON.stringify(rows));
   assert.equal(requests, 8);
   assert.deepEqual(rows.slice(0, 8).map(row => row.outcome),
     ['reply', 'proposal', 'clarify', 'refused', 'reply', 'reply', 'reply', 'CANCELLED']);
   assert.ok(rows.slice(0, 8).every(row => row.model === 'HCX-005' && row.mode === 'live' && row.ok));
-  assert.deepEqual(rows.at(-1).tokens, { promptTokens: 260, completionTokens: 130, totalTokens: 390 });
+  assert.deepEqual(rows.at(-1).tokens, { promptTokens: 240, completionTokens: 120, totalTokens: 360 });
   assert.equal(rows.at(-1).calls, 8);
   assert.equal(rows.at(-1).incomplete, 1);
   assert.doesNotMatch(JSON.stringify(rows), /test-key|Bearer|취소|native-proposal-id/u);
   assert.equal((await cancellation).correlationId, rows[7].correlationId);
   const providerRecords = records.filter(record => record.event === 'navis_agent_provider_call');
-  assert.equal(providerRecords.length, 14);
-  assert.equal(providerRecords[5].requestMode, 'text');
+  assert.equal(providerRecords.length, 13);
+  assert.equal(providerRecords[6].requestMode, 'function_calling');
   assert.equal(records.filter(record => record.event === 'navis_agent_turn').length, 8);
 });
 
@@ -2115,10 +2416,12 @@ test('agent statuses do not reset the first content deadline and disconnect abor
   await pump();
   clock.tick(29999);
   assert.deepEqual(timed.events().map(item => item.event), ['status']);
+  assert.ok(timed.raw().endsWith(': keep-alive\n\n'));
   clock.tick(1);
   await timed.done;
   assert.deepEqual(timed.events().at(-1), { event: 'error', data: { code: 'TIMEOUT' } });
   assert.equal(fake.calls[0].signal.aborted, true);
+  assert.equal(clock.timers.size, 0);
   const stopped = agentClient(bridge);
   await pump();
   stopped.res.destroy();
@@ -2128,6 +2431,7 @@ test('agent statuses do not reset the first content deadline and disconnect abor
   assert.equal(fake.calls[1].signal.aborted, true);
   assert.equal(fake.calls[1].cancelled, 1);
   assert.deepEqual(stopped.events().map(item => item.event), ['status']);
+  assert.equal(clock.timers.size, 0);
 });
 
 test('headerless v5.5 requests keep the legacy frames and empty done data', async t => {
@@ -2183,7 +2487,7 @@ test('agent mode rejects an unretrieved fact ref and overlapping exact menu', as
 
 test('live store allowance cannot be reset with runs, cookie changes, or client scope headers', async t => {
   const clock = new Clock();
-  const bridge = createBridge({ clock, agentMode: 'live', apiKey: 'test-key',
+  const bridge = createBridge({ clock, agentMode: 'live', agentWindowTurns: 6, apiKey: 'test-key',
     fetchImpl: () => assert.fail('unsupported intent reached upstream'), onDiagnostics() {} });
   t.after(() => bridge.close());
   const request = { ...agentMenu, intent: { kind: 'unsupported' } };
@@ -2205,7 +2509,7 @@ test('live store allowance cannot be reset with runs, cookie changes, or client 
 
 test('trusted session turn allowances are independent and share their store identity', async t => {
   const sessions = new WeakMap();
-  const bridge = createBridge({ clock: new Clock(), agentMode: 'live', apiKey: 'test-key', onDiagnostics() {},
+  const bridge = createBridge({ clock: new Clock(), agentMode: 'live', agentWindowTurns: 6, apiKey: 'test-key', onDiagnostics() {},
     resolveAgentScope: req => sessions.get(req), fetchImpl: () => assert.fail('unsupported intent reached upstream') });
   t.after(() => bridge.close());
   const request = { ...agentMenu, intent: { kind: 'unsupported' } };
@@ -2223,6 +2527,93 @@ test('trusted session turn allowances are independent and share their store iden
   assert.equal(await ask(), 403);
 });
 
+test('the default turn allowance lets a presenter ask thirty questions a minute before a 429', async t => {
+  const clock = new Clock();
+  const bridge = createBridge({ clock, agentMode: 'live', apiKey: 'test-key',
+    fetchImpl: () => assert.fail('unsupported intent reached upstream'), onDiagnostics() {} });
+  t.after(() => bridge.close());
+  const request = { ...agentMenu, intent: { kind: 'unsupported' } };
+  const ask = async index => {
+    const run = agentClient(bridge, { ...request, runId: `run-${index}` });
+    await run.done;
+    return run.res.statusCode;
+  };
+  for (let index = 0; index < 30; index++) assert.equal(await ask(index), 200, `turn ${index + 1}`);
+  assert.equal(await ask(30), 429);
+  clock.tick(60000);
+  assert.equal(await ask(31), 200);
+});
+
+test('the turn and token allowances come from NAVIS_AGENT_WINDOW_* and fall back when a value is unusable', async t => {
+  assert.deepEqual(
+    [bridgeOptionsFromEnv({}).agentWindowTurns, bridgeOptionsFromEnv({}).agentWindowTokens], [undefined, undefined]);
+  const configured = bridgeOptionsFromEnv({ NAVIS_AGENT_WINDOW_TURNS: '3', NAVIS_AGENT_WINDOW_TOKENS: '123456' });
+  assert.deepEqual([configured.agentWindowTurns, configured.agentWindowTokens], [3, 123456]);
+  const clock = new Clock();
+  const bridge = createBridge({ ...configured, clock, agentMode: 'live', apiKey: 'test-key',
+    fetchImpl: () => assert.fail('unsupported intent reached upstream'), onDiagnostics() {} });
+  t.after(() => bridge.close());
+  const request = { ...agentMenu, intent: { kind: 'unsupported' } };
+  const ask = async index => {
+    const run = agentClient(bridge, { ...request, runId: `run-${index}` });
+    await run.done;
+    return run.res.statusCode;
+  };
+  for (let index = 0; index < 3; index++) assert.equal(await ask(index), 200);
+  assert.equal(await ask(3), 429);
+  // Unusable values never disable the limit: zero, negative, fractional, text and absurd sizes keep the default of thirty turns.
+  for (const bad of ['0', '-5', '1.5', 'many', '', '9999999999999999999']) {
+    const fallback = createBridge({ ...bridgeOptionsFromEnv({ NAVIS_AGENT_WINDOW_TURNS: bad }), clock: new Clock(), agentMode: 'live', apiKey: 'test-key',
+      fetchImpl: () => assert.fail('unsupported intent reached upstream'), onDiagnostics() {} });
+    t.after(() => fallback.close());
+    for (let index = 0; index < 30; index++) {
+      const run = agentClient(fallback, { ...request, runId: `run-${index}` });
+      await run.done;
+      assert.equal(run.res.statusCode, 200, `${JSON.stringify(bad)} turn ${index + 1}`);
+    }
+    const limited = agentClient(fallback, { ...request, runId: 'run-30' });
+    await limited.done;
+    assert.equal(limited.res.statusCode, 429, JSON.stringify(bad));
+  }
+});
+
+test('the default token allowance covers a quick run of model turns while the per-turn cap stays', async t => {
+  const clock = new Clock();
+  const scopes = new WeakMap();
+  let calls = 0;
+  const reply = '{"outcome":"reply","facts":["f0"]}';
+  const makeFetch = () => async (_url, { body }) => {
+    calls++;
+    const request = JSON.parse(body);
+    const raw = request.tools && request.messages.length < 6 ? agentCall('get_widget', ledgerToolArgs, `call-${calls}`) : result(reply);
+    const final = JSON.parse(raw.split('\n')[1].slice(5));
+    return new Response(frame('result', { ...final, usage: { promptTokens: 2, completionTokens: 1, totalTokens: 3 },
+      ...(request.includeAiFilters && { aiFilter: [{ score: '2' }] }) }), { headers: { 'content-type': 'text/event-stream' } });
+  };
+  const bridge = createBridge({ clock, agentMode: 'live', apiKey: 'test-key', resolveAgentScope: req => scopes.get(req),
+    onDiagnostics() {}, fetchImpl: makeFetch() });
+  t.after(() => bridge.close());
+  // The former 40,000-token window stopped this run at the third turn (each turn reserves several thousand tokens).
+  for (let index = 0; index < 12; index++) {
+    const run = agentClient(bridge, { ...liveWidgetRead, intent: { kind: 'read' }, runId: `budget-${index}` });
+    scopes.set(run.req, { storeId: 'demo-store', sessionId: `session-${index}` });
+    await run.done;
+    const last = run.raw().split('\n\n').filter(Boolean).at(-1);
+    assert.deepEqual(JSON.parse(last.split('\n')[1].slice(6)), { outcome: 'reply' }, `turn ${index + 1}`);
+  }
+  // A configured window still bounds the store: a tiny one refuses before any model call is made.
+  const before = calls;
+  const tight = createBridge({ clock: new Clock(), agentMode: 'live', apiKey: 'test-key', agentWindowTokens: 1, resolveAgentScope: req => scopes.get(req),
+    onDiagnostics() {}, fetchImpl: makeFetch() });
+  t.after(() => tight.close());
+  const run = agentClient(tight, { ...liveWidgetRead, intent: { kind: 'read' }, runId: 'tight' });
+  scopes.set(run.req, { storeId: 'demo-store', sessionId: 'tight-session' });
+  await run.done;
+  const last = run.raw().split('\n\n').filter(Boolean).at(-1);
+  assert.deepEqual(JSON.parse(last.split('\n')[1].slice(6)), { code: 'UNAVAILABLE' });
+  assert.equal(calls, before);
+});
+
 test('replacement stays within the verified session even when requests share a run ID', async t => {
   const fake = upstream({ prelude: false, replayRetries: false });
   const scopes = new WeakMap();
@@ -2230,7 +2621,7 @@ test('replacement stays within the verified session even when requests share a r
     resolveAgentScope: req => scopes.get(req), fetchImpl: fake.fetchImpl });
   t.after(() => bridge.close());
   function ask(sessionId) {
-    const run = agentClient(bridge, liveWidgetRead);
+    const run = agentClient(bridge, { ...liveWidgetRead, intent: { kind: 'read' } });
     scopes.set(run.req, { storeId: 'shared-store', sessionId });
     return run;
   }
@@ -2269,7 +2660,7 @@ test('live provider reservations survive tiny actual usage and isolate trusted s
   const diagnostics = [];
   let calls = 0;
   const bridge = createBridge({
-    clock, agentMode: 'live', apiKey: 'test-key', resolveAgentScope: req => scopes.get(req),
+    clock, agentMode: 'live', agentWindowTokens: 40_000, apiKey: 'test-key', resolveAgentScope: req => scopes.get(req),
     onDiagnostics: entry => diagnostics.push(entry),
     fetchImpl: async (_url, { body }) => {
       calls++;
@@ -2284,7 +2675,7 @@ test('live provider reservations survive tiny actual usage and isolate trusted s
   });
   t.after(() => bridge.close());
   async function ask(storeId, index) {
-    const run = agentClient(bridge, { ...liveWidgetRead, runId: `budget-${index}` }, { 'x-navis-diagnostics': '1' });
+    const run = agentClient(bridge, { ...liveWidgetRead, intent: { kind: 'read' }, runId: `budget-${index}` }, { 'x-navis-diagnostics': '1' });
     scopes.set(run.req, { storeId, sessionId: `session-${index}` });
     await run.done;
     const last = run.raw().split('\n\n').filter(Boolean).at(-1);
@@ -2348,6 +2739,73 @@ test('agent asks only the first missing slot and offers schema-backed choices', 
   assert.equal(next.events().some(item => item.event === 'action_proposal'), false);
 });
 
+test('S1-298 the wire resumes an optional supplier clarification with a freshly scoped target', async t => {
+  const command = 'ledger.recordExpense';
+  const args = { date: { slot: 'date' }, amount: { slot: 'amount' }, category: 'ingredients', evidence: 'tax-invoice' };
+  const lookup = { kind: 'supplier', querySlot: 'name' };
+  const boundArgs = { ...args, supplierId: { handle: 'supplier-dairy' } };
+  const fake = fakeAgentScript(
+    agentCall('search_records', lookup),
+    agentCall('search_records', lookup),
+    agentCall('propose_action', { command, args: boundArgs }, 'expense-card'),
+  );
+  const bridge = createBridge({ agentMode: 'fixture', agentFetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const base = { ...agentMenu, conversation: true, page: 1, slots: ['date', 'amount', 'name'] };
+  const initial = agentClient(bridge, {
+    ...base, intent: { kind: 'command', command, args, querySlot: 'name' },
+    searches: [{ ...lookup, matches: [], status: 'missing' }],
+  });
+  await initial.done;
+  const { outcome, clarification, pendingId } = initial.events().at(-1).data;
+  assert.equal(outcome, 'clarify');
+  assert.equal(clarification.field, 'supplierId');
+  assert.ok(pendingId);
+  assert.equal(fake.calls.length, 1);
+
+  const search = { ...lookup, matches: [{ handle: 'supplier-dairy', match: 'exact' }] };
+  const resume = { kind: 'conversation', action: 'continue', pendingId, selection: { querySlot: 'name', handle: 'supplier-dairy' } };
+  const corrected = { ...base, intent: resume, searches: [search] };
+  for (const extra of [
+    { snapshotRevision: base.snapshotRevision + 1 }, { runId: 'other-run' },
+    { searches: [{ ...search, kind: 'menu' }] },
+    { searches: [{ ...search, matches: [{ handle: 'supplier-other', match: 'exact' }] }] },
+    { searches: [{ ...search, nextCursor: 'more-suppliers' }] },
+    { slots: [...base.slots, 'otherName'], searches: [{ ...search, querySlot: 'otherName' }],
+      intent: { ...resume, selection: { ...resume.selection, querySlot: 'otherName' } } },
+  ]) {
+    const rejected = agentClient(bridge, { ...corrected, ...extra });
+    await rejected.done;
+    assert.equal(rejected.res.statusCode, 200);
+    assert.equal(rejected.events().at(-1).data.resolution.type, 'unavailable');
+    assert.equal(rejected.events().some(({ event }) => event === 'action_proposal'), false);
+    assert.equal(fake.calls.length, 1);
+  }
+  const rawValue = agentClient(bridge, { ...corrected, intent: { ...resume, selection: { ...resume.selection, value: 'private supplier name' } } });
+  await rawValue.done;
+  assert.equal(rawValue.res.statusCode, 400);
+  assert.equal(fake.calls.length, 1);
+
+  const continued = agentClient(bridge, corrected);
+  await continued.done;
+  const proposal = continued.events().find(({ event }) => event === 'action_proposal')?.data;
+  assert.deepEqual(continued.events().at(-1).data, { outcome: 'proposal' });
+  assert.deepEqual(proposal?.args, boundArgs);
+  assert.equal(proposal?.tier, 'normal');
+  assert.equal(continued.events().some(({ event }) => event === 'action_result'), false);
+  assert.deepEqual(fake.calls.map(call => {
+    const { nextLookup, preparedProposal } = JSON.parse(call.messages[1].content);
+    return nextLookup ?? { name: 'propose_action', args: preparedProposal };
+  }), [
+    { name: 'search_records', args: lookup }, { name: 'search_records', args: lookup },
+    { name: 'propose_action', args: { command, args: boundArgs } },
+  ]);
+  const staleSelection = agentClient(bridge, corrected);
+  await staleSelection.done;
+  assert.deepEqual(staleSelection.events().at(-1).data.resolution, { type: 'unavailable', reason: 'pending_missing' });
+  assert.equal(fake.calls.length, 3);
+});
+
 test('agent refuses a send and returns only local draft references to the widget', async t => {
   const bridge = createBridge({ agentFetchImpl: () => assert.fail('restricted intent reached the model') });
   t.after(() => bridge.close());
@@ -2363,6 +2821,20 @@ test('agent refuses a send and returns only local draft references to the widget
     } },
   });
   assert.equal(run.events().some(item => ['action_proposal', 'action_result'].includes(item.event)), false);
+});
+
+test('a typed write from the POS host is refused before lookup or draft clarification', async t => {
+  const fake = fakeAgentScript(agentCall('search_records', menuSearchCall));
+  const bridge = createBridge({ agentMode: 'fixture', agentFetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const requests = [pricedMenu, { ...agentMenu, intent: { kind: 'command', command: 'inventory.createItem', args: {} } }];
+  for (const request of requests) {
+    const run = agentClient(bridge, { ...request, layer: 'pos' });
+    await run.done;
+    assert.deepEqual(run.events().at(-1).data, { outcome: 'refused', refusal: { reason: 'out_of_scope' } });
+    assert.equal(run.events().some(({ event }) => event === 'action_proposal'), false);
+  }
+  assert.deepEqual(fake.calls, []);
 });
 
 test('agent asks which similar menu the user meant using only the scoped choices', async t => {
@@ -2455,4 +2927,207 @@ test('agent distinguishes empty, unavailable, unsupported, and measured zero rea
     assert.equal(run.events().at(-1).data.outcome, 'reply');
     assert.ok(run.events().some(item => item.event === 'text_delta' && item.data.delta.includes(expected)));
   }
+});
+
+test('an explicit default widget projection wins over a different first catalog period', async t => {
+  const earlier = { kind: 'snapshot', asOf: '2026-10-25' };
+  const bridge = createBridge({ agentMode: 'fixture' });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, {
+    ...liveWidgetRead,
+    catalog: [{ ...body.catalog[0], conditions: [earlier, condition] }],
+    snapshot: [{ featureId: 'ledger', condition: earlier, facts: [{ ...fact, date: '2026-10-25', display: '50만 원', value: 500000 }] }, ...body.snapshot],
+  });
+  await run.done;
+  assert.equal(run.events().at(-1).data.outcome, 'reply');
+  assert.match(run.raw(), /128\.4만 원/u);
+  assert.doesNotMatch(run.raw(), /50만 원/u);
+  assert.deepEqual(run.events().find(({ event }) => event === 'panels').data.panels.map(panel => panel.condition), [condition]);
+});
+
+test('a fixture widget read cannot return facts from an unrelated extra tool', async t => {
+  const args = { layer: 'management', page: 1 };
+  const fake = fakeAgentScript(agentCall('get_board', args), result('{"outcome":"reply","facts":["f0"]}'));
+  const bridge = createBridge({ agentMode: 'fixture', agentFetchImpl: fake.agentFetchImpl });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, {
+    ...liveWidgetRead,
+    readings: [{ tool: 'get_board', args, facts: [{ ...fact, key: 'board.fixture', display: 'unrelated board fact' }] }],
+  });
+  await run.done;
+  assert.deepEqual(run.events().at(-1).data, { code: 'INVALID_OUTPUT' });
+  assert.doesNotMatch(run.raw(), /unrelated board fact/u);
+  assert.equal(fake.calls.length, 1);
+  assert.equal(JSON.parse(fake.calls[0].messages[1].content).readings, undefined);
+});
+
+// D-371: read-only intent classification on the agent route.
+const classifyBody = (intent = {}) => ({
+  runId: 'classify-run', snapshotRevision: 1, locale: 'ko', layer: 'management', businessDate: '2026-11-22',
+  intent: { kind: 'classify', text: '저번 달이랑 이번 달 지출 비교해줘', widgets: ['ledger|손익|매출,지출,원가', 'margin|마진|판매 수량'], ...intent },
+  slots: [], catalog: [], snapshot: [], searches: [],
+});
+const hcxJson = plan => new Response(JSON.stringify({ status: { code: '20000' }, result: {
+  message: { role: 'assistant', content: typeof plan === 'string' ? plan : JSON.stringify(plan) }, usage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 } } }),
+{ headers: { 'content-type': 'application/json' } });
+const lastMonthPlan = { kind: 'read', confidence: 'high', reads: [{ featureId: 'ledger', period: 'lastMonth', hints: ['지출'] }, { featureId: 'ledger', period: 'month', hints: ['지출'] }] };
+
+test('a live classify turn returns one intent_plan frame, logs counts only and does not use the chat turn allowance', async t => {
+  const diagnostics = [];
+  const bodies = [];
+  const bridge = createBridge({ clock: new Clock(), agentMode: 'live', apiKey: 'test-key', agentWindowTurns: 2, onDiagnostics: entry => diagnostics.push(entry),
+    fetchImpl: async (_url, init) => { bodies.push(JSON.parse(init.body)); return hcxJson(lastMonthPlan); } });
+  t.after(() => bridge.close());
+  for (let index = 0; index < 4; index++) {
+    const run = agentClient(bridge, { ...classifyBody(), runId: `classify-${index}` });
+    await run.done;
+    assert.equal(run.res.statusCode, 200);
+    const frames = run.events().filter(item => item.event !== 'status');
+    assert.deepEqual(frames, [{ event: 'intent_plan', data: { plan: lastMonthPlan } }, { event: 'done', data: { outcome: 'reply' } }]);
+  }
+  assert.equal(bodies[0].responseFormat, undefined);
+  assert.equal(bodies[0].thinking, undefined);
+  assert.equal(bodies[0].messages.length, 2);
+  const calls = diagnostics.filter(entry => entry.event === 'navis_agent_provider_call');
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every(entry => entry.requestMode === 'structured_outputs' && entry.promptTokens === 100));
+  assert.equal(JSON.stringify(diagnostics).includes('지출'), false);
+});
+
+test('a classify answer that names an unlisted widget ends with an error frame and no plan', async t => {
+  const bridge = createBridge({ clock: new Clock(), agentMode: 'live', apiKey: 'test-key', onDiagnostics() {},
+    fetchImpl: async () => hcxJson({ kind: 'read', confidence: 'high', reads: [{ featureId: 'not-listed', period: 'today', hints: [] }] }) });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, classifyBody());
+  await run.done;
+  assert.deepEqual(run.events().at(-1), { event: 'error', data: { code: 'INVALID_OUTPUT' } });
+  assert.equal(run.events().some(item => item.event === 'intent_plan'), false);
+});
+
+test('classification is live only: the fixture bridge answers 503 and the browser keeps its own routers', async t => {
+  const bridge = createBridge({ onDiagnostics() {} });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, classifyBody());
+  await run.done;
+  assert.equal(run.res.statusCode, 503);
+});
+
+test('a classify request with a field outside the schema is rejected before any provider call', async t => {
+  const bridge = createBridge({ clock: new Clock(), agentMode: 'live', apiKey: 'test-key', onDiagnostics() {}, fetchImpl: () => assert.fail('reached the provider') });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, classifyBody({ command: 'menu.delete' }));
+  await run.done;
+  assert.equal(run.res.statusCode, 400);
+});
+
+test('a live answer that stops one closing bracket early still gives a reply once it passes the reply schema', async t => {
+  let calls = 0;
+  const bridge = createBridge({ agentMode: 'live', apiKey: 'test-key', onDiagnostics() {},
+    fetchImpl: async (_url, { body }) => {
+      calls++;
+      const request = JSON.parse(body);
+      const raw = request.tools && request.messages.length < 6 ? agentCall('get_widget', ledgerToolArgs, `call-${calls}`) : result('{"outcome":"reply","facts":["f0"]');
+      const final = JSON.parse(raw.split('\n')[1].slice(5));
+      return new Response(frame('result', { ...final, usage: { promptTokens: 2, completionTokens: 1, totalTokens: 3 }, ...(request.includeAiFilters && { aiFilter: [{ score: '2' }] }) }),
+        { headers: { 'content-type': 'text/event-stream' } });
+    } });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, { ...liveWidgetRead, intent: { kind: 'read' } });
+  await run.done;
+  assert.deepEqual(run.events().at(-1).data, { outcome: 'reply' });
+  // A reply that is still not valid after closing keeps ending as INVALID_OUTPUT.
+  const broken = createBridge({ agentMode: 'live', apiKey: 'test-key', onDiagnostics() {},
+    fetchImpl: async (_url, { body }) => {
+      calls++;
+      const request = JSON.parse(body);
+      const raw = request.tools && request.messages.length < 6 ? agentCall('get_widget', ledgerToolArgs, `call-${calls}`) : result('{"outcome":"reply","facts":[[[[');
+      const final = JSON.parse(raw.split('\n')[1].slice(5));
+      return new Response(frame('result', { ...final, ...(request.includeAiFilters && { aiFilter: [{ score: '2' }] }) }), { headers: { 'content-type': 'text/event-stream' } });
+    } });
+  t.after(() => broken.close());
+  const failed = agentClient(broken, { ...liveWidgetRead, intent: { kind: 'read' } });
+  await failed.done;
+  assert.deepEqual(failed.events().at(-1).data, { code: 'INVALID_OUTPUT' });
+});
+
+test('NAVIS_AGENT_CLASSIFY=0 turns the classify route off with a 503 and no provider call; any other value leaves it on', async t => {
+  assert.equal(bridgeOptionsFromEnv({ NAVIS_AGENT_CLASSIFY: '0' }).agentClassify, false);
+  assert.equal(bridgeOptionsFromEnv({ NAVIS_AGENT_CLASSIFY: '1' }).agentClassify, undefined);
+  assert.equal(bridgeOptionsFromEnv({}).agentClassify, undefined);
+  const off = createBridge({ ...bridgeOptionsFromEnv({ NAVIS_AGENT_CLASSIFY: '0' }), clock: new Clock(), agentMode: 'live', apiKey: 'test-key', onDiagnostics() {},
+    fetchImpl: () => assert.fail('classification reached the provider while switched off') });
+  t.after(() => off.close());
+  const run = agentClient(off, classifyBody());
+  await run.done;
+  assert.equal(run.res.statusCode, 503);
+  const on = createBridge({ ...bridgeOptionsFromEnv({ NAVIS_AGENT_CLASSIFY: '1' }), clock: new Clock(), agentMode: 'live', apiKey: 'test-key', onDiagnostics() {},
+    fetchImpl: async () => hcxJson(lastMonthPlan) });
+  t.after(() => on.close());
+  const answered = agentClient(on, classifyBody());
+  await answered.done;
+  assert.equal(answered.res.statusCode, 200);
+});
+
+// Shape logging: counts and codes only. The model's words and the owner's words never reach the log.
+function liveFetchReturning(content, { error40009 = false } = {}) {
+  const calls = [];
+  const fetchImpl = async (_url, { body }) => {
+    const request = JSON.parse(body);
+    calls.push(request);
+    if (error40009) return new Response(frame('error', { status: { code: '40009', message: 'private words 지출 12,252,500원' } }), { headers: { 'content-type': 'text/event-stream' } });
+    const raw = request.tools && request.messages.length < 6 ? agentCall('get_widget', ledgerToolArgs, `call-${calls.length}`) : result(content);
+    const final = JSON.parse(raw.split('\n')[1].slice(5));
+    return new Response(frame('result', { ...final, ...(request.includeAiFilters && { aiFilter: [{ score: '2' }] }) }), { headers: { 'content-type': 'text/event-stream' } });
+  };
+  return { calls, fetchImpl };
+}
+
+test('an invalid reply is logged by shape (keys from a fixed list, outcome, fact counts), never by its words', async t => {
+  const diagnostics = [];
+  const secret = '비밀문장지출12,252,500원';
+  const { fetchImpl } = liveFetchReturning(JSON.stringify({ outcome: 'reply', facts: ['f0', 'not-a-ref', 'f2'], reason: secret, [secret]: 1 }));
+  const bridge = createBridge({ agentMode: 'live', apiKey: 'test-key', fetchImpl, onDiagnostics: entry => diagnostics.push(entry) });
+  t.after(() => bridge.close());
+  // 'not-a-ref' is not a valid fact ref, so the reply fails the schema even after tidying.
+  const run = agentClient(bridge, { ...liveWidgetRead, intent: { kind: 'read' } });
+  await run.done;
+  assert.deepEqual(run.events().at(-1).data, { code: 'INVALID_OUTPUT' });
+  const turn = diagnostics.find(entry => entry.event === 'navis_agent_turn');
+  assert.equal(turn.invalidReason, 'reply_schema');
+  assert.deepEqual(turn.replyShape, { kind: 'object', keys: ['facts', 'outcome', 'reason'], otherKeys: 1, outcome: 'reply', facts: 3, badRefs: 1 });
+  assert.equal(JSON.stringify(diagnostics).includes('비밀문장'), false);
+  assert.equal(JSON.stringify(diagnostics).includes('12,252,500'), false);
+});
+
+test('a reply that is plain words or broken JSON is logged as its kind only', async t => {
+  for (const [content, kind] of [['그냥 말로 답했어요 12,252,500원', 'text'], ['{"outcome":"reply","facts":[[[[[[', 'json_broken']]) {
+    const diagnostics = [];
+    const bridge = createBridge({ agentMode: 'live', apiKey: 'test-key', fetchImpl: liveFetchReturning(content).fetchImpl, onDiagnostics: entry => diagnostics.push(entry) });
+    t.after(() => bridge.close());
+    const run = agentClient(bridge, { ...liveWidgetRead, intent: { kind: 'read' } });
+    await run.done;
+    const turn = diagnostics.find(entry => entry.event === 'navis_agent_turn' && entry.invalidReason);
+    assert.deepEqual(turn.replyShape, { kind }, content);
+    assert.equal(JSON.stringify(diagnostics).includes('12,252,500'), false);
+  }
+});
+
+test('a provider call that ends in code 40009 logs the request shape: counts, tool names from the registry and the tool choice', async t => {
+  const diagnostics = [];
+  const { fetchImpl } = liveFetchReturning('', { error40009: true });
+  const bridge = createBridge({ agentMode: 'live', apiKey: 'test-key', fetchImpl, onDiagnostics: entry => diagnostics.push(entry) });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, { ...liveWidgetRead, intent: { kind: 'read' } });
+  await run.done;
+  const calls = diagnostics.filter(entry => entry.event === 'navis_agent_provider_call');
+  assert.ok(calls.length >= 1);
+  for (const call of calls) {
+    assert.equal(call.providerCode, '40009');
+    assert.deepEqual(Object.keys(call.requestShape).sort(), ['filter', 'messages', 'responseFormat', 'toolChoice', 'toolMessages', 'toolNames', 'tools']);
+    assert.ok(call.requestShape.tools >= 1);
+    assert.ok(call.requestShape.toolNames.every(name => ['list_widget_ids', 'get_widget', 'search_records', 'get_source', 'propose_action', 'other'].includes(name)));
+    assert.ok(['auto', 'forced', 'none'].includes(call.requestShape.toolChoice));
+  }
+  assert.equal(JSON.stringify(diagnostics).includes('12,252,500'), false);
+  assert.equal(JSON.stringify(diagnostics).includes('private words'), false);
 });

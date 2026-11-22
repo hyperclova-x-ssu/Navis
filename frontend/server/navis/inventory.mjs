@@ -11,7 +11,8 @@ const refuse = reason => ({ outcome: 'refused', reason });
 const stockLookup = querySlot => ({ name: 'search_records', args: { kind: 'stock', querySlot } });
 
 export function inventoryQuantityInUnit(value, source, target) {
-  if (source === 'box') return { field: 'packSize' };
+  if (target === 'pcs' && ['box', 'pack', 'tray'].includes(source)) return { field: 'packSize' };
+  if (source === 'sheet' && target === 'pcs') source = 'pcs';
   if (!Object.hasOwn(units, source) || !Object.hasOwn(units, target) || units[source][0] !== units[target][0]) {
     return { field: 'unit' };
   }

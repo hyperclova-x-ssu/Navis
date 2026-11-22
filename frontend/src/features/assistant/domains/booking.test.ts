@@ -8,12 +8,12 @@ import { createDomainRegistry } from './registry';
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { selectCalendar } from '../../../data/derive/operations';
-import { selectReservations } from '../../../data/derive/reservations';
+import { selectBriefing, selectCalendar } from '../../../data/derive/operations';
+import { selectPosReservations, selectReservations } from '../../../data/derive/reservations';
 import { NEEDED } from '../../../assets/fonts/dev/collect';
 import { woff2Cmap } from '../../../assets/fonts/dev/woff2-cmap';
 import { addDays } from '../../../data/db/time';
-import { bookingBundle, bookingDetailSeed, bookingDomain } from './booking';
+import { bookingAllocation, bookingBundle, bookingDetailSeed, bookingDomain } from './booking';
 import { classifyNavigation, createNavisNavigation, prepareNavigationRequest } from '../../../screens/dashboard/navis-navigation';
 import { createRunStore } from '../../../state';
 import { getRegistry } from '../../../catalog';
@@ -45,6 +45,134 @@ const fakeResponse = (done: unknown, proposal?: unknown) => new Response(
 );
 
 describe('booking client contract', () => {
+  it.each([
+    ['이번 주 토요일 예약 있어?', '2026-10-31'],
+    ['10월 31일 예약 몇 건이에요', '2026-10-31'],
+    ['다음 주 화요일 예약 확인해줘', '2026-11-03'],
+    ['31일에 잡힌 예약 있나', '2026-10-31'],
+  ])('S4-016 scopes %s to the requested day', (text, date) => {
+    const snapshot = createWidgetDataStore().getSnapshot();
+    const historical = { ...snapshot, pos: { ...snapshot.pos!, businessDate: '2026-10-26' } };
+    expect(bookingDomain.route?.(text, historical, 'ko')).toMatchObject({
+      intent: { kind: 'read', featureId: 'voice-booking', condition: { kind: 'dateRange', start: date, end: date } },
+    });
+  });
+
+  it.each(['postpaid', 'prepaid'] as const)('S4-020 uses the widget allocator on %s checkout', async paymentStyle => {
+    const { tables } = createWidgetDataStore().getSnapshot();
+    const store = createWidgetDataStore({ shopSettings: { ...tables.shopSettings, paymentStyle, layoutActivated: paymentStyle === 'postpaid' } });
+    expect(store.dispatch({ type: 'calendar.setSourceVisible', source: 'reservation', visible: true }).ok).toBe(true);
+    const { provider } = fakeProvider(store);
+    const before = store.getSnapshot();
+    const day = { date: TODAY };
+    const previous = selectReservations(before, day);
+    const expected = bookingAllocation(before, { date: TODAY, time: '19:00', partySize: 4, tableChoice: 'auto' });
+    const ask = (text: string) => provider.ask({ text, signal: signal() });
+    const reply = await ask('오늘 저녁 7시에 김서연 이름으로 4명 예약 잡아줘');
+    expect(reply.turn?.kind).toBe('proposal');
+    const tableField = reply.proposalSession?.getSnapshot().preview?.fields.find(field => field.label === '테이블');
+    expect(tableField?.after ?? null).toBe(expected.tableId);
+    await ask('네 해줘');
+    expect(store.getSnapshot()).toBe(before);
+    const receipt = pressConfirm(store, reply.proposalSession);
+    expect(receipt).toMatchObject({ frame: { outcome: 'applied' } });
+    const after = store.getSnapshot();
+    const saved = after.tables.reservation.at(-1)!;
+    expect(saved).toMatchObject({ date: TODAY, time: '19:00', partySize: 4, tableId: expected.tableId, status: expected.status });
+    expect(after.tables.reservationChange).toHaveLength(before.tables.reservationChange.length + 1);
+    const stats = { count: previous.count + 1, partyTotal: previous.partyTotal + 4, changes: previous.changes + 1 };
+    expect(selectReservations(after, day)).toMatchObject(stats);
+    expect(selectBriefing(after, day).reservations).toMatchObject(stats);
+    expect(selectCalendar(after, day).entries).toContainEqual(expect.objectContaining({ sourceId: saved.reservationId }));
+    expect(selectPosReservations(after, {})).toContainEqual(expect.objectContaining({ reservationId: saved.reservationId, tableId: expected.tableId }));
+    expect(after.revision).toBe(before.revision + 1);
+    pressConfirm(store, reply.proposalSession);
+    expect(store.getSnapshot().revision).toBe(before.revision + 1);
+    if (!receipt || typeof receipt === 'string' || !receipt.undoToken) throw Error('Expected undo receipt');
+    expect(store.undo(receipt.undoToken).ok).toBe(true);
+    expect(store.getSnapshot().tables.reservation).toEqual(before.tables.reservation);
+    expect(store.getSnapshot().tables.reservationChange).toEqual(before.tables.reservationChange);
+  });
+
+  it.each([
+    ["박○현 예약 요청사항 '창가 자리, 유모차'로 바꿔줘", '창가 자리, 유모차'],
+    ['19시 박○현 요청 내용을 창가랑 유모차로 수정', '창가랑 유모차'],
+    ['박○현 요청사항 창가 자리 + 유모차 들어올 공간으로 변경', '창가 자리 + 유모차 들어올 공간'],
+    ['박씨 예약 요청 바꿔줘 창가 유모차', '창가 유모차'],
+  ])('S4-046 grounds %s in one visit and keeps the request in a private slot', async (text, memo) => {
+    const { provider, store, requests } = fakeProvider();
+    expect(store.dispatch({ type: 'booking.create', date: TODAY, time: '19:00', partySize: 2,
+      guest: { name: '박수현' }, tableChoice: 'auto', idempotencyKey: 'request-visit' }).ok).toBe(true);
+    const before = store.getSnapshot();
+    let reply = await provider.ask({ text, signal: signal() });
+    if (text.startsWith('박씨')) {
+      const turn = reply.turn;
+      if (turn?.kind !== 'ambiguity') throw Error('Expected a choice for a surname-only lookup');
+      expect(turn.choices).toHaveLength(1);
+      reply = await provider.ask({ text: '', signal: signal(), continuation: { clarificationId: turn.id, choiceId: turn.choices[0].id } });
+    }
+    expect(reply.turn?.kind, reply.answer).toBe('proposal');
+    expect(JSON.stringify(requests.at(-1))).not.toContain(memo);
+    expect(store.getSnapshot()).toBe(before);
+    const receipt = pressConfirm(store, reply.proposalSession);
+    expect(receipt).toMatchObject({ frame: { outcome: 'applied' } });
+    const visit = before.tables.reservation.at(-1);
+    expect(store.getSnapshot().tables.reservation.at(-1)).toMatchObject({
+      request: { raw: memo }, ...(visit?.kind !== 'pickup' ? { tableId: visit?.tableId } : {}),
+    });
+    if (!receipt || typeof receipt === 'string' || !receipt.undoToken) throw Error('Expected undo receipt');
+    expect(store.undo(receipt.undoToken).ok).toBe(true);
+    expect(store.getSnapshot().tables.reservation).toEqual(before.tables.reservation);
+  });
+
+  it.each([
+    '내일 한○○ 예약 자리 자동 배정으로 돌려줘',
+    '내일 3시 한○○ 테이블 자동으로 바꿔줘',
+    '한○○ 내일 예약 테이블 지정 풀어줘',
+    '내일 15시 예약 테이블 자동 추천으로',
+  ])('S4-051 uses the widget’s auto assignment for %s', async text => {
+    const { tables } = createWidgetDataStore().getSnapshot();
+    const date = addDays(TODAY, 1);
+    const store = createWidgetDataStore({
+      shopSettings: { ...tables.shopSettings, paymentStyle: 'postpaid', layoutActivated: true },
+      reservation: tables.reservation.filter(row => row.date !== date || row.kind === 'pickup'),
+    });
+    expect(store.dispatch({ type: 'booking.create', date, time: '15:00', partySize: 2,
+      guest: { name: '한○○' }, tableChoice: { tableId: 'T2' }, idempotencyKey: 'assigned-visit' }).ok).toBe(true);
+    const before = store.getSnapshot();
+    const { provider } = fakeProvider(store);
+    const reply = await provider.ask({ text, signal: signal() });
+    expect(reply.turn?.kind, reply.answer).toBe('proposal');
+    expect(store.getSnapshot()).toBe(before);
+    const receipt = pressConfirm(store, reply.proposalSession);
+    expect(receipt).toMatchObject({ frame: { outcome: 'applied' } });
+    expect(store.getSnapshot().tables.reservation.at(-1)).toMatchObject({ tableId: 'T1', assignmentMode: 'auto' });
+    if (!receipt || typeof receipt === 'string' || !receipt.undoToken) throw Error('Expected undo receipt');
+    expect(store.undo(receipt.undoToken).ok).toBe(true);
+    expect(store.getSnapshot().tables.reservation).toEqual(before.tables.reservation);
+  });
+
+  it.each([
+    '윤○○ 예약 0명으로 바꿔줘',
+    '윤○○ 인원 -3명',
+    '17시 윤○○ 인원 영 명으로',
+    '윤○○ 예약 마이너스 두 명',
+  ])('S4-056 asks for a positive party size for %s', async text => {
+    const { provider, store, requests } = fakeProvider();
+    expect(store.dispatch({ type: 'booking.create', date: TODAY, time: '17:00', partySize: 4,
+      guest: { name: '윤○○' }, tableChoice: 'auto', idempotencyKey: 'invalid-party-visit' }).ok).toBe(true);
+    const before = store.getSnapshot();
+    const reply = await provider.ask({ text, signal: signal() });
+    const turn = reply.turn;
+    expect(turn).toMatchObject({ kind: 'clarification', field: 'partySize' });
+    expect(reply.answer).toContain('1명 이상');
+    expect(requests).toEqual([]);
+    expect(store.getSnapshot()).toBe(before);
+    if (turn?.kind !== 'clarification') throw Error('Expected a party-size question');
+    const corrected = await provider.ask({ text: '5명', signal: signal(), continuation: { clarificationId: turn.id, value: '5명' } });
+    expect(corrected.turn?.kind, corrected.answer).toBe('proposal');
+    expect(store.getSnapshot()).toBe(before);
+  });
   it('uses registered utterance and widget projections before falling back to legacy text', async () => {
     const store = createWidgetDataStore();
     const domain = {
@@ -391,10 +519,12 @@ it('keeps the routed menu-price simulator inside the bridge first-turn budget', 
     async fetcher(_url, options) {
       const request = JSON.parse(String(options?.body)) as AgentRequest;
       catalogIds = request.catalog.map(entry => entry.id).sort();
+      // B22: the wire carries a random opaque handle; the adapter's own `picked-menu` never leaves the browser.
+      const wireHandle = request.searches.at(-1)!.matches[0].handle;
       try {
         const { requests, done } = await runNavisBookingFixture(createBridge, validateAgentFrame, request, [
           { name: 'search_records', args: { kind: 'menu', querySlot: 'name' } },
-          { name: 'simulate_menu_price', args: { menu: { handle: 'picked-menu' }, price: { slot: 'price' } } },
+          { name: 'simulate_menu_price', args: { menu: { handle: wireHandle }, price: { slot: 'price' } } },
         ], { outcome: 'reply', facts: ['f2'] });
         modelRequests = requests;
         return fakeResponse(done);

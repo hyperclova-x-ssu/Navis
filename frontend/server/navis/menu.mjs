@@ -28,8 +28,8 @@ const refuse = reason => ({ outcome: 'refused', reason });
 const clarify = field => ({ outcome: 'clarify', field });
 const liveMenu = match => match.fields?.kind === 'menu' && ['selling', 'sold_out'].includes(match.fields.status);
 
-function lookupPlan(command, { intent, slots, layer }) {
-  const { args = {}, querySlot } = intent;
+function lookupPlan(command, { intent, slots, layer, searches }) {
+  const { args = {}, querySlot = 'name' } = intent;
   if (layer === 'pos' || !slots.includes(querySlot)) return [];
   const lookups = [searchMenu(querySlot)];
   const nameSlot = args.patch?.name?.slot;
@@ -37,7 +37,11 @@ function lookupPlan(command, { intent, slots, layer }) {
     lookups.push(searchMenu(nameSlot));
   }
   if (command === 'menu.setRecipe' && args.menuId) {
-    lookups.push({ name: 'get_recipe', args: { menuId: args.menuId } });
+    const search = searches?.find(entry => entry.kind === 'menu' && entry.querySlot === querySlot && !entry.cursor);
+    const { match } = resolveAgentTarget(search && { ...search, status: search.status ?? 'ready' });
+    if (match && liveMenu(match) && match.handle === args.menuId.handle) {
+      lookups.push({ name: 'get_recipe', args: { menuId: args.menuId } });
+    }
   }
   return lookups;
 }
@@ -46,7 +50,7 @@ export const menuEditAdapters = AGENT_MENU_EDIT_COMMANDS.map(command => ({
   command,
   lookups: input => lookupPlan(command, input),
   prepare({ input, reads: [search, detail] }) {
-    const { args = {}, querySlot } = input.intent;
+    const { args = {}, querySlot = 'name' } = input.intent;
     if (input.layer === 'pos') return refuse('out_of_scope');
     if (!input.slots.includes(querySlot)) return clarify('menuId');
     if (!['ready', 'missing'].includes(search?.status)) return refuse('unavailable');

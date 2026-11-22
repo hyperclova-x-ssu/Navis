@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 import { createServer } from 'vite';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame } from '../../shared/navis-agent-schema.mjs';
 import { createBridge } from '../bridge.mjs';
-import { createNavisMenuHarness } from '../fixtures/navis-eval-fake.mjs';
+import { createNavisMenuHarness, navigationRequest } from '../fixtures/navis-eval-fake.mjs';
 import { readCafeScenarios, readTrace } from './scenario-fixtures.mjs';
 
 const trace = readTrace();
@@ -14,13 +14,14 @@ const vite = await createServer({
   root: fileURLToPath(new URL('../../', import.meta.url)), configFile: false, envFile: false, envDir: false,
   logLevel: 'silent', server: { middlewareMode: true, watch: null, ws: false, hmr: false },
 });
-let data, clock, runtime, domain, provider, registry, layout, catalog, stateFixtures, guards, testTime, navigation, corpus;
+let data, clock, runtime, domain, provider, registry, layout, catalog, stateFixtures, guards, testTime, navigation, corpus, navisTranslator, widgetHandoffRef;
 try {
   data = await vite.ssrLoadModule('/src/data/widget-data.ts');
   clock = await vite.ssrLoadModule('/src/data/db/time.ts');
   runtime = await vite.ssrLoadModule('/src/state/index.ts');
   domain = await vite.ssrLoadModule('/src/features/assistant/domains/money.ts');
   provider = await vite.ssrLoadModule('/src/features/assistant/provider.ts');
+  ({ navisTranslator } = await vite.ssrLoadModule('/src/features/assistant/messages.ts'));
   registry = await vite.ssrLoadModule('/src/features/assistant/domains/registry.ts');
   layout = await vite.ssrLoadModule('/src/layout/index.ts');
   ({ testTime } = await vite.ssrLoadModule('/src/layout/test-policy.ts'));
@@ -28,6 +29,7 @@ try {
   stateFixtures = await vite.ssrLoadModule('/src/state/test-fixtures.ts');
   guards = await vite.ssrLoadModule('/src/data/commands/management-guards.ts');
   navigation = await vite.ssrLoadModule('/src/screens/dashboard/navis-navigation.ts');
+  ({ widgetHandoffRef } = await vite.ssrLoadModule('/src/features/assistant/widget-handoff.ts'));
   ({ corpus } = await readCafeScenarios(vite));
 } finally {
   await vite.close();
@@ -110,8 +112,10 @@ function scenarioState(id) {
   if (id === 'S2-074') addTax(store, '원천세(10월분)', 132_000, '2026-11-10');
   if (id === 'S2-085') accept(store.dispatch({ type: 'tax.deletePayment', taxPaymentId: nextDue(store.getSnapshot()).taxPaymentId }));
   if (id === 'S2-090') accept(store.dispatch({ type: 'tax.setEvidence', taxPaymentId: nextDue(store.getSnapshot()).taxPaymentId, evidence: 'none' }));
+  if (id === 'S2-088') setup.evidencePaymentId = 'sample-tax-2';
   if (id === 'S2-091') {
     const income = addTax(store, '종합소득세(2025년 귀속)', 2_315_000, '2026-06-01');
+    setup.evidencePaymentId = income;
     accept(store.dispatch({ type: 'tax.updatePayment', taxPaymentId: income, patch: { status: 'paid', paidOn: '2026-05-28' } }));
     accept(store.dispatch({ type: 'tax.setEvidence', taxPaymentId: income, evidence: 'example' }));
   }
@@ -122,10 +126,10 @@ function fixtureTransport(harness) {
   const requests = [];
   const fetcher = async (_path, init) => {
     const request = JSON.parse(init.body);
-    assert.equal(new Headers(init.headers).get(AGENT_PROTOCOL_HEADER), AGENT_PROTOCOL);
+    assert.equal(new globalThis.Headers(init.headers).get(AGENT_PROTOCOL_HEADER), AGENT_PROTOCOL);
     const turn = await harness.run(request);
     requests.push({ ...turn, input: { intent: request.intent, slots: request.slots, catalog: request.catalog.map(entry => entry.id), page: request.page } });
-    return new Response(turn.raw, { status: turn.status, headers: { [AGENT_PROTOCOL_HEADER]: AGENT_PROTOCOL } });
+    return new globalThis.Response(turn.raw, { status: turn.status, headers: { [AGENT_PROTOCOL_HEADER]: AGENT_PROTOCOL } });
   };
   return { requests, fetcher };
 }
@@ -232,7 +236,6 @@ test('TRACE accounts for 90 primary N11 scenarios and 13 downstream scenarios', 
 
 const paidStatusRequests = new Set(['S2-057', 'S2-058', 'S2-059', 'S2-060', 'S2-075', 'S2-076', 'S2-081']);
 const exceptions = {
-  'S1-278': 'N11 R5: this calendar week is being read as the rolling seven-day period.',
   'S1-331': 'The combined prompt must return Ledger, inventory and suppliers from one store. The current single-widget route returns Ledger alone.',
 };
 
@@ -244,9 +247,9 @@ function scenarioDriver(id) {
   const client = provider.createAssistantProvider({ store, run, domains: appDomains, fetcher: transport.fetcher });
   const navigator = navigation.createNavisNavigation(run, { highlight() {}, closeChat() {} });
   const navigated = [];
-  const ask = async (text, plan) => {
+  const ask = async (text, plan, continuation) => {
     const prepared = plan && navigation.prepareNavigationRequest(plan, run.getState(), navigator);
-    return client.ask({ text, signal: new AbortController().signal, ...(prepared ? {
+    return client.ask({ text, continuation, signal: new globalThis.AbortController().signal, ...(prepared ? {
       agentTurn: prepared.agentTurn,
       onNavigation: value => navigated.push(prepared.resolve(value)),
     } : {}) });
@@ -256,6 +259,89 @@ function scenarioDriver(id) {
     close() { harness.close(); run.dispose(); },
   };
 }
+
+test('S1-298 a named supplier lookup cannot become an unattributed expense', async t => {
+  const harness = createNavisMenuHarness(bridge, validateAgentFrame);
+  t.after(() => harness.close());
+  const command = 'ledger.recordExpense';
+  const args = { date: { slot: 'date' }, amount: { slot: 'amount' }, category: 'ingredients', evidence: 'tax-invoice' };
+  const result = await harness.run(navigationRequest(command, args, {
+    intent: { kind: 'command', command, args, querySlot: 'name' },
+    slots: ['date', 'amount', 'name'],
+    searches: [{ kind: 'supplier', querySlot: 'name', matches: [], status: 'missing' }],
+  }));
+  assert.equal(result.terminal?.outcome, 'clarify', result.raw);
+  assert.equal(result.terminal.clarification.field, 'supplierId');
+  assert.deepEqual(result.calls, [{ name: 'search_records', args: { kind: 'supplier', querySlot: 'name' } }]);
+  assert.equal(result.proposal, undefined);
+});
+
+test('tax evidence removal without a matching payment opens the evidence list for owner selection', async t => {
+  const { ask, before, close, requests, store } = scenarioDriver('missing-tax-evidence');
+  t.after(close);
+  for (const text of corpus.get('S2-091').utterances) {
+    const reply = await ask(text);
+    assert.deepEqual(reply.turn, { kind: 'refusal', reason: 'widget_only', alternative: {
+      featureId: 'tax', step: 'tax-evidence-removal',
+    } });
+    assert.deepEqual(widgetHandoffRef(reply.turn.alternative), { featureId: 'tax', view: 'evidence' });
+    assert.equal(reply.proposalSession, undefined);
+  }
+  assert.deepEqual(requests, []);
+  assert.equal(store.getSnapshot(), before);
+});
+
+test('S1-298 asks for the missing supplier and records only the corrected supplier on card press', async t => {
+  for (const text of corpus.get('S1-298').utterances) {
+    const { before, store, run, ask, close } = scenarioDriver('S1-298');
+    t.after(close);
+    const missing = await ask(text, navigation.classifyNavigation(text, run.getState(), before));
+    assert.equal(missing.turn?.kind, 'clarification', missing.answer);
+    assert.equal(missing.turn.field, 'supplierId');
+    assert.equal(store.getSnapshot(), before);
+    const supplier = before.tables.supplier.find(row => row.supplierId === 's-dairy' && !row.deletedAt);
+    assert.ok(supplier);
+    const name = data.resolveDataText(navisTranslator('ko').t, supplier.name ?? { key: supplier.nameKey });
+    const reply = await ask('', undefined, { clarificationId: missing.turn.id, value: name });
+    assert.equal(reply.turn?.proposal?.command, 'ledger.recordExpense', reply.answer);
+    const expected = { date: TODAY, amount: 70_000, category: 'ingredients', evidence: /세금계산서/u.test(text) ? 'tax-invoice' : 'none' };
+    const { after, receipt } = await confirmCard(reply, ask, store, before);
+    verifyWrite('ledger.recordExpense', expected, before, after, {}, 'S1-298', run);
+    assert.equal(after.tables.expense.at(-1).supplierId, supplier.supplierId);
+    accept(store.undo(receipt.undoToken));
+    assert.deepEqual(store.getSnapshot().tables.expense, before.tables.expense);
+  }
+});
+
+test('S1-309 all phrasings select the staged receipt candidate through the dashboard path', async () => {
+  for (const text of corpus.get('S1-309').utterances) {
+    const driver = scenarioDriver('S1-309');
+    try {
+      const { run, store, setup, before, ask, requests } = driver;
+      const plan = navigation.classifyNavigation(text, run.getState(), before);
+      const reply = await ask(text, plan);
+      assert.equal(reply.turn?.proposal?.command, 'ledger.confirmCandidate', [text, reply.answer].join('\n'));
+      const proposal = requests.at(-1).proposal;
+      assert.equal(proposal.command, 'ledger.confirmCandidate');
+      assert.ok(proposal.args.expenseId.handle);
+      assert.match(JSON.stringify(reply.turn.proposal.preview), /23,200|2\.32만/u);
+      const read = await ask('이번 달 현금영수증 얼마야?');
+      assert.equal(read.turn?.kind, 'read');
+      assert.equal(reply.proposalSession.isPending(), true);
+      assert.equal(store.getSnapshot(), before);
+      const { receipt, after } = await confirmCard(reply, ask, store, before);
+      verifyWrite('ledger.confirmCandidate', {}, before, after, setup, 'S1-309', run);
+      const repeat = await ask('우유 입고 지출 후보 다시 확인해서 넣어줘');
+      assert.match(repeat.answer, /이미/u);
+      assert.equal(repeat.turn?.proposal, undefined);
+      assert.equal(store.getSnapshot(), after);
+      accept(store.undo(receipt.undoToken));
+      assert.deepEqual(store.getSnapshot().tables.expense, before.tables.expense);
+    } finally {
+      driver.close();
+    }
+  }
+});
 
 test('D-326 expense edit shows old and new amounts, restores the row, and refuses a closed day', async t => {
   const open = scenarioDriver('D326-open-expense');
@@ -360,6 +446,38 @@ for (const { scenario_id: id } of assigned) {
       return;
     }
 
+    if (id === 'S2-090') {
+      // R1-F18 routes evidence attachments to the tax widget instead of changing the record from chat.
+      assert.deepEqual(reply.turn, {
+        kind: 'handoff',
+        destination: {
+          featureId: 'tax', command: 'tax.setEvidence',
+          draft: { taxPaymentId: nextDue(before).taxPaymentId, evidence: 'example' },
+        },
+      });
+      assert.equal(reply.proposalSession, undefined);
+      assert.ok(requests.every(turn => !turn.proposal));
+      assert.equal(store.getSnapshot(), before);
+      return;
+    }
+
+    if (['S2-088', 'S2-091'].includes(id)) {
+      for (const [index, text] of utterances.entries()) {
+        const result = index === 0 ? reply : await ask(text);
+        assert.deepEqual(result.turn, { kind: 'refusal', reason: 'widget_only', alternative: {
+          featureId: 'tax', step: 'tax-evidence-removal', itemId: setup.evidencePaymentId,
+        } });
+        assert.deepEqual(widgetHandoffRef(result.turn.alternative), {
+          featureId: 'tax', view: 'evidence', itemId: setup.evidencePaymentId, focus: 'action',
+        });
+        assert.equal(result.proposalSession, undefined);
+      }
+      await ask('응, 지워줘');
+      assert.ok(requests.every(turn => !turn.proposal));
+      assert.equal(store.getSnapshot(), before);
+      return;
+    }
+
     const command = expected.tools.find(tool => tool.name === 'propose_action')?.args;
     if (expected.kind === 'proposal') {
       const wanted = command?.command ?? expected.tools[0].name;
@@ -422,8 +540,17 @@ for (const { scenario_id: id } of assigned) {
 
     assert.ok(reply.answer, 'Missing grounded answer');
     if (id === 'S1-278') {
-      const read = requests.flatMap(turn => turn.calls).find(call => call.name === 'get_widget');
-      assert.equal(read?.args.condition.start, clock.WEEK_START);
+      // A3_BATCH2 B20 and B21's S8-016 route read today's Ledger followed by its rolling seven-day view.
+      const rolling = { kind: 'dateRange', start: clock.addDays(TODAY, -6), end: TODAY };
+      assert.deepEqual(requests.flatMap(turn => turn.calls), [standard, rolling].map(condition => ({
+        name: 'get_widget', args: { featureId: 'ledger', condition },
+      })));
+      assert.deepEqual(requests.at(-1).terminal.readStatuses, ['ready', 'ready']);
+      assert.equal(reply.turn?.kind, 'read');
+      assert.deepEqual(reply.turn.evidence.map(entry => entry.facts.find(fact => fact.key === 'ledger.sales.net')?.value),
+        [standard, rolling].map(condition => widgetFacts(selectWidget(before, 'ledger', condition, 'normal'))
+          .find(fact => fact.key === 'ledger.sales.net').value));
+      assert.match(reply.answer, /최근\s*7일/u);
       return;
     }
     if (id === 'S1-331') {

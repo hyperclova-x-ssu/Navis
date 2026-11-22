@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { URL, fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import * as schema from '../../shared/navis-agent-schema.mjs';
 import { createBridge } from '../bridge.mjs';
@@ -125,7 +125,7 @@ async function command(state, name, args, outcome, detail, project = projectBoar
     addresses.push({ layer, page: args.destinationPage });
   }
   const reads = addresses.map(address => project(state, address));
-  const before = structuredClone(state);
+  const before = globalThis.structuredClone(state);
   const result = await send(state, { kind: 'command', command: name, args }, reads);
   assert.equal(result.status, outcome === 'bad_request' ? 400 : 200, result.raw);
   if (outcome === 'bad_request') {
@@ -201,7 +201,7 @@ function verifyEnginePreview(id, state, name, args) {
   } else if (id === 'S7-060') {
     const result = layout.evaluate(marketingPreset, grid, registryA);
     assert.equal(result.valid, true);
-    assert.equal(result.panels.length, 8);
+    assert.equal(result.panels.length, 7); // D-365: the marketing start layout lost 마케팅 성과 (8 -> 7; corpus row text still says 8개)
   }
 }
 
@@ -278,7 +278,7 @@ async function checkScenario(id, scenario) {
   if (id === 'S7-180') {
     const result = await command(state, name, args, 'proposal');
     assert.equal(result.proposal.snapshotRevision, 7);
-    const changed = structuredClone(state);
+    const changed = globalThis.structuredClone(state);
     changed.boards.management[0] = changed.boards.management[0].filter(({ featureId }) => featureId !== 'margin');
     await command(changed, name, args, 'refused', 'invalid_target');
     return;
@@ -325,6 +325,8 @@ function liveBoard(id) {
 const boundaryCases = [
   ['S7-001', 'add_widget', { featureId: 'tax' }, 'management', 0, ['tax']],
   ['S7-016', 'add_widgets', { widgets: [{ featureId: 'suppliers' }, { featureId: 'tax' }] }, 'management', 0, ['suppliers', 'tax']],
+  ['S7-019', 'set_condition', { featureId: 'ledger', condition: conditions.supportedConditions('ledger').find(value => value.kind === 'dateRange') }, 'management', 0, ['ledger']],
+  ['S7-020', 'remove_widget', { featureId: 'margin' }, 'management', 0, []],
   ['S7-021', 'remove_widget', { featureId: 'calendar', page: 2 }, 'management', 1, []],
   ['S7-028', 'remove_widgets', { featureIds: ['margin', 'calendar'] }, 'management', 0, []],
   ['S7-036', 'move_to_page', { featureId: 'inventory-booking', layer: 'management', page: 1, destinationPage: 2 }, 'management', 1, ['inventory-booking']],
@@ -362,6 +364,10 @@ for (const [id, verb, args, layer, page, present] of boundaryCases) {
     assert.equal(after.boards[layer].currentPage, verb === 'move_to_page' ? page : before.boards[layer].currentPage);
     const changed = after.boards[layer].pages[page].panels;
     for (const featureId of present) assert.ok(changed.some(panel => panel.featureId === featureId), featureId);
+    if (id === 'S7-019') {
+      assert.deepEqual(changed, before.boards[layer].pages[page].panels.map(entry => entry.featureId === 'ledger'
+        ? { ...entry, condition: args.condition } : entry));
+    }
     if (removal) {
       for (const featureId of args.featureIds ?? [args.featureId]) assert.equal(changed.some(panel => panel.featureId === featureId), false);
     }
@@ -379,6 +385,27 @@ for (const [id, verb, args, layer, page, present] of boundaryCases) {
     assert.equal(store.getSnapshot(), snapshot);
   });
 }
+
+test('an unqualified batch removal binds both placed widgets on their own pages', async t => {
+  const { run, store, snapshot, actions, state } = liveBoard('S7-021');
+  t.after(() => run.dispose());
+  const before = run.getState();
+  const project = (_state, address) => runtime.projectNavisBoard(before, address, 'ko');
+  const args = { featureIds: ['calendar', 'margin'] };
+  await command(state, 'layout.remove_widgets', { ...args, page: 1 }, 'refused', 'invalid_target', project);
+  const result = await command(state, 'layout.remove_widgets', args, 'proposal', undefined, project);
+  const local = actions.prepare(result.proposal, {}, snapshot);
+  assert.equal(local.kind, 'proposal');
+  assert.equal(local.proposal.confirm(store).requiresExtraConfirmation, true);
+  assert.equal(run.getState(), before);
+  assert.equal(local.proposal.confirm(store, local.proposal.id).frame.outcome, 'applied');
+  const after = run.getState();
+  assert.equal(after.layoutRevision, before.layoutRevision + 1);
+  assert.deepEqual(after.boards.management.pages.map(page => page.panels), before.boards.management.pages.map(page =>
+    page.panels.filter(panel => !args.featureIds.includes(panel.featureId))));
+  assert.equal(run.actions.undo(after.boards.management.undo.token).status, 'accepted');
+  assert.deepEqual(run.getState().boards.management.pages, before.boards.management.pages);
+});
 
 test('S7-180 stale card rejects the final confirmation after a manual board revision', async t => {
   const { run, store, snapshot, actions, state } = liveBoard('S7-180');

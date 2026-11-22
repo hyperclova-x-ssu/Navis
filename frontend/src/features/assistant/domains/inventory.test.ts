@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { woff2Cmap } from '../../../assets/fonts/dev/woff2-cmap';
-import { createWidgetDataStore, readModel, selectStockHistory } from '../../../data/widget-data';
+import { createWidgetDataStore, deriveSuggestions, readModel, selectStockHistory } from '../../../data/widget-data';
 import { createSeedTables } from '../../../data/db/seed';
 import type { InventoryItem } from '../../../data/db/types';
 import { TODAY, addDays } from '../../../data/db/time';
@@ -103,7 +103,7 @@ const stockedRetail = [
   { itemId: 'it-dripbag', channel: 'store', qty: 60 },
   { itemId: 'it-dripbag', channel: 'online', qty: 28 },
 ] as const;
-const cafeWithRetail = (rows: readonly typeof stockedRetail[number][] = stockedRetail) => createWidgetDataStore({
+const cafeWithRetail = (rows: readonly { readonly itemId: string; readonly channel: 'store' | 'online'; readonly qty: number }[] = stockedRetail) => createWidgetDataStore({
   inventoryItem: [...seed.inventoryItem, ...retail], inventoryStock: [...seed.inventoryStock, ...rows],
 });
 
@@ -127,8 +127,274 @@ function makeProvider(store: ReturnType<typeof createWidgetDataStore>) {
     }
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'x-navis-protocol': 'agent-v1' } });
   } });
-  return { requests, ask: (text: string) => fake.ask({ text, locale: 'ko', signal: new AbortController().signal }) };
+  return { requests, ask: (text: string, continuation?: Parameters<typeof fake.ask>[0]['continuation']) =>
+    fake.ask({ text, locale: 'ko', signal: new AbortController().signal, continuation }) };
 }
+
+it('S1-138 reads only the named retail product and requested channel', async () => {
+  for (const [text, quantities] of [
+    ['원두 200g 매장이랑 온라인 재고 각각 알려줘', ['120개', '40개']],
+    ['원두 200그램 온라인에 몇 개 있어?', ['40개']],
+    ['원두200g 재고', ['120개', '40개']],
+  ] as const) {
+    const store = cafeWithRetail();
+    const before = store.getSnapshot();
+    const reply = await makeProvider(store).ask(text);
+    expect(reply.turn?.kind).toBe('read');
+    const values = reply.answer.match(/\d+개/gu);
+    expect(values).toEqual(quantities);
+    expect(store.getSnapshot()).toBe(before);
+
+    const empty = await makeProvider(createWidgetDataStore()).ask(text);
+    expect(empty.turn?.kind).toBe('read');
+    expect(empty.answer).toContain('없어요');
+    expect(empty.answer).not.toMatch(/\d+\s*(?:g|개)/u);
+  }
+});
+
+it.each([40, null])('scopes the real channel read when online stock is %s', online => {
+  const itemId = '35a259a3-ca1f-455f-aa41-b97d8d152345';
+  const businessDate = addDays(TODAY, 4);
+  const store = createWidgetDataStore({
+    inventoryItem: [{ ...retail[0], itemId }],
+    inventoryStock: [{ itemId, channel: 'store', qty: 120 }, { itemId, channel: 'online', qty: online }],
+    realStock: [{ businessDate, items: [{
+      itemId, sku: 'PD-001', name: '원두 200g', kind: 'retail', unit: 'pcs', baseUnit: 'pcs',
+      thresholdBase: '30', trackRestock: false, trackExpiry: false, revision: 1, updatedAt: null,
+      businessDate, stock: null, onlineStock: null, expiresOn: null, referenced: false,
+    }], movements: [], movementsComplete: true, batches: [], batchesComplete: true, forecast: null }],
+  });
+  const snapshot = store.getSnapshot();
+  expect(readInventoryTurn('원두 200g 온라인 재고 알려줘', snapshot, 'ko')).toMatchObject({
+    intent: { kind: 'read', featureId, condition: { kind: 'snapshot', asOf: businessDate } },
+    factKeys: [`product.channelBalance.${itemId}.online`],
+  });
+  const result = projectInventoryFacts(snapshot, featureId, { kind: 'snapshot', asOf: businessDate }, 'ko');
+  expect(result && 'facts' in result ? result.facts.find(fact => fact.key === `product.channelBalance.${itemId}.online`) : undefined)
+    .toMatchObject({ value: online ?? '확인할 수 없어요', unit: online === null ? '' : 'pcs', date: businessDate });
+  expect(projectInventoryFacts(snapshot, featureId, today, 'ko')).toEqual({ status: 'unsupported_period' });
+});
+
+it('keeps a missing package size separate from another stocked product with the same name', async () => {
+  const stockedProduct: InventoryItem = { ...retail[0], name: { raw: '허브 200g' } };
+  const store = createWidgetDataStore({ inventoryItem: [...seed.inventoryItem, stockedProduct], inventoryStock: [...seed.inventoryStock, ...stockedRetail.slice(0, 2)] });
+  const before = store.getSnapshot();
+  const { ask } = makeProvider(store);
+  const reply = await ask('허브 500g 매장 재고 알려줘');
+  expect(reply.turn?.kind).toBe('read');
+  expect(reply.answer).toContain('확인할 수 있는 매장 자료가 없어요.');
+  expect(reply.answer).not.toContain('120개');
+  const move = await ask('허브 500g 20개 온라인으로 옮겨줘');
+  expect(move.turn?.kind).toBe('refusal');
+  expect(store.getSnapshot()).toBe(before);
+});
+
+it.each(['우유 재고 -3리터로 해줘', '우유 마이너스 3리터', '우유 재고 -3L', '우유 재고 마이너스 3'])(
+  'S1-156 explains why %s needs a new stock amount', async text => {
+    const store = createWidgetDataStore();
+    const before = store.getSnapshot();
+    const { ask, requests } = makeProvider(store);
+    const reply = await ask(text);
+    expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'stock' });
+    expect(reply.answer).toContain('0 이상');
+    expect(requests).toHaveLength(0);
+    expect(store.getSnapshot()).toBe(before);
+  },
+);
+
+it('accepts a corrected stock amount while preserving the requested threshold', async () => {
+  const store = createWidgetDataStore();
+  const before = store.getSnapshot();
+  const { ask, requests } = makeProvider(store);
+  const reply = await ask('우유 재고 -3L, 안전 재고 6L로 바꿔줘');
+  if (reply.turn?.kind !== 'clarification') throw new Error(reply.answer);
+  const clarificationId = reply.turn.id;
+  await ask('-1L', { clarificationId, value: '-1L' });
+  expect(requests).toHaveLength(0);
+  const corrected = await ask('5L', { clarificationId, value: '5L' });
+  if (corrected.turn?.kind !== 'proposal') throw new Error(corrected.answer);
+  expect(store.getSnapshot()).toBe(before);
+  expect(corrected.turn.proposal.confirm(store).frame.outcome).toBe('applied');
+  expect(readModel(store.getSnapshot(), featureId).ingredients.find(row => row.itemId === 'i-milk'))
+    .toMatchObject({ stock: 5000, threshold: 6000 });
+});
+
+it('S8-126 parses a spoken quantity ahead of the stock label', async () => {
+  const store = createWidgetDataStore();
+  const { ask } = makeProvider(store);
+  for (const text of ['원두 삼 킬로로 재고 맞춰줘', '원두 2500g 재고 맞춰줘']) {
+    expect((await ask(text)).turn?.kind).toBe('proposal');
+  }
+});
+
+it.each(['원두 재고 2500그램으로 바꿔줘', '원두 2500g로 맞춰줘', '원두 재고 2천5백 그램'])(
+  'S1-158 adjusts only the house beans after a card press for %s', async text => {
+    const store = cafeWithRetail();
+    const before = store.getSnapshot();
+    const { ask } = makeProvider(store);
+    const reply = await ask(text);
+    expect(reply.turn?.kind).toBe('proposal');
+    if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
+    const { proposal } = reply.turn;
+    expect(proposalPreview(proposal.preview)).toMatchObject({
+      target: '하우스 블렌드 원두',
+      fields: expect.arrayContaining([{ label: '현재 재고', before: '5,688 g', after: '2,500 g' }]),
+    });
+    await ask('네 해줘');
+    await ask('응');
+    expect(store.getSnapshot()).toBe(before);
+    const receipt = proposal.confirm(store);
+    expect(receipt.frame.outcome).toBe('applied');
+    const after = store.getSnapshot();
+    expect(after.revision).toBe(before.revision + 1);
+    expect(after.tables.stockAdjustment.slice(before.tables.stockAdjustment.length)).toMatchObject([
+      { itemId: 'i-bean-house', deltaBase: -3188, reason: 'cell-edit' },
+    ]);
+    expect(after.tables.inventoryStock).toEqual(before.tables.inventoryStock);
+    expect(deriveSuggestions(after, { date: TODAY }).find(row => row.itemId === 'i-bean-house'))
+      .toMatchObject({ qty: 7, unit: 'kg' });
+    expect(proposal.confirm(store).frame).toEqual(receipt.frame);
+    expect(store.getSnapshot()).toBe(after);
+    expect(store.undo(receipt.undoToken!).ok).toBe(true);
+    expect(store.getSnapshot().tables.stockAdjustment).toEqual(before.tables.stockAdjustment);
+    expect(deriveSuggestions(store.getSnapshot(), { date: TODAY })).toEqual(deriveSuggestions(before, { date: TODAY }));
+  },
+);
+
+it('asks which ingredient to change when the ordinary bean alias has multiple candidates', () => {
+  const store = createWidgetDataStore();
+  expect(store.dispatch({ type: 'inventory.createItem', sku: 'BEAN-2', name: '싱글 오리진 원두', unit: 'kg', stock: 1, threshold: 1, idempotencyKey: 'extra-beans' }).ok).toBe(true);
+  const before = store.getSnapshot();
+  expect(readInventoryTurn('원두 재고 2.5kg으로 바꿔줘', before, 'ko')).toMatchObject({ kind: 'clarification', field: 'target' });
+  expect(store.getSnapshot()).toBe(before);
+});
+
+it.each([
+  ['드립백 세트 재고 50개로 수정해줘', 'read'],
+  ['드립백 세트 30개 온라인에서 매장으로 옮겨줘', 'refusal'],
+  ['원두 200그램 두 개 반 온라인', 'read'],
+] as const)('keeps %s scoped to the missing retail record', async (text, kind) => {
+  const store = createWidgetDataStore();
+  const before = store.getSnapshot();
+  const { ask, requests } = makeProvider(store);
+  const reply = await ask(text);
+  expect(reply.turn?.kind).toBe(kind);
+  expect(reply.answer).toContain('확인할 수 있는 매장 자료가 없어요.');
+  expect(requests[0]?.intent).toMatchObject({ kind: 'read', recordKind: 'stock' });
+  expect(store.getSnapshot()).toBe(before);
+});
+
+it('S1-168 sets a requested threshold on the eligible item while preserving its alert setting', async () => {
+  const item: InventoryItem = { ...retail[0], itemId: 'test-croissant', sku: 'CROIS-01', kind: 'ingredient',
+    name: { raw: '크루아상' }, trackRestock: false, restockThreshold: null };
+  const store = createWidgetDataStore({ inventoryItem: [...seed.inventoryItem, item] });
+  const before = store.getSnapshot();
+  const { ask } = makeProvider(store);
+  const reply = await ask('크루아상 부족하면 알려줘 기준 20개로');
+  if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
+  expect(store.getSnapshot()).toBe(before);
+  const receipt = reply.turn.proposal.confirm(store);
+  expect(receipt.frame.outcome).toBe('applied');
+  const after = store.getSnapshot();
+  expect(after.tables.inventoryItem.find(row => row.itemId === item.itemId)).toMatchObject({ trackRestock: false, restockThreshold: 20 });
+  expect(after.tables.stockAdjustment).toEqual(before.tables.stockAdjustment);
+  expect(deriveSuggestions(after, { date: TODAY })).toEqual(deriveSuggestions(before, { date: TODAY }));
+  expect(store.undo(receipt.undoToken!).ok).toBe(true);
+  expect(store.getSnapshot().tables.inventoryItem).toEqual(before.tables.inventoryItem);
+});
+
+it.each(['귀리우유 품목 삭제해줘', '재고에서 귀리우유 지워', '귀리우유 품목 없애줘'])('S1-189 requires extra confirmation for %s', async text => {
+  const oat: InventoryItem = { ...retail[0], itemId: 'test-oat', sku: 'OAT-01', kind: 'ingredient', unit: 'L', name: { raw: '귀리우유' } };
+  const purchase = { ...seed.purchaseItem[0], purchaseItemId: 'test-purchase-oat', itemId: oat.itemId };
+  const store = createWidgetDataStore({ inventoryItem: [...seed.inventoryItem, oat], purchaseItem: [...seed.purchaseItem, purchase] });
+  const before = store.getSnapshot();
+  const { ask } = makeProvider(store);
+  const reply = await ask(text);
+  if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
+  const { proposal } = reply.turn;
+  await ask('네 해줘');
+  expect(proposal.confirm(store).requiresExtraConfirmation).toBe(true);
+  await ask('응');
+  expect(store.getSnapshot()).toBe(before);
+  const receipt = proposal.confirm(store, proposal.id);
+  expect(receipt.frame.outcome).toBe('applied');
+  const after = store.getSnapshot();
+  expect(after.revision).toBe(before.revision + 1);
+  expect(after.tables.inventoryItem.find(row => row.itemId === oat.itemId)?.deletedAt).toBeDefined();
+  expect(after.tables.purchaseItem).toEqual(seed.purchaseItem);
+  expect(proposal.confirm(store, proposal.id).frame).toEqual(receipt.frame);
+  expect(store.getSnapshot()).toBe(after);
+  expect(store.undo(receipt.undoToken!).ok).toBe(true);
+  expect(store.getSnapshot().tables.purchaseItem).toEqual(before.tables.purchaseItem);
+  expect(store.getSnapshot().tables.inventoryItem).toEqual(before.tables.inventoryItem);
+});
+
+it('refuses a missing target for a safety stock change without proposing a write', async () => {
+  const store = createWidgetDataStore();
+  const before = store.getSnapshot();
+  const { ask, requests } = makeProvider(store);
+  const reply = await ask('크루아상 보충 기준 20개로 설정해줘');
+  expect(reply.turn).toMatchObject({ kind: 'refusal', reason: 'invalid_target' });
+  expect(requests[0]?.intent).toMatchObject({ kind: 'read', recordKind: 'stock' });
+  expect(store.getSnapshot()).toBe(before);
+});
+
+it.each(['원두 200그램 가격', '원두 200g 얼마야?'])(
+  'leaves the price question %s to the appropriate widget', text => {
+    const snapshot = createWidgetDataStore().getSnapshot();
+    expect(readInventoryTurn(text, snapshot, 'ko')).toBeUndefined();
+  },
+);
+
+it('rejects an inventory card after an intervening update', async () => {
+  const store = createWidgetDataStore();
+  const { ask } = makeProvider(store);
+  const reply = await ask('원두 재고 2500g으로 바꿔줘');
+  if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
+  expect(store.dispatch({ type: 'inventory.updateItem', itemId: 'i-bean-house', stock: 3000 }).ok).toBe(true);
+  const latest = store.getSnapshot();
+  expect(reply.turn.proposal.confirm(store, reply.turn.proposal.id).frame.outcome).toBe('conflict');
+  expect(store.getSnapshot()).toBe(latest);
+});
+
+it.each([
+  ['원두 2.0005kg', 'stock'],
+  ['원두 재고 이점영영영오 킬로', 'stock'],
+  ['우유 재고 5박스로', 'unit'],
+  ['컵 두 박스 있어', 'packSize'],
+  ['귀리우유 품목코드 RM-001 리터 4 2', 'sku'],
+  ['귀리우유 OAT-01 단위 개 두 개 반', 'stock'],
+])('asks for %s correction without sending a command', (text, field) => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  expect(readInventoryTurn(text, snapshot, 'ko')).toMatchObject({ kind: 'clarification', field });
+});
+
+it('S8-127 keeps the named ingredient and converts half kilos to base grams', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  for (const [text, name, stock] of [
+    ['원두 반 키로로 바꿔줘', '하우스 블렌드 원두', 500],
+    ['원두 한 킬로 반으로 바꿔줘', '하우스 블렌드 원두', 1500],
+    ['우유 한 리터 반으로 맞춰줘', '목장 1등급 우유', 1500],
+  ] as const) {
+    expect(readInventoryTurn(text, snapshot, 'ko')).toMatchObject({ intent: { command: 'inventory.updateItem' }, slots: { stock, name } });
+  }
+});
+
+it('S1-177 registers a measured quantity with alerts off through a card', async () => {
+  const store = createWidgetDataStore();
+  const before = store.getSnapshot();
+  const { ask } = makeProvider(store);
+  const reply = await ask('재고에 참깨 SES-01 2kg 보충알림 끔');
+  expect(reply.turn?.kind).toBe('proposal');
+  if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
+  expect(store.getSnapshot()).toBe(before);
+  const receipt = reply.turn.proposal.confirm(store);
+  expect(receipt.frame.outcome).toBe('applied');
+  const item = readModel(store.getSnapshot(), featureId).ingredients.find(row => row.sku === 'SES-01');
+  expect(item).toMatchObject({ trackRestock: false, stock: 2, unit: 'kg', threshold: 0 });
+  expect(store.undo(receipt.undoToken!).ok).toBe(true);
+  expect(store.getSnapshot().tables.inventoryItem).toEqual(before.tables.inventoryItem);
+});
 
 it('S1-179 conserves the two stored channel balances and requires both records', async () => {
   const store = cafeWithRetail();
@@ -153,6 +419,39 @@ it('S1-179 conserves the two stored channel balances and requires both records',
   const missing = await makeProvider(partial).ask('원두 200g 20개 매장에서 온라인으로 옮겨줘');
   expect(missing.turn?.kind).toBe('refusal');
   expect(partial.getSnapshot()).toBe(previous);
+});
+
+it.each([
+  ['원두 200그램 20개 온라인으로 옮겨줘 매장 거에서', 'it-beans200', 100, 60],
+  ['원두200g 매장->온라인 20개 이동', 'it-beans200', 100, 60],
+  ['드립백 세트 10개 온라인에서 매장으로 옮겨줘', 'it-dripbag', 70, 18],
+  ['드립백 온라인 거 10개 매장으로', 'it-dripbag', 70, 18],
+  ['드립백세트 온라인->매장 10개', 'it-dripbag', 70, 18],
+  ['원두 20개만 온라인 쪽으로', 'it-beans200', 100, 60],
+  ['원두 온라인으로 20개', 'it-beans200', 100, 60],
+] as const)('scopes the eligible transfer %s and refuses if the retail record is absent', async (text, itemId, inStore, online) => {
+  const store = cafeWithRetail();
+  const reply = await makeProvider(store).ask(text);
+  if (reply.turn?.kind !== 'proposal') throw new Error(reply.answer);
+  const receipt = reply.turn.proposal.confirm(store);
+  expect(receipt.frame.outcome).toBe('applied');
+  const balances = store.getSnapshot().tables.inventoryStock.filter(row => row.itemId === itemId);
+  expect(balances).toEqual(expect.arrayContaining([
+    expect.objectContaining({ channel: 'store', qty: inStore }), expect.objectContaining({ channel: 'online', qty: online }),
+  ]));
+  const absent = createWidgetDataStore();
+  const before = absent.getSnapshot();
+  const missing = await makeProvider(absent).ask(text);
+  expect(missing.turn?.kind).toBe('refusal');
+  expect(absent.getSnapshot()).toBe(before);
+});
+
+it('rejects an explicitly incompatible starting quantity when registering a stock item', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  const volume = readInventoryTurn('귀리우유 OAT-01 단위 L 재고 500mL 기준 2로 추가해줘', snapshot, 'ko');
+  expect(volume).toMatchObject({ intent: { command: 'inventory.createItem' }, slots: { stock: 0.5 } });
+  const mass = readInventoryTurn('귀리우유 OAT-01 단위 L 재고 2kg 기준 2로 추가해줘', snapshot, 'ko');
+  expect(mass).toMatchObject({ kind: 'clarification', field: 'stock' });
 });
 
 it('keeps the Chinese inventory copy inside both production font weights', () => {
@@ -185,22 +484,18 @@ it('accounts for all 63 primary IDs and 18 additional dependency IDs in TRACE', 
 
 const errata: Readonly<Partial<Record<string, { observed: 'proposal' | 'clarify' | 'answer' | 'unresolved' | 'navigate'; answer?: string }>>> = {
   'S1-014': { observed: 'answer', answer: '카페라떼' },
-  'S1-060': { observed: 'unresolved' },
   'S1-061': { observed: 'unresolved' },
   'S1-133': { observed: 'unresolved' },
-  'S1-138': { observed: 'unresolved' },
-  'S1-139': { observed: 'answer' },
+  'S1-139': { observed: 'answer', answer: '확인할 수 있는 매장 자료가 없어요.' },
   'S1-141': { observed: 'answer', answer: '21,960 mL' },
   'S1-144': { observed: 'answer', answer: '1,406개' },
   'S1-145': { observed: 'answer', answer: 'RM-004' },
   'S1-153': { observed: 'proposal' },
-  'S1-158': { observed: 'clarify' },
   'S1-159': { observed: 'clarify' },
   'S1-161': { observed: 'proposal' },
   'S1-162': { observed: 'proposal' },
   'S1-164': { observed: 'proposal' },
   'S1-165': { observed: 'proposal' },
-  'S1-166': { observed: 'clarify' },
   'S1-168': { observed: 'unresolved' },
   'S1-169': { observed: 'unresolved' },
   'S1-179': { observed: 'unresolved' },
@@ -209,7 +504,6 @@ const errata: Readonly<Partial<Record<string, { observed: 'proposal' | 'clarify'
   'S1-182': { observed: 'unresolved' },
   'S1-183': { observed: 'unresolved' },
   'S1-184': { observed: 'unresolved' },
-  'S1-185': { observed: 'clarify' },
   'S1-187': { observed: 'unresolved' },
   'S7-078': { observed: 'navigate' },
   'S7-079': { observed: 'navigate' },
@@ -218,14 +512,14 @@ const errata: Readonly<Partial<Record<string, { observed: 'proposal' | 'clarify'
   'S8-091': { observed: 'proposal' },
   'S8-095': { observed: 'proposal' },
   'S8-125': { observed: 'proposal' },
-  'S8-126': { observed: 'clarify' },
-  'S8-127': { observed: 'clarify' },
 };
 
 const writes: Record<string, { itemId: string; stock?: number; threshold?: number; name?: string }> = {
-  'S1-153': { itemId: 'i-milk', stock: 5000 }, 'S1-161': { itemId: 'i-milk', threshold: 6000 },
+  'S1-153': { itemId: 'i-milk', stock: 5000 }, 'S1-158': { itemId: 'i-bean-house', stock: 2500 }, 'S1-161': { itemId: 'i-milk', threshold: 6000 },
   'S1-162': { itemId: 'i-cup-takeout', threshold: 100 }, 'S1-163': { itemId: 'i-cup-takeout', name: '종이컵' },
   'S1-164': { itemId: 'i-cup-takeout', stock: 120 }, 'S1-165': { itemId: 'i-milk', stock: 5000, threshold: 6000 },
+  'S1-166': { itemId: 'i-bean-house', stock: 3000 }, 'S8-126': { itemId: 'i-bean-house', stock: 3000 },
+  'S8-127': { itemId: 'i-bean-house', stock: 500 },
   'S8-018': { itemId: 'i-milk', stock: 5 }, 'S8-091': { itemId: 'i-milk', stock: 5000 },
   'S8-095': { itemId: 'i-milk', stock: 5000 }, 'S8-125': { itemId: 'i-milk', stock: 5000 }, 'S8-128': { itemId: 'i-cup-takeout', stock: 200 },
 };
@@ -297,4 +591,121 @@ describe('N05 client contract on the café seed', () => {
       for (const phrase of evidence) expect(reply.answer).toContain(phrase);
     }
   });
+});
+
+describe('A3-B27 selector-backed inventory facts', () => {
+  it.each(['컵 며칠이나 쓸 수 있어?', '컵 언제 떨어져?', '컵 재고로 하루 버텨?'])(
+    'S1-144 states the cup stock and the days left with a day unit for %s', async text => {
+      const store = createWidgetDataStore();
+      const before = store.getSnapshot();
+      const { ask, requests } = makeProvider(store);
+      const reply = await ask(text);
+      expect(reply.turn?.kind).toBe('read');
+      expect(requests[0]?.intent).toMatchObject({ kind: 'read', featureId, condition: { kind: 'snapshot', asOf: TODAY } });
+      expect(reply.answer).toContain('음료 컵·뚜껑·슬리브 세트 · 현재 재고 1,406개');
+      expect(reply.answer).toMatch(/남은 일수 6일(?:$|\n)/u);
+      expect(store.getSnapshot()).toBe(before);
+    },
+  );
+
+  it('S1-144 says the days left cannot be calculated for an item with no usage today instead of staying silent', async () => {
+    const store = createWidgetDataStore();
+    expect(store.dispatch({ type: 'inventory.createItem', sku: 'OAT-01', name: '귀리우유', unit: 'L', stock: 4, threshold: 2, idempotencyKey: 'b27-days' }).ok).toBe(true);
+    const reply = await makeProvider(store).ask('귀리우유 며칠 쓸 수 있어?');
+    expect(reply.turn?.kind).toBe('read');
+    expect(reply.answer).toContain('귀리우유 · 현재 재고 4 L');
+    expect(reply.answer).toContain('귀리우유 · 오늘 사용량 기준 남은 일수 오늘 사용량이 없어 계산할 수 없어요');
+    expect(reply.answer).not.toMatch(/0일/u);
+  });
+
+  it('keeps the day unit on the projected fact in every locale', () => {
+    const snapshot = createWidgetDataStore().getSnapshot();
+    for (const locale of ['ko', 'en', 'zh-Hans', 'zh-Hant'] as const) {
+      const facts = projectInventoryFacts(snapshot, featureId, today, locale);
+      if (!facts || !('facts' in facts)) throw new Error('Expected facts');
+      const days = facts.facts.find(fact => fact.key === 'inventory.daysLeft.i-cup-takeout');
+      expect(days).toMatchObject({ value: 6, unit: 'day' });
+      expect(days?.display).toMatch(/6/u);
+      expect(days?.display).not.toBe('6');
+    }
+  });
+
+  it.each(['온라인 재고 부족한 상품 있어?', '채널별로 모자란 판매 상품', '온라인에 물건 부족한 거 있나'])(
+    'S1-139 says the store has no product data when the catalog has no retail rows (%s)', async text => {
+      const store = createWidgetDataStore();
+      const before = store.getSnapshot();
+      const { ask, requests } = makeProvider(store);
+      const reply = await ask(text);
+      expect(reply.turn?.kind).toBe('read');
+      expect(requests[0]?.intent).toMatchObject({ kind: 'read', featureId, condition: { kind: 'snapshot', asOf: TODAY } });
+      expect(reply.answer).toBe('확인할 수 있는 매장 자료가 없어요.');
+      expect(store.getSnapshot()).toBe(before);
+    },
+  );
+
+  it('S1-139 lists the low online channel with the product, channel and quantity', async () => {
+    const store = cafeWithRetail();
+    const before = store.getSnapshot();
+    const { ask } = makeProvider(store);
+    for (const text of ['온라인 재고 부족한 상품 있어?', '온라인에 물건 부족한 거 있나']) {
+      const reply = await ask(text);
+      expect(reply.turn?.kind).toBe('read');
+      expect(reply.answer).toContain('드립백 세트 · 온라인 28개');
+      expect(reply.answer).not.toContain('원두 200g');
+      expect(reply.answer).not.toContain('확인할 수 있는 매장 자료가 없어요.');
+    }
+    expect(store.getSnapshot()).toBe(before);
+  });
+
+  it('S1-139 reads only low online balances even when a separate store channel is low', async () => {
+    const store = cafeWithRetail(stockedRetail.map(row =>
+      row.itemId === 'it-beans200' && row.channel === 'store' ? { ...row, qty: 5 } : row));
+    const { ask } = makeProvider(store);
+    const online = await ask('온라인 재고 부족한 상품 있어?');
+    expect(online.answer).toContain('드립백 세트 · 온라인 28개');
+    expect(online.answer).not.toContain('원두 200g');
+    const both = await ask('채널별로 모자란 판매 상품');
+    expect(both.answer).toContain('원두 200g · 매장 5개');
+    expect(both.answer).toContain('드립백 세트 · 온라인 28개');
+  });
+
+  it('S1-139 reports a measured zero when every channel is above its threshold', async () => {
+    const store = cafeWithRetail(stockedRetail.map(row => ({ ...row, qty: 90 })));
+    const { ask } = makeProvider(store);
+    const reply = await ask('온라인 재고 부족한 상품 있어?');
+    expect(reply.turn?.kind).toBe('read');
+    expect(reply.answer).toBe('재고가 부족한 판매 채널 0개');
+    expect(reply.answer).not.toContain('확인할 수 있는 매장 자료가 없어요.');
+  });
+
+  it.each([['우유 코드가 뭐였지?', 'RM-004'], ['우유 SKU 알려줘', 'RM-004'], ['원두 품목 코드', 'RM-001']])(
+    'S1-145 answers the SKU of the named item only (%s)', async (text, sku) => {
+      const { ask, requests } = makeProvider(createWidgetDataStore());
+      const reply = await ask(text);
+      expect(requests[0]?.intent).toMatchObject({ kind: 'read', recordKind: 'stock', querySlot: 'name' });
+      expect(reply.answer).toBe(sku);
+    },
+  );
+
+  it.each(['참치 재고 얼마야?', '참치 몇 개 남았어', '참치캔 재고'])(
+    'S1-146 says the item is not registered rather than zero for %s', async text => {
+      const store = createWidgetDataStore();
+      const before = store.getSnapshot();
+      const { ask, requests } = makeProvider(store);
+      const reply = await ask(text);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]?.intent).toMatchObject({ kind: 'read', recordKind: 'stock', querySlot: 'name' });
+      expect(reply.turn?.kind).toBe('read');
+      expect(reply.answer).toBe('등록된 품목이 없어요');
+      expect(reply.answer).not.toMatch(/0\s*개/u);
+      expect(store.getSnapshot()).toBe(before);
+    },
+  );
+
+  it.each(['쿠폰 몇 개 남았어', '자리 몇 개 남았어', '오늘 재고', '이번 주 재고'])(
+    'leaves the other-domain or date-only phrase %s unclaimed', text => {
+      const snapshot = createWidgetDataStore().getSnapshot();
+      expect(readInventoryTurn(text, snapshot, 'ko')).toBeUndefined();
+    },
+  );
 });
