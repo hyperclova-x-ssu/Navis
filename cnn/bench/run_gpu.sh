@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # gpu-server 에서 측정 스크립트를 돌리는 래퍼. 기존 conda torch 환경 python 은 실행만 하고(설치 금지),
 # 추가 패키지는 ~/navis-cnn-live/extra(lap), extra_trt(tensorrt·onnx) 에 pip --target 으로 넣어 PYTHONPATH 로 붙인다.
-# 사용: bash ~/navis-cnn-live/cnn/bench/run_moa.sh bench_detect.py --backends pt
+# 사용: bash ~/navis-cnn-live/cnn/bench/run_gpu.sh bench_detect.py --backends pt
 set -euo pipefail
 L=$HOME/navis-cnn-live
 export NAVIS_LIVE=$L

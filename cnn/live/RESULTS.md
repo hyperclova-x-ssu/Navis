@@ -54,7 +54,7 @@ python tools/measure.py --base https://<tailnet-host>:8443 --seconds 330 \
 ## 실제 휴대폰 시험(사용자, 2026-11-10 09:3x KST)
 
 - 사용자 확인: 휴대폰으로 끝까지 해 보고 "잘 동작"이라고 했다[사용자 보고].
-- 서버 로그(`~/navis-cnn-live/logs/server.log`)에 휴대폰(tailnet 주소 100.85.11.109)이 `/ws/camera`로 붙었다가 끊긴 기록이 있다[측정].
+- 서버 로그(`~/navis-cnn-live/logs/server.log`)에 휴대폰(tailnet 주소)이 `/ws/camera`로 붙었다가 끊긴 기록이 있다[측정].
 - 테이블 영역은 저장되지 않았다: `zonesRevision` 6·0개 그대로[측정].
 - 시험 직후 `/api/health` stats: `inferMs` p50 95·p95 101, `latencyMs` p50 85, `dropped` 10. **시험이 끝난 직후 값이며 시험 중 통계가 아니다**[측정].
 - **[미측정]** 휴대폰 카메라일 때의 상자 갱신 횟수·e2e 수치.

@@ -1,7 +1,7 @@
 """후보 C: OpenVINO FP32 모델(bench_cpu.py 가 만든 *_openvino_model) -> NNCF 사후 양자화 INT8 모델.
 ultralytics 의 int8 내보내기와 같은 설정(preset MIXED, 검출 머리의 Add/Sub/Mul/Div·dfl·Sigmoid 는 FP 유지)을 쓰되,
 보정 데이터는 COCO 를 내려받지 않고 cafe17.mp4 에서 고른 300장을 쓴다(같은 카메라 영상이라 실제 매장에서 '그 매장 화면으로 보정'한 경우와 비슷).
-실행(gpu-server, 측정 코어와 겹치지 않게): PYTHONPATH=extra:extra_cpu:extra_int8 taskset -c 10-19 bash run_moa.sh make_int8.py --model yolo11s --size 1280"""
+실행(gpu-server, 측정 코어와 겹치지 않게): PYTHONPATH=extra:extra_cpu:extra_int8 taskset -c 10-19 bash run_gpu.sh make_int8.py --model yolo11s --size 1280"""
 import argparse
 import shutil
 

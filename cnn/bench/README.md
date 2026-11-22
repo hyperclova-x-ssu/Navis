@@ -165,7 +165,7 @@ sudo 없이 gpu-server에서:
 CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 NAVIS_THREADS=4 \
 PYTHONPATH=$HOME/navis-cnn-live/extra:$HOME/navis-cnn-live/extra_cpu \
 systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 \
-  taskset -c 0-3 bash $HOME/navis-cnn-live/cnn/bench/run_moa.sh bench_cpu.py --mode latency --model yolo11s --runtime ov_int8 --size 960
+  taskset -c 0-3 bash $HOME/navis-cnn-live/cnn/bench/run_gpu.sh bench_cpu.py --mode latency --model yolo11s --runtime ov_int8 --size 960
 ```
 
 - CPU 0~3은 서로 다른 물리 코어(`lscpu -e`), 스레드 수는 torch·OpenCV·ONNX Runtime·OpenVINO 모두 4로 고정(`bench_cpu.py`가 ONNX Runtime·OpenVINO 세션 옵션을 덮어씀).
@@ -196,12 +196,12 @@ $P -m pip install --no-deps --target extra_int8 nncf==2.14.1 jstyleson natsort p
 측정(gpu-server, `~/navis-cnn-live/cnn/bench`):
 
 ```sh
-bash run_moa.sh bench_detect.py --backends pt        # 1-GPU  -> results/detect.json
-bash run_moa.sh bench_pipeline.py --configs pt:640:fp16,pt:960:fp16,pt:960:fp32,pt:1280:fp16,pt:1280:fp32   # 2-GPU -> results/pipeline.json
-bash run_moa.sh bench_tables.py                      # 3-GPU  -> results/tables.json
+bash run_gpu.sh bench_detect.py --backends pt        # 1-GPU  -> results/detect.json
+bash run_gpu.sh bench_pipeline.py --configs pt:640:fp16,pt:960:fp16,pt:960:fp32,pt:1280:fp16,pt:1280:fp32   # 2-GPU -> results/pipeline.json
+bash run_gpu.sh bench_tables.py                      # 3-GPU  -> results/tables.json
 bash run_cpu.sh all                                  # 1·2-CPU (FP32) -> results/cpu_rows.jsonl, results/cpu_frames/
 PYTHONPATH=$HOME/navis-cnn-live/extra:$HOME/navis-cnn-live/extra_cpu:$HOME/navis-cnn-live/extra_int8 \
-  taskset -c 10-19 bash run_moa.sh make_int8.py --model yolo11s --size 960   # INT8 만들기(약 3분, 1280 은 약 5분)
+  taskset -c 10-19 bash run_gpu.sh make_int8.py --model yolo11s --size 960   # INT8 만들기(약 3분, 1280 은 약 5분)
 bash run_cpu_int8.sh; bash run_cpu_int8_n2.sh        # C (INT8)
 bash run_cpu_tables.sh                               # 3-CPU  -> results/tables_cpu.json
 ```
@@ -211,7 +211,7 @@ bash run_cpu_tables.sh                               # 3-CPU  -> results/tables_
 ```sh
 # gpu-server: 서버(10분 뒤 저절로 꺼짐). 끝나면 kill 로 바로 닫고 `ss -ltn | grep 18765` 가 비었는지 확인
 L=~/navis-cnn-live; CUDA_VISIBLE_DEVICES="" NAVIS_THREADS=4 PYTHONPATH=$L/extra:$L/extra_cpu \
-  taskset -c 4-7 bash $L/cnn/bench/run_moa.sh net_server.py --host gpu-server --port 18765 --ttl 600 --config cpu:yolo11n:openvino:640
+  taskset -c 4-7 bash $L/cnn/bench/run_gpu.sh net_server.py --host gpu-server --port 18765 --ttl 600 --config cpu:yolo11n:openvino:640
 # Mac(cnn/bench): 1280x720 JPEG 하나를 만들어서
 python3 net_client.py --host gpu-server --port 18765 --jpeg <1280x720.jpg> --n 200 --out results/network.json
 ```
@@ -242,7 +242,7 @@ python3 summarize_cpu.py > results/cpu_tables.md     # -> results/cpu.json + 표
 
 ## 쓴 환경과 패키지 (서버 의존성 확정은 R3)
 
-- 측정 실행: gpu-server 기존 conda `torch` 환경의 파이썬을 **실행만**(Python 3.10.20, torch 2.5.1+cu121, ultralytics 8.4.41, opencv 4.13.0, numpy 2.2.6). 그 환경에는 아무것도 설치하지 않았고, `YOLO_AUTOINSTALL=False`로 ultralytics 자동 설치도 막았습니다(`run_moa.sh`).
+- 측정 실행: gpu-server 기존 conda `torch` 환경의 파이썬을 **실행만**(Python 3.10.20, torch 2.5.1+cu121, ultralytics 8.4.41, opencv 4.13.0, numpy 2.2.6). 그 환경에는 아무것도 설치하지 않았고, `YOLO_AUTOINSTALL=False`로 ultralytics 자동 설치도 막았습니다(`run_gpu.sh`).
 - 추가 패키지(모두 `~/navis-cnn-live/` 안, `pip --target`): `extra/` lap 0.5.14 · `extra_cpu/` onnx 1.17.0, onnxruntime 1.20.1, openvino 2024.6.0, openvino-telemetry, protobuf 5.29.3, flatbuffers, coloredlogs, humanfriendly · `extra_int8/` nncf 2.14.1, scikit-learn 1.5.2, joblib, threadpoolctl, jstyleson, natsort, pydot, pyparsing, tabulate, safetensors.
 - 서버용 새 환경 `~/navis-cnn-live/venv`(Python 3.10, conda `torch` 환경 파이썬으로 만든 venv): torch 2.5.1+cu121, torchvision 0.20.1+cu121, ultralytics 8.4.41, lap 0.5.14, opencv-python-headless 5.0. 설치가 늦게 끝나 측정에는 쓰지 않았습니다. 처음 시도한 Python 3.13 venv는 torchvision cu121 휠이 없어 실패해 지웠습니다.
 - 가중치: `yolo11s.pt`(Mac에서 복사), `yolo11n.pt`·`yolo11s-seg.pt`(ultralytics assets v8.3.0). ONNX·OpenVINO·INT8 모델은 `~/navis-cnn-live/models/`.
@@ -262,7 +262,7 @@ python3 summarize_cpu.py > results/cpu_tables.md     # -> results/cpu.json + 표
 | `make_gt.py` | Mac: Café 정답 → 프레임별 숫자(`gt_cafe17.json`, 저장소 밖) |
 | `eval_occupancy.py` | T-065b 평가(`occupancy/evaluate_weakpc.py`)를 bench 결과에 돌림(출력은 bench 안) |
 | `summarize_cpu.py` | CPU 결과 정리·판정 |
-| `run_moa.sh`, `run_cpu*.sh`, `start_*.sh` | gpu-server 실행 래퍼·대기열 |
+| `run_gpu.sh`, `run_cpu*.sh`, `start_*.sh` | gpu-server 실행 래퍼·대기열 |
 
 ## 하지 않은 것과 남은 위험
 

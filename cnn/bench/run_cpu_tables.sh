@@ -4,4 +4,4 @@ L=$HOME/navis-cnn-live; B=$L/cnn/bench
 while pgrep -f "bash [r]un_cpu_(more|raw).sh" >/dev/null; do sleep 10; done
 CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=4 NAVIS_THREADS=4 PYTHONPATH=$L/extra:$L/extra_cpu \
   systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 \
-  taskset -c 0-3 bash $B/run_moa.sh bench_tables.py --device cpu --sample 20
+  taskset -c 0-3 bash $B/run_gpu.sh bench_tables.py --device cpu --sample 20

@@ -8,7 +8,7 @@ cpu() {  # 설정 하나 = 새 프로세스 하나(메모리 최대값을 설정
   CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 NAVIS_THREADS=4 \
   PYTHONPATH=$L/extra:$L/extra_cpu \
   systemd-run --user --scope --quiet -p MemoryMax=8G -p MemorySwapMax=0 \
-    taskset -c 0-3 bash $B/run_moa.sh bench_cpu.py "$@"
+    taskset -c 0-3 bash $B/run_gpu.sh bench_cpu.py "$@"
 }
 what=${1:-all}
 if [[ $what == latency || $what == all ]]; then
