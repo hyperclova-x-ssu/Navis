@@ -11,10 +11,10 @@ type StoreParams = { storeId: string };
 type JobParams = StoreParams & { jobId: string };
 
 interface PromoRoutesOptions {
-  confirmToken: string;
+  confirmToken?: string;
   readToken: string;
   references: ReturnType<typeof loadReferences>;
-  catalogForStore(storeId: string): Promise<CatalogSnapshot | null>;
+  catalogForStore?: (storeId: string) => Promise<CatalogSnapshot | null>;
   artifacts: Pick<PromoArtifacts, 'read'>;
 }
 
@@ -54,10 +54,11 @@ function byteRange(header: string, size: number) {
 }
 
 export function registerPromoRoutes(app: FastifyInstance, database: Pool, options: PromoRoutesOptions) {
-  if (!options.confirmToken || !options.readToken || options.confirmToken === options.readToken) {
+  const { confirmToken, catalogForStore } = options;
+  if (!options.readToken || Boolean(confirmToken) !== Boolean(catalogForStore) || confirmToken === options.readToken) {
     throw new Error('Promo confirmation and read credentials must be distinct');
   }
-  const confirm = Buffer.from(sha256(`Bearer ${options.confirmToken}`), 'hex');
+  const confirm = confirmToken && Buffer.from(sha256(`Bearer ${confirmToken}`), 'hex');
   const read = Buffer.from(sha256(`Bearer ${options.readToken}`), 'hex');
   const authorizeRead = async (request: FastifyRequest<{ Params: JobParams }>) => {
     authenticate(request, read);
@@ -75,14 +76,14 @@ export function registerPromoRoutes(app: FastifyInstance, database: Pool, option
       return reply.code(503).send({ code: 'UNAVAILABLE' });
     });
 
-    routes.post<{ Params: StoreParams }>(promoJobsPath, {
+    if (confirm && catalogForStore) routes.post<{ Params: StoreParams }>(promoJobsPath, {
       bodyLimit: 16 * 1024,
       onRequest: async request => { authenticate(request, confirm); },
     }, async (request, reply) => {
       const scope = authenticate(request, confirm);
       const card = checkedCard(request.body, request.headers['idempotency-key']);
       const job = await enqueuePromo(database, scope, `navis:${card.proposalId}`, card, async () => {
-        const snapshot = await options.catalogForStore(scope.storeId);
+        const snapshot = await catalogForStore(scope.storeId);
         if (!snapshot) throw new PromoRouteError(404, 'NOT_FOUND');
         const field = validateInput(card.input, snapshot.catalog, options.references);
         if (field) throw new PromoRouteError(400, 'BAD_REQUEST', { field });

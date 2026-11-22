@@ -1,0 +1,50 @@
+# PN-A2 Compose proof: marketing adapters → committed naver-virtual provider + PostgreSQL.
+# `naver-virtual` and `marketing` sit only on the internal `proof` network (no internet egress).
+# PostgreSQL also publishes a loopback port for the host integration suite (naver-virtual-provider.test.ts).
+# Node and dependencies are mounted read-only from the host (NODE_DIR, MODULES_DIR); no image build.
+name: pn-a2-proof
+x-node: &node
+  image: ubuntu:22.04
+  working_dir: /app/navis/backend
+  environment:
+    PN_A2_DATABASE_URL: postgresql://postgres@postgres/naver_virtual
+  volumes:
+    - ${NODE_DIR:?set NODE_DIR}:/opt/node:ro
+    - ../../../../../..:/app/navis:ro
+    - ${MODULES_DIR:?set MODULES_DIR}:${MODULES_DIR}:ro
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: naver_virtual
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports: ['127.0.0.1:55432:5432']
+    healthcheck:
+      test: [CMD, pg_isready, -U, postgres, -d, naver_virtual, -h, 127.0.0.1]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+    networks: [proof, db-host]
+  naver-virtual:
+    <<: *node
+    profiles: [proof]
+    command: [/opt/node/bin/node, --experimental-transform-types, --disable-warning=ExperimentalWarning, services/marketing/naver/test/compose/persona-server.ts]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, /opt/node/bin/node, -e, "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+    networks: [proof]
+  marketing:
+    <<: *node
+    profiles: [proof]
+    command: [/opt/node/bin/node, --experimental-transform-types, --disable-warning=ExperimentalWarning, services/marketing/naver/test/compose/proof.ts]
+    depends_on:
+      naver-virtual: { condition: service_healthy }
+    networks: [proof]
+networks:
+  proof:
+    internal: true
+  db-host: {}

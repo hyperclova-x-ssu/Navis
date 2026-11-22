@@ -1,0 +1,3833 @@
+{
+ "meta": {
+  "region": "서울 동작구 상도동",
+  "regionRule": "생활인구는 행정동 상도1·2·3·4동(11590530·11590540·11590550·11590560) 합계, 인허가는 지번주소 법정동 상도동·상도1동, 행사는 동작구 행사 중 장소에 상도·숭실이 들어간 것",
+  "attribution": "출처: 서울특별시·KT, 서울시 통신데이터 (생활인구) · 서울 열린데이터광장 (인허가·문화행사)",
+  "window": {
+   "from": "2026-07-01",
+   "coverageDate": "2026-11-19"
+  },
+  "population": {
+   "dataset": "OA-23016 [내국인] 행정동별 서울 생활인구(250m)",
+   "provider": "서울특별시 디지털도시국 데이터전략과",
+   "url": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do",
+   "unit": "시간대별 생활인구(추정) 평균, 명, 정수 반올림",
+   "method": "같은 분기·같은 요일의 같은 시각 값을 상도1~4동 합계로 더해 날짜 수로 나눔. 네 동이 모두 있는 시각만 씀.",
+   "terms": "별도 이용조건: 분석·가공한 통계·지표·시각화의 상업적 이용 허용(출처 표시 필수), 원본의 전부 또는 상당 부분 재배포·유상 제공 금지, 개인 식별 시도 금지",
+   "quarters": {
+    "2026-Q3": {
+     "from": "2026-07-01",
+     "to": "2026-09-30",
+     "days": 92
+    },
+    "2026-Q4": {
+     "from": "2026-10-01",
+     "to": "2026-11-17",
+     "days": 48
+    }
+   },
+   "sheetOverlapRows": 4416,
+   "sheetMismatchRows": 0,
+   "files": [
+    {
+     "path": "pop/250_LOCAL_RESD_ADMDONG_202607.zip",
+     "dataset": "OA-23016 [내국인] 행정동별 서울 생활인구(250m)",
+     "url": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do#file-202607",
+     "disposition": "attachment; filename=250_LOCAL_RESD_ADMDONG_202607.zip",
+     "bytes": 35714535,
+     "sha256": "738e30e09a9fb1420f66d28e2cddb2b37df238e7c376cff9c6fb2e63b12cd4b2",
+     "retrievedAt": "2026-11-21T14:42:37Z"
+    },
+    {
+     "path": "pop/250_LOCAL_RESD_ADMDONG_202608.zip",
+     "dataset": "OA-23016 [내국인] 행정동별 서울 생활인구(250m)",
+     "url": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do#file-202608",
+     "disposition": "attachment; filename=250_LOCAL_RESD_ADMDONG_202608.zip",
+     "bytes": 35938739,
+     "sha256": "a14f0f63b77925c783abddaf8e129d8957930285a14239f8d0684897e90efd40",
+     "retrievedAt": "2026-11-21T14:42:58Z"
+    },
+    {
+     "path": "pop/250_LOCAL_RESD_ADMDONG_202609.zip",
+     "dataset": "OA-23016 [내국인] 행정동별 서울 생활인구(250m)",
+     "url": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do#file-202609",
+     "disposition": "attachment; filename=250_LOCAL_RESD_ADMDONG_202609.zip",
+     "bytes": 34816531,
+     "sha256": "34564933d176268d47bcf577eb9c02d4605ff0402a44d20600762556730b5945",
+     "retrievedAt": "2026-11-21T14:43:17Z"
+    },
+    {
+     "path": "pop/250_LOCAL_RESD_ADMDONG_202610.zip",
+     "dataset": "OA-23016 [내국인] 행정동별 서울 생활인구(250m)",
+     "url": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do#file-202610",
+     "disposition": "attachment; filename=250_LOCAL_RESD_ADMDONG_202610.zip",
+     "bytes": 35923265,
+     "sha256": "f5731f68be93c44a8cf6d54e3bb8c5dc2e21994a5ff0c784e00c7dc521add4d7",
+     "retrievedAt": "2026-11-21T14:43:37Z"
+    },
+    {
+     "path": "pop/recent_11590530.csv",
+     "dataset": "OA-23016 [내국인] 행정동별 서울 생활인구(250m)",
+     "url": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do#csv-11590530",
+     "disposition": "attachment; filename=[내국인] 행정동별 서울 생활인구(250m).csv",
+     "bytes": 479676,
+     "sha256": "41811dbb489d9bac2dc6f03e9f9177102fe7c145f8d9c4b8f0810731dc02fd3d",
+     "retrievedAt": "2026-11-21T14:43:40Z"
+    },
+    {
+     "path": "pop/recent_11590540.csv",
+     "dataset": "OA-23016 [내국인] 행정동별 서울 생활인구(250m)",
+     "url": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do#csv-11590540",
+     "disposition": "attachment; filename=[내국인] 행정동별 서울 생활인구(250m).csv",
+     "bytes": 463706,
+     "sha256": "464e6423193d49deeb9aef93a79497e3d25a5c0c82f27ba95c349c16755e19c4",
+     "retrievedAt": "2026-11-21T14:43:42Z"
+    },
+    {
+     "path": "pop/recent_11590550.csv",
+     "dataset": "OA-23016 [내국인] 행정동별 서울 생활인구(250m)",
+     "url": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do#csv-11590550",
+     "disposition": "attachment; filename=[내국인] 행정동별 서울 생활인구(250m).csv",
+     "bytes": 451623,
+     "sha256": "24db4134b42a736da989f74cf2d938a4a91d40df4dc7fd5f8ec783105e81e510",
+     "retrievedAt": "2026-11-21T14:43:44Z"
+    },
+    {
+     "path": "pop/recent_11590560.csv",
+     "dataset": "OA-23016 [내국인] 행정동별 서울 생활인구(250m)",
+     "url": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do#csv-11590560",
+     "disposition": "attachment; filename=[내국인] 행정동별 서울 생활인구(250m).csv",
+     "bytes": 462943,
+     "sha256": "e00dfcf360870fb822d4686d7931b6ad9ca3febb813e4a7bf891f36fae85b666",
+     "retrievedAt": "2026-11-21T14:43:46Z"
+    }
+   ]
+  },
+  "codeTable": {
+   "dataset": "OA-22172 서울시 상권분석서비스(점포-행정동)",
+   "url": "https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do",
+   "dongs": {
+    "11590530": "상도1동",
+    "11590540": "상도2동",
+    "11590550": "상도3동",
+    "11590560": "상도4동"
+   },
+   "files": [
+    {
+     "path": "codes/store_admdong_2025.zip",
+     "dataset": "OA-22172 서울시 상권분석서비스(점포-행정동)",
+     "url": "https://data.seoul.go.kr/dataList/OA-22172/S/1/datasetView.do#file-7",
+     "disposition": "attachment; filename=서울시 상권분석서비스(점포-행정동)_2025년.zip",
+     "bytes": 1073668,
+     "sha256": "1eb65713ac04861ac54a765984e9a9072e55288fd1c715409f3cce22782d2e69",
+     "retrievedAt": "2026-11-21T14:43:47Z"
+    }
+   ]
+  },
+  "licenses": {
+   "datasets": [
+    "OA-18671 서울시 동작구 일반음식점 인허가 정보",
+    "OA-18696 서울시 동작구 휴게음식점 인허가 정보"
+   ],
+   "provider": "서울특별시 동작구",
+   "terms": "이용허락범위 제한 없음",
+   "asOf": "2026-11-19",
+   "rule": "인허가일자 2026-07-01 이후, 영업상태 영업/정상, 지번주소 법정동 상도동·상도1동",
+   "count": 30,
+   "files": [
+    {
+     "path": "licenses/dongjak_general_restaurants.csv",
+     "dataset": "OA-18671 서울시 동작구 일반음식점 인허가 정보",
+     "url": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do#csv",
+     "disposition": "attachment; filename=서울시 동작구 일반음식점 인허가 정보.csv",
+     "bytes": 5988167,
+     "sha256": "28d7a05a4487606691a7c919be8d7052f19307a2236b339348158ce0c54d8442",
+     "retrievedAt": "2026-11-21T14:43:51Z"
+    },
+    {
+     "path": "licenses/dongjak_rest_restaurants.csv",
+     "dataset": "OA-18696 서울시 동작구 휴게음식점 인허가 정보",
+     "url": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do#csv",
+     "disposition": "attachment; filename=서울시 동작구 휴게음식점 인허가 정보.csv",
+     "bytes": 1624153,
+     "sha256": "bb9385c6294ef87801dba2c8a8bfa97321cc01c8322c81176688f4cc0138cdb3",
+     "retrievedAt": "2026-11-21T14:43:52Z"
+    }
+   ]
+  },
+  "events": {
+   "dataset": "OA-15486 서울시 문화행사 정보",
+   "provider": "서울특별시",
+   "url": "https://data.seoul.go.kr/dataList/OA-15486/S/1/datasetView.do",
+   "terms": "이용허락범위 제한 없음",
+   "rule": "시작일 2026-07-01 이후, 자치구 동작구, 장소에 상도·숭실",
+   "dongjakRows": 172,
+   "count": 5,
+   "files": [
+    {
+     "path": "events/seoul_cultural_events.csv",
+     "dataset": "OA-15486 서울시 문화행사 정보",
+     "url": "https://data.seoul.go.kr/dataList/OA-15486/S/1/datasetView.do#csv",
+     "disposition": "attachment; filename=서울시 문화행사 정보.csv",
+     "bytes": 13268419,
+     "sha256": "3836abd9abf7f3b2e8768a180a970f9f6cdb94aea79c55f2dcb1323ffb361105",
+     "retrievedAt": "2026-11-21T14:43:59Z"
+    }
+   ]
+  },
+  "skippedGarbledRows": 0,
+  "builtWith": "v22.23.4"
+ },
+ "snapshot": {
+  "region": "서울 동작구 상도동",
+  "coverageDate": "2026-11-19",
+  "kinds": [
+   "food-license",
+   "festival"
+  ],
+  "changes": [
+   {
+    "id": "0e138fb0-f334-5385-bd52-21e941cb51b0",
+    "kind": "food-license",
+    "title": "버핏그라운드 상도 · 휴게음식점(기타 휴게음식점) · 상도로 222",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-07-10",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "34ec2d21-31f2-5650-b2f5-75b4ea5b511a",
+    "kind": "food-license",
+    "title": "동네커피 · 일반음식점(기타) · 양녕로25바길 48",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-07-10",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "c1d0127d-d4ae-51f6-8ef4-c1341eb40433",
+    "kind": "food-license",
+    "title": "어울터카페 · 일반음식점(기타) · 성대로 180",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-07-10",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "ede56750-c20a-5c97-af35-738b3dcff0ee",
+    "kind": "food-license",
+    "title": "플러스82 상도점 · 휴게음식점(기타 휴게음식점) · 상도로47가길 3",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-07-15",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "814528ed-b47b-5fc8-9c34-acf93254807a",
+    "kind": "food-license",
+    "title": "잭슨피자 상도점 · 일반음식점(기타) · 양녕로 277-1",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-07-21",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "90b4022b-62d3-55a3-babe-67370de6589a",
+    "kind": "food-license",
+    "title": "베로니카(veronica) · 일반음식점(한식) · 상도로37길 66",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-07-21",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "9f217389-48b0-545a-aba4-ccaa42af343b",
+    "kind": "festival",
+    "title": "[콘서트] [동작문화재단] 2026 상도어울마당 아트홀 하반기 정기 기획공연 [아트 박스 콘서트] · 상도어울마당 아트홀",
+    "authority": "동작문화재단",
+    "referenceDate": "2026-07-29",
+    "sourceUrl": "https://culture.seoul.go.kr/culture/culture/cultureEvent/view.do?cultcode=158715&menuNo=200008"
+   },
+   {
+    "id": "a60f8fc5-3357-5512-af22-5507e3004008",
+    "kind": "food-license",
+    "title": "복이네잔치집 · 일반음식점(한식) · 성대로 14",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-07-31",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "bfa6d3cb-c38d-5775-b8af-a88f97262c0e",
+    "kind": "food-license",
+    "title": "치킨주는 아구찜 · 일반음식점(한식) · 성대로6나길 4",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-08-03",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "69ab3356-e63b-5e96-a0ff-2f360ee598c0",
+    "kind": "food-license",
+    "title": "상상오리 상도점 · 일반음식점(한식) · 상도로15바길 10-1",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-08-07",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "98c84727-6a17-58d8-a87f-a3db28028b3f",
+    "kind": "food-license",
+    "title": "상도꿀단지 · 휴게음식점(일반조리판매) · 상도로37길 58",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-08-10",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "8500c30e-eab9-58b3-9449-c69ea1adc3a1",
+    "kind": "food-license",
+    "title": "카페디차 · 휴게음식점(커피숍) · 상도로47길 89",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-08-11",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "74ffcfa1-4842-558a-9987-6e0cfdd47b99",
+    "kind": "food-license",
+    "title": "칸키라멘 동작구청점 · 일반음식점(일식) · 장승배기로 70",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-08-14",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "31270203-d0d1-572a-ab11-70235eb08d07",
+    "kind": "food-license",
+    "title": "제철바다향기(상도점) · 일반음식점(일식) · 상도로 332",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-08-18",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "e5ee6afd-a1c1-51a1-a243-5baa91b830b2",
+    "kind": "food-license",
+    "title": "뷔페명가 · 일반음식점(한식) · 상도로26길 19",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-08-19",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "9bcacfa6-c4ff-541b-98bb-5ac003aca9d1",
+    "kind": "food-license",
+    "title": "쿼터피자 숭실대 학생회관점 · 휴게음식점(패스트푸드) · 상도로 369",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-08-26",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "ac8632c3-dab4-53cd-91df-7fcb4cb982ec",
+    "kind": "festival",
+    "title": "[콘서트] [동작문화재단] 상도어울마당 아트홀 '아트 박스 콘서트' 8회차 [먼 곳에서 온 가까운 우리] · 상도어울마당 아트홀",
+    "authority": "동작문화재단",
+    "referenceDate": "2026-08-26",
+    "sourceUrl": "https://culture.seoul.go.kr/culture/culture/cultureEvent/view.do?cultcode=158833&menuNo=200008"
+   },
+   {
+    "id": "a34084e8-eee3-522b-8fa8-a36463fc5ddf",
+    "kind": "food-license",
+    "title": "(주)보해명가 · 휴게음식점(일반조리판매) · 상도로30길 40",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-09-03",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "b85f378f-a263-58ca-aa4f-3343d6187e1c",
+    "kind": "food-license",
+    "title": "우픽 떡볶이 상도본점 · 일반음식점(분식) · 상도로47길 4",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-09-03",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "54f05137-fd55-5c27-9f1e-9fdf4325e51b",
+    "kind": "food-license",
+    "title": "국수옥한상 · 일반음식점(한식) · 상도로37길 65",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-09-08",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "818a18a9-170a-5c8e-bd98-f11d93c433e5",
+    "kind": "food-license",
+    "title": "루미카페 · 휴게음식점(커피숍) · 매봉로 1",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-09-09",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "86eb7ce2-b3f8-5808-9db2-909f65f4a49b",
+    "kind": "food-license",
+    "title": "제로백 피씨 상도건영점 · 휴게음식점(기타 휴게음식점) · 만양로 11",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-09-16",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "56903aba-1cc5-5b36-b3e8-78f3bfdcad50",
+    "kind": "food-license",
+    "title": "올드페리도넛 동작구청점 · 휴게음식점(기타 휴게음식점) · 장승배기로 70",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-09-18",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "f0342bf1-c867-5e98-88a0-c409c1398e89",
+    "kind": "food-license",
+    "title": "메가엠지씨커피 장승배기역점 · 휴게음식점(커피숍) · 장승배기로 75",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-09-28",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "425b204d-3ea0-5086-99ee-b886e18dd078",
+    "kind": "food-license",
+    "title": "310쌀국수 · 일반음식점(기타) · 장승배기로 70",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-10-07",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "553f824e-e596-59e1-813b-c525a8a521e1",
+    "kind": "food-license",
+    "title": "라탱(Latin) · 휴게음식점(커피숍) · 상도로15길 85",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-10-07",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "32954341-282c-5027-9d1a-4de212f2c7e2",
+    "kind": "food-license",
+    "title": "아담만두 상도점 · 일반음식점(한식) · 만양로 8",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-10-08",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "e00aa906-e97f-5fa0-af9d-7d4bea81e5ba",
+    "kind": "food-license",
+    "title": "더블피 피자 관악동작점 · 일반음식점(기타) · 국사봉길 64",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-10-14",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "bcb44cbb-1c46-5b17-a9ec-0ec1d751ea39",
+    "kind": "food-license",
+    "title": "국수나무 숭실대점 · 일반음식점(한식) · 사당로 24-1",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-10-16",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "0fe4aa33-fe8c-5743-ab7a-0e280e534313",
+    "kind": "festival",
+    "title": "[콘서트] [동작문화재단] 상도어울마당 아트홀 '아트 박스 콘서트' 10회차 [동작동락-장단으로 만나는 퓨전국악 여행] · 상도어울마당 아트홀",
+    "authority": "동작문화재단",
+    "referenceDate": "2026-10-21",
+    "sourceUrl": "https://culture.seoul.go.kr/culture/culture/cultureEvent/view.do?cultcode=159574&menuNo=200008"
+   },
+   {
+    "id": "8b09c69a-c474-5f4b-a2c4-4c8c09af3c57",
+    "kind": "food-license",
+    "title": "엄마네 집밥 · 일반음식점(한식) · 상도로34길 3",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-10-21",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18671/S/1/datasetView.do"
+   },
+   {
+    "id": "4bceaf42-faff-54a8-ab50-76af7068fd5d",
+    "kind": "food-license",
+    "title": "메가엠지씨커피 상도역점 · 휴게음식점(커피숍) · 상도로 291",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-10-22",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "f6366ad1-7344-551e-8225-df670ab8e458",
+    "kind": "food-license",
+    "title": "씨유 상도파크엘점 · 휴게음식점(편의점) · 양녕로 220",
+    "authority": "서울특별시 동작구",
+    "referenceDate": "2026-10-22",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-18696/S/1/datasetView.do"
+   },
+   {
+    "id": "b4b5d359-ba67-5ede-9bac-b79223dfb913",
+    "kind": "festival",
+    "title": "[교육/체험] [동작문화재단] 예술교육 [교과서 밖 라디오 극장 - 스탠바이 유, 스탠바이 큐!] 2기수 · 상도어울마당 아트홀",
+    "authority": "동작문화재단",
+    "referenceDate": "2026-10-24",
+    "sourceUrl": "https://culture.seoul.go.kr/culture/culture/cultureEvent/view.do?cultcode=159657&menuNo=200011"
+   },
+   {
+    "id": "b0285bde-1076-53e3-bf6d-9108233d39ba",
+    "kind": "festival",
+    "title": "[교육/체험] [동작문화재단] 2026 상도어울마당 아트홀 개관 3주년 기획 프로그램 [상도 놀이터] · 상도어울마당 아트홀",
+    "authority": "동작문화재단",
+    "referenceDate": "2026-11-04",
+    "sourceUrl": "https://culture.seoul.go.kr/culture/culture/cultureEvent/view.do?cultcode=159914&menuNo=200011"
+   }
+  ],
+  "population": [
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 123640,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 124036,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 124084,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 124276,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 124322,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 124058,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 123010,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 120037,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 113021,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 105287,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 101910,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 100384,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 99840,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 99143,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 98778,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 99341,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 100703,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 102518,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 106371,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 112024,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 115500,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 118517,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 120956,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 1,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 122473,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 123787,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 124091,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 124316,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 124594,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 124506,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 124107,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 123359,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 120138,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 112780,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 104442,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 101071,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 99370,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 99066,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 98316,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 98556,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 98711,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 100144,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 102277,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 106034,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 111418,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 114737,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 117949,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 120460,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 2,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 122222,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 123539,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 123955,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 124256,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 124422,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 124444,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 123999,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 123199,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 119775,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 112209,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 104054,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 99935,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 98214,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 97487,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 96800,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 97014,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 97700,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 98779,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 100666,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 104297,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 109547,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 113333,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 116223,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 119264,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 3,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 121294,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 122891,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 123247,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 123570,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 123821,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 123803,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 123142,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 122638,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 119573,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 112107,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 104438,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 101059,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 99185,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 98375,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 97932,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 97921,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 98162,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 99157,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 101271,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 104870,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 109961,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 113389,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 116318,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 119115,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 4,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 120783,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 122855,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 123479,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 123732,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 123933,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 123927,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 123474,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 122730,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 120027,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 113862,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 107331,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 103806,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 101838,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 100789,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 99716,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 99392,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 99593,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 100578,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 102230,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 105556,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 109398,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 112699,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 115521,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 118442,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 5,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 120346,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 122378,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 123137,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 123614,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 123743,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 123954,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 123939,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 123586,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 122874,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 122004,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 120915,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 118963,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 115889,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 113617,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 111697,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 110791,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 110187,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 110295,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 110590,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 110845,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 111963,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 114021,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 116578,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 119629,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 6,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 121573,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 123133,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 123469,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 123958,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 124426,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 124947,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 124804,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 124245,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 123756,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 122882,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 121484,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 119657,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 117450,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 115508,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 113319,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 111816,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 111186,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 111329,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 111471,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 112333,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 113755,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 115838,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 118447,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 120661,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q3",
+    "weekday": 7,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 122215,
+    "referenceDate": "2026-09-30",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 123255,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 123654,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 123704,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 123897,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 123896,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 123621,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 122997,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 120030,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 113335,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 106751,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 104470,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 102958,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 102403,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 101535,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 101171,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 101943,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 103170,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 104744,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 108275,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 113801,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 116675,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 118870,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 121355,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 1,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 121946,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 122453,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 122517,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 122842,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 123002,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 122926,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 122322,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 121622,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 119062,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 111286,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 104181,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 101804,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 99661,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 99616,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 99321,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 99072,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 99739,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 101328,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 102947,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 106676,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 112014,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 115350,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 118032,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 120546,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 2,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 121583,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 123098,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 123450,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 123620,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 123795,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 123849,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 123397,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 122933,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 119760,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 111682,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 104067,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 100677,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 98759,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 98579,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 98478,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 98222,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 99085,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 99762,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 101859,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 105504,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 110832,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 114331,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 117236,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 120003,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 3,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 121328,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 123126,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 123702,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 123853,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 124130,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 124034,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 123377,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 122597,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 119227,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 111406,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 103307,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 101016,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 99005,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 99113,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 98958,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 98733,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 99501,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 101863,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 103248,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 106144,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 111463,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 114394,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 117038,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 119516,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 4,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 121206,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 122849,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 123447,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 123746,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 124070,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 124091,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 123498,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 122889,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 119975,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 113421,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 106895,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 104041,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 102051,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 100939,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 100158,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 99680,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 100593,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 102008,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 103570,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 105620,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 109791,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 112780,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 115695,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 118502,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 5,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 120372,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 123104,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 123968,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 124327,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 124644,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 125106,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 124443,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 124384,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 123382,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 122500,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 121853,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 119852,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 116821,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 114041,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 111750,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 109877,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 109559,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 109455,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 109694,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 110592,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 113061,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 115247,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 118046,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 119868,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 6,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 121674,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 0,
+    "endHour": 1,
+    "estimate": 123467,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 1,
+    "endHour": 2,
+    "estimate": 123719,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 2,
+    "endHour": 3,
+    "estimate": 124418,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 3,
+    "endHour": 4,
+    "estimate": 124717,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 4,
+    "endHour": 5,
+    "estimate": 124993,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 5,
+    "endHour": 6,
+    "estimate": 125235,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 6,
+    "endHour": 7,
+    "estimate": 124556,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 7,
+    "endHour": 8,
+    "estimate": 123969,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 8,
+    "endHour": 9,
+    "estimate": 123244,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 9,
+    "endHour": 10,
+    "estimate": 121599,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 10,
+    "endHour": 11,
+    "estimate": 119501,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 11,
+    "endHour": 12,
+    "estimate": 116663,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 12,
+    "endHour": 13,
+    "estimate": 114740,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 13,
+    "endHour": 14,
+    "estimate": 112242,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 14,
+    "endHour": 15,
+    "estimate": 110989,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 15,
+    "endHour": 16,
+    "estimate": 110513,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 16,
+    "endHour": 17,
+    "estimate": 111036,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 17,
+    "endHour": 18,
+    "estimate": 111182,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 18,
+    "endHour": 19,
+    "estimate": 112542,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 19,
+    "endHour": 20,
+    "estimate": 114398,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 20,
+    "endHour": 21,
+    "estimate": 116242,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 21,
+    "endHour": 22,
+    "estimate": 118596,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 22,
+    "endHour": 23,
+    "estimate": 120905,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   },
+   {
+    "quarter": "2026-Q4",
+    "weekday": 7,
+    "startHour": 23,
+    "endHour": 24,
+    "estimate": 122427,
+    "referenceDate": "2026-11-17",
+    "refreshedAt": "2026-11-21T14:43:46Z",
+    "sourceUrl": "https://data.seoul.go.kr/dataList/OA-23016/S/1/datasetView.do"
+   }
+  ]
+ }
+}

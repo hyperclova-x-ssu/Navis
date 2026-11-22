@@ -115,7 +115,7 @@ BEGIN
                                  'stream_inbox', 'stream_checkpoint'] LOOP
         EXECUTE format('ALTER TABLE marketing.%I ENABLE ROW LEVEL SECURITY', name);
         EXECUTE format('ALTER TABLE marketing.%I FORCE ROW LEVEL SECURITY', name);
-        EXECUTE format('CREATE POLICY marketing_scope ON marketing.%I TO marketing_migrate, marketing_runtime USING (%s)',
+        EXECUTE format('CREATE POLICY marketing_scope ON marketing.%I TO marketing_mig, marketing_run USING (%s)',
             name,
             CASE
                 WHEN name IN ('stream_inbox', 'stream_checkpoint')
@@ -129,12 +129,12 @@ END
 $$;
 
 GRANT SELECT, INSERT ON marketing.promo_job, marketing.promo_checkpoint, marketing.promo_attempt,
-    marketing.outbox, marketing.outbox_scope, marketing.stream_checkpoint, marketing.stream_inbox TO marketing_runtime;
+    marketing.outbox, marketing.outbox_scope, marketing.stream_checkpoint, marketing.stream_inbox TO marketing_run;
 GRANT UPDATE (status, stage, lease_token, lease_until, dispatched_at, next_run_at, stage_started_at,
-    finished_at, fail_reason, asset_id, result) ON marketing.promo_job TO marketing_runtime;
-GRANT UPDATE (state, asset_id, usage, settled_at) ON marketing.promo_attempt TO marketing_runtime;
-GRANT UPDATE (last_seq) ON marketing.outbox_scope, marketing.stream_checkpoint TO marketing_runtime;
-GRANT UPDATE (status, attempts, retry_at, reason, envelope, notified_at) ON marketing.stream_inbox TO marketing_runtime;
+    finished_at, fail_reason, asset_id, result) ON marketing.promo_job TO marketing_run;
+GRANT UPDATE (state, asset_id, usage, settled_at) ON marketing.promo_attempt TO marketing_run;
+GRANT UPDATE (last_seq) ON marketing.outbox_scope, marketing.stream_checkpoint TO marketing_run;
+GRANT UPDATE (status, attempts, retry_at, reason, envelope, notified_at) ON marketing.stream_inbox TO marketing_run;
 
 -- Down Migration
 DROP TABLE marketing.stream_inbox, marketing.stream_checkpoint, marketing.promo_attempt,

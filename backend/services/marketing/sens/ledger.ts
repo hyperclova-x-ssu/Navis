@@ -49,24 +49,35 @@ export async function sendWait(db: PoolClient, storeId: string, kind: 'reserve' 
   return row.retry_after;
 }
 
-export function enqueueSensAttempt(pool: Pool, scope: OwnerScope, card: SensCard, policy: SensPolicy) {
+export async function enqueueSensAttempt(pool: Pool, scope: OwnerScope, card: SensCard, policy: SensPolicy) {
   const { storeId, actorId } = scope;
   const { draftId, targetId, body } = card.input;
   const actionKey = `navis:${card.proposalId}`;
   const requestHash = sha256(JSON.stringify([card.snapshotRevision, draftId, targetId, body]));
   const bodyHash = sha256(body);
-  return inStore(pool, storeId, async db => {
+  async function findPrior(db: PoolClient) {
     const { rows: [prior] } = await db.query<Attempt>(
       'SELECT * FROM marketing.sens_attempt WHERE store_id = $1 AND action_key = $2', [storeId, actionKey]);
-    if (prior) {
-      if (prior.actor_id !== actorId) throw new SensError('NOT_FOUND');
-      if (prior.request_hash !== requestHash) throw new SensError('CONFLICT');
-      return prior;
-    }
+    if (prior && prior.actor_id !== actorId) throw new SensError('NOT_FOUND');
+    if (prior && prior.request_hash !== requestHash) throw new SensError('CONFLICT');
+    return prior;
+  }
 
+  async function validate() {
     const target = await resolveTestTarget(policy, storeId, targetId);
     const draft = await resolveReply(policy, scope, draftId);
     if (!draft.replies.has(bodyHash)) throw new SensError('INVALID_REPLY');
+    return { draft, routingHash: target.routingHash };
+  }
+
+  const existing = await inStore(pool, storeId, findPrior);
+  if (existing) return existing;
+  const validation = await validate().catch((error: unknown) => ({ error }));
+  return inStore(pool, storeId, async db => {
+    const prior = await findPrior(db);
+    if (prior) return prior;
+    if ('error' in validation) throw validation.error;
+    const { draft, routingHash } = validation;
     const { rowCount } = await db.query(`
       SELECT 1 FROM marketing.sens_attempt
       WHERE store_id = $1 AND (state IN ${openStates} OR (actor_id, draft_session_id, sample_id) = ($2, $3, $4))
@@ -81,7 +92,7 @@ export function enqueueSensAttempt(pool: Pool, scope: OwnerScope, card: SensCard
         (store_id, receipt_id, actor_id, action_key, request_hash, draft_id, draft_session_id, sample_id,
          target_alias, routing_hash, body_hash)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-    [storeId, receiptId, actorId, actionKey, requestHash, draftId, draft.sessionId, draft.sampleId, targetId, target.routingHash, bodyHash]);
+    [storeId, receiptId, actorId, actionKey, requestHash, draftId, draft.sessionId, draft.sampleId, targetId, routingHash, bodyHash]);
     await appendMarketingEvent(db, storeId, { type: messageQueued, aggregateId: receiptId, payload: { receiptId } });
     return attempt;
   }, { serialize: true });

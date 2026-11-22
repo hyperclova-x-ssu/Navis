@@ -39,6 +39,7 @@ interface WorkerOptions {
   checkVideo: (request: { file: string; lengthSec: number; rules: unknown }) => Promise<{ info: VideoInfo; violations: unknown[] }>;
   leaseMs?: number;
   retryDelayMs?: number;
+  reconcileWindowMs?: number;
   onError?: (code: 'PROMO_STAGE_DEFERRED') => void;
 }
 
@@ -46,15 +47,29 @@ const readJson = <T>(value: Buffer): T => JSON.parse(value.toString('utf8'));
 
 export function createPromoWorker({
   database, artifacts, meter, provider, references, music, musicDir, checkScene, renderVideo, checkVideo,
-  leaseMs = 30_000, retryDelayMs = 5_000, onError,
+  leaseMs = 30_000, retryDelayMs = 5_000, reconcileWindowMs = 5 * 60_000, onError,
 }: WorkerOptions) {
   if (!Number.isSafeInteger(leaseMs) || leaseMs < 300 || leaseMs > 300_000
-      || !Number.isSafeInteger(retryDelayMs) || retryDelayMs < 0) throw new Error('Invalid promo timing');
+      || !Number.isSafeInteger(retryDelayMs) || retryDelayMs < 0
+      || !Number.isInteger(reconcileWindowMs) || reconcileWindowMs < 1 || reconcileWindowMs > 2_147_483_647) {
+    throw new Error('Invalid promo timing');
+  }
 
   async function process(lease: Lease, signal: AbortSignal, directory: string) {
     const { input, stage, catalog_snapshot: snapshot, store_id: storeId, job_id: jobId } = lease;
     const scope = { storeId, resourceId: jobId };
-    const attempts = createAttemptRunner({ database, lease, artifacts, meter, provider, signal });
+    // Check the persisted attempts even when a redeploy changes the stage's prompt or call keys.
+    if (stage !== 'merge') {
+      await withLease(database, lease, async db => {
+        const expired = await db.query(`
+          SELECT 1 FROM marketing.promo_attempt
+          WHERE store_id = $1 AND job_id = $2 AND stage = $3 AND state = 'pending'
+            AND started_at <= clock_timestamp() - $4 * interval '1 millisecond'
+          LIMIT 1`, [storeId, jobId, stage, reconcileWindowMs]);
+        if (expired.rowCount) throw new PromoError('AI_TIMEOUT', undefined);
+      });
+    }
+    const attempts = createAttemptRunner({ database, lease, artifacts, meter, provider, signal, reconcileWindowMs });
     const photoSource = {
       listCatalog: () => snapshot.catalog,
       photoInfo: (id: string) => id === snapshot.catalog.store.exteriorPhotoId
@@ -70,11 +85,16 @@ export function createPromoWorker({
         return { bytes, mediaType: mime, lookKey: fingerprint({ bytes: sha256(bytes), menuName }) };
       },
     };
+    if (!references.rules) throw new PromoError('AI_BAD_OUTPUT', undefined);
+    const jobReferences = {
+      ...references,
+      rules: { ...references.rules, photo: { ...references.rules.photo, exteriorId: snapshot.catalog.store.exteriorPhotoId } },
+    };
     const sceneRunner = attempts.runner('scenes');
     const pipeline = createPipeline({
       runner: sceneRunner, sceneRunner, lookRunner: attempts.runner('look'), storyRunner: attempts.runner('story'),
       lookModel: attempts.model('look'), model: attempts.model('scenes'),
-      photoSource, references, music, musicDir, cacheDir: directory, checkScene, checkVideo, renderVideo,
+      photoSource, references: jobReferences, music, musicDir, cacheDir: directory, checkScene, checkVideo, renderVideo,
       fault: null, onSceneCheck: undefined,
     });
     const job = { input, stage, dir: directory, fixCount: 0, storyRewriteCount: 0, checks: [],
@@ -111,7 +131,7 @@ export function createPromoWorker({
       } else {
         const [story, scene] = await Promise.all([load('story'), load('scenes')]);
         job.fixCount = scene.fixCount;
-        const { rules, fonts, contract } = references;
+        const { rules, fonts, contract } = jobReferences;
         const assets = await photoAssets(photoSource, [...input.photoIds, snapshot.catalog.store.exteriorPhotoId]);
         const ctx = { ...story.promptCtx, rules, fonts, contract };
         const { info, outFile, music: track } = await pipeline.merge(job, { signal, story, scene: { ...scene, ctx, assets } });
@@ -156,6 +176,7 @@ export function createPromoWorker({
         if (!(error instanceof LostLease)) {
           const reason = shutdown?.aborted ? null : reasonOf(error);
           try {
+            // Pending provider rows retain the unresolved outcome for audit after the job fails.
             if (reason) await fail(database, lease, reason);
             else {
               await defer(database, lease, retryDelayMs);

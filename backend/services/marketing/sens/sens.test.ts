@@ -143,6 +143,20 @@ describe.skipIf(!redisUrl)('T-314 isolated Compose test-SMS ledger', () => {
     expect(await env.events()).toEqual([]);
   }));
 
+  test('resolves SMS settings and draft with the store advisory lock available', () => fixture(async env => {
+    const { policy, storeId } = env;
+    const { settingsForStore, draftForOwner } = policy;
+    const checkLock = () => inStore(database, storeId, async db => {
+      const { rows: [lock] } = await db.query(
+        "SELECT pg_try_advisory_xact_lock(hashtextextended('marketing:' || $1, 0)) AS acquired", [storeId]);
+      expect(lock.acquired).toBe(true);
+    });
+    policy.settingsForStore = async id => { await checkLock(); return settingsForStore(id); };
+    policy.draftForOwner = async (scope, id) => { await checkLock(); return draftForOwner(scope, id); };
+    expect((await env.submit()).statusCode).toBe(202);
+    expect(await env.events()).toHaveLength(1);
+  }));
+
   test('commits one private event and atomically claims concurrent deliveries across workers and restart', () => fixture(async env => {
     const provider = createFakeSensTransport({
       send: request => {

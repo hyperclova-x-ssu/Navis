@@ -5,7 +5,7 @@ export const stages = ['look', 'story', 'scenes', 'merge'] as const;
 export type Stage = typeof stages[number];
 export type CheckpointStage = Exclude<Stage, 'merge'>;
 export type PromoInput = PromoVideoInput;
-export type FileBinding = { resourceId: string; fileId: string };
+export type FileBinding = { resourceId: string; fileId: string; sourceFileId?: string };
 export type CatalogSnapshot = {
   catalog: PromoCatalogInput;
   photos: Record<string, FileBinding>;

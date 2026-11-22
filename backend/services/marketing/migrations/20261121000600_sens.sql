@@ -43,12 +43,12 @@ CREATE INDEX sens_attempt_retry_send ON marketing.sens_attempt (store_id, retry_
 
 ALTER TABLE marketing.sens_attempt ENABLE ROW LEVEL SECURITY;
 ALTER TABLE marketing.sens_attempt FORCE ROW LEVEL SECURITY;
-CREATE POLICY marketing_scope ON marketing.sens_attempt TO marketing_migrate, marketing_runtime
+CREATE POLICY marketing_scope ON marketing.sens_attempt TO marketing_mig, marketing_run
     USING (store_id = (SELECT nullif(current_setting('app.store_id', true), '')::uuid));
 
-GRANT SELECT, INSERT ON marketing.sens_attempt TO marketing_runtime;
+GRANT SELECT, INSERT ON marketing.sens_attempt TO marketing_run;
 GRANT UPDATE (state, dispatched_at, send_token, first_send_at, retry_send_at,
-    provider_request_id, accepted_at, delivery_state, delivery_at) ON marketing.sens_attempt TO marketing_runtime;
+    provider_request_id, accepted_at, delivery_state, delivery_at) ON marketing.sens_attempt TO marketing_run;
 
 -- Down Migration
 DROP TABLE marketing.sens_attempt;

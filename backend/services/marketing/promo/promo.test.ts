@@ -18,6 +18,7 @@ import { createLocalPromoStorage } from '../../account/files/storage.ts';
 import { createInsightApp } from '../../insight/app.ts';
 import { saveProposal } from '../../insight/actions.ts';
 import { inStore } from '../transaction.ts';
+import { enqueuePromo } from './jobs.ts';
 import { registerPromoRoutes, promoJobsPath } from './routes.ts';
 import type { PromoArtifacts, PromoInput } from './contracts.ts';
 import { createArtifactClient, createUsageClient } from '../../../workers/marketing-worker/promo/clients.ts';
@@ -157,7 +158,7 @@ async function deliver(jobId: string, consumerName: string, copies = 1) {
   published++;
 }
 
-function fakeProvider(options: { loseStory?: boolean; reconcile?: 'found' | 'not_sent'; badLook?: boolean } = {}) {
+function fakeProvider(options: { loseStory?: boolean; reconcile?: 'found' | 'not_sent'; badLook?: boolean; missingUsage?: boolean } = {}) {
   const calls: string[] = [];
   const replies = new Map<string, Response>();
   let loseStory = options.loseStory;
@@ -195,22 +196,22 @@ function fakeProvider(options: { loseStory?: boolean; reconcile?: 'found' | 'not
       ? { state: 'received', output: (() => {
         const { scenes, texts, ending } = validStory();
         return { scenes, texts, ending };
-      })(), usage: { outcome: 'success', inputTokens: 5, outputTokens: 2, latencyMs: 1 } }
+      })(), usage: options.missingUsage ? null : { outcome: 'success', inputTokens: 5, outputTokens: 2, latencyMs: 1 } }
       : options.reconcile === 'not_sent' ? { state: 'not_sent' } : { state: 'unknown' },
   });
   return { calls, provider };
 }
 
 function worker(provider: ReturnType<typeof fakeProvider>['provider'], {
-  render, files = artifacts,
-}: { render?: () => Promise<Buffer>; files?: PromoArtifacts } = {}) {
+  render, files = artifacts, reconcileWindowMs,
+}: { render?: () => Promise<Buffer>; files?: PromoArtifacts; reconcileWindowMs?: number } = {}) {
   return createPromoWorker({
     database, artifacts: files, meter, provider, references: refs, music: [], musicDir: tmpdir(),
     checkScene: async () => ({ violations: [], checkMs: 0 }),
     renderVideo: async ({ outFile }) => { await writeFile(outFile, render ? await render() : video); },
     checkVideo: ({ file, lengthSec }) =>
       checkVideo({ file, lengthSec, ffmpeg, rules: refs.rules, width: 720, height: 1280, expectAudio: true }),
-    retryDelayMs: 0,
+    retryDelayMs: 0, reconcileWindowMs,
   });
 }
 
@@ -282,7 +283,7 @@ test.runIf(!!redisUrl)('confirms through Insight, reconciles a lost response, an
   const { jobId } = accepted.json();
   expect((await confirm('card')).json()).toEqual({ jobId });
   await deliver(jobId, 'second');
-  const fake = fakeProvider({ loseStory: true, reconcile: 'found' });
+  const fake = fakeProvider({ loseStory: true, reconcile: 'found', missingUsage: true });
   const first = worker(fake.provider);
   expect(await first.runNext(store)).toBe(true);
   expect(await first.runNext(store)).toBe(true);
@@ -319,9 +320,15 @@ test.runIf(!!redisUrl)('confirms through Insight, reconciles a lost response, an
     expect((await jobView(jobId)).json()).toEqual(result);
     expect((await artifacts.read({ storeId: store, resourceId: jobId }, result.assetId)).bytes).toEqual(video);
     const attempt = await inStore(database, store, db => db.query(`
-      SELECT count(*)::int AS calls FROM marketing.promo_attempt
+      SELECT attempt_id FROM marketing.promo_attempt
       WHERE job_id = $1 AND stage = 'story' AND state = 'received'`, [jobId]));
-    expect(attempt.rows).toEqual([{ calls: 1 }]);
+    expect(attempt.rows).toHaveLength(1);
+    const usage = await inStore(insightDb, store, db => db.query(`
+      SELECT attempt_id, outcome, latency_ms, input_tokens, output_tokens, reasoning_tokens
+      FROM insight.ai_usage WHERE correlation_id = $1 AND stage = 'story'`, [jobId]));
+    expect(usage.rows).toEqual([{ attempt_id: attempt.rows[0].attempt_id, outcome: 'success', latency_ms: expect.any(Number),
+      input_tokens: null, output_tokens: null, reasoning_tokens: null }]);
+    expect(usage.rows[0].latency_ms).toBeGreaterThanOrEqual(0);
     expect(published).toBe(2);
   } finally {
     unlock();
@@ -350,4 +357,45 @@ test.runIf(!!redisUrl)('keeps an uncertain attempt pending until no-send is defi
   const states = await inStore(database, store, db => db.query(`
     SELECT attempt_no, state FROM marketing.promo_attempt WHERE job_id = $1 AND stage = 'story' ORDER BY attempt_no`, [jobId]));
   expect(states.rows).toEqual([{ attempt_no: 1, state: 'not_sent' }, { attempt_no: 2, state: 'received' }]);
+});
+
+test.runIf(!!redisUrl)('fails an unresolved promo by its deadline and lets the store enqueue again without resending', async () => {
+  const { jobId } = (await submit(card())).json();
+  await deliver(jobId, 'deadline');
+  const { calls, provider } = fakeProvider({ loseStory: true });
+  const first = worker(provider);
+  expect(await first.runNext(store)).toBe(true);
+  expect(await first.runNext(store)).toBe(true);
+  expect(await first.runNext(store)).toBe(true);
+  expect((await jobView(jobId)).json()).toMatchObject({ stage: 'story', status: 'running' });
+  const nextCard = card();
+  expect((await submit(nextCard)).json()).toEqual({ code: 'BUSY', activeJobId: jobId });
+
+  const resumed = worker({
+    ...provider,
+    reconcile: async () => new Promise(() => {}),
+  }, { reconcileWindowMs: 1_000 });
+  expect(await resumed.runNext(store)).toBe(true);
+  expect((await jobView(jobId)).json()).toMatchObject({ stage: 'story', status: 'failed', failReason: 'AI_TIMEOUT' });
+  expect(await resumed.runNext(store)).toBe(false);
+  expect(calls.filter(stage => stage === 'story')).toHaveLength(1);
+  const attempts = await inStore(database, store, db => db.query(`
+    SELECT attempt_no, state FROM marketing.promo_attempt WHERE job_id = $1 AND stage = 'story'`, [jobId]));
+  expect(attempts.rows).toEqual([{ attempt_no: 1, state: 'pending' }]);
+  expect((await submit(nextCard)).statusCode).toBe(202);
+});
+
+test.runIf(!!redisUrl)('resolves the promo catalog with the store advisory lock available', async () => {
+  const { key, body } = card();
+  const scope = { storeId: anotherStore, actorId: actor };
+  const queued = await enqueuePromo(database, scope, key, { ...body, source: 'card' }, async () => {
+    await inStore(database, anotherStore, async db => {
+      const { rows: [lock] } = await db.query(
+        "SELECT pg_try_advisory_xact_lock(hashtextextended('marketing:' || $1, 0)) AS acquired", [anotherStore]);
+      expect(lock.acquired).toBe(true);
+    });
+    const catalog = photoSource.listCatalog();
+    return { catalog, photos: photoBindings, exterior: photoSource.photoInfo(catalog.store.exteriorPhotoId)! };
+  });
+  expect(queued.status).toBe('queued');
 });
