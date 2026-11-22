@@ -6,8 +6,10 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { ActionButton, IconButton, useUi } from '../../../ui';
 import { useBundle } from '../../../i18n';
+import { dataBundle } from '../../../data/messages';
 import { cctvBundle } from '../messages';
 import { createZonesApi, ZonesApiError, type ZonesApi } from './api';
+import { StoreZonesSaveError, storeZonesSaveText } from './real-api';
 import { DEFAULT_ASPECT, ERASER_RADIUS, zoneTokens, type DraftZone, type Point, type ZoneId, type ZoneSet } from './types';
 import { applyOp, draftFromSaved, editorReducer, initialEditorState, keepDraft, newZoneId, putBody, renumber, takeKeptDraft, type EditorAction, type EditorContext, type EditorState } from './editor-state';
 import { cellAt, displayRings, isDrawTooSmall, ringsToPath, zoneBounds, zoneCenter } from './mask';
@@ -23,6 +25,9 @@ export interface ZoneEditorProps {
   /** Saved zones when the caller already has them; otherwise the editor GETs them. */
   readonly initial?: ZoneSet;
   readonly api?: ZonesApi;
+  /** Store-scoped saves use an explicit second press before removing any saved zone. */
+  readonly storeScoped?: boolean;
+  readonly zoneLabels?: ReadonlyMap<string, string>;
   /** Camera link lost while editing (SCREENS 9.6): frame frozen, editing continues. */
   readonly disconnected?: boolean;
   /** Test seam for zone ids. */
@@ -33,7 +38,7 @@ export interface ZoneEditorProps {
 
 type Phase = { kind: 'loading' } | { kind: 'load-failed' } | { kind: 'ready' };
 type Suggest = 'idle' | 'finding' | 'none';
-type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'failed'; conflict: boolean };
+type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'failed'; reload: boolean; problem: string };
 type Tool = 'draw' | 'erase';
 interface Gesture { id: number; at: number; startPx: [number, number]; mode: 'press' | 'draw' | 'erase'; path: Point[]; hitId: ZoneId | null; timer: number | null; fired: boolean }
 interface Notice { key: number; text: string; undo: boolean }
@@ -53,15 +58,18 @@ function reduce(s: EditorState | null, { a, ctx }: { a: Act; ctx: EditorContext 
   return editorReducer(s, a, ctx);
 }
 
-export function ZoneEditor({ onSaved, onClose, background, frameAspect, initial, api: apiProp, disconnected = false, newId = newZoneId, linkPicker }: ZoneEditorProps) {
-  const { t } = useBundle(cctvBundle);
+export function ZoneEditor({ onSaved, onClose, background, frameAspect, initial, api: apiProp, disconnected = false, newId = newZoneId, linkPicker, storeScoped: scopeProp, zoneLabels }: ZoneEditorProps) {
+  const { t } = useBundle(cctvBundle, dataBundle);
   const { reducedMotion } = useUi();
-  const api = useMemo(() => apiProp ?? createZonesApi(), [apiProp]);
+  // Keep the draft tied to its camera when a refresh temporarily clears or changes the camera list.
+  const [storeApi] = useState(() => apiProp?.storeScoped ? apiProp : undefined);
+  const api = useMemo(() => storeApi ?? apiProp ?? createZonesApi(), [storeApi, apiProp]);
+  const storeScoped = scopeProp ?? api.storeScoped ?? false;
   const aspect = frameAspect ?? DEFAULT_ASPECT;
   const W = 1000; const H = W / aspect;
   const ctx = useMemo<EditorContext>(() => ({ aspect, newId }), [aspect, newId]);
 
-  const [kept] = useState(takeKeptDraft);
+  const [kept] = useState(() => storeScoped ? null : takeKeptDraft());
   const [state, send] = useReducer(reduce, kept);
   const dispatch = useCallback((a: Act) => send({ a, ctx }), [ctx]);
   const [phase, setPhase] = useState<Phase>(kept ? { kind: 'ready' } : { kind: 'loading' });
@@ -69,6 +77,10 @@ export function ZoneEditor({ onSaved, onClose, background, frameAspect, initial,
   const [guideOpen, setGuideOpen] = useState(() => !!kept && kept.draft.baseRevision === 0 && kept.draft.zones.every(z => !z.adopted) && kept.undo.length === 0);
   const [tool, setTool] = useState<Tool>('draw');
   const [save, setSave] = useState<SaveState>({ kind: 'idle' });
+  const [confirmRemoval, setConfirmRemoval] = useState(false);
+  const [originalIds, setOriginalIds] = useState<readonly string[]>([]);
+  const saving = useRef(false);
+  const mounted = useRef(true);
   const [preview, setPreview] = useState<readonly DraftZone[] | null>(null);
   const [drawPath, setDrawPath] = useState<Point[] | null>(null);
   const [pressing, setPressing] = useState<{ id: ZoneId; held: boolean } | null>(null);
@@ -93,9 +105,10 @@ export function ZoneEditor({ onSaved, onClose, background, frameAspect, initial,
     let set: ZoneSet;
     try { set = await (initial ? Promise.resolve(initial) : api.get()); } catch { if (seq === loadSeq.current) setPhase({ kind: 'load-failed' }); return; }
     if (seq !== loadSeq.current) return;
+    setOriginalIds(set.zones.map(zone => zone.id));
     dispatch({ type: 'reset', state: initialEditorState(draftFromSaved(set)) });
     setPhase({ kind: 'ready' });
-    if (set.zones.length > 0) return;
+    if (storeScoped || set.zones.length > 0) return;
     setGuideOpen(true);
     setSuggest('finding');
     try {
@@ -106,12 +119,12 @@ export function ZoneEditor({ onSaved, onClose, background, frameAspect, initial,
     } catch {
       if (seq === loadSeq.current) setSuggest('none');
     }
-  }, [api, initial, dispatch]);
+  }, [api, initial, dispatch, storeScoped]);
   useEffect(() => {
-    if (kept) return;
-    void Promise.resolve().then(load); // starts after commit; load only sets state after awaits
+    mounted.current = true;
+    if (!kept) void Promise.resolve().then(load); // starts after commit; load only sets state after awaits
     const seq = loadSeq;
-    return () => { seq.current++; };
+    return () => { seq.current++; mounted.current = false; };
     // Opening runs once per mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -119,7 +132,7 @@ export function ZoneEditor({ onSaved, onClose, background, frameAspect, initial,
   const zones = preview ?? state?.draft.zones ?? [];
   const adoptedCount = zones.filter(z => z.adopted).length;
   const suggestedCount = zones.length - adoptedCount;
-  const nameOf = (z: DraftZone) => t('cctv.table.n', { n: z.number });
+  const nameOf = (z: DraftZone) => zoneLabels?.get(z.id) ?? t('cctv.table.n', { n: z.number });
 
   /* ---------- actions ---------- */
   const runOp = useCallback((op: Parameters<typeof applyOp>[1]) => dispatch({ type: 'op', op }), [dispatch]);
@@ -249,23 +262,38 @@ export function ZoneEditor({ onSaved, onClose, background, frameAspect, initial,
   };
 
   /* ---------- save / close ---------- */
-  const done = async () => {
-    if (!state || adoptedCount === 0 || save.kind === 'saving') return;
+  const cannotSaveEmpty = adoptedCount === 0 && (!storeScoped || originalIds.length === 0);
+  const done = async (confirmed = false) => {
+    if (!state || cannotSaveEmpty || saving.current) return;
+    const body = putBody(state.draft, frameAspect ?? state.draft.frameAspect ?? null);
+    if (storeScoped && !confirmed && originalIds.some(id => !body.zones.some(zone => zone.id === id))) {
+      setConfirmRemoval(true);
+      return;
+    }
+    setConfirmRemoval(false);
+    saving.current = true;
     setSave({ kind: 'saving' });
     try {
-      const set = await api.put(putBody(state.draft, frameAspect ?? state.draft.frameAspect ?? null));
-      keepDraft(null);
+      const set = await api.put({ ...body, ...(confirmed ? { confirmed: true } : {}) });
+      if (!mounted.current) return;
+      if (!storeScoped) keepDraft(null);
       setSave({ kind: 'idle' });
       navigator.vibrate?.(10);
       onSaved(set);
     } catch (err) {
+      if (!mounted.current) return;
+      if (err instanceof StoreZonesSaveError) {
+        setSave({ kind: 'failed', reload: err.reload, problem: storeZonesSaveText(t, err) });
+        return;
+      }
       const conflict = err instanceof ZonesApiError && err.code === 'REVISION_CONFLICT';
       if (conflict && err.current) dispatch({ type: 'rebase', revision: err.current.revision });
-      setSave({ kind: 'failed', conflict });
-      say(t(conflict ? 'cctv.zoneEditor.conflict' : 'cctv.zones.saveFailed'));
+      setSave({ kind: 'failed', reload: false, problem: t(conflict ? 'cctv.zoneEditor.conflict' : 'cctv.zones.saveFailed') });
+    } finally {
+      saving.current = false;
     }
   };
-  const close = () => { clearGesture(); keepDraft(state); onClose(); };
+  const close = () => { clearGesture(); if (!storeScoped) keepDraft(state); onClose(); };
 
   /* ---------- render ---------- */
   const selected = state?.selectedId ? zones.find(z => z.id === state.selectedId) : undefined;
@@ -365,19 +393,26 @@ export function ZoneEditor({ onSaved, onClose, background, frameAspect, initial,
         {!guideOpen && <ActionButton variant="ghost" onClick={() => setGuideOpen(true)}>{t('cctv.zones.howTo')}</ActionButton>}
         <span className="cz-toolbar__spacer" />
         <ActionButton variant="ghost" onClick={close}>{t('common.close')}</ActionButton>
-        <ActionButton size="primary" loading={save.kind === 'saving'} disabled={adoptedCount === 0 || save.kind === 'saving' || phase.kind !== 'ready'} aria-describedby={adoptedCount === 0 ? 'cz-done-reason' : undefined} onClick={() => void done()}>
+        <ActionButton size="primary" loading={save.kind === 'saving'} disabled={cannotSaveEmpty || confirmRemoval || save.kind === 'saving' || (save.kind === 'failed' && save.reload) || phase.kind !== 'ready'} aria-describedby={cannotSaveEmpty ? 'cz-done-reason' : undefined} onClick={() => void done()}>
           {save.kind === 'saving' ? t('cctv.zoneEditor.saving') : t('cctv.zones.toolDone')}
         </ActionButton>
       </div>
 
       <p className="cz-summary" id="cz-done-reason">
-        {adoptedCount === 0 ? t('cctv.zones.atLeastOne') : suggestedCount > 0 ? t('cctv.zoneEditor.summary', { a: adoptedCount, b: suggestedCount }) : t('cctv.zoneEditor.summaryTables', { a: adoptedCount })}
+        {cannotSaveEmpty ? t('cctv.zones.atLeastOne') : suggestedCount > 0 ? t('cctv.zoneEditor.summary', { a: adoptedCount, b: suggestedCount }) : t('cctv.zoneEditor.summaryTables', { a: adoptedCount })}
       </p>
+      {confirmRemoval && <div className="cz-notice" role="group" aria-label="구역 삭제 확인">
+        <span>구역을 지우면 연결된 POS 테이블도 해제돼요</span>
+        <ActionButton variant="destructive" onClick={() => void done(true)}>구역 삭제하고 저장하기</ActionButton>
+        <ActionButton variant="secondary" onClick={() => setConfirmRemoval(false)}>취소</ActionButton>
+      </div>}
 
       {save.kind === 'failed' && (
         <div className="cz-error" role="alert">
-          <span>{t(save.conflict ? 'cctv.zoneEditor.conflict' : 'cctv.zones.saveFailed')}</span>
-          <ActionButton variant="secondary" onClick={() => void done()}>{t('cctv.conn.retry')}</ActionButton>
+          <span>{save.problem}</span>
+          {save.reload
+            ? <ActionButton variant="secondary" onClick={() => { setSave({ kind: 'idle' }); setPhase({ kind: 'loading' }); void load(); }}>{t('cctv.zoneSave.loadLatest')}</ActionButton>
+            : <ActionButton variant="secondary" onClick={() => void done()}>{t('cctv.conn.retry')}</ActionButton>}
         </div>
       )}
       {notice && (

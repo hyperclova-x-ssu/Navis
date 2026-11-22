@@ -19,7 +19,6 @@ const rows = {
   'cctv.mode.changedMock': ['예시로 바꿨어요', 'Switched to Demo', '已切换为示例', '已切換為示範'],
   'cctv.unit.mock': ['매장 안 손님', 'Guests in store', '店内顾客', '店內顧客'],
   'cctv.unit.live': ['매장 안 손님 · 실시간', 'Guests in store · Live', '店内顾客 · 实时', '店內顧客 · 即時'],
-  'cctv.estimateNote': ['카메라 영상을 미리 분석한 숫자예요', 'Numbers analyzed ahead of time from camera video', '这是预先分析摄像头视频得出的数字', '這是預先分析攝影機影像得出的數字'],
   'cctv.guests': ['{n}명', '{n, plural, one {# guest} other {# guests}}', '{n} 位', '{n} 位'],
   'cctv.guestsNow': ['지금 손님 {n}명', '{n, plural, one {# guest} other {# guests}} now', '现在 {n} 位顾客', '現在 {n} 位顧客'],
 
@@ -56,7 +55,6 @@ const rows = {
   'cctv.nowNumbers.mock': ['지금 숫자', 'Now', '当前数字', '目前數字'],
   'cctv.nowNumbers.live': ['지금 숫자 · 실시간', 'Now · Live', '当前数字 · 实时', '目前數字 · 即時'],
   'cctv.example': ['예시', 'Sample', '示例', '範例'],
-  'cctv.dayRecord.live': ['하루 기록 · 예시예요 / 카메라 값이 아니에요', 'Daily record · sample / Not from the camera', '当日记录 · 示例 / 非摄像头数据', '當日記錄 · 範例 / 非攝影機資料'],
   'cctv.dayRecord.title': ['하루 기록', 'Daily record', '当日记录', '當日記錄'],
   'cctv.dayRecord.notCamera': ['카메라 값이 아니에요', 'Not from the camera', '非摄像头数据', '非攝影機資料'],
   'cctv.legend.person': ['사람', 'Person', '人', '人'],
@@ -127,6 +125,23 @@ const rows = {
   'cctv.zones.atLeastOne': ['테이블을 하나 이상 정해 주세요', 'Set at least one table', '请至少设置一张桌子', '請至少設定一張桌子'],
   'cctv.zones.saved': ['테이블 영역을 저장했어요', 'Table areas saved', '桌位区域已保存', '桌位區域已儲存'],
   'cctv.zones.saveFailed': ['저장하지 못했어요. 다시 시도해 주세요', "Couldn't save. Please try again", '保存失败，请重试', '儲存失敗，請重試'],
+  'cctv.zoneSave.invalid': ['구역 정보에 문제가 있어요', 'The area details are invalid', '区域信息有误', '區域資訊有誤'],
+  'cctv.zoneSave.checkDrawing': ['그린 구역을 확인해 주세요', 'Check the areas you drew', '请检查画出的区域', '請檢查畫出的區域'],
+  'cctv.zoneSave.outline': ['구역 윤곽이 끊어져 있거나 너무 복잡해요', 'The area outline is disconnected or too complex', '区域轮廓断开或过于复杂', '區域輪廓斷開或過於複雜'],
+  'cctv.zoneSave.redraw': ['한 구역을 한 번에 둘러 그려 주세요', 'Draw one continuous outline per area', '请为每个区域画一条连续的轮廓', '請為每個區域畫一條連續的輪廓'],
+  'cctv.zoneSave.missingOutline': ['윤곽이 없는 기존 구역이 있어요', 'An existing area has no outline', '有一个现有区域没有轮廓', '有一個現有區域沒有輪廓'],
+  'cctv.zoneSave.replaceOutline': ['목록에서 지우고 다시 그려 주세요', 'Remove it from the list and redraw it', '请从列表中删除后重画', '請從清單中刪除後重畫'],
+  'cctv.zoneSave.cameraMissing': ['카메라를 찾을 수 없어요', 'The camera could not be found', '找不到摄像头', '找不到攝影機'],
+  'cctv.zoneSave.checkCamera': ['카메라 연결을 확인해 주세요', 'Check the camera connection', '请检查摄像头连接', '請檢查攝影機連線'],
+  'cctv.zoneSave.zoneMissing': ['저장된 구역을 찾을 수 없어요', 'A saved area could not be found', '找不到已保存的区域', '找不到已儲存的區域'],
+  'cctv.zoneSave.stale': ['그사이 구역이 바뀌었어요', 'The areas changed in the meantime', '区域已发生变化', '區域已發生變更'],
+  'cctv.zoneSave.reload': ['최신 구역을 불러와 주세요', 'Load the latest areas', '请加载最新区域', '請載入最新區域'],
+  'cctv.zoneSave.loadLatest': ['최신 구역 불러오기', 'Load latest areas', '加载最新区域', '載入最新區域'],
+  'cctv.zoneSave.confirmationRequired': ['구역을 지우려면 확인이 필요해요', 'Removing an area requires confirmation', '删除区域需要确认', '刪除區域需要確認'],
+  'cctv.zoneSave.confirmDeletion': ['삭제를 확인한 뒤 저장해 주세요', 'Confirm the removal and save again', '请确认删除后重新保存', '請確認刪除後重新儲存'],
+  'cctv.zoneSave.invalidRequest': ['저장 요청을 확인할 수 없어요', 'The save request could not be verified', '无法验证保存请求', '無法驗證儲存請求'],
+  'cctv.zoneSave.outcomeUnknown': ['구역 저장 결과를 확인하지 못했어요. 다시 시도해 주세요', 'The save result could not be verified. Try again', '无法确认区域是否已保存。请重试', '無法確認區域是否已儲存。請重試'],
+  'cctv.zoneSave.savedReload': ['구역을 저장했어요. 저장 결과를 다시 불러와 확인해 주세요', 'The areas were saved. Reload to check the result', '区域已保存。请重新加载以确认结果', '區域已儲存。請重新載入以確認結果'],
   'cctv.zones.deleted': ['테이블 {n}을 지웠어요 · 되돌리기', 'Table {n} deleted · Undo', '已删除桌位 {n} · 撤销', '已刪除桌位 {n} · 復原'],
   'cctv.zones.aspectMismatch': ['카메라 방향이 바뀐 것 같아요. 테이블 영역을 다시 확인해 주세요', 'The camera orientation seems to have changed. Please check your table areas', '摄像头方向似乎已改变，请重新确认桌位区域', '攝影機方向似乎已改變，請重新確認桌位區域'],
 
@@ -163,7 +178,6 @@ const rows = {
 
   /* panel accessible names */
   'cctv.a11y.panelLive': ['CCTV 손님분석, 실시간, 지금 매장 안 손님 {n}명, 자세히 보기', 'CCTV guest analysis, Live, {n, plural, one {# guest} other {# guests}} in the store now, view details', 'CCTV 顾客分析，实时，店内现有 {n} 位顾客，查看详情', 'CCTV 顧客分析，即時，店內現有 {n} 位顧客，查看詳情'],
-  'cctv.a11y.panelMock': ['CCTV 손님분석, 예시, 매장 안 손님 {n}명, 자세히 보기', 'CCTV guest analysis, Demo, {n, plural, one {# guest} other {# guests}} in the store, view details', 'CCTV 顾客分析，示例，店内 {n} 位顾客，查看详情', 'CCTV 顧客分析，示範，店內 {n} 位顧客，查看詳情'],
   'cctv.a11y.video': ['카메라 영상과 사람 위치', 'Camera video with people marked', '摄像头画面与人员位置', '攝影機畫面與人員位置'],
 
   /* zone editor (folded in from T-073) and setup (T-074) */

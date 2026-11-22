@@ -3,7 +3,7 @@ import type { TableSettingsPanelProps } from '../../../ui/components/table-grid-
 import type { ZoneEditorProps } from './ZoneEditor';
 
 /** The session supplies the API-275 joined projection; this module owns no state. */
-export type LinkedTableDisplay = LinkedTableView;
+export type LinkedTableDisplay = LinkedTableView & { readonly tableLabel?: string };
 export function linkedOccupancyText(link: LinkedTableDisplay): string {
   return link.occupancyState === 'occupied' ? '사람 있음' : link.occupancyState === 'empty' ? '빈 자리' : link.occupancyState === 'cups_left' ? '치울 컵' : '상태 확인 불가';
 }

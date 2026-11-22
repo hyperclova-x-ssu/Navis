@@ -4,7 +4,7 @@
   display:flex; flex-direction:column; gap:var(--space-4); color:var(--foreground); font-family:var(--font-system); min-width:0;
 }
 .cctv-playback h3 { margin:0; font-size:var(--type-panel-title); line-height:var(--leading-panel-title); }
-.cctv-estimate, .cctv-caption, .cctv-fake { margin:0; color:var(--muted-foreground); font-size:var(--type-body); line-height:var(--leading-body); }
+.cctv-caption, .cctv-fake { margin:0; color:var(--muted-foreground); font-size:var(--type-body); line-height:var(--leading-body); }
 .cctv-tag { color:var(--muted-foreground); font-size:var(--type-caption); font-weight:var(--weight-regular); }
 /* T-079 (D-391, round 2): the picture is as tall as the detail body allows with the controls row still in view (height cap = canvas height − --cctv-chrome: dialog inset, header, padding, one controls row), width = height × 16/9; the numbers column takes ALL the width that is left (at least 320px), so no empty strip at the right. The app draws on a fixed canvas scaled to the window, so the canvas height is the unit. Same rule for mock, live, setup and the zone editor (SCREENS 9.3). */
 .cctv-stage-row, .cc-detail { --cctv-chrome:408px; --cctv-now-w:320px; --cctv-cap:calc((var(--canvas-height, 100dvh) - var(--cctv-chrome)) * 16 / 9); }

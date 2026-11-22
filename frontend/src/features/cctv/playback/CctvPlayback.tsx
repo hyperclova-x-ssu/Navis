@@ -147,7 +147,6 @@ export function CctvPlayback({detectionsUrl, videoUrl = VIDEO_URL}: CctvPlayback
         </div>}
       </div>
       <div className="cctv-side">
-        <p className="cctv-estimate">{t('cctv.estimateNote')}</p>
         <NowNumbers view={view} time={shownTime} duration={duration}/>
       </div>
     </div>

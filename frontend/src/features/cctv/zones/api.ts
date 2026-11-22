@@ -6,15 +6,16 @@ import { getZones, putZones, suggestZones, type CnnErrorCode, type CnnResult, ty
 import { cnnBaseUrl } from '../live/config';
 import type { Zone, ZoneSet } from './types';
 
-/** First suggest call loads the segmentation model (moa 3.6 s measured by T-072); allow 8 s. */
+/** First suggest call loads the segmentation model (3.6 s measured on the GPU server); allow 8 s. */
 export const SUGGEST_TIMEOUT_MS = 8000;
 
 export class ZonesApiError extends Error {
   constructor(readonly code: CnnErrorCode, readonly key: string, readonly current?: ZoneSet) { super(code); this.name = 'ZonesApiError'; }
 }
-export interface PutZonesBody { readonly baseRevision: number; readonly frameAspect: number | null; readonly zones: readonly Zone[] }
+export interface PutZonesBody { readonly baseRevision: number; readonly frameAspect: number | null; readonly zones: readonly Zone[]; readonly confirmed?: boolean }
 export interface SuggestResult { readonly zones: readonly Zone[]; readonly frameAspect: number | null }
 export interface ZonesApi {
+  readonly storeScoped?: true;
   get(): Promise<ZoneSet>;
   put(body: PutZonesBody): Promise<ZoneSet>;
   suggest(): Promise<SuggestResult>;

@@ -1,6 +1,6 @@
 /**
  * T-072 server address (API 공통 약속 v5, ARCHITECTURE 14.6). The address comes only from `VITE_CNN_SERVER_URL`
- * (`04_app/.env.local`); there is no default address in code. Empty or missing = not configured.
+ * (`frontend/.env.local`); there is no default address in code. Empty or missing = not configured.
  */
 
 /** Normalised base address (no trailing `/`), or null when not configured or not an http(s) URL. */
