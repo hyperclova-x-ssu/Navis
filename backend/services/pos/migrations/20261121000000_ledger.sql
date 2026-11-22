@@ -238,7 +238,7 @@ BEGIN
         EXECUTE format('ALTER TABLE pos.%I ENABLE ROW LEVEL SECURITY', scoped_table);
         EXECUTE format('ALTER TABLE pos.%I FORCE ROW LEVEL SECURITY', scoped_table);
         EXECUTE format(
-            'CREATE POLICY store_scope ON pos.%I TO pos_migrate, pos_runtime
+            'CREATE POLICY store_scope ON pos.%I TO pos_mig, pos_run
              USING (store_id = (SELECT nullif(current_setting(''app.store_id'', true), '''')::uuid))',
             scoped_table
         );
@@ -246,15 +246,15 @@ BEGIN
 END
 $migration$;
 
-GRANT SELECT ON pos.store, pos.business_day, pos.catalog_menu TO pos_runtime;
+GRANT SELECT ON pos.store, pos.business_day, pos.catalog_menu TO pos_run;
 GRANT SELECT, INSERT ON pos.bill, pos.pos_order, pos.order_line, pos.bill_allocation,
     pos.settlement, pos.settlement_line, pos.payment, pos.payment_correction, pos.sales_recognition,
-    pos.command_ledger, pos.customer_claim, pos.outbox_scope, pos.outbox, pos.expense_candidate TO pos_runtime;
-GRANT UPDATE (seq) ON pos.business_day TO pos_runtime;
-GRANT UPDATE (status, recognized_at) ON pos.bill TO pos_runtime;
-GRANT UPDATE (preparation) ON pos.pos_order TO pos_runtime;
-GRANT UPDATE (status, terminal_receipt) ON pos.command_ledger TO pos_runtime;
-GRANT UPDATE (last_seq) ON pos.outbox_scope TO pos_runtime;
+    pos.command_ledger, pos.customer_claim, pos.outbox_scope, pos.outbox, pos.expense_candidate TO pos_run;
+GRANT UPDATE (seq) ON pos.business_day TO pos_run;
+GRANT UPDATE (status, recognized_at) ON pos.bill TO pos_run;
+GRANT UPDATE (preparation) ON pos.pos_order TO pos_run;
+GRANT UPDATE (status, terminal_receipt) ON pos.command_ledger TO pos_run;
+GRANT UPDATE (last_seq) ON pos.outbox_scope TO pos_run;
 
 -- Down Migration
 DROP TABLE pos.expense_candidate, pos.outbox, pos.outbox_scope, pos.customer_claim, pos.command_ledger,

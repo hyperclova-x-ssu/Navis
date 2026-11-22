@@ -12,6 +12,12 @@ export interface MenuSnapshot {
   saleStatus: 'selling' | 'sold_out';
   groups: readonly { required: boolean; options: readonly CatalogOption[] }[];
 }
+type SourceOption = Omit<CatalogOption, 'recipeVersion'> & { recipeVersion: string | null };
+type SourceMenu = Omit<MenuSnapshot, 'recipeVersion' | 'groups'> & {
+  recipeVersion: string | null;
+  groups: readonly { required: boolean; options: readonly SourceOption[] }[];
+};
+export type ReadPosCatalog = (input: { storeId: string; actorId: string; menuIds: readonly string[] }) => Promise<unknown>;
 
 interface RequestedLine { menuId: string; qty: number; optionIds: string[] }
 export interface BillInput { type: 'dine_in' | 'takeout'; lines: RequestedLine[]; discount: number }
@@ -38,7 +44,7 @@ export interface BillQuote {
   discount: number;
   payable: number;
 }
-export interface BillDraft { request: BillInput; quote: BillQuote }
+export interface BillDraft { request: BillInput; quote: BillQuote; postpaid?: true; fixedDiscounts?: true }
 
 export function parseBill(value: unknown): BillInput {
   const input = object(value, ['type', 'lines', 'discount']);
@@ -74,12 +80,69 @@ export function apportion(amount: number, weighted: readonly { id: string; weigh
   return calculated.map(({ share }) => share);
 }
 
-export async function quoteBill({ db, storeId }: PosTx, request: BillInput, previous?: BillQuote): Promise<BillQuote> {
+function sourceObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new PosError(503, 'CATALOG_UNAVAILABLE');
+  return value as Record<string, unknown>;
+}
+
+function sourceText(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) throw new PosError(503, 'CATALOG_UNAVAILABLE');
+  return value;
+}
+
+function sourceVersion(value: unknown) {
+  if (value === null) return null;
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) throw new PosError(503, 'CATALOG_UNAVAILABLE');
+  return value;
+}
+
+async function liveSnapshots(tx: PosTx, menuIds: string[], readCatalog: ReadPosCatalog) {
+  try {
+    const { items } = sourceObject(await readCatalog({ storeId: tx.storeId, actorId: tx.actorId, menuIds }));
+    if (!Array.isArray(items) || items.length > menuIds.length) throw new PosError(503, 'CATALOG_UNAVAILABLE');
+    const result = new Map<string, SourceMenu>();
+    for (const item of items) {
+      const row = sourceObject(item);
+      const menuId = uuid(row.menuId);
+      if (result.has(menuId) || !menuIds.includes(menuId) || !Array.isArray(row.groups)
+          || (row.saleStatus !== 'selling' && row.saleStatus !== 'sold_out')) throw new PosError(503, 'CATALOG_UNAVAILABLE');
+      const optionIds = new Set<string>();
+      result.set(menuId, {
+        name: sourceText(row.name), basePrice: integer(row.basePrice, 1),
+        baseCost: row.baseCost === null ? null : integer(row.baseCost, 0),
+        recipeVersion: sourceVersion(row.recipeVersion), saleStatus: row.saleStatus,
+        groups: row.groups.map((group) => {
+          const entry = sourceObject(group);
+          if (typeof entry.required !== 'boolean' || !Array.isArray(entry.options)) throw new PosError(503, 'CATALOG_UNAVAILABLE');
+          return { required: entry.required, options: entry.options.map((option) => {
+            const value = sourceObject(option);
+            const optionId = uuid(value.optionId);
+            if (optionIds.has(optionId) || optionId === menuId) throw new PosError(503, 'CATALOG_UNAVAILABLE');
+            optionIds.add(optionId);
+            return { optionId, name: sourceText(value.name), extraPrice: integer(value.extraPrice, 0),
+              extraCost: value.extraCost === null ? null : integer(value.extraCost, 0), recipeVersion: sourceVersion(value.recipeVersion) };
+          }) };
+        }),
+      });
+    }
+    return result;
+  } catch {
+    throw new PosError(503, 'CATALOG_UNAVAILABLE');
+  }
+}
+
+async function storedSnapshots({ db, storeId }: PosTx, menuIds: string[]) {
   const { rows } = await db.query<{ menuId: string; snapshot: MenuSnapshot }>(`
     SELECT menu_id AS "menuId", snapshot FROM pos.catalog_menu
     WHERE store_id = $1 AND menu_id = ANY($2::uuid[])
-  `, [storeId, request.lines.map((line) => line.menuId)]);
-  const menu = new Map(rows.map((row) => [row.menuId, row.snapshot]));
+  `, [storeId, menuIds]);
+  return new Map(rows.map((row) => [row.menuId, row.snapshot]));
+}
+
+export async function quoteBill(tx: PosTx, request: BillInput, previous?: BillQuote, readCatalog?: ReadPosCatalog,
+  fixedDiscounts = false): Promise<BillQuote> {
+  const menuIds = [...new Set(request.lines.map((line) => line.menuId))];
+  const menu = readCatalog ? await liveSnapshots(tx, menuIds, readCatalog) : await storedSnapshots(tx, menuIds);
   const lines = request.lines.map(({ menuId, qty, optionIds }, index): SaleLine => {
     const item = menu.get(menuId);
     if (!item) throw new PosError(400, 'ITEM_REMOVED');
@@ -88,26 +151,33 @@ export async function quoteBill({ db, storeId }: PosTx, request: BillInput, prev
       const selected = group.options.filter((option) => optionIds.includes(option.optionId));
       if (group.required && selected.length !== 1) throw new PosError(400, 'REQUIRED_OPTION');
       return selected;
-    }).sort((a, b) => a.optionId.localeCompare(b.optionId));
+    }).sort((a, b) => a.optionId.localeCompare(b.optionId)).map((option): CatalogOption => {
+      if (option.recipeVersion === null) throw new PosError(409, 'CATALOG_RECIPE_UNAVAILABLE');
+      return { ...option, recipeVersion: option.recipeVersion };
+    });
     if (options.length !== optionIds.length) throw new PosError(400, 'INVALID_OPTION');
+    if (item.recipeVersion === null) throw new PosError(409, 'CATALOG_RECIPE_UNAVAILABLE');
     const optionPrice = options.reduce((sum, option) => sum + option.extraPrice, 0);
     const optionCost = nullableSum(options.map((option) => option.extraCost));
     const gross = (item.basePrice + optionPrice) * qty;
     return {
-      orderLineId: previous?.lines[index].orderLineId ?? randomUUID(),
-      allocationId: previous?.lines[index].allocationId ?? randomUUID(),
+      orderLineId: previous?.lines[index]?.orderLineId ?? randomUUID(),
+      allocationId: previous?.lines[index]?.allocationId ?? randomUUID(),
       menuId, name: item.name, qty, basePrice: item.basePrice, baseCost: item.baseCost,
       optionPrice, optionCost, recipeVersion: item.recipeVersion, options, gross, discount: 0, amount: gross,
     };
   });
+  const allocations = fixedDiscounts
+    ? lines.map((_, index) => previous?.lines[index]?.discount ?? 0)
+    : apportion(request.discount, lines.map((line) => ({ id: line.allocationId, weight: line.gross })));
+  return quoteFromLines(lines.map((line, index) => ({ ...line, discount: allocations[index], amount: line.gross - allocations[index] })));
+}
+
+export function quoteFromLines(lines: SaleLine[]): BillQuote {
   const gross = lines.reduce((sum, line) => sum + line.gross, 0);
-  if (!Number.isSafeInteger(gross) || gross <= request.discount) throw new PosError(400, 'INVALID_AMOUNT');
-  const allocations = apportion(request.discount, lines.map((line) => ({ id: line.allocationId, weight: line.gross })));
-  for (const [index, line] of lines.entries()) {
-    line.discount = allocations[index];
-    line.amount -= line.discount;
-  }
-  const quote = { lines, gross, discount: request.discount, payable: gross - request.discount };
+  const discount = lines.reduce((sum, line) => sum + line.discount, 0);
+  if (!Number.isSafeInteger(gross) || gross <= discount || lines.some(line => line.amount < 0)) throw new PosError(400, 'INVALID_AMOUNT');
+  const quote = { lines, gross, discount, payable: gross - discount };
   const quoteRevision = Number.parseInt(fingerprint(quote).slice(0, 13), 16);
   return { quoteRevision, ...quote };
 }

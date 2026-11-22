@@ -1,0 +1,19 @@
+# GAP-POS local proof only, layered over backend/compose.yaml. Runs db, naver-virtual, account, inventory,
+# pos and api-gateway (with --no-deps) so the POS NAVER surface is proven without the customer, insight and
+# marketing workloads. The browser origin requires a marketing upstream URL; point it at inventory so the
+# gateway starts and stays ready. No marketing route is exercised by the proof.
+services:
+  # As deployed (D-346): Commerce token requests must carry a timestamp within 5 minutes of the provider clock.
+  naver-virtual:
+    environment:
+      NAVIS_NAVER_VIRTUAL_CLOCK: real
+  api-gateway:
+    environment:
+      NAVIS_INSIGHT_BASE_URL: ""
+      NAVIS_GATEWAY_INSIGHT_TOKEN_FILE: ""
+      NAVIS_CUSTOMER_URL: ""
+      NAVIS_GATEWAY_CUSTOMER_TOKEN_FILE: ""
+      NAVIS_GATEWAY_MARKETING_LOCAL_COMMAND_TOKEN_FILE: ""
+      NAVIS_MARKETING_BASE_URL: http://inventory:3000
+  tools:
+    networks: [data, test-data, workloads]

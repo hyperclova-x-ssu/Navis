@@ -1,22 +1,28 @@
 import { randomUUID } from 'node:crypto';
 import type { PosSaleRecognized } from '../../packages/contracts/events.ts';
-import { eventLine, nullableSum, quoteBill, saleCost, type BillDraft, type BillInput, type BillQuote } from './catalog.ts';
+import { eventLine, nullableSum, quoteBill, saleCost, type BillDraft, type BillInput, type BillQuote, type ReadPosCatalog } from './catalog.ts';
 import { appendOutbox, applyCommand, nextBusinessSequence, openDay, readCommand } from './ledger.ts';
-import { applied, fingerprint, integer, object, PosError, splits, uuid, type MethodSplit, type PosTx } from './wire.ts';
+import { insertTerminal, type TerminalRecord } from './reality/02/terminal.ts';
+import { applied, commandReceipt, fingerprint, integer, object, PosError, splits, uuid, type MethodSplit, type PosTx } from './wire.ts';
 
 export const approvalCommand = 'approval.begin';
 
 export async function createBill(tx: PosTx, key: string, input: BillInput) {
   return applyCommand(tx, 'bill.create', key, input, async () => {
-    const day = await openDay(tx);
-    const quote = await quoteBill(tx, input);
-    const billId = randomUUID();
-    await tx.db.query(`
-      INSERT INTO pos.bill (store_id, bill_id, business_date, draft, created_at)
-      VALUES ($1, $2, $3, $4, $5)
-    `, [tx.storeId, billId, day, { request: input, quote } satisfies BillDraft, tx.at]);
+    const { billId, quote } = await insertBill(tx, input);
     return applied({ billId, ...quote, canSubmit: true, issues: [] }, billId);
   });
+}
+
+export async function insertBill(tx: PosTx, input: BillInput, readCatalog?: ReadPosCatalog, postpaid = false) {
+  const day = await openDay(tx);
+  const quote = await quoteBill(tx, input, undefined, readCatalog);
+  const billId = randomUUID();
+  await tx.db.query(`
+    INSERT INTO pos.bill (store_id, bill_id, business_date, draft, created_at)
+    VALUES ($1, $2, $3, $4, $5)
+  `, [tx.storeId, billId, day, { request: input, quote, ...(postpaid && { postpaid: true }) } satisfies BillDraft, tx.at]);
+  return { billId, quote, day };
 }
 
 type ApprovalInput = { billId: string; quoteRevision: number; splits: MethodSplit[] };
@@ -35,19 +41,23 @@ export function parseApproval(value: unknown): ApprovalInput {
   return { billId: uuid(input.billId), quoteRevision: integer(input.quoteRevision, 0), splits: splits(input.splits) };
 }
 
-async function readBill({ db, storeId }: PosTx, billId: string) {
-  const { rows } = await db.query<{ day: string; status: string; draft: BillDraft }>(`
-    SELECT business_date::text AS day, status, draft FROM pos.bill WHERE store_id = $1 AND bill_id = $2
+export async function readBill({ db, storeId }: PosTx, billId: string) {
+  const { rows } = await db.query<{ day: string; status: string; revision: number; draft: BillDraft }>(`
+    SELECT business_date::text AS day, status, revision, draft FROM pos.bill WHERE store_id = $1 AND bill_id = $2
   `, [storeId, billId]);
   if (!rows[0]) throw new PosError(404, 'BILL_NOT_FOUND');
   return rows[0];
 }
 
-async function currentQuote(tx: PosTx, input: ApprovalInput, day: string) {
-  const bill = await readBill(tx, input.billId);
+export async function quoteOpenBill(tx: PosTx, billId: string, day: string, readCatalog?: ReadPosCatalog) {
+  const bill = await readBill(tx, billId);
   if (bill.status !== 'open') throw new PosError(409, 'BILL_LOCKED');
   if (bill.day !== day) throw new PosError(409, 'DAY_CLOSED');
-  const quote = await quoteBill(tx, bill.draft.request, bill.draft.quote);
+  return quoteBill(tx, bill.draft.request, bill.draft.quote, readCatalog, bill.draft.fixedDiscounts);
+}
+
+async function currentQuote(tx: PosTx, input: ApprovalInput, day: string) {
+  const quote = await quoteOpenBill(tx, input.billId, day);
   const quoteFingerprint = fingerprint(quote);
   if (input.quoteRevision !== quote.quoteRevision) {
     throw new PosError(409, 'QUOTE_CHANGED', { quote });
@@ -76,11 +86,7 @@ export async function beginApproval(tx: PosTx, key: string, input: ApprovalInput
   if (input.splits.reduce((sum, split) => sum + split.amount, 0) !== quote.payable) {
     throw new PosError(400, 'ALLOCATION_SUM_MISMATCH', { payable: quote.payable });
   }
-  const active = await db.query(`
-    SELECT 1 FROM pos.command_ledger WHERE store_id = $1 AND bill_id = $2
-      AND command_type = 'approval.begin' AND status = 'pending'
-  `, [storeId, input.billId]);
-  if (active.rowCount) throw new PosError(409, 'APPROVAL_BUSY');
+  await assertNoPendingApproval(tx, input.billId);
 
   const attemptId = randomUUID();
   const approval: PinnedApproval = {
@@ -93,6 +99,14 @@ export async function beginApproval(tx: PosTx, key: string, input: ApprovalInput
     VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, $8)
   `, [storeId, approvalCommand, key, digest, receipt, attemptId, input.billId, approval]);
   return receipt;
+}
+
+export async function assertNoPendingApproval({ db, storeId }: PosTx, billId: string) {
+  const active = await db.query(`
+    SELECT 1 FROM pos.command_ledger WHERE store_id = $1 AND bill_id = $2
+      AND command_type = 'approval.begin' AND status = 'pending'
+  `, [storeId, billId]);
+  if (active.rowCount) throw new PosError(409, 'APPROVAL_BUSY');
 }
 
 export function parseFinish(value: unknown) {
@@ -142,45 +156,89 @@ async function setTerminal(tx: PosTx, key: string, status: 'committed' | 'reject
   if (update.rowCount !== 1) throw new Error('Missing pending approval');
 }
 
-async function recognizeSale(tx: PosTx, approval: PinnedApproval, quote: BillQuote): Promise<CompletedReceipt> {
-  const { db, storeId, at, actorId } = tx;
-  const { billId, businessDate: day } = approval;
+type SaleApproval = Pick<PinnedApproval, 'billId' | 'businessDate' | 'splits' | 'claimId'>;
+type RecordedSale = { terminal: TerminalRecord | null; source?: 'connect' };
+type MemberRecordedSale = RecordedSale & { member: {
+  memberId: string;
+  beforePublish: (settlementId: string) => Promise<{ claimId?: string; membershipContributions?: { allocationId: string; quantity: number }[] }>;
+} };
+type MemberCompletion = Omit<Completion, 'paymentId'> & { paymentId?: string };
+
+export async function insertOrder(tx: PosTx, billId: string, day: string, lines: BillQuote['lines'],
+  seq: number, at = tx.at) {
+  const { db, storeId } = tx;
   const orderId = randomUUID();
-  const paymentId = randomUUID();
-  const settlementId = randomUUID();
-  const seq = await nextBusinessSequence(tx, day);
-  const transactionNo = `거래-${day.replaceAll('-', '')}-${String(seq).padStart(4, '0')}`;
-  const approvalNo = `예시-${String(seq).padStart(6, '0')}`;
-  await db.query(`
-    UPDATE pos.bill SET status = 'paid', recognized_at = $3 WHERE store_id = $1 AND bill_id = $2
-  `, [storeId, billId, at]);
+  const snapshots = JSON.stringify(lines);
   await db.query(`
     INSERT INTO pos.pos_order (store_id, order_id, origin_bill_id, business_date, order_no, ordered_at)
     VALUES ($1, $2, $3, $4, $5, $6)
   `, [storeId, orderId, billId, day, seq, at]);
   await db.query(`
+    INSERT INTO pos.order_line (store_id, order_id, order_line_id, snapshot)
+    SELECT $1, $2, (line->>'orderLineId')::uuid, line FROM jsonb_array_elements($3::jsonb) AS line
+  `, [storeId, orderId, snapshots]);
+  await db.query(`
+    INSERT INTO pos.bill_allocation (store_id, bill_id, allocation_id, order_line_id, quantity)
+    SELECT $1, $2, (line->>'allocationId')::uuid, (line->>'orderLineId')::uuid, (line->>'qty')::integer
+    FROM jsonb_array_elements($3::jsonb) AS line
+  `, [storeId, billId, snapshots]);
+  return orderId;
+}
+
+export async function billOrderIds({ db, storeId }: PosTx, billId: string) {
+  const { rows } = await db.query<{ orderId: string }>(`
+    SELECT DISTINCT o.order_id AS "orderId", o.order_no FROM pos.bill_allocation a
+    JOIN pos.order_line l USING (store_id, order_line_id)
+    JOIN pos.pos_order o USING (store_id, order_id)
+    WHERE a.store_id = $1 AND a.bill_id = $2 ORDER BY o.order_no
+  `, [storeId, billId]);
+  return rows.map(row => row.orderId);
+}
+
+export function recognizeSale(tx: PosTx, approval: SaleApproval, quote: BillQuote, record: MemberRecordedSale):
+  Promise<ReturnType<typeof applied<MemberCompletion>>>;
+export function recognizeSale(tx: PosTx, approval: SaleApproval, quote: BillQuote, record?: RecordedSale): Promise<CompletedReceipt>;
+export async function recognizeSale(
+  tx: PosTx, approval: SaleApproval, quote: BillQuote, record?: RecordedSale | MemberRecordedSale,
+): Promise<ReturnType<typeof applied<MemberCompletion>>> {
+  const { db, storeId, actorId } = tx;
+  const at = record?.terminal ? new Date(record.terminal.occurredAt) : tx.at;
+  const { billId, businessDate: day } = approval;
+  const bill = await readBill(tx, billId);
+  const member = record && 'member' in record ? record.member : undefined;
+  const paidAmount = member ? approval.splits.reduce((sum, split) => sum + split.amount, 0) : quote.payable;
+  const paymentId = paidAmount > 0 ? randomUUID() : undefined;
+  const settlementId = randomUUID();
+  const seq = await nextBusinessSequence(tx, day);
+  const transactionNo = `거래-${day.replaceAll('-', '')}-${String(seq).padStart(4, '0')}`;
+  const channel = !record ? 'fixture' : record.terminal ? 'terminal_record' : 'cash_record';
+  const approvalNo = record ? record.terminal?.approvalNo ?? record.terminal?.receiptNo ?? transactionNo
+    : `예시-${String(seq).padStart(6, '0')}`;
+  await db.query(`
+    UPDATE pos.bill SET status = 'paid', recognized_at = $3, draft = jsonb_set(draft, '{quote}', $4)
+    WHERE store_id = $1 AND bill_id = $2
+  `, [storeId, billId, at, quote]);
+  const orderIds = bill.draft.postpaid ? await billOrderIds(tx, billId)
+    : [await insertOrder(tx, billId, day, quote.lines, seq, at)];
+  const [orderId] = orderIds;
+  if (!orderId) throw new Error('Missing order for POS settlement');
+  await db.query(`
     INSERT INTO pos.settlement (store_id, settlement_id, bill_id, purpose, amount, at)
     VALUES ($1, $2, $3, 'sale', $4, $5)
   `, [storeId, settlementId, billId, quote.payable, at]);
-  await db.query(`
-    INSERT INTO pos.payment (store_id, payment_id, settlement_id, created_by, amount, splits, transaction_no, approval_no, at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-  `, [storeId, paymentId, settlementId, actorId, quote.payable, JSON.stringify(approval.splits), transactionNo, approvalNo, at]);
+  if (paymentId) {
+    await db.query(`
+      INSERT INTO pos.payment (store_id, payment_id, settlement_id, created_by, amount, splits, transaction_no, approval_no, at, channel, source)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, [storeId, paymentId, settlementId, actorId, paidAmount, JSON.stringify(approval.splits), transactionNo, approvalNo, at, channel,
+      record?.source ?? null]);
+    if (record?.terminal) await insertTerminal(tx, day, paymentId, null, record.terminal);
+  }
 
   const ledgerLines = quote.lines.map((line) => ({
     line, recognitionId: randomUUID(), cost: saleCost(line, line.qty),
   }));
   const snapshots = JSON.stringify(ledgerLines);
-  await db.query(`
-    INSERT INTO pos.order_line (store_id, order_id, order_line_id, snapshot)
-    SELECT $1, $2, (row->'line'->>'orderLineId')::uuid, row->'line'
-    FROM jsonb_array_elements($3::jsonb) AS row
-  `, [storeId, orderId, snapshots]);
-  await db.query(`
-    INSERT INTO pos.bill_allocation (store_id, bill_id, allocation_id, order_line_id, quantity)
-    SELECT $1, $2, (row->'line'->>'allocationId')::uuid, (row->'line'->>'orderLineId')::uuid, (row->'line'->>'qty')::integer
-    FROM jsonb_array_elements($3::jsonb) AS row
-  `, [storeId, billId, snapshots]);
   await db.query(`
     INSERT INTO pos.settlement_line (store_id, settlement_id, allocation_id, snapshot)
     SELECT $1, $2, (row->'line'->>'allocationId')::uuid, row->'line'
@@ -194,34 +252,52 @@ async function recognizeSale(tx: PosTx, approval: PinnedApproval, quote: BillQuo
   `, [storeId, settlementId, day, at, snapshots]);
 
   const cost = nullableSum(ledgerLines.map((line) => line.cost));
-  await appendOutbox<PosSaleRecognized>(tx, 'pos.sale_recognized.v1', settlementId, {
-    billId, orderId, paymentId, settlementId, businessDate: day, lines: quote.lines.map((line) => eventLine(line, line.qty)),
+  const claim = await member?.beforePublish(settlementId);
+  const saleEvent: Omit<PosSaleRecognized['payload'], 'paymentId'> & { paymentId?: string; memberId?: string } = {
+    billId, orderId, ...(paymentId && { paymentId }), settlementId, businessDate: day, lines: quote.lines.map((line) => eventLine(line, line.qty)),
     amount: quote.payable, cost, incompleteMarginCoverage: cost === null,
     ...(approval.claimId && { claimId: approval.claimId }),
-  });
-  return applied({ settlementId, paymentId, billId, orderIds: [orderId], remaining: 0, settled: true,
+    ...(member && { memberId: member.memberId }), ...claim,
+  };
+  await appendOutbox({ ...tx, at }, 'pos.sale_recognized.v1', settlementId, saleEvent);
+  return applied({ settlementId, ...(paymentId && { paymentId }), billId, orderIds, remaining: 0, settled: true,
     purpose: 'sale', sourceRef: { kind: 'bill', id: billId }, accountEffects: [] }, settlementId);
 }
 
-export async function setPreparation(tx: PosTx, key: string, orderId: string, status: 'preparing' | 'completed') {
-  return applyCommand(tx, 'order.preparation', key, { orderId, status }, async () => {
-    const { rows } = await tx.db.query<{ preparation: string }>(`
-      SELECT preparation FROM pos.pos_order WHERE store_id = $1 AND order_id = $2
+export async function setPreparation(tx: PosTx, key: string, orderId: string, status: 'preparing' | 'completed', expectedRevision?: number) {
+  return applyCommand(tx, 'order.preparation', key, { orderId, status, expectedRevision }, async () => {
+    const { rows } = await tx.db.query<{ preparation: string; revision: number; day: string }>(`
+      SELECT preparation, revision, business_date::text AS day FROM pos.pos_order WHERE store_id = $1 AND order_id = $2
     `, [tx.storeId, orderId]);
     if (!rows[0]) throw new PosError(404, 'ORDER_NOT_FOUND');
+    if (expectedRevision !== undefined) {
+      if (expectedRevision !== rows[0].revision) throw new PosError(409, 'STALE_REVISION', { revision: rows[0].revision });
+      if (await openDay(tx) !== rows[0].day) throw new PosError(409, 'DAY_CLOSED');
+    }
     if (rows[0].preparation === 'completed' && status === 'preparing') throw new PosError(409, 'INVALID_STATUS_TRANSITION');
-    const { rows: payments } = await tx.db.query(`
-      SELECT 1 FROM pos.pos_order o
-      JOIN pos.settlement s ON (s.store_id, s.bill_id) = (o.store_id, o.origin_bill_id)
-      JOIN pos.payment p ON (p.store_id, p.settlement_id) = (s.store_id, s.settlement_id)
-      JOIN pos.payment_correction c ON (c.store_id, c.payment_id) = (p.store_id, p.payment_id)
-      WHERE o.store_id = $1 AND o.order_id = $2 AND c.kind = 'cancel'
-      GROUP BY p.payment_id, p.amount HAVING sum(c.amount) = p.amount
+    const active = await tx.db.query(`
+      SELECT 1 FROM pos.order_line l
+      JOIN pos.bill_allocation a USING (store_id, order_line_id)
+      JOIN pos.bill b USING (store_id, bill_id)
+      LEFT JOIN pos.settlement s USING (store_id, bill_id)
+      LEFT JOIN pos.payment p USING (store_id, settlement_id)
+      WHERE l.store_id = $1 AND l.order_id = $2 AND b.status <> 'void'
+        AND a.quantity > (
+          SELECT coalesce(sum((entry->>'qty')::integer), 0)
+          FROM pos.payment_correction c CROSS JOIN LATERAL jsonb_array_elements(c.allocations) entry
+          WHERE c.store_id = l.store_id AND (c.payment_id = p.payment_id OR c.member_sale_settlement_id = s.settlement_id)
+            AND c.kind = 'cancel' AND entry->>'allocationId' = a.allocation_id::text
+        )
+      LIMIT 1
     `, [tx.storeId, orderId]);
-    if (payments.length) throw new PosError(409, 'ALREADY_REVERSED');
+    if (!active.rowCount) throw new PosError(409, 'ALREADY_REVERSED');
     await tx.db.query(`
-      UPDATE pos.pos_order SET preparation = $3 WHERE store_id = $1 AND order_id = $2
-    `, [tx.storeId, orderId, status]);
-    return applied({ orderId, status }, randomUUID());
+      UPDATE pos.pos_order SET preparation = $3, revision = revision + (preparation <> $3)::integer,
+        preparing_at = CASE WHEN preparation = 'accepted' AND $3 = 'preparing' THEN $4 ELSE preparing_at END,
+        completed_at = CASE WHEN preparation <> 'completed' AND $3 = 'completed' THEN $4 ELSE completed_at END
+      WHERE store_id = $1 AND order_id = $2
+    `, [tx.storeId, orderId, status, tx.at]);
+    if (expectedRevision === undefined) return applied({ orderId, status }, randomUUID());
+    return commandReceipt(orderId, expectedRevision + Number(rows[0].preparation !== status), ['pos.orders']);
   });
 }

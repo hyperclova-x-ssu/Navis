@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { PosEvent } from '../../packages/contracts/events.ts';
+import type { EventEnvelope } from '../../packages/contracts/events.ts';
 import { fingerprint, PosError, type PosFailure, type PosTx } from './wire.ts';
 
 export type CommandStatus = 'pending' | 'committed' | 'rejected' | 'aborted';
@@ -29,6 +29,7 @@ export async function applyCommand<T extends object>(
   const previous = await readCommand<T>(tx, type, key);
   if (previous) {
     if (previous.fingerprint !== digest) throw new PosError(409, 'IDEMPOTENCY_MISMATCH');
+    if (previous.status === 'aborted') throw new PosError(409, 'COMMAND_UNDONE');
     if (!previous.receipt) throw new Error('Missing command receipt');
     return previous.receipt;
   }
@@ -63,7 +64,7 @@ export async function nextBusinessSequence({ db, storeId }: PosTx, day: string) 
 
 // TODO(Q3/T-307): Add a separate relay role, head-of-scope relay, checkpointed consumption and replay.
 // Production retention, required groups, retry and restore policy are pending review.
-export async function appendOutbox<E extends PosEvent>(
+export async function appendOutbox<E extends EventEnvelope<'pos', string, object>>(
   { db, storeId, at }: PosTx, eventType: E['eventType'], aggregateId: string, payload: E['payload'],
 ) {
   const { rows } = await db.query<{ seq: string }>(`

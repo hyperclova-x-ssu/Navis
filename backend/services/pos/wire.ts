@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 
 export const isUuid = (value: unknown): value is string =>
@@ -14,7 +14,7 @@ export const methods = ['card', 'easy_pay', 'cash'] as const;
 
 export type PosFailure = {
   ok: false;
-  code: 'VALIDATION' | 'CONFLICT' | 'NOT_FOUND' | 'PREVIEW_FAILURE';
+  code: 'VALIDATION' | 'CONFLICT' | 'NOT_FOUND' | 'PREVIEW_FAILURE' | 'SERVICE_UNAVAILABLE';
   reason: string;
   messageKey: string;
   details?: Record<string, unknown>;
@@ -40,13 +40,17 @@ export class PosError extends Error {
     super(reason);
     this.statusCode = statusCode;
     const code = statusCode === 404 ? 'NOT_FOUND' : statusCode === 409 ? 'CONFLICT'
-      : statusCode === 422 ? 'PREVIEW_FAILURE' : 'VALIDATION';
+      : statusCode === 422 ? 'PREVIEW_FAILURE' : statusCode === 503 ? 'SERVICE_UNAVAILABLE' : 'VALIDATION';
     this.result = { ok: false, code, reason, messageKey: messageKeys[reason] ?? 'run.session.conflict', ...(details ? { details } : {}) };
   }
 }
 
 export function applied<T>(value: T, transactionId: string) {
   return { ok: true, status: 'applied', transactionId, value } as const;
+}
+
+export function commandReceipt(resourceId: string, revision: number, affectedSources: string[], receiptId: string = randomUUID()) {
+  return { resourceId, revision, receiptId, affectedSources };
 }
 
 export function object(value: unknown, keys: readonly string[]): Record<string, unknown> {

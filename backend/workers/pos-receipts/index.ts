@@ -3,7 +3,7 @@ import { dbPool } from '../../packages/db/index.ts';
 import { connectStreams } from '../../packages/streams/index.ts';
 import { createPosReceiptConsumer } from './consumer.ts';
 
-const pool = dbPool('pos');
+const pool = dbPool('pos', 'worker');
 const stop = new AbortController();
 process.once('SIGINT', () => stop.abort());
 process.once('SIGTERM', () => stop.abort());
