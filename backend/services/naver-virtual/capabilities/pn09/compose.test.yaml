@@ -1,0 +1,44 @@
+# Dedicated PN-P1 fixture project. All networks are private and all credentials are synthetic.
+x-node: &node
+  image: navis-backend-local-tools:latest
+  working_dir: /app/backend
+  volumes:
+    - ../../../:/app/backend/services:ro
+    - ../../../../packages:/app/backend/packages:ro
+    - ../../../../../db/seed/ansungjalbu:/app/db/seed/ansungjalbu:ro
+    - ../../../../../src/data/db/generated:/app/src/data/db/generated:ro
+  networks: [fixtures]
+
+x-command: &command
+  [node, --experimental-transform-types, --disable-warning=ExperimentalWarning, services/naver-virtual/capabilities/pn09/compose-test.mjs]
+
+services:
+  db:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: naver_virtual
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -h 127.0.0.1 -U postgres -d naver_virtual]
+      interval: 1s
+      timeout: 3s
+      retries: 20
+    networks: [fixtures]
+  persona:
+    <<: *node
+    entrypoint: *command
+    command: [serve]
+    depends_on:
+      db: {condition: service_healthy}
+  customer:
+    <<: *node
+    entrypoint: *command
+    command: [customer]
+  proof:
+    <<: *node
+    entrypoint: *command
+    command: [verify]
+    profiles: [proof]
+
+networks:
+  fixtures: {internal: true}

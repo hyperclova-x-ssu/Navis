@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:17.11-bookworm@sha256:665dc7b37ac52a17e298511414c21d23ffa4e6a6ef6225b3e5d59c7afb35e994
+    pull_policy: never
+    environment:
+      POSTGRES_DB: naver_virtual
+      POSTGRES_HOST_AUTH_METHOD: trust
+    networks: [proof]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U postgres -d naver_virtual']
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  proof:
+    image: navis-backend-local-tools:latest
+    pull_policy: never
+    command: [node, --experimental-transform-types, services/naver-virtual/capabilities/pn03/compose-proof.mjs]
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks:
+      proof:
+        aliases: [marketing]
+    volumes:
+      - ../../../../services/naver-virtual:/app/backend/services/naver-virtual:ro
+      - ../../../../packages/naver:/app/backend/packages/naver:ro
+      - ../../../../packages/db:/app/backend/packages/db:ro
+      - ../../../../../db/seed/ansungjalbu:/app/db/seed/ansungjalbu:ro
+      - ../../../../../src/data/db/generated:/app/src/data/db/generated:ro
+
+networks:
+  proof:
+    internal: true
