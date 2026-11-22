@@ -1,0 +1,359 @@
+{
+  "storeId": "c05409a6-f082-5964-a787-c1ed3184988b",
+  "model": "claude-opus-5-5",
+  "schemaVersion": 2,
+  "rows": [
+    {
+      "sha256": "1ef54d2ebd6570d1909105fb636bf19b9cf28b1aae3e29e9081c8fd5ad424c8d",
+      "metadata": {
+        "kind": "other",
+        "subject": "Slice of strawberry cream cake in an open kraft takeaway box beside a heart latte by a window",
+        "items": [
+          "strawberry cream cake slice",
+          "open kraft takeaway box",
+          "parchment paper",
+          "latte with heart latte art",
+          "saucer and spoon",
+          "glass of water",
+          "wooden round table",
+          "window view of street"
+        ],
+        "flavors": [
+          "strawberry",
+          "whipped cream",
+          "sponge cake"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.57,
+          "y": 0.68
+        },
+        "captionHints": [
+          "Strawberry cream cake with a heart latte",
+          "Layers of sponge, cream and fresh strawberries",
+          "Cake and coffee by a sunny window",
+          "Takeaway slice, fresh strawberries on top"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "2164da3b92acd8392b0fba382aa949ffd4071f776ba072d3a40752202984403a",
+      "metadata": {
+        "kind": "inhand",
+        "subject": "A slice of strawberry shortcake with fresh cream and sponge, on a beige plate held by a hand",
+        "items": [
+          "strawberry shortcake slice",
+          "beige ceramic plate",
+          "wooden round table",
+          "window with sunlit pavement",
+          "green upholstered seat"
+        ],
+        "flavors": [
+          "strawberry",
+          "whipped cream",
+          "vanilla sponge"
+        ],
+        "people": "hands",
+        "textInImage": "",
+        "focus": {
+          "x": 0.54,
+          "y": 0.6
+        },
+        "captionHints": [
+          "Layers of cream and fresh strawberries",
+          "Fluffy sponge with strawberry halves on top",
+          "A sunny-window slice of shortcake",
+          "Fresh strawberries tucked between soft layers"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "2e2754a9e90d5a6a733ec44ad8f368356330394a5b7de9f5a0c79453feb99dfa",
+      "metadata": {
+        "kind": "closeup",
+        "subject": "Extreme close-up of a strawberry cream cake slice with sponge layers, cream and fresh strawberry halves on top",
+        "items": [
+          "strawberry cake slice",
+          "halved fresh strawberries",
+          "whipped cream frosting",
+          "sponge cake layers",
+          "strawberry filling layer"
+        ],
+        "flavors": [
+          "strawberry",
+          "whipped cream",
+          "vanilla sponge"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.5,
+          "y": 0.55
+        },
+        "captionHints": [
+          "Fresh strawberry halves on fluffy cream",
+          "Soft sponge layered with cream and strawberries",
+          "A closer look at our strawberry layers",
+          "Light sponge, cream and juicy berries"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "4b009c264d8b4e0b1abb525b895581eac65dc592284f6b8c2ebaa87b6a11e160",
+      "metadata": {
+        "kind": "display",
+        "subject": "Six strawberry shortcake slices on a beige tray inside a glass display case",
+        "items": [
+          "strawberry shortcake slices",
+          "beige service tray",
+          "glass display case",
+          "wooden counter",
+          "window with trees outside"
+        ],
+        "flavors": [
+          "strawberry",
+          "whipped cream",
+          "sponge cake"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "captionHints": [
+          "Six strawberry shortcake slices ready in the case",
+          "Fresh strawberry halves on whipped cream",
+          "Sliced strawberries layered between sponge",
+          "A sunny tray of strawberry cake"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "many"
+      }
+    },
+    {
+      "sha256": "545aba2d15b60d847c5511a91c921eccc8807af64fbdfbc4c4cfcdf844d0bca6",
+      "metadata": {
+        "kind": "inhand",
+        "subject": "A slice of strawberry cream sponge cake in an open kraft takeaway box, held in a hand by a cafe window.",
+        "items": [
+          "strawberry shortcake slice",
+          "kraft paper takeaway box",
+          "parchment paper liner",
+          "latte with latte art",
+          "white saucer",
+          "glass of water",
+          "wooden round table"
+        ],
+        "flavors": [
+          "strawberry",
+          "whipped cream",
+          "vanilla sponge"
+        ],
+        "people": "hands",
+        "textInImage": "",
+        "focus": {
+          "x": 0.5,
+          "y": 0.72
+        },
+        "captionHints": [
+          "Strawberry cream cake to go in a kraft box",
+          "Fresh strawberry halves on whipped cream",
+          "Layers of sponge, cream and strawberries",
+          "Cake and a latte by the sunny window"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "5ca812f6e27a16ce8c76dad19ed211b67be41d4aa6ecbaa5e5c1ded26666d4c1",
+      "metadata": {
+        "kind": "display",
+        "subject": "Two strawberry shortcake slices on a beige tray inside a glass display case",
+        "items": [
+          "strawberry shortcake slice",
+          "strawberry shortcake slice",
+          "beige display tray",
+          "glass display cabinet",
+          "glass of water",
+          "wooden cafe table",
+          "window with trees outside"
+        ],
+        "flavors": [
+          "strawberry",
+          "whipped cream",
+          "sponge cake"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.7,
+          "y": 0.47
+        },
+        "captionHints": [
+          "Two strawberry shortcake slices left in the case",
+          "Layers of sponge, cream and fresh strawberries",
+          "Fresh strawberries on top of each slice",
+          "Cake case by a sunny window"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "few"
+      }
+    },
+    {
+      "sha256": "5fda8d5d695445c243752a328fc2bf2ceee607bfbfb62688dde2a5ecf3852564",
+      "metadata": {
+        "kind": "table",
+        "subject": "A slice of strawberry cream layer cake on a beige ceramic plate with a fork, on a wooden table",
+        "items": [
+          "strawberry cream cake slice",
+          "beige ceramic plate",
+          "metal fork",
+          "wooden table"
+        ],
+        "flavors": [
+          "strawberry",
+          "whipped cream",
+          "sponge cake"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.5,
+          "y": 0.43
+        },
+        "captionHints": [
+          "Fresh strawberry halves on whipped cream",
+          "Layers of sponge, cream and strawberries",
+          "A slice of strawberry cake in the sunlight",
+          "Cake and a fork on a wooden table"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "829e1a1ac4f03c26fee12759253e2368c0f2813c666f6d3284e99b45f77c647a",
+      "metadata": {
+        "kind": "display",
+        "subject": "A single strawberry shortcake slice left on an otherwise empty metal tray inside a glass display case.",
+        "items": [
+          "strawberry cake slice",
+          "stainless steel tray",
+          "glass display cabinet",
+          "cake crumbs",
+          "wooden cabinet frame"
+        ],
+        "flavors": [
+          "strawberry",
+          "whipped cream",
+          "vanilla sponge"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.76,
+          "y": 0.52
+        },
+        "captionHints": [
+          "The last strawberry slice on the tray",
+          "Two whole strawberries on whipped cream",
+          "Sliced strawberries between sponge layers",
+          "Only one slice left in the case"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "8a7828d229e415ea5d125c021c99f65fccff287caede6bd7f941ee106653523f",
+      "metadata": {
+        "kind": "table",
+        "subject": "A slice of strawberry shortcake on a cream plate next to a latte with heart latte art",
+        "items": [
+          "strawberry shortcake slice",
+          "cream ceramic plate",
+          "latte with heart art",
+          "white cup and saucer",
+          "metal teaspoon",
+          "wooden round table",
+          "green bench seat",
+          "window with street view"
+        ],
+        "flavors": [
+          "strawberry",
+          "whipped cream",
+          "sponge cake"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.61,
+          "y": 0.63
+        },
+        "captionHints": [
+          "Strawberry shortcake with a heart latte",
+          "Layers of sponge, cream and fresh strawberries",
+          "Halved strawberries on top of fluffy cream",
+          "A sunny window seat with cake and coffee"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "ff47317ca3fde87a02dce351487af1d1f013b7b56cd79263cbbf6b3d36eaf919",
+      "metadata": {
+        "kind": "display",
+        "subject": "Five strawberry shortcake slices on beige plates inside a glass display cabinet",
+        "items": [
+          "strawberry shortcake slices",
+          "beige ceramic plates",
+          "glass display cabinet",
+          "stainless steel shelf",
+          "wooden counter",
+          "round wooden table",
+          "green bench seat",
+          "window with street view"
+        ],
+        "flavors": [
+          "strawberry",
+          "whipped cream",
+          "sponge cake"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.5,
+          "y": 0.55
+        },
+        "captionHints": [
+          "Five strawberry shortcake slices in the case",
+          "Fresh strawberries on top of every slice",
+          "Layers of sponge, cream and strawberries",
+          "A display case full of strawberry cake"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "many"
+      }
+    }
+  ]
+}

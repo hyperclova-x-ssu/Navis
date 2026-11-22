@@ -7,6 +7,7 @@ import { insert, publishRecordChange, type Row } from './records.ts';
 
 const redeliveryWindowMs = 5 * 60_000;
 export const liveInboxPrefix = 'live-inbox-';
+export const virtualInboxPrefix = 'inbox-';
 
 /** Bind this handler to the store of the separately authenticated callback at composition time. */
 export function createTalkTalkInbox(pool: Pool, storeId: string, now = () => new Date(), live = false) {
@@ -30,7 +31,7 @@ export function createTalkTalkInbox(pool: Pool, storeId: string, now = () => new
 
       const id = randomUUID();
       const row: Row = {
-        id, kind: 'inquiry', source: 'talktalk', providerRef: (live ? liveInboxPrefix : 'inbox-') + id,
+        id, kind: 'inquiry', source: 'talktalk', providerRef: (live ? liveInboxPrefix : virtualInboxPrefix) + id,
         revision: 1, status: 'waiting', updatedAt: at,
         data: { type: 'message', title: null, text: event.text, sourceUrl: null, draft: null, reply: null },
       };
@@ -50,17 +51,17 @@ export async function talkTalkInboxRecipient(db: PoolClient, storeId: string, in
   return candidate;
 }
 
-export async function liveTalkTalkConversation(db: PoolClient, storeId: string, inquiryId: string, ref: string) {
+export async function inboxTalkTalkConversation(db: PoolClient, storeId: string, inquiryId: string, ref: string, live: boolean) {
   const { rows } = await db.query<{ id: string; status: string; inbound: string; reply: string | null;
     receivedAt: Date; repliedAt: Date }>(`
     SELECT record.id, record.status, record.data->>'text' AS inbound, record.data->'reply'->>'text' AS reply,
       item.received_at AS "receivedAt", record.updated_at AS "repliedAt"
     FROM marketing.talktalk_inbox_candidate target
     JOIN marketing.talktalk_inbox_candidate item
-      ON item.store_id=target.store_id AND item.provider_user=target.provider_user AND item.is_live
+      ON item.store_id=target.store_id AND item.provider_user=target.provider_user AND item.is_live=target.is_live
     JOIN marketing.reply_notice_record record ON record.store_id=item.store_id AND record.id=item.inquiry_id
-    WHERE target.store_id=$1 AND target.inquiry_id=$2 AND target.is_live
-    ORDER BY (item.inquiry_id=$2) DESC, item.received_at DESC, item.inquiry_id DESC LIMIT 30`, [storeId, inquiryId]);
+    WHERE target.store_id=$1 AND target.inquiry_id=$2 AND target.is_live=$3
+    ORDER BY (item.inquiry_id=$2) DESC, item.received_at DESC, item.inquiry_id DESC LIMIT 30`, [storeId, inquiryId, live]);
   const target = rows[0];
   if (target?.id !== inquiryId) return;
   const messages = rows.flatMap(row => [

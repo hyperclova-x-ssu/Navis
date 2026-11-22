@@ -136,12 +136,12 @@ export function createAttemptRunner({
     return response;
   }
 
-  async function run(modelStage: ModelStage, key: string, hash: string, request: ModelRequest) {
+  async function run(modelStage: ModelStage, key: string, hash: string, request: ModelRequest, retryInvalid: boolean) {
     for (let attemptNo = 1; attemptNo <= 2; attemptNo++) {
       const result = await runAttempt(modelStage, key, hash, attemptNo, request);
       if (result.state === 'not_sent') continue;
       if (!result.error) return { output: result.output };
-      if (result.error === 'AI_BAD_OUTPUT' && attemptNo === 1) continue;
+      if (retryInvalid && result.error === 'AI_BAD_OUTPUT' && attemptNo === 1) continue;
       throw new PromoError(result.error, undefined);
     }
     throw new PromoError('AI_UNAVAILABLE', undefined);
@@ -149,7 +149,7 @@ export function createAttemptRunner({
 
   return {
     model: (modelStage: ModelStage) => provider.identity(modelStage).model,
-    runner: (modelStage: ModelStage) => ({
+    runner: (modelStage: ModelStage, { retryInvalid = true } = {}) => ({
       run(request: ModelRequest) {
         const hash = fingerprint({
           model: provider.identity(modelStage), prompt: request.prompt, schema: request.schema,
@@ -161,7 +161,7 @@ export function createAttemptRunner({
         if (!key) throw new PromoError('AI_BAD_OUTPUT', undefined);
         const prior = modelStage === 'look' ? lookCalls.get(key) : undefined;
         if (prior) return prior;
-        const task = run(modelStage, key, hash, request);
+        const task = run(modelStage, key, hash, request, retryInvalid);
         if (modelStage === 'look') lookCalls.set(key, task);
         pending.add(task);
         void task.then(() => pending.delete(task), () => pending.delete(task));

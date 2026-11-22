@@ -23,7 +23,7 @@ export function navisReviewDraft(forOwner: (owner: Owner) => Provider): NonNulla
  * Marketing only resolves recipients for scheduled notice SMS. It holds no SENS credential: marketing-worker sends
  * at the scheduled minute with its own PN13 grant (RV-GAP-B-6). Bind `recipients` to `createNoticeRecipients`.
  */
-export function scheduledSmsProvider(options: { mode: ScheduledSms['mode']; recipients: ScheduledSms['recipients'] }): ScheduledSms {
-  if (options.mode !== 'fake' && options.mode !== 'virtual') throw new Error('Scheduled SMS requires a fake or virtual binding');
-  return { mode: options.mode, recipients: options.recipients };
+export function scheduledSmsProvider(options: ScheduledSms): ScheduledSms {
+  if (options.mode === 'live' && !options.settings) throw new Error('Live scheduled SMS requires current store settings');
+  return options;
 }

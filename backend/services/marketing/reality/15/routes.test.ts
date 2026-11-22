@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import type { Pool } from 'pg';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { NaverAdapterError } from '../../naver/errors.ts';
 import { definitiveRejection } from './commands.ts';
 import { registerNoticeReplyRoutes } from './routes.ts';
@@ -14,6 +14,118 @@ const headers = { authorization: 'Bearer marketing-test', 'x-navis-store-id': st
   'x-navis-user-id': actor, 'x-navis-store-role': 'owner', 'idempotency-key': 'test-approval' };
 
 describe('marketing notice and reply boundaries', () => {
+  it('previews a scoped TalkTalk inquiry with server facts and makes no record or send writes', async () => {
+    const app = Fastify();
+    const record = { source: 'talktalk', providerRef: 'tt-1', status: 'waiting', data: { type: 'message', text: null } };
+    const query = vi.fn(async (sql: string) => ({ rows: sql.includes('marketing.reply_notice_record') ? [record] : [] }));
+    const pool = { connect: async () => ({ query, release() {} }) } as unknown as Pool;
+    const hours = '일요일 영업시간은 10:00~20:30입니다.';
+    const storedFacts = [hours, '아메리카노 가격은 3,500원입니다.'];
+    const facts = vi.fn(async () => storedFacts);
+    const draft = vi.fn(async () => `안녕하세요.\n${hours}\n감사합니다.`);
+    registerNoticeReplyRoutes(app, pool, { gatewayToken: 'marketing-test', talkTalkDraft: { facts, draft },
+      provider: { mode: 'fake', consultation: async () => ({ ref: 'tt-1', status: 'waiting', messages: [{ text: '일요일에도 문 여나요?' }] }) } });
+    const url = root + `/inquiries/${actor}/navis-draft-preview`;
+    try {
+      expect((await app.inject({ method: 'POST', url, headers: { ...headers, 'x-navis-store-role': 'staff' }, payload: {} })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'POST', url, headers, payload: { inquiry: 'Browser text' } })).statusCode).toBe(400);
+      expect(query).not.toHaveBeenCalled();
+      const response = await app.inject({ method: 'POST', url, headers, payload: {} });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ source: 'navis', text: `안녕하세요.\n${hours}\n감사합니다.`, facts: [hours] });
+      expect(facts).toHaveBeenCalledWith(expect.objectContaining({ storeId: store, actorId: actor }));
+      expect(draft).toHaveBeenCalledWith({ inquiry: '일요일에도 문 여나요?', facts: storedFacts });
+      expect(query.mock.calls.every(([sql]) => !/\b(?:INSERT|UPDATE|DELETE)\b/u.test(sql))).toBe(true);
+      draft.mockResolvedValueOnce('안녕하세요.\n감사합니다.');
+      const ungrounded = await app.inject({ method: 'POST', url, headers, payload: {} });
+      expect(ungrounded.statusCode).toBe(422);
+      expect(ungrounded.json()).toEqual({ code: 'DRAFT_UNGROUNDED' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each([
+    ['manual', 'message', '매장 주소가 궁금합니다.'],
+    ['manual', 'review', '매장 주소 안내가 있으면 좋겠어요.'],
+    ['review', 'review', '매장 주소를 알기 어렵네요.'],
+  ])('previews a stored %s %s using its text and shop facts without a write', async (source, type, original) => {
+    const app = Fastify();
+    const record = { source, providerRef: source === 'review' ? 'review-1' : null, status: 'waiting', data: { type, text: original } };
+    const query = vi.fn(async (sql: string) => ({ rows: sql.includes('marketing.reply_notice_record') ? [record] : [] }));
+    const pool = { connect: async () => ({ query, release() {} }) } as unknown as Pool;
+    const address = '매장 주소는 상도로 1입니다.';
+    const facts = vi.fn(async () => [address]);
+    const draft = vi.fn(async () => `안녕하세요.\n${address}\n감사합니다.`);
+    const consultation = vi.fn();
+    registerNoticeReplyRoutes(app, pool, { gatewayToken: 'marketing-test', talkTalkDraft: { facts, draft },
+      provider: { mode: 'fake', consultation } });
+    const url = root + `/inquiries/${actor}/navis-draft-preview`;
+    try {
+      const response = await app.inject({ method: 'POST', url, headers, payload: {} });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ source: 'navis', text: `안녕하세요.\n${address}\n감사합니다.`, facts: [address] });
+      expect(draft).toHaveBeenCalledWith({ inquiry: original, facts: [address] });
+      expect(consultation).not.toHaveBeenCalled();
+      expect(query.mock.calls.every(([sql]) => !/\b(?:INSERT|UPDATE|DELETE)\b/u.test(sql))).toBe(true);
+      record.status = 'done';
+      expect((await app.inject({ method: 'POST', url, headers, payload: {} })).statusCode).toBe(409);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('reads the provider original for an imported review without stored text', async () => {
+    const app = Fastify();
+    const query = vi.fn(async (sql: string) => ({ rows: sql.includes('marketing.reply_notice_record')
+      ? [{ source: 'review', providerRef: 'review-1', status: 'waiting', data: { type: 'review', text: null } }] : [] }));
+    const pool = { connect: async () => ({ query, release() {} }) } as unknown as Pool;
+    const address = '매장 주소는 상도로 1입니다.';
+    const facts = vi.fn(async () => [address]);
+    const draft = vi.fn(async () => `안녕하세요.\n${address}\n감사합니다.`);
+    const review = vi.fn(async () => ({ ref: 'review-1', text: '매장 주소를 알려 주세요. 010-1234-5678',
+      stars: 3, keywords: [], media: [], reply: null, hasReply: false }));
+    registerNoticeReplyRoutes(app, pool, { gatewayToken: 'marketing-test', talkTalkDraft: { facts, draft },
+      provider: { mode: 'fake', review } });
+    try {
+      const url = root + `/inquiries/${actor}/navis-draft-preview`;
+      const response = await app.inject({ method: 'POST', url, headers, payload: {} });
+      expect(response.statusCode).toBe(200);
+      expect(review).toHaveBeenCalledWith({ storeId: store, actorId: actor }, 'review-1');
+      expect(draft.mock.calls[0]).toEqual([{ inquiry: expect.stringContaining('매장 주소를 알려 주세요.'), facts: [address] }]);
+      expect(JSON.stringify(draft.mock.calls)).not.toContain('010-1234-5678');
+      expect(query.mock.calls.every(([sql]) => !/\b(?:INSERT|UPDATE|DELETE)\b/u.test(sql))).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('loads scoped callback conversations from the inbox for both provider modes', async () => {
+    const app = Fastify();
+    const entries = [{ id: actor, status: 'waiting', inbound: '일요일에도 문 여나요?', reply: null,
+      receivedAt: new Date('2026-11-22T05:30:00Z'), repliedAt: new Date('2026-11-22T05:30:00Z') }];
+    const query = vi.fn(async (sql: string, _params?: unknown[]) => ({ rows: sql.includes('marketing.talktalk_inbox_candidate') ? entries : [] }));
+    const pool = { connect: async () => ({ query, release() {} }) } as unknown as Pool;
+    const consultation = vi.fn(async () => ({ ref: 'provider-ref', status: 'waiting', messages: [] }));
+    registerNoticeReplyRoutes(app, pool, { gatewayToken: 'marketing-test', provider: { mode: 'virtual', consultation } });
+    try {
+      for (const [prefix, live] of [['inbox-', false], ['live-inbox-', true]] as const) {
+        const ref = `${prefix}${actor}`;
+        const url = `${root}/talktalk/consultations/${ref}`;
+        const result = await app.inject({ url, headers });
+        expect(result.statusCode).toBe(200);
+        expect(result.json()).toMatchObject({ ref, status: 'waiting', messages: [{ text: entries[0].inbound, from: 'user' }] });
+        expect(query.mock.calls.some(([sql, params]) => sql.includes('marketing.talktalk_inbox_candidate')
+          && JSON.stringify(params) === JSON.stringify([store, actor, live]))).toBe(true);
+      }
+      expect(consultation).not.toHaveBeenCalled();
+      expect((await app.inject({ url: `${root}/talktalk/consultations/provider-ref`, headers })).statusCode).toBe(200);
+      expect(consultation).toHaveBeenCalledOnce();
+    } finally {
+      await app.close();
+    }
+  });
+
   it("allows fake and virtual providers and rejects live mode at registration", async () => {
     const app = Fastify();
     const pool = {} as Pool;

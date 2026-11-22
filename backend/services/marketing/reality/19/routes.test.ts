@@ -89,6 +89,18 @@ const correction = (store: string, settlementId: string, day: string, amountDelt
 };
 
 describe('customer groups', () => {
+  it('returns the authoritative member code in the group preview and customer page', async () => {
+    const store = randomUUID(), memberId = randomUUID();
+    const call = await server({ memberCodes: async (scope, ids) =>
+      new Map(scope.storeId === store && ids.includes(memberId) ? [[memberId, 'M-0008']] : []) });
+    await member(store, memberId, 1, true, true, '손');
+    await sale(store, { day: '2026-11-20', memberId });
+    expect((await call(store, 'GET', '/groups')).json().preview['first-visit'])
+      .toMatchObject([{ memberId, memberCode: 'M-0008', displayName: '손○○' }]);
+    expect((await call(store, 'GET', '/groups/first-visit/customers')).json().items)
+      .toMatchObject([{ memberId, memberCode: 'M-0008', displayName: '손○○' }]);
+  });
+
   it('splits real member visits into non-overlapping groups by business day and keeps CCTV-free sources', async () => {
     const call = await server();
     const store = randomUUID();

@@ -95,7 +95,9 @@ function failure(result: CallResult, write: boolean): never {
 
 export interface SensServiceIds { sms?: string; alimtalk?: string; brandmessage?: string; mail?: string }
 
-export function createSensWire(provider: Provider, options: { serviceIds: SensServiceIds; clock?: { now(): Date } }) {
+export function createSensWire(provider: Provider, options: {
+  serviceIds: SensServiceIds; clock?: { now(): Date }; liveApproval?: symbol;
+}) {
   const now = () => (options.clock ?? { now: () => new Date() }).now();
   const service = (product: keyof SensServiceIds) => {
     const value = options.serviceIds[product];
@@ -106,7 +108,8 @@ export function createSensWire(provider: Provider, options: { serviceIds: SensSe
   async function send<T>(operation: OperationId, path: string, expect: number, shape: Shape, body?: object, signal?: AbortSignal, attemptKey?: string): Promise<T> {
     const write = body !== undefined;
     const result = await call(provider, operation, path, {
-      signal, headers: write ? { 'content-type': 'application/json', ...(attemptKey && { 'idempotency-key': attemptKey }) } : undefined, body: write ? JSON.stringify(body) : undefined,
+      signal, approvalScope: options.liveApproval,
+      headers: write ? { 'content-type': 'application/json', ...(attemptKey && { 'idempotency-key': attemptKey }) } : undefined, body: write ? JSON.stringify(body) : undefined,
     });
     if (result.status !== expect) failure(result, write);
     return project<T>(shape, parseJson(result), { strict: provider.strict });
@@ -134,7 +137,7 @@ export function createSensWire(provider: Provider, options: { serviceIds: SensSe
         const timestamp = new Date(local.replace(' ', 'T') + ':00+09:00');
         if (!/^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(local) || !Number.isFinite(+timestamp)
           || new Date(+timestamp + 9 * 3600_000).toISOString().slice(0, 16).replace('T', ' ') !== local
-          || +timestamp - +sendAt <= 600_000 || input.reserveTimeZone !== 'Asia/Seoul' || !provider.strict) {
+          || +timestamp - +sendAt <= 600_000 || input.reserveTimeZone !== 'Asia/Seoul' || (!provider.strict && !options.liveApproval)) {
           throw new NaverAdapterError('INVALID_INPUT', { detail: 'reserveTime' });
         }
         sendAt = timestamp;
@@ -153,15 +156,15 @@ export function createSensWire(provider: Provider, options: { serviceIds: SensSe
       return send<MessageAcceptance>('pn13.sms.send', `/sms/v2/services/${service('sms')}/messages`, 202, smsAcceptanceShape, body, input.signal, input.attemptKey);
     },
     async reservationStatus(id: string, signal?: AbortSignal) {
-      if (!provider.strict) throw new NaverAdapterError('FORBIDDEN');
+      if (!provider.strict && !options.liveApproval) throw new NaverAdapterError('FORBIDDEN');
       return send<SmsReservation>('pn13.sms.reservation-status',
         `/sms/v2/services/${service('sms')}/reservations/${messageId(id)}/reserve-status`,
         200, smsReservationShape, undefined, signal);
     },
     async cancelReservation(id: string, signal?: AbortSignal) {
-      if (!provider.strict) throw new NaverAdapterError('FORBIDDEN');
+      if (!provider.strict && !options.liveApproval) throw new NaverAdapterError('FORBIDDEN');
       const result = await call(provider, 'pn13.sms.reservation-delete',
-        `/sms/v2/services/${service('sms')}/reservations/${messageId(id)}`, { signal });
+        `/sms/v2/services/${service('sms')}/reservations/${messageId(id)}`, { signal, approvalScope: options.liveApproval });
       if (result.status !== 204) failure(result, true);
     },
     listSms: (requestId: string, signal?: AbortSignal) =>

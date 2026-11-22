@@ -6,6 +6,7 @@ import type { Pool } from 'pg';
 import { PromoError, reasonOf } from '../../../../frontend/server/promo/errors.mjs';
 import { createPipeline } from '../../../../frontend/server/promo/pipeline.mjs';
 import { photoAssets } from '../../../../frontend/server/promo/renderer.mjs';
+import type { loadPlanningTemplates } from '../../../../frontend/server/promo/templates/runtime.mjs';
 import type { loadReferences } from '../../../../frontend/server/promo/references.mjs';
 import { fingerprint, sha256, stages, type CheckpointStage, type PromoArtifacts, type PromoResult } from '../../../services/marketing/promo/contracts.ts';
 import { inStore } from '../../../services/marketing/transaction.ts';
@@ -13,6 +14,7 @@ import { createAttemptRunner, UnsettledAttempt } from './attempts.ts';
 import type { createUsageClient } from './clients.ts';
 import { checkpoint, claim, complete, defer, fail, LostLease, renew, withLease, type Lease } from './leases.ts';
 import type { PromoProvider } from './providers.ts';
+import type { createPhotoAnalysis } from './photo-analysis.ts';
 
 type Pipeline = ReturnType<typeof createPipeline>;
 type Look = Awaited<ReturnType<Pipeline['look']>>;
@@ -30,6 +32,8 @@ interface WorkerOptions {
   artifacts: PromoArtifacts;
   meter: ReturnType<typeof createUsageClient>;
   provider: PromoProvider;
+  photoAnalysis?: ReturnType<typeof createPhotoAnalysis>;
+  templates?: ReturnType<typeof loadPlanningTemplates>;
   references: ReturnType<typeof loadReferences>;
   music: Array<NonNullable<PromoResult['music']> & { file: string; moods?: string[] }>;
   musicDir: string;
@@ -46,7 +50,7 @@ interface WorkerOptions {
 const readJson = <T>(value: Buffer): T => JSON.parse(value.toString('utf8'));
 
 export function createPromoWorker({
-  database, artifacts, meter, provider, references, music, musicDir, checkScene, renderVideo, checkVideo,
+  database, artifacts, meter, provider, photoAnalysis, templates, references, music, musicDir, checkScene, renderVideo, checkVideo,
   leaseMs = 30_000, retryDelayMs = 5_000, reconcileWindowMs = 5 * 60_000, onError,
 }: WorkerOptions) {
   if (!Number.isSafeInteger(leaseMs) || leaseMs < 300 || leaseMs > 300_000
@@ -92,12 +96,20 @@ export function createPromoWorker({
     };
     const sceneRunner = attempts.runner('scenes');
     const pipeline = createPipeline({
-      runner: sceneRunner, sceneRunner, lookRunner: attempts.runner('look'), storyRunner: attempts.runner('story'),
+      runner: sceneRunner, sceneRunner, lookRunner: attempts.runner('look'),
+      storyRunner: attempts.runner('story', { retryInvalid: !templates }),
       lookModel: attempts.model('look'), model: attempts.model('scenes'),
       photoSource, references: jobReferences, music, musicDir, cacheDir: directory, checkScene, checkVideo, renderVideo,
-      fault: null, onSceneCheck: undefined,
+      fault: null, onSceneCheck: undefined, templates, promotionFacts: snapshot.promotionFacts, storeId,
+      readPhotoMeta: photoAnalysis && (async (id: string, stageSignal: AbortSignal) => {
+        const photo = await photoSource.readPhoto(id);
+        if (!photo) throw new PromoError('AI_BAD_OUTPUT', undefined);
+        const menuId = photoSource.photoInfo(id)?.menuId;
+        const menuName = snapshot.catalog.menus.find(menu => menu.menuId === menuId)?.names.en ?? '';
+        return photoAnalysis.resolve(storeId, photo, menuName, stageSignal);
+      }),
     });
-    const job = { input, stage, dir: directory, fixCount: 0, storyRewriteCount: 0, checks: [],
+    const job = { input, stage, dir: directory, takeIndex: snapshot.takeIndex, fixCount: 0, storyRewriteCount: 0, checks: [],
       usage: { calls: 0, inputTokens: 0, outputTokens: 0 } };
     const save = async <S extends CheckpointStage>(name: S, data: Checkpoints[S]) => {
       await withLease(database, lease, async () => undefined);

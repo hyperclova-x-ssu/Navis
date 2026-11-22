@@ -8,7 +8,7 @@ import { talkTalkInboxRecipient } from './inbox.ts';
 import { recipientGroup } from './recipients.ts';
 import { assertWritable, byKey, byReceipt, complete, get, insert, reject, reserve } from './records.ts';
 import type { Inquiry, Kind, Notice, Receipt, Row } from './records.ts';
-import { cancelDispatch, noticeSmsText, scheduleDispatch } from './sms-dispatch.ts';
+import { approvedNoticeSmsText, cancelDispatch, scheduleDispatch } from './sms-dispatch.ts';
 import {
   cardOperations, destructiveOperations, nightNoticeHint, NoticeError, noticeCommand, publicReply, smsMaxRecipients, smsReservationTime,
 } from './wire.ts';
@@ -155,7 +155,7 @@ async function changeNotice(db: PoolClient, options: NoticeReplyOptions, owner: 
       if (!options.scheduledSms) throw new NoticeError(409, 'A6_DISABLED');
       if (!input.scheduledFor) throw new NoticeError(409, 'SMS_SCHEDULE_REQUIRED');
       // Owner-written notice copy is advertising: `(광고)`, sender line, body and free opt-out (RV-GAP-B-2).
-      const text = noticeSmsText(draft);
+      const text = await approvedNoticeSmsText(options, owner, draft);
       if (!text.type) throw new NoticeError(400, 'SMS_CONTENT_UNSUPPORTED');
       const schedule = smsReservationTime(input.scheduledFor, row.updatedAt, true);
       const recipients = await options.scheduledSms.recipients(owner, draft.recipientGroupId!, true);
@@ -163,7 +163,7 @@ async function changeNotice(db: PoolClient, options: NoticeReplyOptions, owner: 
       if (new Set(recipients.to).size > smsMaxRecipients) throw new NoticeError(409, 'SMS_RECIPIENT_LIMIT');
       // The ledger row commits with the receipt; no provider call happens at the press (RV-GAP-B-3/5/6).
       const dispatchId = await scheduleDispatch(db, owner, row, draft, schedule, { content: text.content, type: text.type },
-        closure, period, row.updatedAt);
+        closure, period, row.updatedAt, options.scheduledSms.mode === 'live');
       scheduled = { state: 'scheduled', providerRef: dispatchId, scheduledFor: schedule.local };
     }
     if (draft.channel === 'manual') throw new NoticeError(409, 'MANUAL_ATTESTATION_REQUIRED');

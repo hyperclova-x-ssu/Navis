@@ -79,7 +79,8 @@ describe('seedOfficialLocal', () => {
     expect(queries[1].values).toEqual([store]);
     expect(queries[2].text).toContain('pg_advisory_xact_lock');
     const coverage = queries.find(query => query.text.includes('marketing.local_coverage'));
-    expect(coverage?.values).toEqual([store, officialSnapshot.region, officialSnapshot.coverageDate, officialSnapshot.kinds]);
+    expect(coverage?.values).toEqual([store, officialSnapshot.region, officialSnapshot.coverageDate, officialSnapshot.kinds,
+      '2026-11-21T14:43:59Z']);
     const changes = queries.find(query => query.text.includes('INSERT INTO marketing.local_change'));
     expect(JSON.parse(String(changes?.values?.[2]))).toHaveLength(officialSnapshot.changes.length);
     const bands = queries.find(query => query.text.includes('marketing.local_population_band'));

@@ -8,11 +8,18 @@ import { storeClock } from '../14/wire.ts';
 import { cafePostInput, cafeReceipt, reserveCafePost, finishCafePost, type CafeOptions } from './cafe.ts';
 import { readProjectedSales } from './pos.ts';
 import { advanceSource, readSourceRevision } from './revision.ts';
-import { day, invalid, LocalError, parseSearch, period, readSales, readSearch, readSearchLinks, salesByHour, salesByMenuDay, type Sources } from './sources.ts';
+import { addTrendCandidate, readTrendCache, readTrendList, removeTrendCandidate, seedTrendList, trendFingerprint, writeTrendCache } from './trend-candidates.ts';
+import { createTrendRanker, maxTrendCandidates, trendDays, trendKeyword, trendKeywordKey } from './trend-ranking.ts';
+import { matchTrendMenu, type TrendMenuItem } from './trend-menu-match.ts';
+import { createTrendRecommendations, defaultTrendKeywords, ruleTrendRecommendations, untrackedTrendRecommendations,
+  type TrendCandidateChooser, type TrendRecommendations } from './trend-recommendations.ts';
+import { day, invalid, LocalError, parseSearch, period, readNewsReferences, readSales, readSearch, readStoreLocation,
+  salesByHour, type Sources } from './sources.ts';
 
 const prefix = '/internal/v1/marketing/stores/:storeId';
 const localSources = ['local-changes', 'briefing'];
 const offerSources = ['community', 'calendar', 'briefing'];
+const trendSources = ['local-trends'];
 const coverageFilter = `(kind = 'owner-record' OR EXISTS (
   SELECT 1 FROM marketing.local_coverage coverage
   WHERE coverage.store_id = local_change.store_id AND coverage.region = local_change.region
@@ -31,6 +38,8 @@ export type LocalOptions = Sources & {
   now?: () => Date;
   readToken: string;
   commandToken: string;
+  trendMenu?(owner: Scope): Promise<readonly TrendMenuItem[] | null>;
+  chooseTrendCandidates?: TrendCandidateChooser;
   /** Resolve live participation/visibility approval through account. */
   canOffer?(senderStoreId: string, recipientStoreId: string): Promise<boolean>;
   listPeers?(storeId: string): Promise<{ storeId: string; displayName: string }[]>;
@@ -183,6 +192,24 @@ export function registerLocalMarketingRoutes(app: FastifyInstance, pool: Pool, o
   const readToken = digest(`Bearer ${options.readToken}`);
   const commandToken = digest(`Bearer ${options.commandToken}`);
   const now = options.now ?? (() => new Date());
+  const rankTrends = createTrendRanker(options.searchInterest, now);
+  const recommend = createTrendRecommendations(options.chooseTrendCandidates, now);
+  const menuFor = (owner: Scope) => options.trendMenu?.(owner) ?? Promise.resolve([]);
+  function recommendationFor(owner: Scope, menu: readonly TrendMenuItem[] | null) {
+    if (!menu) return Promise.resolve({ events: null, recommendations: ruleTrendRecommendations([], [], now()) });
+    return inStore(pool, owner.storeId, async db => {
+      const { rows: [context] } = await db.query<{ events: number | null }>(`SELECT CASE WHEN EXISTS (
+        SELECT 1 FROM marketing.local_coverage WHERE store_id = $1 AND region LIKE '서울 동작구%' AND 'festival' = ANY(kinds)
+      ) THEN (SELECT count(*)::integer FROM marketing.local_change WHERE store_id = $1 AND kind = 'festival'
+        AND region LIKE '서울 동작구%' AND reference_date BETWEEN $2::date + 1 AND $2::date + 14) END AS events`,
+      [owner.storeId, trendDays(now()).to]);
+      return context?.events ?? null;
+    }).then(async events => ({ events, recommendations: await recommend(owner.storeId, [], menu, events) }));
+  }
+  async function initializeTrendCandidates(owner: Scope, menu: readonly TrendMenuItem[] | null, recommendations: TrendRecommendations) {
+    if (!menu) throw new LocalError(503, 'UNAVAILABLE');
+    return inStore(pool, owner.storeId, db => seedTrendList({ ...owner, db }, defaultTrendKeywords(recommendations, menu, now())), { serialize: true });
+  }
   function businessDate(req: Request) {
     const timezone = req.headers['x-navis-store-timezone'];
     const dayStart = req.headers['x-navis-business-day-start'];
@@ -201,27 +228,30 @@ export function registerLocalMarketingRoutes(app: FastifyInstance, pool: Pool, o
       return reply.code(503).send({ code: 'UNAVAILABLE', reason: 'UNAVAILABLE' });
     });
     type Params = { storeId: string; id?: string };
-    const get = (path: string, handler: (tx: Tx, req: Request) => Promise<unknown>) =>
+    const get = <T>(path: string, handler: (tx: Tx, req: Request) => Promise<T>,
+      addSources?: (result: T, claims: Scope, req: Request) => Promise<T>) =>
       routes.get<{ Params: Params }>(prefix + path, async req => {
         const claims = scope(req, readToken);
-        return inStore(pool, claims.storeId, db => handler({ ...claims, db }, req));
+        const result = await inStore(pool, claims.storeId, db => handler({ ...claims, db }, req));
+        return addSources ? addSources(result, claims, req) : result;
       });
-    const post = (path: string, handler: (tx: Tx, req: Request) => Promise<Receipt>) =>
-      routes.post<{ Params: Params }>(prefix + path, { bodyLimit: 8192 }, async req => {
+    const post = (path: string, handler: (tx: Tx, req: Request) => Promise<Receipt>, method: 'POST' | 'DELETE' = 'POST') =>
+      routes.route<{ Params: Params }>({ method, url: prefix + path, bodyLimit: 8192, async handler(req) {
         const claims = scope(req, commandToken);
         return inStore(pool, claims.storeId, db => handler({ ...claims, db }, req), { serialize: true });
-      });
+      } });
     const salesFor = (tx: Tx, range: ReturnType<typeof period>) => readSales({
       sales: options.sales ?? ((storeId, period) => readProjectedSales(tx.db, storeId, period)),
     }, tx.storeId, range);
 
     get('/local-changes', async (tx, req) => {
-      const query = fields(req.query, ['from', 'to', 'cursor', 'limit']);
+      const query = fields(req.query, ['from', 'to', 'cursor', 'limit', 'includeNews']);
+      if (query.includeNews !== undefined && query.includeNews !== '1') invalid();
       const range = period(query);
       const limit = limitOf(query.limit);
       const cursor = query.cursor === undefined ? null : uuid(query.cursor);
       const result = await tx.db.query<Change>(`
-        SELECT id, revision, kind, title, region, authority, source_url AS "sourceUrl",
+        SELECT id, revision, kind, title, region, authority, source_url AS "sourceUrl", change_type AS "changeType",
           date_kind AS "dateKind", reference_date::text AS "referenceDate",
           acknowledged_at AS "acknowledgedAt", imported_at AS "updatedAt"
         FROM marketing.local_change
@@ -233,10 +263,16 @@ export function registerLocalMarketingRoutes(app: FastifyInstance, pool: Pool, o
         SELECT count(*)::integer AS unread FROM marketing.local_change
         WHERE store_id = $1 AND reference_date BETWEEN $2 AND $3 AND ${coverageFilter}
           AND acknowledged_at IS NULL`, [tx.storeId, range.from, range.to]);
-      const coverage = (await tx.db.query(`SELECT region, kinds, reference_date::text AS "referenceDate"
+      const coverage = (await tx.db.query<{ region: string; kinds: string[]; referenceDate: string; fetchedAt: Date | null }>(`SELECT region, kinds, reference_date::text AS "referenceDate", fetched_at AS "fetchedAt"
         FROM marketing.local_coverage WHERE store_id = $1`, [tx.storeId])).rows[0] ?? null;
       return { ...page(result.rows, limit, await readSourceRevision(tx.db, tx.storeId, 'local-changes')),
         period: range, unreadCount: counts.rows[0].unread, coverage };
+    }, async (page, owner, req) => {
+      const { includeNews, cursor } = req.query as { includeNews?: string; cursor?: string };
+      if (includeNews !== '1' || cursor) return page;
+      // The DB supplies the supported region. These links never enter the changes list.
+      const newsReferences = page.coverage && await readNewsReferences(options, owner.storeId, page.coverage.region, page.period);
+      return newsReferences ? { ...page, newsReferences } : page;
     });
 
     post('/local-changes', async (tx, req) => {
@@ -297,6 +333,9 @@ export function registerLocalMarketingRoutes(app: FastifyInstance, pool: Pool, o
           unit: 'movement-estimate', quarter, weekday, items: official },
         sales: { ...sales, status: hourly.length || sales.status === 'unavailable' ? sales.status : 'empty',
           unit: 'quantity', items: hourly } };
+    }, async (area, owner) => {
+      const location = await readStoreLocation(options, owner.storeId);
+      return location ? { ...area, location } : area;
     });
 
     routes.get<{ Params: Params }>(prefix + '/local-trends', async req => {
@@ -304,13 +343,94 @@ export function registerLocalMarketingRoutes(app: FastifyInstance, pool: Pool, o
       const query = fields(req.query, ['from', 'to', 'keyword']);
       const range = period(query);
       const request = query.keyword === undefined ? null : parseSearch(query);
-      const [search, links, sales] = await Promise.all([
-        request && readSearch(options, owner.storeId, request),
-        request && readSearchLinks(options.searchLinks, owner.storeId, request.keywordGroups[0].keywords[0]),
-        inStore(pool, owner.storeId, db => salesFor({ ...owner, db }, range)),
+      if (!request) {
+        const menu = await menuFor(owner);
+        const current = await inStore(pool, owner.storeId, db => readTrendList({ ...owner, db }));
+        const suggestion = recommendationFor(owner, menu);
+        const list = current ?? await initializeTrendCandidates(owner, menu, (await suggestion).recommendations);
+        const keywords = list.items.map(item => item.keyword);
+        const fingerprint = trendFingerprint(keywords, options.trendProvider);
+        const [ranking, { events, recommendations }] = await Promise.all([
+          (async () => {
+            const cached = options.searchInterest && await inStore(pool, owner.storeId, db =>
+              readTrendCache({ ...owner, db }, trendDays(now()).to, fingerprint));
+            if (cached) return cached;
+            const result = await rankTrends(owner.storeId, keywords);
+            if (result.fetchedAt) await inStore(pool, owner.storeId, db => writeTrendCache({ ...owner, db }, fingerprint, result, list.revision));
+            return result;
+          })(),
+          suggestion,
+        ]);
+        const ids = new Map(list.items.map(item => [item.keyword, item.id]));
+        return { asOf: now().toISOString(), period: range, search: null, candidates: list.items, sourceRevision: list.revision,
+          ranking: { ...ranking, events, recommendations: untrackedTrendRecommendations(recommendations, keywords, menu ?? [], now()), items: ranking.items.map(item => {
+            const menuName = menu ? matchTrendMenu(item.keyword, menu) : null;
+            return { ...item, id: ids.get(item.keyword)!, menuName, isMenu: menu ? menuName !== null : null };
+          }) },
+          // Retain the former field for installed clients without reading POS data for Widget 20.
+          sales: { status: 'unavailable', source: 'pos', unit: 'quantity', items: [] } };
+      }
+      const search = await readSearch(options, owner.storeId, request);
+      return { asOf: now().toISOString(), period: range, search,
+        sales: { status: 'unavailable', source: 'pos', unit: 'quantity', items: [] } };
+    });
+
+    routes.get<{ Params: Params }>(prefix + '/local-trends/candidates', async req => {
+      const owner = scope(req, readToken);
+      fields(req.query, []);
+      const current = await inStore(pool, owner.storeId, db => readTrendList({ ...owner, db }));
+      const list = current ?? await menuFor(owner).then(async menu => initializeTrendCandidates(owner, menu, (await recommendationFor(owner, menu)).recommendations));
+      return { items: list.items, nextCursor: null, asOf: now().toISOString(), sourceRevision: list.revision };
+    });
+
+    routes.post<{ Params: Params }>(prefix + '/local-trends/candidates', { bodyLimit: 8192 }, async req => {
+      const owner = scope(req, commandToken);
+      const keyword = trendKeyword(fields(req.body, ['keyword']).keyword);
+      const current = await inStore(pool, owner.storeId, db => readTrendList({ ...owner, db }));
+      const menu = current ? [] : await menuFor(owner);
+      if (!menu) throw new LocalError(503, 'UNAVAILABLE');
+      const defaults = current ? [] : defaultTrendKeywords((await recommendationFor(owner, menu)).recommendations, menu, now());
+      return inStore(pool, owner.storeId, db => {
+        const tx = { ...owner, db };
+        return command(tx, req, 'localTrends.addCandidate', { keyword }, async () => {
+          const candidate = await addTrendCandidate(tx, keyword, defaults);
+          await emit(tx, 'marketing.local_trend_candidates_changed.v1', { candidateId: candidate.id, revision: candidate.revision, operation: 'added' });
+          return candidate;
+        }, trendSources);
+      }, { serialize: true });
+    });
+
+    post('/local-trends/candidates/:id', async (tx, req) => {
+      const id = uuid(req.params.id);
+      const body = fields(req.body, ['expectedRevision', 'confirmed']);
+      const expectedRevision = revision(body.expectedRevision);
+      if (body.confirmed !== true) invalid();
+      return command(tx, req, 'localTrends.removeCandidate', { id, expectedRevision }, async () => {
+        const candidate = await removeTrendCandidate(tx, id, expectedRevision);
+        await emit(tx, 'marketing.local_trend_candidates_changed.v1', { candidateId: id, revision: candidate.revision, operation: 'removed' });
+        return candidate;
+      }, trendSources);
+    }, 'DELETE');
+
+    routes.post<{ Params: Params }>(prefix + '/local-trends/preview', { bodyLimit: 8192 }, async req => {
+      const owner = scope(req, commandToken);
+      const { keywords, useDefaults } = fields(req.body, ['keywords', 'useDefaults']);
+      if (!Array.isArray(keywords) || keywords.length > maxTrendCandidates ||
+          (useDefaults !== undefined && (useDefaults !== true || keywords.length !== 0))) invalid();
+      const menu = await menuFor(owner);
+      const suggestion = recommendationFor(owner, menu);
+      const initialKeywords = useDefaults === true ? defaultTrendKeywords((await suggestion).recommendations, menu ?? [], now()) : undefined;
+      const names = initialKeywords ?? keywords.map(trendKeyword);
+      if (new Set(names.map(trendKeywordKey)).size !== names.length) invalid();
+      const [ranking, { events, recommendations }] = await Promise.all([
+        (async () => {
+          const cached = options.searchInterest && await inStore(pool, owner.storeId, db =>
+            readTrendCache({ ...owner, db }, trendDays(now()).to, trendFingerprint(names, options.trendProvider)));
+          return cached || rankTrends(owner.storeId, names);
+        })(),
+        suggestion,
       ]);
-      return { asOf: now().toISOString(), period: range, search, links,
-        sales: { ...sales, unit: 'quantity', items: salesByMenuDay(sales.items) } };
+      return { ...ranking, events, initialKeywords, recommendations: untrackedTrendRecommendations(recommendations, names, menu ?? [], now()) };
     });
 
     routes.get<{ Params: Params }>(prefix + '/community/cafe-boards', async req => {

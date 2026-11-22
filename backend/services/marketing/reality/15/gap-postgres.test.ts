@@ -41,7 +41,7 @@ it.skipIf(!databaseUrl || !personaDatabaseUrl)('persists Café card receipts and
   const admin = new pg.Pool({ connectionString: databaseUrl });
   const db = await admin.connect();
   try {
-    await db.query(`CREATE ROLE marketing_mig; CREATE ROLE marketing_run; CREATE SCHEMA marketing AUTHORIZATION marketing_mig;
+    await db.query(`CREATE ROLE marketing_mig; CREATE ROLE marketing_run; CREATE ROLE marketing_wrk; CREATE SCHEMA marketing AUTHORIZATION marketing_mig;
       GRANT USAGE ON SCHEMA marketing TO marketing_run; SET ROLE marketing_mig`);
     const dir = fileURLToPath(new URL('../../migrations/', import.meta.url));
     const baseCount = (await readdir(dir)).filter(name => name.endsWith('.sql') && name < '20261122002001').length;
@@ -153,7 +153,7 @@ it.skipIf(!databaseUrl || !personaDatabaseUrl)('persists Café card receipts and
     expect(navisDraft).toMatchObject({ source: 'navis', text: expect.stringContaining('감사합니다') });
     const trends = await request('/local-trends?from=2026-11-18&to=2026-11-22&keyword=' + encodeURIComponent('커피'), 200);
     expect(trends.search).toMatchObject({ unit: 'relative-index', items: [{ ratio: 80 }, { ratio: 100 }] });
-    expect(trends.links).toMatchObject({ blog: { status: 'available' }, cafearticle: { status: 'available' } });
+    expect(trends).not.toHaveProperty('links');
     const cafe = { body: { clubid: CAFE.clubid, menuid: CAFE.menuid, subject: '공지', text: '안녕하세요' },
       key: 'navis:' + randomUUID() };
     await request('/community/cafe-posts', 403, cafe);

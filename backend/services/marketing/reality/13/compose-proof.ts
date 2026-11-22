@@ -70,7 +70,7 @@ try {
   const setup = await admin.connect();
   try {
     await setup.query('SET ROLE marketing_mig');
-    for (const file of ['20261121000500_promo.sql', '20261122001300_real_local.sql']) {
+    for (const file of ['20261121000500_promo.sql', '20261122001300_real_local.sql', '20261122113200_real_local_search_candidates.sql']) {
       const sql = await readFile(new URL(`../../migrations/${file}`, import.meta.url), 'utf8');
       await setup.query(sql.split('-- Down Migration')[0]);
     }
@@ -154,7 +154,7 @@ try {
   assert.deepEqual(trade.sales.items, [{ hour: 14, quantity: 1, settlementIds: [settlementId] }]);
   const trends = await request(store, '/local-trends' + range + '&keyword=coffee', 200);
   assert.equal(trends.search.items[0].ratio, 100);
-  assert.equal(trends.sales.items[0].menuId, menuId);
+  assert.deepEqual(trends.sales.items, []);
   const missing = await runtime.query('SELECT count(*) FROM marketing.local_change');
   assert.equal(missing.rows[0].count, '0');
   const events = await admin.query(`SELECT event_type, count(*)::integer AS count FROM marketing.outbox GROUP BY event_type`);

@@ -5,11 +5,13 @@ export const stages = ['look', 'story', 'scenes', 'merge'] as const;
 export type Stage = typeof stages[number];
 export type CheckpointStage = Exclude<Stage, 'merge'>;
 export type PromoInput = PromoVideoInput;
-export type FileBinding = { resourceId: string; fileId: string; sourceFileId?: string };
+export type FileBinding = { resourceId: string; fileId: string; sourceFileId?: string; sha256?: string };
 export type CatalogSnapshot = {
   catalog: PromoCatalogInput;
   photos: Record<string, FileBinding>;
   exterior: { width: number; height: number };
+  promotionFacts?: { menuName: string; price?: string; text?: string };
+  takeIndex?: number;
 };
 export type FileScope = { storeId: string; resourceId: string };
 export type ArtifactPurpose = 'promo_input' | 'promo_checkpoint' | 'promo_output';

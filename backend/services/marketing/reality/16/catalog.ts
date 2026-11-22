@@ -1,4 +1,5 @@
 import type { PromoCatalogInput } from '../../../../../frontend/src/data/marketing/types.ts';
+import { loadReferences } from '../../../../../frontend/server/promo/references.mjs';
 import type { FileBinding } from '../../promo/contracts.ts';
 import { type Asset, type Owner } from './state.ts';
 import type { PromoRealityOptions } from './routes.ts';
@@ -23,8 +24,9 @@ export type PromoAccountCatalog = {
 };
 
 export function createPromoCatalog(account: PromoAccountCatalog, venueForOwner: (owner: Owner) => Promise<Venue | null>):
-  Pick<PromoRealityOptions, 'catalogForOwner' | 'verifyUpload'> {
+  Pick<PromoRealityOptions, 'catalogForOwner' | 'verifyUpload' | 'references'> {
   return {
+    references: loadReferences(),
     verifyUpload: account.verifyUpload,
     async catalogForOwner(owner, uploads) {
       const venue = await venueForOwner(owner);

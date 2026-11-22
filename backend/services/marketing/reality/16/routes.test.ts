@@ -6,7 +6,9 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createGateway } from '../../../../gateway/app.ts';
 import { expect, it, vi } from 'vitest';
 import { INPUT, PHOTO_META, fakeSpawn, refs, resultLine, sceneHtml, validStory } from '../../../../../frontend/server/promo/test/helpers.mjs';
+import { validateInput } from '../../../../../frontend/server/promo/service.mjs';
 import { createExamplePhotoSource } from '../../../../../frontend/server/promo/photo-source.mjs';
+import { loadReferences } from '../../../../../frontend/server/promo/references.mjs';
 import { createPromoWorker } from '../../../../workers/marketing-worker/promo/worker.ts';
 import { createFakePromoProvider } from '../../../../workers/marketing-worker/promo/providers.ts';
 import type { CatalogSnapshot, PromoArtifacts } from '../../promo/contracts.ts';
@@ -16,7 +18,60 @@ import { createPromoCatalog } from './catalog.ts';
 import { naverPromoPublish } from './publication.ts';
 import { promoRealityPath, registerPromoReality, type PromoRealityOptions } from './routes.ts';
 
+import { PROMO_REFERENCE_IDS } from '../../../../../frontend/shared/promo-references.mjs';
+
 const url = process.env.NAVIS_B16_TEST_DB_URL;
+
+it('accepts generation input for every gallery template in the store catalog', () => {
+  const source = createExamplePhotoSource({ sourceId: 'cafe' });
+  const catalog: CatalogSnapshot['catalog'] = source.listCatalog();
+  const primary = catalog.menus.find(menu => menu.menuId === 'm-chestnut-latte')!;
+  const runtime = createPromoCatalog({ photos: async () => [], verifyUpload: async () => null }, async () => catalog);
+  for (const referenceId of PROMO_REFERENCE_IDS) {
+    expect(validateInput({ ...INPUT, menuIds: [primary.menuId], photoIds: primary.photoIds.slice(0, 5), referenceId },
+      catalog, runtime.references), referenceId).toBeNull();
+  }
+});
+
+it('queues confirmed ref-1 with an Americano first and no inventory access', async () => {
+  const storeId = randomUUID(), actorId = randomUUID(), draftId = randomUUID(), token = randomUUID();
+  const catalog: CatalogSnapshot['catalog'] = createExamplePhotoSource({ sourceId: 'cafe' }).listCatalog();
+  const coffee = catalog.menus.find(menu => menu.menuId === 'm-americano')!;
+  const cake = catalog.menus.find(menu => menu.menuId === 'm-strawberry-cake')!;
+  const input = { ...INPUT, menuIds: [coffee.menuId, cake.menuId], photoIds: cake.photoIds.slice(0, 5) };
+  const photos = Object.fromEntries([...input.photoIds, catalog.store.exteriorPhotoId].map(photoId =>
+    [photoId, { fileId: randomUUID(), resourceId: photoId }]));
+  const query = vi.fn(async (sql: string, args?: unknown[]) => {
+    if (sql.includes('FROM marketing.promo_draft')) return { rows: [{ draftId, input, revision: 1 }], rowCount: 1 };
+    if (sql.includes('INSERT INTO marketing.promo_job')) {
+      expect(args?.[5]).toEqual(input);
+      expect(args?.[6]).not.toHaveProperty('countdownStock');
+      return { rows: [{ job_id: args?.[1] }], rowCount: 1 };
+    }
+    return { rows: [], rowCount: 0 };
+  });
+  const pool = { connect: async () => ({ query, release: vi.fn() }) } as unknown as pg.Pool;
+  const app = Fastify();
+  registerPromoReality(app, pool, {
+    gatewayToken: token, references: loadReferences(),
+    catalogForOwner: async () => ({ catalog, photos, exterior: { width: 720, height: 1280 } }),
+    verifyUpload: vi.fn(), artifacts: { read: vi.fn() },
+  });
+  try {
+    const generate = (key: string) => app.inject({ method: 'POST', url: `${promoRealityPath.replace(':storeId', storeId)}/drafts/${draftId}/generate`,
+      payload: { expectedRevision: 1, confirmed: true }, headers: { authorization: `Bearer ${token}`, 'x-navis-store-id': storeId,
+        'x-navis-user-id': actorId, 'x-navis-store-role': 'owner', 'idempotency-key': key } });
+    const result = await generate('test-generate');
+    expect(result.statusCode, result.body).toBe(202);
+    expect(result.json().affectedSources).toContain('promo-jobs');
+    delete photos[input.photoIds[0]];
+    const missing = await generate('test-missing-photo');
+    expect(missing.statusCode).toBe(409);
+    expect(missing.json().code).toBe('PROMO_SELECTION_UNAVAILABLE');
+  } finally {
+    await app.close();
+  }
+});
 
 it.runIf(Boolean(url))('persists owner assets, drafts, a FAKE job and separate publication receipts across fresh clients',
   async () => {
@@ -26,7 +81,7 @@ it.runIf(Boolean(url))('persists owner assets, drafts, a FAKE job and separate p
     const source = createExamplePhotoSource({ sourceId: 'cafe' });
     const cafe: CatalogSnapshot['catalog'] = source.listCatalog();
     const venue = { ...cafe, store: { ...cafe.store, location: '서울 동작구 상도동 999-12' } };
-    const primary = venue.menus.find(menu => menu.photoIds.length >= 5)!;
+    const primary = venue.menus.find(menu => menu.menuId === 'm-chestnut-latte')!;
     const input = { ...INPUT, menuIds: [primary.menuId], photoIds: primary.photoIds.slice(0, 5) };
     const video = await readFile(new URL('../../../../../frontend/server/promo/references/ref-1/preview.mp4', import.meta.url));
     const files = new Map<string, { scope: string; bytes: Buffer; mime: string }>();
@@ -68,7 +123,8 @@ it.runIf(Boolean(url))('persists owner assets, drafts, a FAKE job and separate p
     const clips = vi.fn(async () => ({ clip: { ref: 'clip-1', state: 'processing' as const, link: null } }));
     const readClip = vi.fn(async () => ({ ref: 'clip-1', state: 'published' as const, link: 'https://clip.naver.com/a' }));
     const ports: PromoRealityOptions = {
-      ...catalog, gatewayToken: readToken, artifacts, references: refs,
+      ...catalog, gatewayToken: readToken, artifacts,
+      readMenuPrice: async (scope, name) => scope.storeId === storeId && name === primary.names.ko ? 4900 : null,
       naver: naverPromoPublish(() => ({ news: { create: news }, clips: { upload: clips, read: readClip } })),
     };
     const app = Fastify();
@@ -122,11 +178,27 @@ it.runIf(Boolean(url))('persists owner assets, drafts, a FAKE job and separate p
       const assetResponse = await call('GET', '/assets');
       expect(assetResponse.statusCode, assetResponse.body).toBe(200);
       const assets = assetResponse.json();
-      expect(assets.eligiblePhotoCount).toBe(36);
-      expect(assets.items).toHaveLength(39);
+      expect(assets.eligiblePhotoCount).toBe(177);
+      const allAssets: { photoId: string; menuId: string | null }[] = [...assets.items];
+      let cursor: string | null = assets.nextCursor;
+      for (let page = 1; cursor && page < 4; page++) {
+        const next = await call('GET', `/assets?cursor=${encodeURIComponent(cursor)}`);
+        expect(next.statusCode, next.body).toBe(200);
+        const body = next.json();
+        expect(body.sourceRevision).toBe(assets.sourceRevision);
+        allAssets.push(...body.items);
+        cursor = body.nextCursor;
+      }
+      expect(cursor).toBeNull();
+      expect(allAssets).toHaveLength(180);
+      expect(new Set(allAssets.map(photo => photo.photoId)).size).toBe(180);
+      expect(allAssets.filter(photo => photo.menuId === primary.menuId).map(photo => photo.photoId)).toEqual([
+        'cafe-chestnut-latte-01', 'cafe-chestnut-latte-02', 'cafe-chestnut-latte-03',
+        'cafe-chestnut-latte-04', 'cafe-chestnut-latte-05', 'cafe-chestnut-latte-06',
+      ]);
       const upload = await call('POST', '/assets', { fileId: uploadId, menuId: primary.menuId, rightsConfirmed: true });
       expect(upload.statusCode).toBe(200);
-      expect((await call('GET', '/assets', undefined, randomUUID(), storeId, 'owner', fresh)).json().eligiblePhotoCount).toBe(37);
+      expect((await call('GET', '/assets', undefined, randomUUID(), storeId, 'owner', fresh)).json().eligiblePhotoCount).toBe(178);
       expect((await call('GET', '/assets', undefined, randomUUID(), otherStore)).json().items).toEqual([]);
       const rejected = await call('POST', '/assets', { fileId: uploadId, menuId: null, rightsConfirmed: true }, randomUUID(), otherStore);
       expect(rejected.statusCode).toBe(404);
@@ -159,6 +231,8 @@ it.runIf(Boolean(url))('persists owner assets, drafts, a FAKE job and separate p
       await inStore(pool, storeId, async db => {
         const { rows } = await db.query('SELECT event_type FROM marketing.outbox WHERE aggregate_id = $1', [jobId]);
         expect(rows).toEqual([{ event_type: 'marketing.promo_job_queued.v1' }]);
+        const read = await db.query('SELECT catalog_snapshot FROM marketing.promo_job WHERE job_id = $1', [jobId]);
+        expect(read.rows[0].catalog_snapshot.promotionFacts).toEqual({ menuName: primary.names.ko, price: '₩4,900' });
         // Redis queue delivery is covered by the existing worker tests.
         await db.query('UPDATE marketing.promo_job SET dispatched_at = now() WHERE store_id = $1 AND job_id = $2', [storeId, jobId]);
       });
@@ -252,6 +326,20 @@ it.runIf(Boolean(url))('persists owner assets, drafts, a FAKE job and separate p
         expect(file.rawPayload).toEqual(video);
       }
       expect((await pool.query('SELECT count(*) FROM marketing.promo_publication')).rows[0].count).toBe('0');
+      for (const referenceId of PROMO_REFERENCE_IDS) {
+        const draft = await call('POST', '/drafts', { ...input, referenceId });
+        expect(draft.statusCode).toBe(200);
+        const result = await call('POST', `/drafts/${draft.json().resourceId}/generate`, { expectedRevision: 1, confirmed: true });
+        expect(result.statusCode, `${referenceId}: ${result.body}`).toBe(202);
+        if (referenceId === 'ref-1') {
+          const { rows: [saved] } = await inStore(pool, storeId, db => db.query(`
+            SELECT catalog_snapshot FROM marketing.promo_job WHERE job_id = $1`, [result.json().resourceId]));
+          expect(saved.catalog_snapshot).not.toHaveProperty('countdownStock');
+        }
+        await inStore(pool, storeId, db => db.query(`
+          UPDATE marketing.promo_job SET status = 'failed', finished_at = now(), fail_reason = 'CANCELLED_BY_RESTART'
+          WHERE job_id = $1`, [result.json().resourceId]));
+      }
     } finally {
       await Promise.all([gateway?.close(), app.close(), fresh.close()]);
       await pool.end();

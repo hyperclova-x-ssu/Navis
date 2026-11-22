@@ -1,5 +1,6 @@
 import { isUuid, type PromoInput } from '../../promo/contracts.ts';
 import { PromoRouteError } from '../../promo/jobs.ts';
+import { PROMO_REFERENCE_IDS } from '../../../../../frontend/shared/promo-references.mjs';
 
 export const badRequest = () => new PromoRouteError(400, 'BAD_REQUEST');
 export const notFound = () => new PromoRouteError(404, 'NOT_FOUND');
@@ -52,7 +53,7 @@ const parsers = {
   concepts: (value: unknown) => list(value, 5, entry => choice(entry, ['review-roundup', 'behind-the-scenes', 'todays-deal', 'new-item', 'day-at-shop'] as const)),
   moods: (value: unknown) => list(value, 4, entry => choice(entry, ['warm', 'clean', 'lively', 'elegant'] as const)),
   lengthSec: (value: unknown) => choice(value, [10, 15, 30] as const),
-  referenceId: (value: unknown) => choice(value, ['ref-1', 'ref-2', 'ref-3', 'ref-4', 'ref-5', 'ref-6'] as const),
+  referenceId: (value: unknown) => choice(value, PROMO_REFERENCE_IDS),
   locale: (value: unknown) => choice(value, ['ko', 'en', 'zh-Hans', 'zh-Hant'] as const),
   memo: (value: unknown) => text(value, 100),
 } satisfies { [Field in keyof PromoInput]: (value: unknown) => PromoInput[Field] };

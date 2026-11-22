@@ -55,10 +55,11 @@ it.skipIf(!adminUrl)('sends a scheduled notice SMS only to recipients whose cons
   await admin.query(`DO $$ BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='marketing_mig') THEN CREATE ROLE marketing_mig; END IF;
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='marketing_run') THEN CREATE ROLE marketing_run; END IF;
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='marketing_wrk') THEN CREATE ROLE marketing_wrk; END IF;
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='customer_mig') THEN CREATE ROLE customer_mig; END IF;
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='customer_run') THEN CREATE ROLE customer_run; END IF; END $$`);
   const marketingDir = fileURLToPath(new URL('../../migrations/', import.meta.url));
-  expect((await readdir(marketingDir)).filter(name => name.endsWith('.sql')).at(-1)).toBe('20261122002004_real_notice_sms_dispatch.sql');
+  expect(await readdir(marketingDir)).toContain('20261122002006_real_ncp_notice_mode.sql');
   const marketingUrl = await database(admin, 'fgb_m_' + suffix, `CREATE SCHEMA marketing AUTHORIZATION marketing_mig;
     GRANT USAGE ON SCHEMA marketing TO marketing_run`, { dir: marketingDir, schema: 'marketing', role: 'marketing_mig' });
   const customerUrl = await database(admin, 'fgb_c_' + suffix, `CREATE SCHEMA customer AUTHORIZATION customer_mig;

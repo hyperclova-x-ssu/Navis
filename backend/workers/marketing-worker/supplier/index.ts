@@ -3,19 +3,21 @@ import { PermanentStreamError, StreamConsumer } from '../../../packages/streams/
 import type { RedisStreams } from '../../../packages/streams/redis.ts';
 import { createMarketingProvider, NaverAdapterError, type MarketingBindingOptions } from '../../../services/marketing/naver/index.ts';
 import { createSensWire, smsDelivery, type SensServiceIds } from '../naver/pn13-sens.ts';
+import type { LiveSens, SensSettings } from '../naver/sens-live.ts';
 
 export const supplierConsumerGroup = 'marketing-supplier';
 export const supplierRequested = 'inventory.supplier_message_requested.v1';
 type Channel = 'sms' | 'mail';
-type Pending = { receiptId: string; channel: Channel; state: 'ready' | 'dispatching' | 'accepted'; providerId: string | null };
-type Claim = { channel: Channel; target: string; title: string; body: string };
-type State = 'accepted' | 'delivered' | 'failed' | 'unknown';
+type Pending = { receiptId: string; channel: Channel; state: 'ready' | 'dispatching' | 'accepted'; providerId: string | null; providerLive?: true };
+type Claim = { channel: Channel; target: string; title: string; body: string; providerLive?: true };
+type State = 'accepted' | 'delivered' | 'failed' | 'unknown' | 'blocked';
 type Options = {
   inventoryUrl: URL; token: string;
   provider: Omit<MarketingBindingOptions, 'mode'> & { fetcher?: typeof fetch; readCredential?: (path: string) => string };
   serviceIds: SensServiceIds;
   senderNumber: string; senderAddress: string;
   database: Pool; redis: RedisStreams; name: string;
+  live?: LiveSens; readSettings?: (storeId: string) => Promise<SensSettings | null>;
 };
 
 const identifier = /^[A-Za-z0-9_-]{1,100}$/;
@@ -57,31 +59,51 @@ export function createSupplierWorker(options: Options) {
     },
   });
 
-  async function report(receiptId: string, state: State, providerId?: string) {
+  async function report(receiptId: string, state: State, providerId?: string, reason?: string) {
     const path = '/' + receiptId + '/result';
-    const result = { state, providerId };
+    const result = { state, providerId, reason };
     try { await request(path, 'POST', result); }
     catch { await request(path, 'POST', result); }
   }
 
   async function send(row: Pending, draft: Claim, signal: AbortSignal) {
-    let providerId: string;
+    let providerId: string | undefined;
     try {
-      const response = draft.channel === 'sms'
+      if (draft.providerLive) {
+        const live = options.live;
+        const settings = await options.readSettings?.(storeId).catch(() => null);
+        if (!live || !settings) return await report(row.receiptId, 'blocked', undefined, 'SMS_SETTINGS_REQUIRED');
+        const base = { settings, to: [draft.target], approval: { confirmed: true as const },
+          signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) };
+        const result = draft.channel === 'sms'
+          ? await live.sms({ ...base, body: draft.body, advertising: false })
+          : await live.mail({ ...base, title: draft.title, body: html(draft.body) });
+        if (!result.sentCount) return await report(row.receiptId, 'blocked', undefined, 'NOT_SENT_TEST_MODE');
+        providerId = result.requestId;
+      } else {
+        const response = draft.channel === 'sms'
         ? await sens.sendSms({ type: 'LMS', contentType: 'COMM', from: options.senderNumber,
           to: [draft.target], content: draft.body, signal })
         : await sens.sendMail({ senderAddress: options.senderAddress, title: draft.title,
           body: html(draft.body), to: [{ address: draft.target }], signal });
-      providerId = response.requestId;
+        providerId = response.requestId;
+      }
     } catch (error) {
       await report(row.receiptId, error instanceof NaverAdapterError && rejected.has(error.code) ? 'failed' : 'unknown');
       return;
     }
-    await report(row.receiptId, identifier.test(providerId) ? 'accepted' : 'unknown', providerId);
+    await report(row.receiptId, providerId && identifier.test(providerId) ? 'accepted' : 'unknown', providerId);
   }
 
   async function reconcile(row: Pending, signal: AbortSignal) {
     if (!row.providerId) throw new Error('Supplier provider receipt missing');
+    if (row.providerLive) {
+      if (!options.live) return;
+      const state = row.channel === 'sms' ? await options.live.smsResult(row.providerId, 1, signal)
+        : await options.live.mailResult(row.providerId, signal);
+      if (state) await report(row.receiptId, state);
+      return;
+    }
     if (row.channel === 'sms') {
       const result = await sens.listSms(row.providerId, signal);
       if (result.messages.length !== 1) return;

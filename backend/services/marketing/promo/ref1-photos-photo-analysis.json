@@ -1,0 +1,537 @@
+{
+  "storeId": "c05409a6-f082-5964-a787-c1ed3184988b",
+  "model": "claude-opus-5-5",
+  "schemaVersion": 2,
+  "rows": [
+    {
+      "sha256": "0c135f02ff69c7a07eeef8a9958d640e027a98dc6dd46138b7658b77df6eaa97",
+      "metadata": {
+        "kind": "display",
+        "subject": "One thick chocolate cookie left on an almost-empty steel tray inside a glass display case",
+        "items": [
+          "thick chocolate cookie",
+          "stainless steel baking tray",
+          "cookie crumbs",
+          "glass display cabinet",
+          "wooden cabinet frame",
+          "perforated metal shelf"
+        ],
+        "flavors": [
+          "chocolate",
+          "chocolate chunks"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.77,
+          "y": 0.56
+        },
+        "captionHints": [
+          "The last cookie on the tray",
+          "Only one left in the case",
+          "Crumbs where the rest used to be",
+          "Thick, cracked chocolate cookie"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "1a29d7c45d0b7fa2ed3f9aba70b1cbbdd190c68e5bbf0fc7c54200a72e596cb2",
+      "metadata": {
+        "kind": "other",
+        "subject": "Three thick dark chocolate cookies with melted chocolate pools in an open kraft takeout box beside a latte",
+        "items": [
+          "3 thick dark chocolate cookies",
+          "open kraft takeout box",
+          "parchment paper liner",
+          "latte with heart latte art",
+          "white saucer and teaspoon",
+          "glass of water",
+          "wooden table by the window"
+        ],
+        "flavors": [
+          "chocolate",
+          "melted chocolate chunks"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.56,
+          "y": 0.73
+        },
+        "captionHints": [
+          "Three chunky chocolate cookies in a kraft box",
+          "Melty chocolate pools on thick cookies",
+          "Cookies and a heart latte by the window",
+          "Thick, crackly double-chocolate cookies"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "few"
+      }
+    },
+    {
+      "sha256": "1d1b1981ff4ce13ea2cdb4ee6495203c13bd697ceba3b4051c1e81084485bedf",
+      "metadata": {
+        "kind": "display",
+        "subject": "A single slice of Basque cheesecake left on a mostly empty metal tray inside a display cabinet.",
+        "items": [
+          "Basque cheesecake slice",
+          "stainless steel sheet tray",
+          "glass display cabinet",
+          "crumbs on tray",
+          "wooden cabinet frame",
+          "vented metal shelf"
+        ],
+        "flavors": [
+          "burnt caramelized top"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.75,
+          "y": 0.53
+        },
+        "captionHints": [
+          "The last slice on the tray",
+          "One Basque cheesecake slice left",
+          "Deeply caramelized top, creamy inside",
+          "Only crumbs and one slice remain"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "23061c837083bcb4bd1deb49364489784595f67543c0732eb8ff6b44c68c84a8",
+      "metadata": {
+        "kind": "display",
+        "subject": "Eight thick, cracked dark chocolate cookies with melty chocolate pockets on a beige tray in a glass display case",
+        "items": [
+          "8 thick dark chocolate cookies",
+          "beige rectangular tray",
+          "glass display case",
+          "glass shelf",
+          "wooden counter",
+          "window with trees outside",
+          "green bench seat",
+          "round wooden table"
+        ],
+        "flavors": [
+          "chocolate",
+          "dark chocolate chunks"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.49,
+          "y": 0.66
+        },
+        "captionHints": [
+          "A full tray of thick chocolate cookies",
+          "Cracked tops with melty chocolate pockets",
+          "Eight cookies lined up in the display case",
+          "Dark chocolate cookies in afternoon light"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "many"
+      }
+    },
+    {
+      "sha256": "3a6ccef8bce641c490146adcecb802671de5150a147d5a632edaea49f6e28fb1",
+      "metadata": {
+        "kind": "inhand",
+        "subject": "A glossy golden butter salt roll topped with coarse salt flakes on a beige plate held by a hand",
+        "items": [
+          "butter salt roll",
+          "beige ceramic plate",
+          "round wooden table",
+          "green upholstered chair",
+          "window with black frame"
+        ],
+        "flavors": [
+          "coarse salt flakes",
+          "butter glaze"
+        ],
+        "people": "hands",
+        "textInImage": "",
+        "focus": {
+          "x": 0.53,
+          "y": 0.54
+        },
+        "captionHints": [
+          "Golden roll with a sprinkle of sea salt",
+          "Shiny, buttery layers by the sunny window",
+          "One salt roll, fresh on the plate",
+          "Sunlight, wood table and a glossy roll"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "54cff73fd6e897c10d963a3801038dbc7f4e81038e84e93e2b6e6d2ebf9a20aa",
+      "metadata": {
+        "kind": "other",
+        "subject": "A glossy golden plain bagel on parchment in an open kraft takeout box on a wooden cafe table",
+        "items": [
+          "plain bagel",
+          "kraft takeout box",
+          "parchment paper",
+          "latte with heart art",
+          "saucer and spoon",
+          "glass of water",
+          "wooden round table",
+          "window with sunlit street"
+        ],
+        "flavors": [],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.55,
+          "y": 0.72
+        },
+        "captionHints": [
+          "Glossy golden bagel fresh out of the box",
+          "Bagel and a heart latte by the window",
+          "Simple plain bagel on a sunny cafe table",
+          "Takeout box, bagel and morning light"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "5d0eac9076cc6bd20bafeae61503cc28c7daf662cc3b8a72ffa845f33e15ed40",
+      "metadata": {
+        "kind": "inhand",
+        "subject": "A whole glossy golden-brown bagel on a beige plate, held by a hand above a wooden cafe table",
+        "items": [
+          "golden-brown bagel",
+          "beige ceramic plate",
+          "round wooden table",
+          "green upholstered bench",
+          "window with black frame"
+        ],
+        "flavors": [],
+        "people": "hands",
+        "textInImage": "",
+        "focus": {
+          "x": 0.53,
+          "y": 0.55
+        },
+        "captionHints": [
+          "Glossy golden bagel by the sunny window",
+          "A simple plain bagel on a beige plate",
+          "Shiny golden crust, fresh from the oven",
+          "Bagel break at a wooden table in the sun"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "616f77c7898cfc23ccee10780e3554f13e6c9f5e6adb8dce480a86f865a73175",
+      "metadata": {
+        "kind": "display",
+        "subject": "A single glossy golden bagel left on a steel tray inside a bakery display case",
+        "items": [
+          "plain bagel",
+          "stainless steel tray",
+          "glass display case",
+          "crumbs on tray",
+          "wooden cabinet frame"
+        ],
+        "flavors": [],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.75,
+          "y": 0.54
+        },
+        "captionHints": [
+          "The last bagel on the tray",
+          "One glossy bagel left in the case",
+          "Golden bagel, nearly sold out",
+          "Only crumbs and one bagel remain"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "64e72b43379094108550b67112e8ce894096f513b4035b94bf4ee7d133b5587a",
+      "metadata": {
+        "kind": "display",
+        "subject": "Eight slices of Basque cheesecake with burnt tops lined up on a beige tray inside a glass display case",
+        "items": [
+          "8 Basque cheesecake slices",
+          "beige rectangular tray",
+          "glass display cabinet",
+          "wooden counter",
+          "window with trees outside",
+          "green upholstered seat"
+        ],
+        "flavors": [
+          "caramelized burnt top"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.5,
+          "y": 0.6
+        },
+        "captionHints": [
+          "Eight slices of burnt Basque cheesecake on a tray",
+          "Caramelized tops, creamy centers, all in a row",
+          "A fresh tray of cheesecake in the display case",
+          "Sunlit cheesecake slices behind the glass"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "many"
+      }
+    },
+    {
+      "sha256": "8abbfde028a5f897feb670b26c96a65b1d3aff9213af960940dd90522d03a3b7",
+      "metadata": {
+        "kind": "display",
+        "subject": "Eight glossy golden butter salt rolls in two rows on a tray inside a glass display case",
+        "items": [
+          "8 rolled butter salt rolls",
+          "beige baking tray",
+          "glass display cabinet",
+          "wooden counter",
+          "window with trees outside"
+        ],
+        "flavors": [
+          "coarse salt flakes",
+          "butter glaze"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.49,
+          "y": 0.6
+        },
+        "captionHints": [
+          "A full tray of golden salt rolls",
+          "Glossy rolls topped with coarse salt",
+          "Fresh rolls lined up in the display case",
+          "Eight shiny rolls in morning sunlight"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "many"
+      }
+    },
+    {
+      "sha256": "a10b0d093d8fef36a3eca79b670ee9e10fec9da286f4963f248e9cdc4e081126",
+      "metadata": {
+        "kind": "inhand",
+        "subject": "A thick, crackled double-chocolate cookie with melty chocolate chunks on a beige plate held by a hand",
+        "items": [
+          "thick chocolate cookie",
+          "beige ceramic plate",
+          "round wooden table",
+          "green upholstered seat",
+          "window with black frame"
+        ],
+        "flavors": [
+          "chocolate",
+          "dark chocolate chunks"
+        ],
+        "people": "hands",
+        "textInImage": "",
+        "focus": {
+          "x": 0.53,
+          "y": 0.56
+        },
+        "captionHints": [
+          "Thick chocolate cookie with melty chunks",
+          "Crackled top, gooey chocolate pockets",
+          "A cookie by the sunny window",
+          "Double chocolate, served on a simple plate"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "a534dca29f91eafa91cb895e24ad470818a215b83547194c2ca8abfbb2613eb1",
+      "metadata": {
+        "kind": "display",
+        "subject": "A single glossy salt-topped butter roll left on an otherwise empty steel tray inside a display cabinet",
+        "items": [
+          "butter roll with salt flakes",
+          "stainless steel baking tray",
+          "bakery display cabinet",
+          "pastry crumbs",
+          "glass cabinet panels",
+          "wooden cabinet frame"
+        ],
+        "flavors": [
+          "coarse salt"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.76,
+          "y": 0.55
+        },
+        "captionHints": [
+          "The last salt roll on the tray",
+          "Golden roll topped with salt flakes",
+          "Only crumbs and one roll left",
+          "Glossy roll in the display case"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "be03995ffb58fed533d15f6958c156cee37887367bc2d6ad1bf62500760a4b7e",
+      "metadata": {
+        "kind": "other",
+        "subject": "A glossy golden salt roll topped with coarse salt crystals, on wax paper in an open kraft takeout box",
+        "items": [
+          "salt roll",
+          "open kraft takeout box",
+          "wax paper",
+          "latte with heart latte art",
+          "cup and saucer",
+          "teaspoon",
+          "glass of water",
+          "wooden table"
+        ],
+        "flavors": [
+          "coarse salt"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.57,
+          "y": 0.74
+        },
+        "captionHints": [
+          "Glossy salt roll fresh in its box",
+          "Salt roll and a heart latte by the window",
+          "Golden roll topped with salt crystals",
+          "Sunny table, salt roll and latte"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "c6ba3f677da779d42a0ff000e9dc5383b2f585db5d681065aad17174f4a57c16",
+      "metadata": {
+        "kind": "other",
+        "subject": "A slice of cheesecake with a dark caramelized top, served in an open kraft takeout box on parchment paper",
+        "items": [
+          "cheesecake slice with burnt top",
+          "open kraft paper takeout box",
+          "crinkled parchment paper",
+          "latte with heart latte art",
+          "cream cup and saucer",
+          "metal teaspoon",
+          "glass of water",
+          "round wooden table"
+        ],
+        "flavors": [
+          "caramelized top"
+        ],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.57,
+          "y": 0.7
+        },
+        "captionHints": [
+          "Burnt-top cheesecake slice in a kraft box",
+          "Cheesecake and a heart latte by the window",
+          "Creamy inside, dark caramelized top",
+          "Sunny window seat with cake and coffee"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    },
+    {
+      "sha256": "d8d5e9b6409915752f2df23dd54d98a53e9abae99a6e9b09f3e094db3c1550ba",
+      "metadata": {
+        "kind": "display",
+        "subject": "Eight glossy golden plain bagels lined up on a beige tray inside a glass display cabinet",
+        "items": [
+          "plain bagels",
+          "beige tray",
+          "glass display cabinet",
+          "glass shelf",
+          "wooden counter",
+          "window with trees outside",
+          "green bench seat"
+        ],
+        "flavors": [],
+        "people": "none",
+        "textInImage": "",
+        "focus": {
+          "x": 0.49,
+          "y": 0.66
+        },
+        "captionHints": [
+          "Eight golden bagels lined up in the case",
+          "Glossy plain bagels fresh on the tray",
+          "A full tray of shiny bagels in the display",
+          "Plain bagels in neat rows of four"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "many"
+      }
+    },
+    {
+      "sha256": "dc226ea9f19b2926084af1c61481a568ddab2afb4a27ac1393049ff85fb8441c",
+      "metadata": {
+        "kind": "inhand",
+        "subject": "A slice of Basque-style cheesecake with a dark caramelized top on a beige plate held by a hand",
+        "items": [
+          "cheesecake slice",
+          "beige ceramic plate",
+          "round wooden table",
+          "window with black frame",
+          "green upholstered seat"
+        ],
+        "flavors": [
+          "caramelized top"
+        ],
+        "people": "hands",
+        "textInImage": "",
+        "focus": {
+          "x": 0.53,
+          "y": 0.5
+        },
+        "captionHints": [
+          "Burnt top, creamy center",
+          "A slice by the sunny window",
+          "Deeply caramelized crust",
+          "Simple slice on a stoneware plate"
+        ],
+        "quality": "good",
+        "menuShown": "main",
+        "amount": "one"
+      }
+    }
+  ]
+}

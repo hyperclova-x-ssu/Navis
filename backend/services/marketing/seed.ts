@@ -61,9 +61,7 @@ async function seedLocalAndInbox(db: PoolClient, storeId: string, context: SeedC
   // Manual inquiries are owner records. The connected review and TalkTalk lists keep their separate Persona sources.
   const threads = (context.rows.inquiry_thread as { thread_id: string; external_id: string; received_at: string }[]);
   const byRef = new Map(threads.map(row => [row.external_id, row]));
-  await insertSeedRows(db, 'marketing.reply_notice_record',
-    'store_id, id, kind, revision, status, source, data, updated_at',
-    content.inquiries.flatMap((inquiry, index) => {
+  const inquiries = content.inquiries.flatMap((inquiry, index) => {
       const thread = byRef.get('FICTIONAL-INQUIRY-' + index);
       if (!thread || thread.received_at > context.cutoff) return [];
       return [{ ...store, id: thread.thread_id, kind: 'inquiry', revision: 1,
@@ -71,7 +69,17 @@ async function seedLocalAndInbox(db: PoolClient, storeId: string, context: SeedC
         data: { type: 'message', title: inquiry.channel + ' 문의', text: redactReviewContact(inquiry.text),
           sourceUrl: null, draft: null, reply: null },
       }];
-    }));
+    });
+  await insertSeedRows(db, 'marketing.reply_notice_record',
+    'store_id, id, kind, revision, status, source, data, updated_at', inquiries);
+  await db.query(`
+    UPDATE marketing.reply_notice_record AS existing
+    SET updated_at = ((existing.updated_at AT TIME ZONE $3)::date + (seed.updated_at AT TIME ZONE $3)::time) AT TIME ZONE $3
+    FROM jsonb_to_recordset($2::jsonb) seed(id uuid, status text, data jsonb, updated_at timestamptz)
+    WHERE existing.store_id = $1 AND existing.id = seed.id AND existing.kind = 'inquiry'
+      AND existing.revision = 1 AND existing.source = 'manual' AND existing.status = seed.status AND existing.data = seed.data
+      AND (existing.updated_at AT TIME ZONE $3)::time = TIME '14:00'
+  `, [storeId, JSON.stringify(inquiries), content.store.timezone]);
 }
 
 async function seedSales(db: PoolClient, storeId: string, context: SeedContext) {

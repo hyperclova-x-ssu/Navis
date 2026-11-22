@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { createExamplePhotoSource } from '../../../frontend/server/promo/photo-source.mjs';
-import { refs } from '../../../frontend/server/promo/test/helpers.mjs';
 import { listen } from '../../infra/http.ts';
 import { disposableReplayClock } from '../../packages/contracts/replay-clock.ts';
+import { createSensSettingsReader } from './reality/15/sens-settings.ts';
 import { dbPool, fileSecret, readSecret, requiredEnv } from '../../packages/db/index.ts';
 import { promoSeedFileId } from '../../packages/contracts/promo-photos.ts';
 import type { NaverBinding } from '../../packages/naver/config/index.ts';
@@ -20,12 +20,15 @@ import { couponRecommendations } from './coupon-recommendations.ts';
 import { createMarketingProvider, OPERATIONS, registerTalkTalkInbound } from './naver/index.ts';
 import { createSearchPort } from './naver/pn10-search.ts';
 import { PromoRouteError } from './promo/jobs.ts';
+import { sha256 } from './promo/contracts.ts';
+import { createPromoMenuPriceRead } from './promo/menu-facts.ts';
 import { createHttpCouponSources, createPosBillReader } from './reality/14/clients.ts';
 import { createPersonaCouponPort } from './reality/14/coupon-provider.ts';
 import { couponPosHandlers } from './reality/14/redemptions.ts';
 import { createClosureReader } from './reality/15/closure.ts';
 import { navisReviewDraft, scheduledSmsProvider } from './reality/15/gap-providers.ts';
 import { createTalkTalkInbox } from './reality/15/inbox.ts';
+import { createTalkTalkDraftPorts } from './reality/15/talktalk-draft.ts';
 import { createVirtualNoticeMarketing } from './reality/15/notice-marketing.ts';
 import type { Review } from './reality/15/ports.ts';
 import { createNoticeRecipients } from './reality/15/recipients.ts';
@@ -34,9 +37,15 @@ import { createPromoCatalog } from './reality/16/catalog.ts';
 import { assetColumns, type Asset } from './reality/16/state.ts';
 import type { PromoRealityOptions } from './reality/16/routes.ts';
 import { localPosHandlers } from './reality/13/pos.ts';
+import { configureSeoulPublic } from './reality/13/seoul-public.ts';
+import { startSeoulRefresh } from './reality/13/seoul-refresh.ts';
+import { createLiveSearchSources } from './reality/13/ncp-search.ts';
+import { createTrendMenuReader } from './reality/13/trend-menu.ts';
+import { configureTrendHcx } from './reality/13/trend-hcx.ts';
 import { pn10SearchInterest } from './reality/13/sources.ts';
 import { createMarketingStreamConsumers, mergeStreamHandlers } from './reality/19/consumers.ts';
 import type { ReplyQueue, TodaySources } from './reality/19/ports.ts';
+import { createGroupMemberCodeReader } from './reality/19/routes.ts';
 
 const pool = dbPool('marketing');
 const replayNow = disposableReplayClock();
@@ -70,7 +79,7 @@ if (talkTalkCallbackToken && (!storeId || !privateTokenFile || !talkTalkCredenti
   || [gatewayToken, readSecret(privateTokenFile), readSecret(talkTalkCredentialFile)].includes(talkTalkCallbackToken))) {
   throw new Error('TalkTalk callback requires a configured store and a distinct workload credential');
 }
-const searchPort = storeId && providerAccount && origin && privateTokenFile && credentialsDir ? createSearchPort({
+const searchPort = process.env.NAVIS_NCP_APIHUB_PROVIDER === 'fake' && storeId && providerAccount && origin && privateTokenFile && credentialsDir ? createSearchPort({
   storeId, strict: true, transport: createNaverTransport({ bindings: (['pn10.trend', 'pn10.blog', 'pn10.cafearticle'] as const).map(operation => {
     const spec = OPERATIONS[operation];
     return {
@@ -155,17 +164,32 @@ const [customerCouponToken, inventoryCouponToken, posCouponToken] = couponTokens
 if (smsRecipientToken && [smsWorkerToken, gatewayToken, localToken, communityToken, scheduleToken, ...couponTokens].includes(smsRecipientToken)) {
   throw new Error('The Customer SMS recipient credential must be distinct');
 }
-const noticeRecipients = customer && smsRecipientToken ? createNoticeRecipients({
-  pool, senderNumber: '01000000000', now: replayNow,
-  readCustomer: (storeId, body) => fetch(new URL(`/internal/v1/customer/stores/${storeId}/sms-recipients`, customer), {
+const accountUrl = process.env.NAVIS_ACCOUNT_BASE_URL;
+const artifactFile = process.env.NAVIS_MARKETING_ACCOUNT_TOKEN_FILE;
+const liveSms = process.env.NAVIS_NCP_SENS_PROVIDER === 'live';
+const readSensSettings = liveSms && accountUrl && artifactFile
+  ? createSensSettingsReader(new URL(accountUrl), readSecret(artifactFile)) : undefined;
+const readSmsCustomer = customer && smsRecipientToken
+  ? (scope: string, body: { memberIds: string[]; purpose: 'advertising' | 'informational' }) =>
+    fetch(new URL(`/internal/v1/customer/stores/${scope}/sms-recipients`, customer), {
     method: 'POST', redirect: 'error', signal: AbortSignal.timeout(2500),
-    headers: { authorization: `Bearer ${smsRecipientToken}`, 'x-navis-store-id': storeId, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${smsRecipientToken}`, 'x-navis-store-id': scope, 'content-type': 'application/json' },
     body: JSON.stringify(body),
-  }),
+  }) : undefined;
+const noticeRecipients = readSmsCustomer ? createNoticeRecipients({
+  pool, senderNumber: '01000000000', now: replayNow, readCustomer: readSmsCustomer,
 }) : undefined;
-const scheduledSms = noticeRecipients ? scheduledSmsProvider({
-  mode: 'virtual', recipients: (scope, group, advertising) => scope.storeId === storeId
+const scheduledSms = noticeRecipients && (!liveSms || readSensSettings) ? scheduledSmsProvider({
+  mode: liveSms ? 'live' : 'virtual', recipients: (scope, group, advertising) => scope.storeId === storeId
     ? noticeRecipients(scope, group, advertising) : Promise.resolve(null),
+  settings: readSensSettings,
+  couponRecipient: liveSms && readSmsCustomer ? async (scope, memberId) => {
+    if (scope !== storeId) return null;
+    const response = await readSmsCustomer(scope, { memberIds: [memberId], purpose: 'advertising' });
+    if (!response.ok) { await response.body?.cancel(); throw new Error('Coupon consent lookup unavailable'); }
+    const result = await response.json() as { items?: { memberId: string; phone: string }[] };
+    return result.items?.find(item => item.memberId === memberId)?.phone ?? null;
+  } : undefined,
 }) : undefined;
 const naverCoupon = storeId && providerAccount && origin && privateTokenFile
   ? createPersonaCouponPort({ storeId, providerAccount, virtualOrigin: origin, privateTokenFile }) : undefined;
@@ -177,6 +201,7 @@ const coupons = customerCouponToken && inventoryCouponToken && posCouponToken ? 
   pos: createPosBillReader(requiredEnv('NAVIS_MARKETING_POS_URL'), posCouponToken),
   naver: (scope: string) => scope === storeId ? naverCoupon ?? null : null,
   naverWriteMode: naverCoupon ? 'fake' as const : undefined,
+  smsSettings: liveSms ? async (scope: string) => scope === storeId ? await readSensSettings?.(scope) ?? null : null : undefined,
 } : undefined;
 const listPeers = communityAccount && communityToken ? async (storeId: string) => {
   const response = await fetch(new URL(`/internal/v1/account/stores/${storeId}/community-peers`, communityAccount), {
@@ -194,8 +219,6 @@ const readClosure = customer && scheduleToken ? createClosureReader(({ storeId, 
     headers: { authorization: `Bearer ${scheduleToken}`, 'x-navis-store-id': storeId, 'x-navis-user-id': actorId,
       'x-navis-store-role': 'owner' }, redirect: 'error', signal: AbortSignal.timeout(2500),
   })) : undefined;
-const accountUrl = process.env.NAVIS_ACCOUNT_BASE_URL;
-const artifactFile = process.env.NAVIS_MARKETING_ACCOUNT_TOKEN_FILE;
 const artifacts = accountUrl && artifactFile ? createArtifactClient({ baseUrl: accountUrl, token: readSecret(artifactFile) }) : undefined;
 let promo: Omit<PromoRealityOptions, 'gatewayToken'> | undefined;
 if (accountUrl && artifactFile && artifacts) {
@@ -217,7 +240,9 @@ if (accountUrl && artifactFile && artifacts) {
     throw new Error('Promo photo lookup unavailable');
   };
   promo = {
-    references: refs, artifacts,
+    artifacts,
+    readMenuPrice: inventoryCouponToken
+      ? createPromoMenuPriceRead(requiredEnv('NAVIS_MARKETING_INVENTORY_URL'), inventoryCouponToken) : undefined,
     ...createPromoCatalog({
       async photos(owner, uploads) {
         const candidates = [...seed, ...uploads.map(row => ({ ...row, photoId: row.assetId.replaceAll('-', '') }))];
@@ -248,7 +273,7 @@ if (accountUrl && artifactFile && artifacts) {
       const mime = photo.headers.get('content-type') ?? '';
       const bytes = Buffer.from(await photo.arrayBuffer());
       const fileId = await artifacts.put({ storeId: owner.storeId, resourceId: photoId }, binding.fileId, 'promo_input', mime, bytes);
-      return { resourceId: photoId, fileId, sourceFileId: binding.fileId };
+      return { resourceId: photoId, fileId, sourceFileId: binding.fileId, sha256: sha256(bytes) };
     },
   };
 }
@@ -276,6 +301,7 @@ const today: TodaySources = {
     return { eligiblePhotos: photos.length, postedVideos: publication.count, firstAssetId: photos[0]?.photoId ?? null };
   }),
 };
+const seoulPublic = await configureSeoulPublic(process.env);
 const app = createMarketingApp(pool, phase3 && gatewayToken ? {
   promoToken: fileSecret('NAVIS_INSIGHT_MARKETING_TOKEN_FILE'),
   readToken: gatewayToken,
@@ -286,9 +312,12 @@ const app = createMarketingApp(pool, phase3 && gatewayToken ? {
   }),
 } : undefined, gatewayToken, gatewayToken && localToken ? {
   readToken: gatewayToken, briefingToken: briefingFile && readSecret(briefingFile),
-  local: { commandToken: localToken, listPeers, searchInterest, searchLinks, cafe, now: replayNow, canOffer: listPeers && (async (senderStoreId, recipientStoreId) =>
+  local: { commandToken: localToken, listPeers, ...createLiveSearchSources(process.env, { searchInterest, searchLinks }),
+    trendMenu: inventoryCouponToken ? createTrendMenuReader(requiredEnv('NAVIS_MARKETING_INVENTORY_URL'), inventoryCouponToken) : undefined,
+    chooseTrendCandidates: configureTrendHcx(process.env, gapProvider),
+    cafe, now: replayNow, canOffer: listPeers && (async (senderStoreId, recipientStoreId) =>
     (await listPeers(senderStoreId)).some(peer => peer.storeId === recipientStoreId)) },
-  notice: { readClosure, now: replayNow, scheduledSms, smsWorkerToken, navisReviewDraft: gapProvider && navisReviewDraft(() => gapProvider), provider: naver && {
+  notice: { readClosure, now: replayNow, scheduledSms, smsWorkerToken, talkTalkDraft: createTalkTalkDraftPorts(pool, process.env, replayNow), navisReviewDraft: gapProvider && navisReviewDraft(() => gapProvider), provider: naver && {
     mode: 'virtual',
     async reviews({ storeId }, { view, ...filter }) {
       const result = await naver.reviews(storeId, view === 'venue' ? { scope: 'venue' } : { ...filter, scope: 'booking' });
@@ -326,12 +355,19 @@ const app = createMarketingApp(pool, phase3 && gatewayToken ? {
     audiences: ({ storeId }) => scopedNotices(storeId).talktalkMarketing.audiences(),
     campaign: ({ storeId }, input) => scopedNotices(storeId).campaign(input),
   } }, promo, coupons: coupons && { ...coupons, now: replayNow },
-  groups: { channels: naver, today, coupons: coupons && couponLedger, now: replayNow },
+  groups: { channels: naver, today, coupons: coupons && couponLedger, now: replayNow,
+    memberCodes: customerCouponToken
+      ? createGroupMemberCodeReader(requiredEnv('NAVIS_MARKETING_CUSTOMER_URL'), customerCouponToken) : undefined },
 } : undefined);
 if (storeId && talkTalkCallbackToken) registerTalkTalkInbound(app, {
   mode: 'virtual', callbackToken: talkTalkCallbackToken, onEvent: createTalkTalkInbox(pool, storeId),
 });
 pool.on('error', () => app.log.warn('Idle database connection closed unexpectedly'));
+let stopSeoulRefresh: ReturnType<typeof startSeoulRefresh> | undefined;
+if (seoulPublic) app.addHook('onReady', async () => {
+  stopSeoulRefresh = startSeoulRefresh(pool, seoulPublic, fixtureStore, dataset =>
+    app.log.warn({ dataset }, 'Seoul public data refresh unavailable'));
+});
 const stop = new AbortController();
 const redis = process.env.NAVIS_REDIS_URL ? await connectStreams('marketing') : undefined;
 const workers = redis ? createMarketingStreamConsumers(pool, redis, `marketing-${randomUUID()}`, {
@@ -340,6 +376,7 @@ const workers = redis ? createMarketingStreamConsumers(pool, redis, `marketing-$
   .map(consumer => consumer.run(stop.signal)) : [];
 app.addHook('onClose', async () => {
   stop.abort();
+  await stopSeoulRefresh?.();
   await Promise.all(workers);
   redis?.close();
   await pool.end();

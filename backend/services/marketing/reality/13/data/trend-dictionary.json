@@ -1,0 +1,614 @@
+{
+  "version": "2026-11",
+  "author": "claude-opus-5-5",
+  "entries": [
+    {
+      "id": "decaf-latte",
+      "keyword": "디카페인 라떼",
+      "group": "coffee",
+      "months": []
+    },
+    {
+      "id": "decaf-cold-brew",
+      "keyword": "디카페인 콜드브루",
+      "group": "coffee",
+      "months": []
+    },
+    {
+      "id": "hand-drip-coffee",
+      "keyword": "핸드드립 커피",
+      "group": "coffee",
+      "months": []
+    },
+    {
+      "id": "einspanner",
+      "keyword": "아인슈페너",
+      "group": "coffee",
+      "months": []
+    },
+    {
+      "id": "oat-milk-latte",
+      "keyword": "오트밀크 라떼",
+      "group": "coffee",
+      "months": []
+    },
+    {
+      "id": "vanilla-bean-latte",
+      "keyword": "바닐라빈 라떼",
+      "group": "coffee",
+      "months": []
+    },
+    {
+      "id": "matcha-latte",
+      "keyword": "말차 라떼",
+      "group": "tea",
+      "months": []
+    },
+    {
+      "id": "black-sesame-latte",
+      "keyword": "흑임자 라떼",
+      "group": "non-coffee",
+      "months": []
+    },
+    {
+      "id": "rich-chocolate-latte",
+      "keyword": "진한 초코 라떼",
+      "group": "non-coffee",
+      "months": []
+    },
+    {
+      "id": "chamomile-tea",
+      "keyword": "캐모마일 티",
+      "group": "tea",
+      "months": []
+    },
+    {
+      "id": "earl-grey-milk-tea",
+      "keyword": "얼그레이 밀크티",
+      "group": "tea",
+      "months": []
+    },
+    {
+      "id": "rooibos-tea",
+      "keyword": "루이보스 티",
+      "group": "tea",
+      "months": []
+    },
+    {
+      "id": "butter-bar",
+      "keyword": "버터바",
+      "group": "bakery",
+      "months": []
+    },
+    {
+      "id": "salt-bread",
+      "keyword": "소금빵",
+      "group": "bakery",
+      "months": []
+    },
+    {
+      "id": "financier",
+      "keyword": "휘낭시에",
+      "group": "bakery",
+      "months": []
+    },
+    {
+      "id": "butter-scone",
+      "keyword": "버터 스콘",
+      "group": "bakery",
+      "months": []
+    },
+    {
+      "id": "madeleine",
+      "keyword": "마들렌",
+      "group": "bakery",
+      "months": []
+    },
+    {
+      "id": "croffle",
+      "keyword": "크로플",
+      "group": "dessert",
+      "months": []
+    },
+    {
+      "id": "basque-cheesecake",
+      "keyword": "바스크 치즈케이크",
+      "group": "dessert",
+      "months": []
+    },
+    {
+      "id": "tiramisu",
+      "keyword": "티라미수",
+      "group": "dessert",
+      "months": []
+    },
+    {
+      "id": "low-sugar-dessert",
+      "keyword": "저당 디저트 추천",
+      "group": "dessert",
+      "months": []
+    },
+    {
+      "id": "custom-birthday-cake",
+      "keyword": "생일 케이크 주문 제작",
+      "group": "dessert",
+      "months": []
+    },
+    {
+      "id": "study-friendly-cafe",
+      "keyword": "공부하기 좋은 카페",
+      "group": "cafe-occasion",
+      "months": []
+    },
+    {
+      "id": "laptop-friendly-cafe",
+      "keyword": "노트북 하기 좋은 카페",
+      "group": "cafe-occasion",
+      "months": []
+    },
+    {
+      "id": "pet-friendly-cafe",
+      "keyword": "애견 동반 카페",
+      "group": "cafe-occasion",
+      "months": []
+    },
+    {
+      "id": "group-coffee-order",
+      "keyword": "카페 단체 커피 주문",
+      "group": "cafe-occasion",
+      "months": []
+    },
+    {
+      "id": "cafe-signature-menu",
+      "keyword": "카페 시그니처 메뉴 추천",
+      "group": "cafe-occasion",
+      "months": []
+    },
+    {
+      "id": "strawberry-latte",
+      "keyword": "딸기 라떼",
+      "group": "non-coffee",
+      "months": [
+        1,
+        2,
+        3,
+        4,
+        12
+      ]
+    },
+    {
+      "id": "strawberry-cream-cake",
+      "keyword": "딸기 생크림 케이크",
+      "group": "dessert",
+      "months": [
+        1,
+        2,
+        3,
+        12
+      ]
+    },
+    {
+      "id": "strawberry-tart",
+      "keyword": "딸기 타르트",
+      "group": "dessert",
+      "months": [
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "id": "valentine-chocolate-gift",
+      "keyword": "발렌타인 초콜릿 선물",
+      "group": "dessert",
+      "months": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "graduation-celebration-cake",
+      "keyword": "졸업 축하 케이크",
+      "group": "dessert",
+      "months": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "lunar-new-year-cookie-gift",
+      "keyword": "설 선물 수제 쿠키 세트",
+      "group": "cafe-occasion",
+      "months": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "jujube-tea",
+      "keyword": "대추차",
+      "group": "tea",
+      "months": [
+        1,
+        2,
+        3,
+        11,
+        12
+      ]
+    },
+    {
+      "id": "white-day-dessert-gift",
+      "keyword": "화이트데이 디저트 선물",
+      "group": "cafe-occasion",
+      "months": [
+        3
+      ]
+    },
+    {
+      "id": "cherry-blossom-latte",
+      "keyword": "벚꽃 라떼",
+      "group": "non-coffee",
+      "months": [
+        3,
+        4
+      ]
+    },
+    {
+      "id": "cherry-blossom-dessert",
+      "keyword": "벚꽃 디저트",
+      "group": "dessert",
+      "months": [
+        3,
+        4
+      ]
+    },
+    {
+      "id": "mugwort-latte",
+      "keyword": "쑥 라떼",
+      "group": "non-coffee",
+      "months": [
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "id": "mugwort-scone",
+      "keyword": "쑥 스콘",
+      "group": "bakery",
+      "months": [
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "id": "spring-cafe-new-drinks",
+      "keyword": "봄 카페 신메뉴 음료",
+      "group": "cafe-occasion",
+      "months": [
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "id": "parents-day-carnation-cake",
+      "keyword": "어버이날 카네이션 케이크",
+      "group": "dessert",
+      "months": [
+        4,
+        5
+      ]
+    },
+    {
+      "id": "teachers-day-dessert-gift",
+      "keyword": "스승의날 디저트 선물",
+      "group": "cafe-occasion",
+      "months": [
+        5
+      ]
+    },
+    {
+      "id": "family-month-dessert-gift",
+      "keyword": "가정의달 디저트 선물",
+      "group": "cafe-occasion",
+      "months": [
+        5
+      ]
+    },
+    {
+      "id": "iced-americano",
+      "keyword": "아이스 아메리카노",
+      "group": "coffee",
+      "months": [
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "id": "cold-brew-latte",
+      "keyword": "콜드브루 라떼",
+      "group": "coffee",
+      "months": [
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "id": "lemonade",
+      "keyword": "레몬에이드",
+      "group": "non-coffee",
+      "months": [
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "id": "grapefruit-ade",
+      "keyword": "자몽 에이드",
+      "group": "non-coffee",
+      "months": [
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "id": "watermelon-juice",
+      "keyword": "수박 주스",
+      "group": "non-coffee",
+      "months": [
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "id": "omija-ade",
+      "keyword": "오미자 에이드",
+      "group": "non-coffee",
+      "months": [
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "id": "maesil-ade",
+      "keyword": "매실 에이드",
+      "group": "non-coffee",
+      "months": [
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "id": "peach-iced-tea",
+      "keyword": "복숭아 아이스티",
+      "group": "tea",
+      "months": [
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "id": "patbingsu",
+      "keyword": "팥빙수",
+      "group": "dessert",
+      "months": [
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "id": "mango-bingsu",
+      "keyword": "망고 빙수",
+      "group": "dessert",
+      "months": [
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "id": "ocean-view-cafe",
+      "keyword": "바다 보이는 카페",
+      "group": "cafe-occasion",
+      "months": [
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "id": "corn-latte",
+      "keyword": "옥수수 라떼",
+      "group": "non-coffee",
+      "months": [
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "id": "fig-tart",
+      "keyword": "무화과 타르트",
+      "group": "dessert",
+      "months": [
+        8,
+        9,
+        10
+      ]
+    },
+    {
+      "id": "chuseok-dessert-gift-set",
+      "keyword": "추석 디저트 선물 세트",
+      "group": "cafe-occasion",
+      "months": [
+        8,
+        9
+      ]
+    },
+    {
+      "id": "chestnut-latte",
+      "keyword": "밤 라떼",
+      "group": "non-coffee",
+      "months": [
+        9,
+        10,
+        11
+      ]
+    },
+    {
+      "id": "chestnut-mont-blanc",
+      "keyword": "밤 몽블랑",
+      "group": "dessert",
+      "months": [
+        9,
+        10,
+        11
+      ]
+    },
+    {
+      "id": "sweet-pumpkin-latte",
+      "keyword": "단호박 라떼",
+      "group": "non-coffee",
+      "months": [
+        9,
+        10,
+        11
+      ]
+    },
+    {
+      "id": "sweet-potato-latte",
+      "keyword": "고구마 라떼",
+      "group": "non-coffee",
+      "months": [
+        1,
+        2,
+        10,
+        11,
+        12
+      ]
+    },
+    {
+      "id": "autumn-foliage-cafe",
+      "keyword": "단풍 구경 카페",
+      "group": "cafe-occasion",
+      "months": [
+        10,
+        11
+      ]
+    },
+    {
+      "id": "halloween-dessert",
+      "keyword": "할로윈 디저트",
+      "group": "dessert",
+      "months": [
+        10
+      ]
+    },
+    {
+      "id": "pepero-day-handmade-choco",
+      "keyword": "빼빼로데이 수제 초콜릿",
+      "group": "dessert",
+      "months": [
+        10,
+        11
+      ]
+    },
+    {
+      "id": "suneung-cheer-snack-gift",
+      "keyword": "수능 응원 간식 선물",
+      "group": "cafe-occasion",
+      "months": [
+        11
+      ]
+    },
+    {
+      "id": "yuja-tea",
+      "keyword": "유자차",
+      "group": "tea",
+      "months": [
+        1,
+        2,
+        11,
+        12
+      ]
+    },
+    {
+      "id": "ginger-tea",
+      "keyword": "생강차",
+      "group": "tea",
+      "months": [
+        1,
+        2,
+        11,
+        12
+      ]
+    },
+    {
+      "id": "hot-chocolate",
+      "keyword": "핫초코",
+      "group": "non-coffee",
+      "months": [
+        1,
+        2,
+        11,
+        12
+      ]
+    },
+    {
+      "id": "vin-chaud",
+      "keyword": "뱅쇼",
+      "group": "non-coffee",
+      "months": [
+        1,
+        11,
+        12
+      ]
+    },
+    {
+      "id": "christmas-cake-reservation",
+      "keyword": "크리스마스 케이크 예약",
+      "group": "dessert",
+      "months": [
+        11,
+        12
+      ]
+    },
+    {
+      "id": "stollen",
+      "keyword": "슈톨렌",
+      "group": "bakery",
+      "months": [
+        11,
+        12
+      ]
+    },
+    {
+      "id": "year-end-party-cafe-rental",
+      "keyword": "연말 모임 카페 대관",
+      "group": "cafe-occasion",
+      "months": [
+        11,
+        12
+      ]
+    }
+  ]
+}

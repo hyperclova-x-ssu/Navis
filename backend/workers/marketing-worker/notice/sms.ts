@@ -1,5 +1,6 @@
 import { createMarketingProvider, NaverAdapterError, type MarketingBindingOptions } from '../../../services/marketing/naver/index.ts';
 import { advertisingNight, createSensWire, type SensServiceIds, type SensWire } from '../naver/pn13-sens.ts';
+import type { LiveSens, SensSettings } from '../naver/sens-live.ts';
 
 /**
  * Scheduled owner notice SMS dispatcher (FIX-GAP-B, RV-GAP-B-3/5/6). Marketing keeps the schedule in its ledger.
@@ -12,10 +13,12 @@ const requestId = /^[A-Za-z0-9_-]{1,128}$/;
 /** Documented refusals or local validation: nothing was sent for that batch. */
 const definitive = new Set(['INVALID_INPUT', 'NOT_CONFIGURED', 'LIVE_NOT_APPROVED', 'FORBIDDEN', 'NOT_FOUND', 'RATE_LIMITED', 'REJECTED']);
 
-type Due = { dispatchId: string; state: 'scheduled' | 'dispatching'; pendingBatches: number[] };
+type Due = { dispatchId: string; state: 'scheduled' | 'dispatching' | 'sent'; pendingBatches: number[];
+  acceptedBatches?: { batch: number; providerId: string; size: number }[] };
 type Claim = { dispatchId: string; type: 'SMS' | 'LMS'; contentType: 'AD'; content: string; from: string;
-  batches: { batch: number; to: string[] }[] };
-type Outcome = { state: 'accepted'; providerId: string } | { state: 'failed' | 'unknown' };
+  providerLive?: boolean; batches: { batch: number; to: string[] }[] };
+type Outcome = { state: 'accepted'; providerId: string; skipped?: number }
+  | { state: 'not_sent'; skipped: number } | { state: 'failed' | 'unknown' | 'delivered' | 'delivery_failed' };
 
 /** Virtual-only SENS wire scoped to the single PN13 send operation (live stays refused until A6). */
 export function noticeSmsWire(binding: Omit<MarketingBindingOptions, 'mode' | 'operations'>, serviceIds: SensServiceIds) {
@@ -26,6 +29,7 @@ export function noticeSmsWire(binding: Omit<MarketingBindingOptions, 'mode' | 'o
 export function createNoticeSmsWorker(options: {
   marketingUrl: URL; token: string; storeId: string; sens: SensWire;
   fetcher?: typeof fetch; now?: () => Date;
+  live?: LiveSens; readSettings?: (storeId: string) => Promise<SensSettings | null>;
 }) {
   const root = '/internal/v1/marketing/notice-sms-dispatch/stores/' + options.storeId;
   const fetcher = options.fetcher ?? fetch;
@@ -52,6 +56,21 @@ export function createNoticeSmsWorker(options: {
   }
 
   async function send(claim: Claim, batch: Claim['batches'][number]): Promise<Outcome> {
+    if (claim.providerLive) {
+      if (!options.live || !options.readSettings || advertisingNight(now())) return { state: 'failed' };
+      const settings = await options.readSettings(options.storeId).catch(() => null);
+      if (!settings) return { state: 'failed' };
+      try {
+        const body = claim.content.split('\n').slice(1, -1).join('\n');
+        const result = await options.live.sms({ settings, to: batch.to, body, advertising: true, approvedContent: claim.content,
+          approval: { confirmed: true }, signal: AbortSignal.timeout(5000) });
+        if (result.sentCount === 0) return { state: 'not_sent', skipped: result.skippedCount };
+        return result.requestId && requestId.test(result.requestId)
+          ? { state: 'accepted', providerId: result.requestId, skipped: result.skippedCount } : { state: 'unknown' };
+      } catch (error) {
+        return { state: error instanceof NaverAdapterError && definitive.has(error.code) ? 'failed' : 'unknown' };
+      }
+    }
     // The same attempt key makes the single retry a private idempotent replay on the virtual server.
     const attemptKey = `notice-sms:${claim.dispatchId}:${batch.batch}`;
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -73,6 +92,14 @@ export function createNoticeSmsWorker(options: {
     for (const row of due) {
       signal?.throwIfAborted();
       try {
+        if (row.state === 'sent') {
+          if (!options.live) continue;
+          for (const batch of row.acceptedBatches ?? []) {
+            const state = await options.live.smsResult(batch.providerId, batch.size, signal);
+            if (state) await report(row.dispatchId, batch.batch, { state: state === 'delivered' ? state : 'delivery_failed' });
+          }
+          continue;
+        }
         if (row.state === 'dispatching') {
           // A claim older than two minutes lost its worker: never resend, leave it for reconciliation.
           for (const batch of row.pendingBatches) await report(row.dispatchId, batch, { state: 'unknown' });
@@ -87,5 +114,7 @@ export function createNoticeSmsWorker(options: {
     }
     if (incomplete) throw new Error('One or more notice SMS dispatches need another step');
   }
-  return { step };
+  const couponRecipient = (memberId: string) =>
+    request<{ phone: string | null }>('/coupon-recipient', 'POST', { memberId }).then(result => result.phone);
+  return { step, couponRecipient };
 }

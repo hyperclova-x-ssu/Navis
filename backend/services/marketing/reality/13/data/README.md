@@ -3,8 +3,18 @@
 `sangdo-official.json` is the reviewed official snapshot loaded by `../seed.ts` (`seedOfficialLocal`) through
 B13's `importOfficialLocalSnapshot` with the marketing migrator. It feeds `/marketing/trade-area` (population bands)
 and `/marketing/local-changes` (coverage plus official rows) for the café store `c05409a6-f082-5964-a787-c1ed3184988b`.
-There is no runtime collection. The app never calls a public-data portal, and the rows keep their real dates
-(they are not shifted to the demo clock).
+The snapshot is the default source. Rows keep their original dates across demo clock changes.
+
+Marketing can opt in to daily Seoul Open Data collection with `NAVIS_SEOUL_PUBLIC_DATA_MODE=live` and
+`NAVIS_SEOUL_OPENAPI_KEY_FILE`. The local overlay is `compose.seoul-public-live.yaml`. Helm uses
+`config.navisSeoulPublicDataMode=live` and the `SEOUL_OPENAPI_KEY` entry of the `navis-seoul-openapi` Secret.
+Both allow Marketing to reach `openapi.seoul.go.kr:8088`, the HTTP endpoint published by Seoul.
+
+The collector refreshes the four feeds independently for the Sangdo café area. It keeps the latest successful
+rows when a feed fails, including the original snapshot where a successful live import has yet to happen.
+License imports use the official license and closure dates and keep a distinct ID for each closure.
+Live population bands average complete four-dong observations from the dates the API returned. The trade-area
+detail credits Seoul and KT and displays the selected band's fetch time.
 
 ## Snapshot at a glance
 
@@ -27,7 +37,7 @@ There is no runtime collection. The app never calls a public-data portal, and th
 
 Only derived values are committed: hourly averages for one region and the selected public license and event rows.
 The raw files stay outside the repository (see refresh). The required living-population attribution is in
-`meta.attribution`. The owner-facing label `서울 공개 자료 · {기준일}` (LOCALES §20) does not contain it. See open question 1.
+`meta.attribution`. The trade-area detail includes the required attribution on the source and fetch-time line.
 
 ## How rows are selected
 

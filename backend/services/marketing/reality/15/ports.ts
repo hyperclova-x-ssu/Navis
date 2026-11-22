@@ -1,6 +1,8 @@
 import type { SmsReservation } from '../../../../packages/naver/contracts/pn13/index.ts';
 import type { PoolClient } from 'pg';
 import type { Audience, BusinessHours, ClosureLink, NewsPin, Operation } from './wire.ts';
+import type { SensSettings } from './sens-settings.ts';
+import type { TalkTalkDraftPorts } from './talktalk-draft.ts';
 
 export type Owner = { storeId: string; actorId: string };
 export type Closure = ClosureLink & { date: string; endDate: string };
@@ -51,7 +53,9 @@ export type SmsEffect = { state: SmsState; providerRef: string; scheduledFor: st
 /** SENS reservation status vocabulary, reused for the ledger status read. */
 export type SmsStatus = SmsReservation['reserveStatus'];
 export type ScheduledSms = {
-  mode: 'fake' | 'virtual';
+  mode: 'fake' | 'virtual' | 'live';
+  settings?: (storeId: string) => Promise<SensSettings | null>;
+  couponRecipient?: (storeId: string, memberId: string) => Promise<string | null>;
   /**
    * Resolve current SMS and advertising consent server-side. Never accept numbers from the browser. Called at the
    * press (count only) and again by the worker claim just before sending; numbers never leave memory.
@@ -65,6 +69,7 @@ export type NoticeReplyOptions = {
   /** Private marketing-worker credential for the notice SMS dispatch routes. Distinct from `gatewayToken`. */
   smsWorkerToken?: string;
   navisReviewDraft?: FakeNoticeProvider['navisReviewDraft'];
+  talkTalkDraft?: TalkTalkDraftPorts;
   gatewayToken: string;
   now?: () => Date;
   provider?: FakeNoticeProvider;

@@ -1,13 +1,14 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { NaverAdapterError } from '../../naver/errors.ts';
 import type { SensWire } from '../../../../workers/marketing-worker/naver/pn13-sens.ts';
 import { createNoticeSmsWorker } from '../../../../workers/marketing-worker/notice/sms.ts';
+import type { LiveSens } from '../../../../workers/marketing-worker/naver/sens-live.ts';
 
 const store = 'd85e9289-0b89-4e02-8eb7-3ce777285baa';
 const dispatchId = '4b4b0f0a-0d3b-4bd5-9a3f-6f0b6f8a2c11';
 const stale = '9a0d7c3e-5d5e-4f21-8b1c-9d0f4a2b6e33';
 
-function harness(sendSms: SensWire['sendSms'], due: unknown[]) {
+function harness(sendSms: SensWire['sendSms'], due: unknown[], live?: LiveSens) {
   const reports: { path: string; body: unknown }[] = [];
   const claims: string[] = [];
   const fetcher: typeof fetch = async (input, init) => {
@@ -18,13 +19,15 @@ function harness(sendSms: SensWire['sendSms'], due: unknown[]) {
     if (url.pathname.endsWith('/claim')) {
       claims.push(url.pathname);
       return Response.json({ dispatchId, type: 'SMS', contentType: 'AD', content: '(광고) 가게\n소식\n무료수신거부', from: '01000000000',
+        ...(live && { providerLive: true }),
         batches: [{ batch: 0, to: ['01000001000'] }, { batch: 1, to: ['01000001001'] }] });
     }
     reports.push({ path: url.pathname, body: JSON.parse(String(init.body)) });
     return new Response(null, { status: 204 });
   };
   const worker = createNoticeSmsWorker({ marketingUrl: new URL('http://marketing:3000'), token: 'worker-token', storeId: store,
-    sens: { sendSms } as SensWire, fetcher, now: () => new Date('2026-11-23T01:00:00Z') });
+    sens: { sendSms } as SensWire, fetcher, now: () => new Date('2026-11-23T01:00:00Z'), live,
+    readSettings: async () => ({ storeName: '가게', senderNumber: '01012345678', optOutNumber: '0801234567' }) });
   return { worker, reports, claims };
 }
 
@@ -48,6 +51,18 @@ it('sends each claimed batch once, replays an unknown outcome with the same key 
     [dispatchId, { batch: 0, state: 'accepted', providerId: 'RSLA-1' }],
     [dispatchId, { batch: 1, state: 'accepted', providerId: 'RSLA-2' }],
   ]);
+});
+
+it('records a test-mode drop and never retries an uncertain live send', async () => {
+  const sendSms = vi.fn<SensWire['sendSms']>();
+  const sms = vi.fn<LiveSens['sms']>()
+    .mockResolvedValueOnce({ sentCount: 0, skippedCount: 1 })
+    .mockRejectedValueOnce(new NaverAdapterError('UNKNOWN_OUTCOME'));
+  const { worker, reports } = harness(sendSms, [{ dispatchId, state: 'scheduled', pendingBatches: [] }], { sms } as unknown as LiveSens);
+  await worker.step();
+  expect(sendSms).not.toHaveBeenCalled();
+  expect(sms).toHaveBeenCalledTimes(2);
+  expect(reports.map(report => report.body)).toEqual([{ batch: 0, state: 'not_sent', skipped: 1 }, { batch: 1, state: 'unknown' }]);
 });
 
 it('reports a documented refusal as failed and a repeated unknown outcome as unknown', async () => {

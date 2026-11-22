@@ -70,11 +70,11 @@ export function createMarketingApp(database: Pool, options?: {
   sms: ReturnType<typeof createFixtureSms>;
 }, browserToken?: string, records?: {
   readToken: string; local?: Omit<LocalOptions, 'readToken'>;
-  notice?: Pick<NoticeReplyOptions, 'provider' | 'readClosure' | 'now' | 'navisReviewDraft' | 'scheduledSms' | 'smsWorkerToken'>;
+  notice?: Pick<NoticeReplyOptions, 'provider' | 'readClosure' | 'now' | 'navisReviewDraft' | 'talkTalkDraft' | 'scheduledSms' | 'smsWorkerToken'>;
   briefingToken?: string;
   coupons?: Omit<CouponRouteOptions, 'gatewayToken'>;
   promo?: Omit<PromoRealityOptions, 'gatewayToken'>;
-  groups?: Pick<GroupsPerformanceOptions, 'channels' | 'today' | 'coupons' | 'now'>;
+  groups?: Pick<GroupsPerformanceOptions, 'channels' | 'today' | 'coupons' | 'now' | 'memberCodes'>;
 }) {
   // W5 serves the fixture catalog and assets. Render tools and live keys stay off until A6.
   const promo = browserToken ? createPromoService({

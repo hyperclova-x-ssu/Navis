@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { inStore } from '../../transaction.ts';
+import type { SensSettings } from '../15/sens-settings.ts';
 import type { CouponSources, NaverCouponPorts, PosBillReader } from './clients.ts';
 import { execute, type CommandName } from './commands.ts';
 import { createNaverCoupons, type NaverOperation } from './naver.ts';
@@ -18,6 +19,7 @@ const digest = (value: string) => createHash('sha256').update(value).digest();
 export type CouponRouteOptions = {
   gatewayToken: string;
   sources: CouponSources;
+  smsSettings?: (storeId: string) => Promise<SensSettings | null>;
   pos?: PosBillReader;
   naver?: NaverCouponPorts;
   naverWriteMode?: 'fake';
@@ -93,7 +95,8 @@ export function registerCouponRoutes(app: FastifyInstance, pool: Pool, options: 
   function command(method: 'POST' | 'PATCH', path: string, name: CommandName, created = false) {
     route(method, path, async (req, reply, who) => {
       const key = requestKey(req);
-      const result = await scoped(who, scope => execute({ ...scope, sources: options.sources }, key, name, req.params.id, req.body), true);
+      const result = await scoped(who, scope => execute({ ...scope, sources: options.sources, smsSettings: options.smsSettings },
+        key, name, req.params.id, req.body), true);
       if (created && result.changed) reply.code(201);
       return result;
     });

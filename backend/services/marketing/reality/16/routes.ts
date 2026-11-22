@@ -5,6 +5,8 @@ import { validateInput } from '../../../../../frontend/server/promo/service.mjs'
 import type { loadReferences } from '../../../../../frontend/server/promo/references.mjs';
 import { fingerprint, isUuid, sha256, type CatalogSnapshot, type FileBinding, type PromoInput } from '../../promo/contracts.ts';
 import { insertPromoJob, PromoRouteError } from '../../promo/jobs.ts';
+import type { PromoMenuPriceRead } from '../../promo/menu-facts.ts';
+import { queuePhotoAnalysis } from '../../promo/photo-analysis-store.ts';
 import { inStore } from '../../transaction.ts';
 import { attest, publish, type PublicationPorts } from './publication.ts';
 import { assetColumns, draftColumns, getDraft, preparedCommand, publicationColumns, receipt,
@@ -20,6 +22,7 @@ export type PromoRealityOptions = PublicationPorts & {
   catalogForOwner(owner: Owner, uploads: readonly Asset[]): Promise<CatalogSnapshot | null>;
   verifyUpload(owner: Owner, fileId: string): Promise<{ width: number; height: number } | null>;
   bindPhoto?: (owner: Owner, photoId: string, attachment: FileBinding) => Promise<FileBinding>;
+  readMenuPrice?: PromoMenuPriceRead;
   uploadTargets?: Partial<Record<Channel, string>>;
 };
 
@@ -152,18 +155,26 @@ export function registerPromoReality(app: FastifyInstance, pool: Pool, options: 
         if (!Number.isInteger(verified.width) || !Number.isInteger(verified.height)
             || verified.width < 1 || verified.height < 1 || verified.width > 16384 || verified.height > 16384) throw unavailable();
         const uploads = menuId === null ? null : await inStore(pool, scope.storeId, db => readAssets(db, scope.storeId));
+        const assetId = randomUUID();
+        let pendingAnalysis: Parameters<typeof queuePhotoAnalysis>[2] | undefined;
         if (uploads) {
           const catalog = await options.catalogForOwner(scope, uploads);
-          if (!catalog?.catalog.menus.some(menu => menu.menuId === menuId)) throw notFound();
+          const menu = catalog?.catalog.menus.find(menu => menu.menuId === menuId);
+          if (!menu) throw notFound();
+          if (options.bindPhoto) {
+            const resourceId = `analysis-${fileId}`;
+            const binding = await options.bindPhoto(scope, resourceId, { fileId, resourceId });
+            if (binding.sha256) pendingAnalysis = { ...binding, sha256: binding.sha256, menuName: menu.names.en };
+          }
         }
         return async (db, receiptId) => {
           if (uploads) await checkAssets(db, scope.storeId, uploads);
-          const assetId = randomUUID();
           const { rowCount } = await db.query(`
             INSERT INTO marketing.promo_asset (store_id, asset_id, file_id, menu_id, width, height)
             VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (store_id, file_id) DO NOTHING`,
           [scope.storeId, assetId, fileId, menuId, verified.width, verified.height]);
           if (!rowCount) throw conflict('ASSET_ALREADY_REGISTERED');
+          if (pendingAnalysis) await queuePhotoAnalysis(db, scope.storeId, pendingAnalysis);
           return { receipt: receipt(receiptId, assetId, 1, sources.assets) };
         };
       });
@@ -238,9 +249,16 @@ export function registerPromoReality(app: FastifyInstance, pool: Pool, options: 
         }));
         const current = await options.catalogForOwner(scope, uploads);
         if (!current || current.exterior.width < 1 || current.exterior.height < 1) throw conflict('PROMO_SELECTION_UNAVAILABLE');
+        validateSelections(draft.input, current);
         const field = validateInput(draft.input, current.catalog, options.references);
         if (field) throw new PromoRouteError(400, 'BAD_REQUEST', { field });
         const input = draft.input as PromoInput;
+        const menu = input.menuIds.length === 1 ? current.catalog.menus.find(item => item.menuId === input.menuIds[0]) : undefined;
+        const price = menu && await options.readMenuPrice?.(scope, menu.names.ko);
+        const promotionFacts = menu && price ? {
+          menuName: menu.names[input.locale],
+          price: new Intl.NumberFormat(input.locale, { style: 'currency', currency: 'KRW' }).format(price),
+        } : undefined;
         const ids = [...input.photoIds, current.catalog.store.exteriorPhotoId];
         const photos = Object.fromEntries(await Promise.all(ids.map(async photoId => {
           if (!Object.hasOwn(current.photos, photoId)) throw conflict('PROMO_SELECTION_UNAVAILABLE');
@@ -252,7 +270,8 @@ export function registerPromoReality(app: FastifyInstance, pool: Pool, options: 
         return async (db, receiptId) => {
           await expectDraft(db, scope.storeId, draftId, expected);
           await checkAssets(db, scope.storeId, uploads);
-          const job = await insertPromoJob(db, scope, `r1-b16:${receiptId}`, fingerprint([draftId, expected]), input, { ...current, photos });
+          const job = await insertPromoJob(db, scope, `r1-b16:${receiptId}`, fingerprint([draftId, expected]), input,
+            { ...current, photos, promotionFacts, takeIndex: expected - 1 });
           await db.query(`UPDATE marketing.promo_draft SET job_id = $3, revision = $4, updated_at = clock_timestamp()
             WHERE store_id = $1 AND draft_id = $2`, [scope.storeId, draftId, job.job_id, expected + 1]);
           return { receipt: receipt(receiptId, job.job_id, 1, sources.drafts, 'promo-jobs') };

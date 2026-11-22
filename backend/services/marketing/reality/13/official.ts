@@ -12,6 +12,7 @@ type PopulationInput = {
 };
 type Snapshot = {
   region: string; coverageDate: string; kinds: OfficialKind[]; changes: ChangeInput[]; population: PopulationInput[];
+  fetchedAt?: string;
 };
 
 function officialUrl(value: string) {
@@ -44,12 +45,14 @@ export function importOfficialLocalSnapshot(pool: Pool, storeId: string, input: 
     return { ...band, sourceUrl: officialUrl(band.sourceUrl), referenceDate: day(band.referenceDate) };
   });
   return inStore(pool, storeId, async db => {
-    const coverage = await db.query(`INSERT INTO marketing.local_coverage AS existing (store_id, region, reference_date, kinds)
-      VALUES ($1, $2, $3, $4) ON CONFLICT (store_id)
-      DO UPDATE SET region = EXCLUDED.region, reference_date = EXCLUDED.reference_date, kinds = EXCLUDED.kinds
-      WHERE (existing.region, existing.reference_date, existing.kinds)
-        IS DISTINCT FROM (EXCLUDED.region, EXCLUDED.reference_date, EXCLUDED.kinds)`,
-    [storeId, input.region, coverageDate, input.kinds]);
+    const coverage = await db.query(`INSERT INTO marketing.local_coverage AS existing (store_id, region, reference_date, kinds, fetched_at)
+      VALUES ($1, $2, $3, $4, $5) ON CONFLICT (store_id)
+      DO UPDATE SET region = EXCLUDED.region, reference_date = EXCLUDED.reference_date, kinds = EXCLUDED.kinds,
+        fetched_at = coalesce(EXCLUDED.fetched_at, existing.fetched_at)
+      WHERE (existing.fetched_at IS NULL OR EXCLUDED.fetched_at >= existing.fetched_at)
+        AND (existing.region, existing.reference_date, existing.kinds, existing.fetched_at)
+          IS DISTINCT FROM (EXCLUDED.region, EXCLUDED.reference_date, EXCLUDED.kinds, coalesce(EXCLUDED.fetched_at, existing.fetched_at))`,
+    [storeId, input.region, coverageDate, input.kinds, input.fetchedAt ?? null]);
     const changed = await db.query(`INSERT INTO marketing.local_change AS existing
       (store_id, id, kind, title, region, authority, source_url, date_kind, reference_date)
       SELECT $1, row.id, row.kind, row.title, $2, row.authority, row."sourceUrl", row."dateKind", row."referenceDate"
@@ -58,10 +61,10 @@ export function importOfficialLocalSnapshot(pool: Pool, storeId: string, input: 
       ON CONFLICT (store_id, id) DO UPDATE SET title = EXCLUDED.title, region = EXCLUDED.region,
         authority = EXCLUDED.authority, source_url = EXCLUDED.source_url, reference_date = EXCLUDED.reference_date,
         revision = existing.revision + 1, imported_at = clock_timestamp()
-      WHERE existing.kind = EXCLUDED.kind AND
+      WHERE existing.kind = EXCLUDED.kind AND existing.imported_at <= coalesce($4::timestamptz, existing.imported_at) AND
         (existing.title, existing.region, existing.authority, existing.source_url, existing.reference_date)
           IS DISTINCT FROM (EXCLUDED.title, EXCLUDED.region, EXCLUDED.authority, EXCLUDED.source_url, EXCLUDED.reference_date)`,
-    [storeId, input.region, JSON.stringify(changes)]);
+    [storeId, input.region, JSON.stringify(changes), input.fetchedAt ?? null]);
     await db.query(`INSERT INTO marketing.local_population_band AS existing
       (store_id, region, quarter, weekday, start_hour, end_hour, estimate, reference_date, refreshed_at, source_url)
       SELECT $1, $2, row.quarter, row.weekday, row."startHour", row."endHour", row.estimate,

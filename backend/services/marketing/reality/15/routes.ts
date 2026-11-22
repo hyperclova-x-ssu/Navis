@@ -4,12 +4,12 @@ import type { Pool } from 'pg';
 import { inStore } from '../../transaction.ts';
 import { businessDay, clockOf } from '../19/wire.ts';
 import { execute, undoNoticeDeletion } from './commands.ts';
-import { createTalkTalkInbox, liveInboxPrefix, liveTalkTalkConversation } from './inbox.ts';
+import { createTalkTalkInbox, inboxTalkTalkConversation, liveInboxPrefix, virtualInboxPrefix } from './inbox.ts';
 import type { NoticeReplyOptions, Owner } from './ports.ts';
 import { ensureRecipientGroup, listRecipientGroups, parseGroupId } from './recipients.ts';
 import { byReceipt, dto, get, list } from './records.ts';
 import { dispatchStatus, noticeSmsPreview, registerNoticeSmsDispatch } from './sms-dispatch.ts';
-import type { Kind, Notice } from './records.ts';
+import type { Inquiry, Kind, Notice } from './records.ts';
 import { createLiveTalkTalk, registerLiveTalkTalkWebhook } from './talktalk-live.ts';
 import { authorNotification, choice, date, nightNoticeHint, NoticeError, object, publicReply, redactReviewContact, reference, text, uuid } from './wire.ts';
 import type { Operation } from './wire.ts';
@@ -23,6 +23,7 @@ type Request = FastifyRequest<{ Params: Params }>;
 export const noticeReplyRoutes = [
   ['GET', '/inquiries'], ['POST', '/inquiries'], ['GET', '/inquiries/:id'],
   ['PATCH', '/inquiries/:id/draft'], ['POST', '/inquiries/:id/attestation'],
+  ['POST', '/inquiries/:id/navis-draft-preview'],
   ['POST', '/inquiries/:id/reply'], ['PATCH', '/inquiries/:id/reply'], ['DELETE', '/inquiries/:id/reply'],
   ['GET', '/notices'], ['POST', '/notices'], ['GET', '/notices/:id'],
   ['PATCH', '/notices/:id/draft'], ['POST', '/notices/:id/attestation'], ['DELETE', '/notices/:id/draft'],
@@ -37,8 +38,9 @@ export const noticeReplyRoutes = [
 ] as const;
 
 export function registerNoticeReplyRoutes(app: FastifyInstance, pool: Pool, options: NoticeReplyOptions) {
-  if (!options.gatewayToken || options.scheduledSms && !['fake', 'virtual'].includes(options.scheduledSms.mode) || options.provider && options.provider.mode !== 'fake' && options.provider.mode !== 'virtual') {
-    throw new Error('B15 requires a workload token and a fake or virtual provider');
+  if (!options.gatewayToken || options.scheduledSms?.mode === 'live' && !options.scheduledSms.settings
+    || options.provider && options.provider.mode !== 'fake' && options.provider.mode !== 'virtual') {
+    throw new Error('Invalid B15 provider binding');
   }
   const token = digest(`Bearer ${options.gatewayToken}`);
   const clock = options.now ?? (() => new Date());
@@ -163,6 +165,38 @@ export function registerNoticeReplyRoutes(app: FastifyInstance, pool: Pool, opti
       if (!port) throw new NoticeError(503, 'PROVIDER_UNAVAILABLE');
       return port;
     }
+    route('POST', '/inquiries/:id/navis-draft-preview', async (scope, req) => {
+      object(req.body ?? {}, []);
+      object(req.query, []);
+      const ports = read(options.talkTalkDraft);
+      const row = await inStore(pool, scope.storeId, db => get(db, scope.storeId, 'inquiry', uuid(req.params.id)));
+      const inquiry = row.data as Inquiry;
+      const talkTalk = row.source === 'talktalk' && inquiry.type === 'message' && row.providerRef;
+      const reviewRef = row.source === 'review' && inquiry.type === 'review' && row.providerRef;
+      if (row.status === 'done' || (!talkTalk && !reviewRef && row.source !== 'manual')) {
+        throw new NoticeError(409, 'REPLY_NOT_ALLOWED');
+      }
+      let original = inquiry.text;
+      if (!original?.trim() && talkTalk) {
+        const thread = await read(provider?.consultation)(scope, talkTalk);
+        if (thread.status === 'blocked' || thread.status === 'spam') throw new NoticeError(409, 'REPLY_NOT_ALLOWED');
+        const messages = thread.messages.filter(message => message.text?.trim());
+        original = messages.findLast(message => message.from === 'user')?.text
+          ?? (thread.status === 'waiting' && messages.length === 1 && !messages[0].from ? messages[0].text : null);
+      }
+      if (!original?.trim() && reviewRef) {
+        const review = await read(provider?.review)(scope, reviewRef);
+        if (review.hasReply) throw new NoticeError(409, 'REPLY_NOT_ALLOWED');
+        original = review.text;
+      }
+      if (!original?.trim()) throw new NoticeError(422, 'DRAFT_UNGROUNDED');
+      const facts = await ports.facts({ ...scope, ...clockOf(req) });
+      const text = await ports.draft({ inquiry: redactReviewContact([...original].slice(0, 4000).join('')), facts });
+      const available = new Set(facts);
+      const used = text.split('\n').map(line => line.trim()).filter(line => available.has(line));
+      if (!used.length) throw new NoticeError(422, 'DRAFT_UNGROUNDED');
+      return { text: inquiry.type === 'review' ? publicReply(text) : text, source: 'navis', facts: used };
+    });
     route('GET', '/reviews', async (scope, req) => {
       const query = object(req.query, ['view', 'product', 'rating', 'hasReply', 'sort']);
       const view = choice(query.view ?? 'venue', ['venue', 'booking'] as const);
@@ -209,10 +243,12 @@ export function registerNoticeReplyRoutes(app: FastifyInstance, pool: Pool, opti
     });
     route('GET', '/talktalk/consultations/:id', async (scope, req) => {
       const ref = reference(req.params.id);
-      if (!ref.startsWith(liveInboxPrefix)) return read(provider?.consultation)(scope, ref);
+      const live = ref.startsWith(liveInboxPrefix);
+      const prefix = live ? liveInboxPrefix : virtualInboxPrefix;
+      if (!ref.startsWith(prefix)) return read(provider?.consultation)(scope, ref);
       const { storeId } = scope;
-      const inquiryId = uuid(ref.slice(liveInboxPrefix.length));
-      const conversation = await inStore(pool, storeId, db => liveTalkTalkConversation(db, storeId, inquiryId, ref));
+      const inquiryId = uuid(ref.slice(prefix.length));
+      const conversation = await inStore(pool, storeId, db => inboxTalkTalkConversation(db, storeId, inquiryId, ref, live));
       if (!conversation) throw new NoticeError(404, 'NOT_FOUND');
       return conversation;
     });

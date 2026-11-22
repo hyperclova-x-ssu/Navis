@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 import type { Pool } from 'pg';
 import { createClient } from 'redis';
 import { checkVideo } from '../../../frontend/server/promo/recorder.mjs';
+import { loadReferences } from '../../../frontend/server/promo/references.mjs';
+import { readPromoKey } from '../../../frontend/server/promo/scene-provider.mjs';
+import { loadPhotoExamples } from '../../../frontend/server/promo/templates/runtime.mjs';
 import { PHOTO_META, fakeSpawn, refs, resultLine, sceneHtml, validStory } from '../../../frontend/server/promo/test/helpers.mjs';
 import { disposableReplayClock } from '../../packages/contracts/replay-clock.ts';
 import { dbPool, fileSecret, readSecret, requiredEnv } from '../../packages/db/index.ts';
@@ -17,17 +20,47 @@ import { createMarketingProvider } from '../../services/marketing/naver/index.ts
 import type { CatalogSnapshot, PromoInput } from '../../services/marketing/promo/contracts.ts';
 import { inStore } from '../../services/marketing/transaction.ts';
 import { createSensWire } from './naver/pn13-sens.ts';
+import { createLiveSens, liveSensRequested, loadLiveSens } from './naver/sens-live.ts';
 import { createNoticeSmsWorker, noticeSmsOperations } from './notice/sms.ts';
 import { createArtifactClient, createUsageClient } from './promo/clients.ts';
 import { createPromoConsumer } from './promo/events.ts';
-import { createFakePromoProvider } from './promo/providers.ts';
+import { loadLivePromo } from './promo/live.ts';
+import { createPhotoAnalysis } from './promo/photo-analysis.ts';
+import { analyzeCafePhotoSeed, cafePhotoSeedModels, importCafePhotoSeed } from './promo/photo-backfill.ts';
+import { createClaudePhotoProvider, createFakePromoProvider } from './promo/providers.ts';
 import { createPromoWorker } from './promo/worker.ts';
 import { dispatchTestSms, messageQueued } from './sens/events.ts';
+import { createCouponSmsDispatcher } from './sens/coupon-dispatch.ts';
+import { createSensSettingsReader } from '../../services/marketing/reality/15/sens-settings.ts';
 import type { FakeSensTransport, ProviderOutcome } from './sens/transport.ts';
 import { createSensWorker } from './sens/worker.ts';
 import { createSupplierWorker } from './supplier/index.ts';
 
 const clip = fileURLToPath(new URL('../../../frontend/server/promo/references/ref-1/preview.mp4', import.meta.url));
+
+async function createFixturePromoRuntime(database: Pool, storeId: string, scratch: string) {
+  const ffprobe = join(scratch, 'fake-ffprobe');
+  const ffmpeg = join(scratch, 'fake-ffmpeg');
+  await writeFile(ffprobe, [
+    '#!/bin/sh', 'for media do :; done',
+    `cmp -s "$media" "${clip}" || exit 1`,
+    'printf \'{"format":{"duration":10},"streams":[{"codec_type":"video","codec_name":"h264","width":720,"height":1280,"r_frame_rate":"30/1"},{"codec_type":"audio","codec_name":"aac"}]}\\n\'',
+    '',
+  ].join('\n'), { mode: 0o700 });
+  await writeFile(ffmpeg, '#!/bin/sh\nprintf "lavfi.signalstats.YAVG=80\\n"\n', { mode: 0o700 });
+  const gallery = loadReferences();
+  const fixtureReference = refs.refs.get('ref-1');
+  const references = { ...refs, refs: new Map([...gallery.refs].map(([id, reference]) => [id, {
+    ...reference, meta: { ...reference.meta, lengths: fixtureReference.meta.lengths },
+  }])) };
+  return {
+    provider: createFixturePromoProvider(database, storeId), references, music: [], musicDir: scratch,
+    checkScene: async () => ({ violations: [], checkMs: 0 }),
+    renderVideo: ({ outFile }: { outFile: string }) => copyFile(clip, outFile),
+    checkVideo: ({ file, lengthSec }: { file: string; lengthSec: number }) =>
+      checkVideo({ file, lengthSec, ffmpeg: { ffprobe, ffmpeg }, rules: refs.rules, width: 720, height: 1280, expectAudio: true, requireMotion: false }),
+  };
+}
 
 function createFixturePromoProvider(database: Pool, storeId: string) {
   const captions = {
@@ -125,7 +158,7 @@ function createFixtureSmsTransport(directory: string): FakeSensTransport {
 }
 
 async function main() {
-  if (process.env.NAVIS_PHASE3_FIXTURES !== '1') throw new Error('The local marketing worker requires fake providers');
+  if (process.env.NAVIS_PHASE3_FIXTURES !== '1') throw new Error('Marketing promo rendering requires the local fixture configuration');
   const stop = new AbortController();
   process.once('SIGTERM', () => stop.abort());
   process.once('SIGINT', () => stop.abort());
@@ -139,27 +172,53 @@ async function main() {
   database.on('error', () => console.error('Marketing database connection unavailable'));
   const scratch = await mkdtemp(join(tmpdir(), 'navis-fixture-'));
   try {
-    const ffprobe = join(scratch, 'fake-ffprobe');
-    const ffmpeg = join(scratch, 'fake-ffmpeg');
-    await writeFile(ffprobe, [
-      '#!/bin/sh', 'for media do :; done',
-      `cmp -s "$media" "${clip}" || exit 1`,
-      'printf \'{"format":{"duration":10},"streams":[{"codec_type":"video","codec_name":"h264","width":720,"height":1280,"r_frame_rate":"30/1"},{"codec_type":"audio","codec_name":"aac"}]}\\n\'',
-      '',
-    ].join('\n'), { mode: 0o700 });
-    await writeFile(ffmpeg, '#!/bin/sh\nprintf "lavfi.signalstats.YAVG=80\\n"\n', { mode: 0o700 });
     const storeId = fixtureStore;
-    const promo = createPromoWorker({
-      database, provider: createFixturePromoProvider(database, storeId), references: refs, music: [], musicDir: scratch,
-      artifacts: createArtifactClient({ baseUrl: requiredEnv('NAVIS_ACCOUNT_BASE_URL'),
-        token: fileSecret('NAVIS_MARKETING_ACCOUNT_TOKEN_FILE') }),
-      meter: createUsageClient({ baseUrl: requiredEnv('NAVIS_INSIGHT_BASE_URL'), token: fileSecret('NAVIS_PROMO_INSIGHT_TOKEN_FILE') }),
-      checkScene: async () => ({ violations: [], checkMs: 0 }),
-      renderVideo: async ({ outFile }) => copyFile(clip, outFile),
-      checkVideo: ({ file, lengthSec }) =>
-        checkVideo({ file, lengthSec, ffmpeg: { ffprobe, ffmpeg }, rules: refs.rules, width: 720, height: 1280, expectAudio: true }),
-      onError: code => console.error(code),
-    });
+    const importAt = process.argv.indexOf('--import-photo-backfill');
+    if (importAt !== -1) {
+      const path = process.argv[importAt + 1];
+      if (!path) throw new Error('Missing promo photo snapshot path');
+      const inserted = await importCafePhotoSeed(database, storeId, JSON.parse(await readFile(path, 'utf8')));
+      console.info('Promo café photo metadata imported', { inserted });
+      return;
+    }
+    const livePromo = process.env.NAVIS_PROMO_SCENE_PROVIDER === 'claude-api';
+    const runtime = livePromo
+      ? await loadLivePromo(process.env)
+      : await createFixturePromoRuntime(database, storeId, scratch);
+    const artifacts = createArtifactClient({ baseUrl: requiredEnv('NAVIS_ACCOUNT_BASE_URL'),
+      token: fileSecret('NAVIS_MARKETING_ACCOUNT_TOKEN_FILE') });
+    const meter = createUsageClient({ baseUrl: requiredEnv('NAVIS_INSIGHT_BASE_URL'), token: fileSecret('NAVIS_PROMO_INSIGHT_TOKEN_FILE') });
+    const photoAnalysis = livePromo ? createPhotoAnalysis({
+      database, preferredModels: cafePhotoSeedModels, examples: loadPhotoExamples(),
+      async load(storeId, { resourceId, fileId }, signal) {
+        const { bytes, mime } = await artifacts.read({ storeId, resourceId }, fileId, signal);
+        return { bytes, mediaType: mime };
+      },
+      invoke: (id, request) => runtime.provider.invoke('look', id, request),
+      async meter(storeId, attemptId, result) {
+        if (!result.usage) return;
+        await meter.record(storeId, { ...result.usage, ...runtime.provider.identity('look'),
+          attemptId, correlationId: attemptId, stage: 'look' }, stop.signal);
+      },
+    }) : undefined;
+    if (process.argv.includes('--photo-backfill')) {
+      if (!livePromo) throw new Error('Photo backfill requires live promo activation');
+      const vision = createClaudePhotoProvider({ approved: process.env.NAVIS_PROMO_CLAUDE_API_APPROVED === 'true',
+        apiKey: readPromoKey(process.env.ANTHROPIC_API_KEY_FILE) });
+      const seedAnalysis = createPhotoAnalysis({ database, analysisModel: vision.model, invoke: vision.invoke,
+        async load() { throw new Error('Photo backfill only accepts bundled photos'); },
+        async meter(storeId, attemptId, result) {
+          if (!result.usage) return;
+          await meter.record(storeId, { ...result.usage, model: vision.model, mode: 'image',
+            attemptId, correlationId: attemptId, stage: 'look' }, stop.signal);
+        },
+      });
+      const counts = await analyzeCafePhotoSeed(seedAnalysis, storeId, stop.signal);
+      console.info('Promo café photo analysis', counts);
+      if (counts.failed) process.exitCode = 1;
+      return;
+    }
+    const promo = createPromoWorker({ database, ...runtime, artifacts, meter, photoAnalysis, onError: code => console.error(code) });
     const sms = createSensWorker(database, {
       policy: createFixtureSms(fileSecret('NAVIS_FIXTURE_SMS_KEY_FILE'), process.env.NAVIS_FIXTURE_SMS_ENABLED === '1').policy,
       transport: createFixtureSmsTransport(requiredEnv('NAVIS_FIXTURE_SMS_STATE_DIR')),
@@ -179,6 +238,7 @@ async function main() {
     const noticeUrl = process.env.NAVIS_MARKETING_BASE_URL;
     const noticeTokenFile = process.env.NAVIS_MARKETING_SMS_WORKER_TOKEN_FILE;
     if (Boolean(noticeUrl) !== Boolean(noticeTokenFile)) throw new Error('Incomplete notice SMS dispatch settings');
+    const replayNow = disposableReplayClock();
     const virtual = supplierUrl || noticeUrl ? (() => {
       const directory = requiredEnv('NAVIS_NAVER_VIRTUAL_PROVIDER_CREDENTIALS_DIR');
       const file = (name: string) => join(directory, `nvirtual_${name}`);
@@ -198,6 +258,11 @@ async function main() {
         },
       };
     })() : undefined;
+    const sensEnabled = !replayNow && Boolean(virtual) && liveSensRequested();
+    const liveConfig = sensEnabled ? loadLiveSens() : undefined;
+    const live = liveConfig && virtual ? createLiveSens(liveConfig, { storeId: virtual.provider.storeId }) : undefined;
+    const readSettings = sensEnabled ? createSensSettingsReader(new URL(requiredEnv('NAVIS_ACCOUNT_BASE_URL')),
+      fileSecret('NAVIS_MARKETING_ACCOUNT_TOKEN_FILE')) : undefined;
     const supplier = supplierUrl && supplierTokenFile && virtual ? createSupplierWorker({
       inventoryUrl: new URL(supplierUrl), token: readSecret(supplierTokenFile), database, redis: streams, name: randomUUID(),
       provider: { ...virtual.provider, operationCredentialFiles: {
@@ -206,15 +271,19 @@ async function main() {
       } },
       serviceIds: { sms: readSecret(virtual.file('sms_service')), mail: readSecret(virtual.file('mail_service')) },
       senderNumber: readSecret(virtual.file('sms_sender')), senderAddress: readSecret(virtual.file('mail_sender')),
+      live, readSettings,
     }) : undefined;
-    const replayNow = disposableReplayClock();
     const notice = noticeUrl && noticeTokenFile && virtual ? createNoticeSmsWorker({
       marketingUrl: new URL(noticeUrl), token: readSecret(noticeTokenFile), storeId: virtual.provider.storeId,
       now: replayNow,
+      live, readSettings,
       sens: createSensWire(createMarketingProvider({ ...virtual.provider, mode: 'virtual', operations: noticeSmsOperations,
         operationCredentialFiles: { 'pn13.sms.send': virtual.file('sms_id') } }), {
         serviceIds: { sms: readSecret(virtual.file('sms_service')) }, clock: replayNow && { now: replayNow },
       }),
+    }) : undefined;
+    const couponSms = notice && sensEnabled && readSettings && virtual ? createCouponSmsDispatcher({
+      database, storeId: virtual.provider.storeId, sens: live, readSettings, readRecipient: notice.couponRecipient,
     }) : undefined;
     const interval = Number(process.env.NAVIS_PROMO_FIXTURE_STAGE_INTERVAL_MS ?? 250);
     if (!Number.isSafeInteger(interval) || interval < 250 || interval > 5_000) throw new Error('Invalid fixture stage interval');
@@ -231,7 +300,9 @@ async function main() {
       consumer.run(stop.signal),
       ...(supplier ? [supplier.consumer.run(stop.signal), poll(() => supplier.step(stop.signal), interval)] : []),
       ...(notice ? [poll(() => notice.step(stop.signal), Math.max(2_000, interval))] : []),
+      ...(couponSms ? [poll(() => couponSms(stop.signal), Math.max(2_000, interval))] : []),
       poll(async () => { await promo.runNext(storeId, stop.signal); }, interval),
+      ...(photoAnalysis ? [poll(async () => { await photoAnalysis.runNext(storeId, stop.signal); }, interval)] : []),
       poll(async () => {
         await sms.runNext(storeId);
         const pending = await inStore(database, storeId, db => db.query<{ receipt_id: string }>(`

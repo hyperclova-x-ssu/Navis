@@ -108,7 +108,9 @@ if (phase === 'before') {
   const bands = await checkTradeArea();
 
   const all = await readChanges('2026-07-01', '2026-11-30');
-  assert.deepEqual(all.coverage, { region: snapshot.region, referenceDate: snapshot.coverageDate, kinds: snapshot.kinds });
+  const fetchedAt = [...official.meta.events.files, ...official.meta.licenses.files].map(file => file.retrievedAt).sort().at(-1);
+  assert.deepEqual(all.coverage, { region: snapshot.region, referenceDate: snapshot.coverageDate, kinds: snapshot.kinds,
+    fetchedAt: new Date(fetchedAt).toISOString() });
   assert.equal(all.items.length, snapshot.changes.length);
   assert.equal(all.unreadCount, snapshot.changes.length);
   assert.equal(all.sourceRevision, 1, 'Two seed runs advance the local-changes revision once');

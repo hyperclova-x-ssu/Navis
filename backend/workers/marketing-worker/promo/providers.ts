@@ -1,10 +1,11 @@
 import type { Readable } from 'node:stream';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createClovaStudio } from '../../../../frontend/server/clova-studio.mjs';
 import { parseStream } from '../../../../frontend/server/promo/claude-runner.mjs';
 import { readConfig } from '../../../../frontend/server/promo/config.mjs';
 import { PromoError } from '../../../../frontend/server/promo/errors.mjs';
 import { createHcxRunner, HCX_PHOTO_MODEL, HCX_PROMO_MODEL } from '../../../../frontend/server/promo/hcx-runner.mjs';
-import { createClaudeCliRunner } from '../../../../frontend/server/promo/scene-provider.mjs';
+import { CAFE_PHOTO_ANALYSIS_MODEL, createClaudeApiRunner, createClaudeCliRunner, promoClaudeApiModel } from '../../../../frontend/server/promo/scene-provider.mjs';
 import type { PromoUsage } from '../../../services/insight/usage.ts';
 
 export type ModelStage = 'look' | 'story' | 'scenes';
@@ -18,6 +19,9 @@ export type ModelRequest = {
   prompt: string;
   schema: object;
   images?: { bytes: Buffer; mediaType: string; lookKey: string }[];
+  maxTokens?: number;
+  temperature?: number;
+  seed?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
 };
@@ -60,19 +64,13 @@ const createClaudeStage = createClaudeCliRunner as unknown as (options: {
   command: string; model: string; env: NodeJS.ProcessEnv; retries: number; spawnProcess: Spawn;
 }) => Runner;
 
-export function createFakePromoProvider({ env = process.env, naverFetch, claudeSpawn, reconcile }: FakeOptions): PromoProvider {
-  const config = readConfig(env);
-  if (config.sceneProvider === 'claude-api') throw new PromoError('AI_UNAVAILABLE', 'CLAUDE_API_NOT_APPROVED');
-  const usesClaude = (stage: ModelStage) => stage === 'scenes' && config.sceneProvider === 'claude';
-  const identity: PromoProvider['identity'] = stage => ({
-    model: usesClaude(stage) ? config.model : stage === 'look' ? HCX_PHOTO_MODEL : HCX_PROMO_MODEL,
-    mode: stage === 'look' ? 'image' : 'structured_outputs',
-  });
+function providerIdentity(stage: ModelStage, sceneModel: string): ReturnType<PromoProvider['identity']> {
+  if (stage === 'look') return { model: HCX_PHOTO_MODEL, mode: 'image' };
+  return { model: stage === 'story' ? HCX_PROMO_MODEL : sceneModel, mode: 'structured_outputs' };
+}
 
-  async function naver(stage: ModelStage, attemptId: string, request: ModelRequest): Promise<Recovery> {
-    const transport = createClovaTransport({
-      apiKey: attemptId, baseUrl: 'https://promo-fixture.invalid', fetchImpl: naverFetch(stage, attemptId),
-    });
+async function invokeNaver(stage: ModelStage, transport: ReturnType<typeof createClovaStudio>,
+  request: ModelRequest): Promise<Recovery> {
     const metering: HcxReport[] = [];
     const runner = createNaverStage({ stage, transport, retries: 0, beforeCall: () => {},
       onCall: (report: HcxReport) => { metering.push(report); } });
@@ -96,7 +94,70 @@ export function createFakePromoProvider({ env = process.env, naverFetch, claudeS
       outcome: report.httpStatus === 429 ? 'rate_limited' : error === 'AI_BAD_OUTPUT' ? 'invalid_output' : error ? 'error' : 'success',
     };
     return error ? { state: 'received', error, usage } : { state: 'received', output, usage };
+}
+
+export function createLivePromoProvider({ env = process.env, clovaKey, anthropicKey, fetchImpl = globalThis.fetch }: {
+  env?: NodeJS.ProcessEnv; clovaKey: string; anthropicKey: string; fetchImpl?: typeof fetch;
+}): PromoProvider {
+  const config = readConfig(env);
+  if (config.sceneProvider !== 'claude-api' || !config.claudeApiApproved || !config.hcxLookEnabled) {
+    throw new PromoError('AI_UNAVAILABLE', 'LIVE_PROMO_NOT_APPROVED');
   }
+  const scene = createClaudeApiRunner({ approved: true, apiKey: anthropicKey,
+    model: promoClaudeApiModel(env), fetchImpl, video: true });
+  const transport = createClovaTransport({ apiKey: clovaKey, baseUrl: 'https://clovastudio.stream.ntruss.com', fetchImpl });
+  if (!scene.available || !transport.available) throw new PromoError('AI_UNAVAILABLE', 'LIVE_PROMO_KEYS_MISSING');
+
+  return {
+    identity: stage => providerIdentity(stage, scene.model),
+    async invoke(stage, _attemptId, request) {
+      if (stage !== 'scenes') return invokeNaver(stage, transport, request);
+      return invokeClaude(scene, request);
+    },
+    // The providers offer no lookup by the caller's attempt ID.
+    reconcile: async () => ({ state: 'unknown' }),
+  };
+}
+
+async function invokeClaude(runner: ReturnType<typeof createClaudeApiRunner>, request: ModelRequest, maxTokens?: number): Promise<Recovery> {
+  if (request.signal?.aborted) return { state: 'not_sent' };
+  const started = Date.now();
+  try {
+    const { output, usage } = await runner.run({ ...request, maxTokens: maxTokens ?? request.maxTokens });
+    return { state: 'received', output, usage: {
+      latencyMs: Date.now() - started, outcome: 'success', inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+    } };
+  } catch (failure) {
+    const observed = failure as { httpStatus?: number | null; usage?: { inputTokens: number; outputTokens: number } };
+    if (!observed.httpStatus || observed.httpStatus >= 500) return { state: 'unknown' };
+    const error = errorCode(failure);
+    return { state: 'received', error, usage: {
+      latencyMs: Date.now() - started,
+      outcome: observed.httpStatus === 429 ? 'rate_limited' : error === 'AI_BAD_OUTPUT' ? 'invalid_output' : 'error',
+      inputTokens: observed.httpStatus < 300 ? observed.usage?.inputTokens ?? null : null,
+      outputTokens: observed.httpStatus < 300 ? observed.usage?.outputTokens ?? null : null,
+    } };
+  }
+}
+
+export function createClaudePhotoProvider({ approved, apiKey, fetchImpl = globalThis.fetch }: {
+  approved: boolean; apiKey: string; fetchImpl?: typeof fetch;
+}) {
+  let next = 0;
+  const runner = createClaudeApiRunner({ model: CAFE_PHOTO_ANALYSIS_MODEL, approved, apiKey, fetchImpl: async (url, init) => {
+    const at = Math.max(next, Date.now());
+    next = at + 5_000;
+    if (at > Date.now()) await delay(at - Date.now(), undefined, { signal: init?.signal ?? undefined });
+    return fetchImpl(url, init);
+  } });
+  if (!runner.available) throw new PromoError('AI_UNAVAILABLE', 'CLAUDE_PHOTO_BACKFILL_NOT_APPROVED');
+  return { model: runner.model, invoke: (_id: string, request: ModelRequest) => invokeClaude(runner, request, 1024) };
+}
+
+export function createFakePromoProvider({ env = process.env, naverFetch, claudeSpawn, reconcile }: FakeOptions): PromoProvider {
+  const config = readConfig(env);
+  if (config.sceneProvider === 'claude-api') throw new PromoError('AI_UNAVAILABLE', 'CLAUDE_API_NOT_APPROVED');
+  const usesClaude = (stage: ModelStage) => stage === 'scenes' && config.sceneProvider === 'claude';
 
   async function claude(attemptId: string, request: ModelRequest): Promise<Recovery> {
     const fake = claudeSpawn(attemptId);
@@ -137,8 +198,11 @@ export function createFakePromoProvider({ env = process.env, naverFetch, claudeS
   }
 
   return {
-    identity,
-    invoke: (stage, attemptId, request) => usesClaude(stage) ? claude(attemptId, request) : naver(stage, attemptId, request),
+    identity: stage => providerIdentity(stage, usesClaude(stage) ? config.model : HCX_PROMO_MODEL),
+    invoke: (stage, attemptId, request) => usesClaude(stage) ? claude(attemptId, request)
+      : invokeNaver(stage, createClovaTransport({
+        apiKey: attemptId, baseUrl: 'https://promo-fixture.invalid', fetchImpl: naverFetch(stage, attemptId),
+      }), request),
     reconcile: reconcile ?? (async () => ({ state: 'unknown' })),
   };
 }

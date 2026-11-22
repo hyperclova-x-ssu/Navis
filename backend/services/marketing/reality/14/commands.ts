@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { advertisingSmsText } from '../../sms-text.ts';
+import { advertisingSmsText, smsMessageType } from '../../sms-text.ts';
+import { configuredSensSettings, liveAdvertisingText, type SensSettings } from '../15/sens-settings.ts';
 import {
   benefitKinds, benefitOf, benefitProblem, benefitStored, couponCode, expiryEconomics, isNightHour, maxRatePercent,
   type Benefit, type BenefitType,
@@ -14,7 +15,7 @@ import {
   revisionAggregate, text, unavailable, uuid,
 } from './wire.ts';
 
-export type Ctx = Scope & { sources: CouponSources };
+export type Ctx = Scope & { sources: CouponSources; smsSettings?: (storeId: string) => Promise<SensSettings | null> };
 export type Receipt = {
   resourceId: string; revision: number; receiptId: string; changed: boolean; affectedSources: readonly string[];
   undoUntil?: string; [extra: string]: unknown;
@@ -46,18 +47,18 @@ function objectParticle(word: string) {
   return code % 28 === 0 ? '를' : '을';
 }
 const benefitText = (benefit: Benefit) => benefit.kind === 'percent' ? `${benefit.value}% 할인`
-  : benefit.kind === 'amount' ? `${won(benefit.value)}원 할인` : `세트 가격 ${won(benefit.value)}원`;
+  : benefit.kind === 'amount' ? `${won(benefit.value)}원 할인` : `지정 가격 ${won(benefit.value)}원`;
 const expiryName = (item: string, benefit: Benefit) => `${item} 오늘만 ${benefit.kind === 'percent' ? `${benefit.value}%` : benefitText(benefit)}`;
 function expirySms(item: string, benefit: Benefit) {
   const tail = '오늘 마감 전까지 쓸 수 있어요.';
   const object = `${item}${objectParticle(item)}`;
   if (benefit.kind === 'percent') return `${object} 오늘만 ${benefit.value}% 할인해요. ${tail}`;
   if (benefit.kind === 'amount') return `${object} 오늘만 ${won(benefit.value)}원 할인해요. ${tail}`;
-  return `${object} 오늘만 세트 가격 ${won(benefit.value)}원에 드려요. ${tail}`;
+  return `${object} 오늘만 ${won(benefit.value)}원에 드려요. ${tail}`;
 }
 export function postText(item: string, benefit: Benefit, code: string) {
   const what = benefit.kind === 'percent' ? `${item} ${benefit.value}% 할인` : benefit.kind === 'amount'
-    ? `${item} ${won(benefit.value)}원 할인` : `${item} 세트 가격 ${won(benefit.value)}원`;
+    ? `${item} ${won(benefit.value)}원 할인` : `${item} ${won(benefit.value)}원`;
   return `오늘만! ${what}. 계산할 때 쿠폰 코드를 보여 주세요: ${code}`;
 }
 function slotSms(slotName: string, from: string, to: string, until: string) {
@@ -123,18 +124,24 @@ async function insertCode(ctx: Ctx, couponId: string, route: CodeRow['route'], i
 
 /** Queue one message per consenting recipient for the approved SENS worker. Bodies and phones never enter events. */
 async function queueMessages(ctx: Ctx, couponId: string, codeId: string | null, recipients: readonly string[],
-  kind: 'coupon' | 'reminder', body: string, reason: 'slot-regular' | 'regular' | 'churn-risk' | null, sendAt: unknown) {
+  kind: 'coupon' | 'reminder', body: string, reason: 'slot-regular' | 'regular' | 'churn-risk' | null, sendAt: unknown, code?: string) {
   const schedule = scheduleSend(ctx, sendAt);
   const scheduledAt = instant(ctx, schedule.local);
-  // R1 queues FAKE previews. A6 must supply verified sender details and a working free opt-out (shared with notices).
-  const message = advertisingSmsText(body);
+  let message = advertisingSmsText(body);
+  if (ctx.smsSettings) {
+    const settings = await ctx.smsSettings(ctx.storeId);
+    if (!configuredSensSettings(settings)) throw conflict('SMS_SETTINGS_REQUIRED', 'recipientIds');
+    message = liveAdvertisingText(code ? body + '\n쿠폰 코드: ' + code : body, settings);
+    if (message.length > 1000 || !smsMessageType(message)) throw invalid('body', 'SMS_CONTENT_UNSUPPORTED');
+  }
   const ids: string[] = [];
   for (const customerId of recipients) {
     const messageId = randomUUID();
     ids.push(messageId);
     await ctx.db.query(`INSERT INTO marketing.coupon_message (store_id, message_id, coupon_id, customer_id, kind, body, scheduled_at,
-        is_night, status, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'queued',$9)`,
-    [ctx.storeId, messageId, couponId, customerId, kind, message, scheduledAt, schedule.night, ctx.now]);
+        is_night, status, created_at, dispatch_state) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'queued',$9,$10)`,
+    [ctx.storeId, messageId, couponId, customerId, kind, message, scheduledAt, schedule.night, ctx.now,
+      ctx.smsSettings ? 'ready' : null]);
     if (codeId && reason) {
       await ctx.db.query(`INSERT INTO marketing.coupon_target (store_id, code_id, customer_id, coupon_id, reason, message_id)
         VALUES ($1,$2,$3,$4,$5,$6)`, [ctx.storeId, codeId, customerId, couponId, reason, messageId]);
@@ -198,7 +205,7 @@ async function slotIssue(ctx: Ctx, body: unknown, events: Event[]): Promise<Outc
     endsOn, status: 'active', originRef: { slotIds: ids, benefitId }, basis: null, futureIssueCount: null, lotKey: null,
   });
   const { codeId, code } = await insertCode(ctx, couponId, 'sms', recipients.length, true);
-  const queued = await queueMessages(ctx, couponId, codeId, recipients, 'coupon', message, 'slot-regular', input.sendAt);
+  const queued = await queueMessages(ctx, couponId, codeId, recipients, 'coupon', message, 'slot-regular', input.sendAt, code);
   events.push(codeEvent({ codeId, couponId, code, route: 'sms', issueCount: recipients.length }, 1, 'issued'),
     { type: 'marketing.message_queued.v1', aggregateId: couponId,
       payload: { couponId, codeId, kind: 'coupon', count: recipients.length, scheduledAt: queued.scheduledAt } });
@@ -249,7 +256,7 @@ async function expiryCreate(ctx: Ctx, body: unknown, events: Event[]): Promise<O
     const recipients = regulars.filter((row: Recipient) => row.marketingAllowed && row.recentVisitCount >= 2).map(row => row.customerId);
     if (!recipients.length) throw invalid('route', 'NO_RECIPIENTS');
     const { codeId, code } = await insertCode(ctx, couponId, 'sms', recipients.length, true);
-    const queued = await queueMessages(ctx, couponId, codeId, recipients, 'coupon', expirySms(menu.name, benefit), 'regular', undefined);
+    const queued = await queueMessages(ctx, couponId, codeId, recipients, 'coupon', expirySms(menu.name, benefit), 'regular', undefined, code);
     events.push(codeEvent({ codeId, couponId, code, route, issueCount: recipients.length }, 1, 'issued'),
       { type: 'marketing.message_queued.v1', aggregateId: couponId,
         payload: { couponId, codeId, kind: 'coupon', count: recipients.length, scheduledAt: queued.scheduledAt } });
