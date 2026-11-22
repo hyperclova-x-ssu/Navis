@@ -61,7 +61,9 @@ function projectTables(manuals: readonly ManualDto[], drafts: readonly DraftDto[
   return {
     manual: manuals.map((row): InsightManual => ({ manualId: row.id, title: raw(row.title), section: row.section, category: row.category,
       cautions: raw(row.cautions), isPublished: row.isPublished, updatedAt: row.updatedAt, businessDay })),
-    manualStep: manuals.flatMap(row => (row.section === 'store-info' ? row.body ? [{ body: row.body }] : [] : row.steps)
+    manualStep: manuals.flatMap(row => (row.section === 'store-info'
+      ? [{ body: row.body.trim() || row.steps.map(step => step.body).join('\n') }].filter(step => step.body.trim())
+      : row.steps)
       .map((step, index) => ({ ...step, manualId: row.id, stepNo: index + 1, body: raw(step.body) }))),
     manualDraft: drafts.map(row => ({ draftId: row.id, section: row.section, category: row.category, memo: row.memo,
       title: raw(row.title), cautions: raw(row.cautions), steps: row.section === 'store-info' ? [raw(row.body)] : row.steps.map(step => raw(step.body)), status: row.status })),

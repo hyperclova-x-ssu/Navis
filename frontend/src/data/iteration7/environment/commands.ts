@@ -1,6 +1,7 @@
 import type { DataCommandResult } from '../../commands/types';
 import { selectStoreEnvironment } from './selectors';
-import type { EnvironmentPlayerCommand, EnvironmentTables, StoreEnvironment, StoreEnvironmentModel } from './types';
+import { staffLocalTimestamp } from '../staff/clock';
+import type { EnvironmentPlayerCommand, EnvironmentTables, ObservationCommand, StoreEnvironment, StoreEnvironmentModel } from './types';
 
 type Failure = Extract<DataCommandResult, { ok: false }>;
 type Context<T extends EnvironmentTables> = { readonly tables: T; readonly snapshot: { readonly revision: number; readonly tables?: T } };
@@ -51,9 +52,32 @@ function handle<T extends EnvironmentTables>(ctx: Context<T>, c: EnvironmentPlay
   return { ok: true, tables, undoable: false, ...(changed ? { noticeKey: receiptKeys[c.type] } : {}), value: selectStoreEnvironment({ tables }).music };
 }
 const realOnly = (): Failure => ({ ok: false, code: 'CONFLICT', reason: 'REAL_ONLY', messageKey: 'data.real.error.SOURCE_UNAVAILABLE' });
+const between = (value: number, min: number, max: number) => Number.isFinite(value) && value >= min && value <= max;
+function recordReading<T extends EnvironmentTables>({ tables }: Context<T>, command: Extract<ObservationCommand, { type: 'environment.recordReading' }>) {
+  const { measuredAt, temperatureC, humidityPct } = command;
+  if (!Number.isFinite(Date.parse(measuredAt)) || !between(temperatureC, -50, 80) || !between(humidityPct, 0, 100)) {
+    return { ok: false, code: 'VALIDATION', messageKey: 'data.real.error.VALIDATION' } as const;
+  }
+  const environment = tables.storeEnvironment;
+  const { date, time } = staffLocalTimestamp(measuredAt);
+  const reading = { measuredAt: `${date}T${time}`, temperatureC, humidityPct };
+  const readings = [...environment.readings.filter(row => row.measuredAt !== reading.measuredAt), reading].sort((a, b) => a.measuredAt.localeCompare(b.measuredAt));
+  return { ok: true, undoable: false, tables: { ...tables, storeEnvironment: { ...environment, readings, current: readings.at(-1)! } } } as const;
+}
+function updateLimits<T extends EnvironmentTables>({ tables }: Context<T>, command: Extract<ObservationCommand, { type: 'environment.updateLimits' }>) {
+  const environment = tables.storeEnvironment;
+  const revision = environment.limitsRevision ?? 0;
+  if (command.expectedRevision !== revision) return { ok: false, code: 'CONFLICT', reason: 'STALE_REVISION', messageKey: 'data.real.error.STALE_REVISION' } as const;
+  const { temperatureRange, humidityRange } = command;
+  if (!between(temperatureRange[0], -50, temperatureRange[1]) || !between(temperatureRange[1], -50, 80)
+    || !between(humidityRange[0], 0, humidityRange[1]) || !between(humidityRange[1], 0, 100)) {
+    return { ok: false, code: 'VALIDATION', messageKey: 'data.real.error.VALIDATION' } as const;
+  }
+  return { ok: true, undoable: false, tables: { ...tables, storeEnvironment: { ...environment, temperatureRange, humidityRange, limitsRevision: revision + 1 } } } as const;
+}
 export const environmentHandlers = {
   'environment.setPlaying': handle, 'environment.skipTrack': handle,
   'environment.selectPlaylist': handle, 'environment.selectTrack': handle, 'environment.setVolume': handle,
-  'environment.recordReading': realOnly, 'environment.updateLimits': realOnly,
+  'environment.recordReading': recordReading, 'environment.updateLimits': updateLimits,
   'cctv.saveZones': realOnly, 'cctv.setTableLink': realOnly,
 };

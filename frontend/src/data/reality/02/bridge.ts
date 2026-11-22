@@ -6,7 +6,7 @@
 import type { PosCommandValue, PosMethod, PosPlan, PosReadSnapshot, PosResult, PosTableView } from '../../../contracts/pos';
 import { PortError } from '../00/port';
 import { toPortError } from '../00/transport';
-import type { PosBillDto, PosBillLinkDto, PosCommandReceiptDto, PosReceiptDto, PosReversalQuoteDto, PosTableDto } from './dto';
+import type { PosBillDto, PosBillLinkDto, PosCommandReceiptDto, PosQuoteDto, PosReceiptDto, PosReversalQuoteDto, PosTableDto } from './dto';
 import { projectPosState } from './project';
 import type { CheckoutInput, PosRemote, ReversalInput, SubmitOrderInput } from './remote';
 import type { TerminalInput } from './requests';
@@ -32,7 +32,7 @@ export interface BridgeDeps {
 
 export type CheckoutOutcome =
   | { readonly status: 'paid'; readonly orderNo: number | undefined; readonly paymentId: string; readonly billId: string }
-  | { readonly status: 'quote-changed'; readonly billId: string; readonly payable: number }
+  | { readonly status: 'quote-changed'; readonly billId: string; readonly payable: number; readonly quote?: PosQuoteDto }
   | { readonly status: 'failed'; readonly reason: string; readonly field?: string; readonly outcomeUnknown: boolean };
 export type CommandOutcome = { readonly ok: true; readonly receipt: PosCommandReceiptDto & PosBillLinkDto } | { readonly ok: false; readonly reason: string; readonly outcomeUnknown: boolean };
 type CartVersion = Pick<PosReadSnapshot['pos']['cart'], 'cartId' | 'revision'>;
@@ -45,6 +45,7 @@ export interface CheckoutRequest {
   readonly expectedPayable: number;
   readonly billId?: string;
   readonly member?: CheckoutInput['member'];
+  readonly pass?: CheckoutInput['pass'];
   readonly coupon?: CheckoutInput['coupon'];
 }
 
@@ -188,9 +189,10 @@ export function createPosBridge(deps: BridgeDeps): PosBridge {
         const result = await remote.checkout({
           attemptId: request.attemptId, type: cart.type,
           lines: linesOf(cart), method: request.method, terminal: request.terminal, expectedPayable: request.expectedPayable, billId: request.billId, member: request.member,
-          coupon: request.coupon,
+          coupon: request.coupon, pass: request.pass,
         });
-        if (result.status === 'quote-changed') return { status: 'quote-changed', billId: result.billId, payable: result.quote.payable };
+        if (result.status === 'quote-changed') return { status: 'quote-changed', billId: result.billId, payable: result.quote.payable,
+          ...(request.pass && { quote: result.quote }) };
         // The sale is recorded. Publish it (and empty the cart only if the owner did not change it meanwhile).
         const clearCart = bills.get(result.receipt.billId)?.orderIds?.length ? undefined : cart;
         await afterReceipt(clearCart, result.receipt.affectedSources, signal, !!request.coupon || !!request.member);

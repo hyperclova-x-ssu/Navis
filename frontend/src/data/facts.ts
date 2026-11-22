@@ -184,6 +184,14 @@ export function posReadForFacts(snapshot: DataSnapshot): PosReadSnapshot | null 
     posUi: { tab: 'order', approval: null, cartUndo: null }, dataRevision: snapshot.revision,
     settings: snapshot.tables.shopSettings, scenario: 'normal', data: selectPosDataRead(snapshot) };
 }
+/** "11월 22일(일)" for an ISO date; the evidence line shows this, never "2026-11-22". */
+export function humanDate(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(iso);
+  if (!match) return iso;
+  const [, year, month, day] = match;
+  const weekday = '일월화수목금토'[new Date(Date.UTC(Number(year), Number(month) - 1, Number(day))).getUTCDay()];
+  return `${Number(month)}월 ${Number(day)}일(${weekday})`;
+}
 export function selectPosFacts(read: PosReadSnapshot): readonly ModelFact[] {
   const summary = selectOrderSummary(read), totals = selectM2DayTotals(read.pos), drawer = selectM2Drawer(read.pos);
   const source=read.data.source as DataSnapshot | undefined;
@@ -192,7 +200,8 @@ export function selectPosFacts(read: PosReadSnapshot): readonly ModelFact[] {
   const map=new Map(selectTableMap(read).tables.map(t=>[t.tableId,t]));
   const links=tableLinksEnabled(read.settings) ? cctvPosLinks(read.settings) : [];
   const linked=links.filter(l=>map.has(l.tableId));
-  const date = read.pos.businessDate, asOf = { key: 'data.pos.asOf', params: { date, time: POS_NOW_TIME } };
+  // The evidence line names the day once (its period); the as-of stamp adds only the time.
+  const date = read.pos.businessDate, asOf = { key: 'data.pos.asOf', params: { time: POS_NOW_TIME } };
   const f = (key: string, value: number | string, unit: ModelFact['unit'] = ''): ModelFact => fact(key, value, unit, { date, source: asOf,...(key.startsWith('pos.method.')?{labelText:{raw:key.endsWith('.card')?'카드 판매분':key.endsWith('.cash')?'현금 판매분':'간편결제 판매분'}}:{}) }, `data.pos.fact.${key}`);
   return [f('orders.today.count', summary.todayCount, 'order'), f('orders.open.count', summary.openCount, 'order'),
     f('orders.missing.count', summary.missingCount, 'order'), f('orders.slow.count', summary.slowCount, 'order'),

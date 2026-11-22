@@ -16,6 +16,7 @@ import type { PosServerRows } from './project';
 import { billBody, orderLinesBody, paymentBody, POS_PATH, terminalBody, type CartLineInput, type TableRevision, type TerminalInput } from './requests';
 import { abortClaim, claimFirstOrder, type FirstOrderReservation } from '../06/first-order';
 import { redemptionPath, type CheckoutCoupon, type CouponQuote, type CouponQuoteLine } from '../14/dto';
+import type { MemberPassDto } from '../05/dto';
 
 export interface PosRemoteOptions {
   readonly transport: PortTransport;
@@ -39,6 +40,12 @@ export interface CheckoutInput {
   readonly discount?: number;
   readonly coupon?: CheckoutCoupon;
   readonly member?: { readonly memberId: string; readonly allocation: 'method' | 'charge' | 'receivable' };
+  readonly pass?: {
+    readonly membershipId: string;
+    readonly kind: 'membership_count' | 'membership_period';
+    readonly line: { readonly allocationId: string } | { readonly index: number };
+    readonly expectedCoverage: number;
+  };
 }
 export interface SubmitOrderInput {
   readonly lines: readonly CartLineInput[]; readonly key: string;
@@ -71,6 +78,7 @@ export interface PosRemote {
   cleanTable(table: TableRevision, key: string): Promise<PosCommandReceiptDto>;
   members(query: string, cursor?: string, signal?: AbortSignal): Promise<import('../00/port').ListPage<PosMemberChoice>>;
   memberBalance(memberId: string, signal?: AbortSignal): Promise<{ readonly chargeBalance: number; readonly receivableBalance: number }>;
+  memberPasses(memberId: string, signal?: AbortSignal): Promise<readonly MemberPassDto[]>;
   /** Voids an open unpaid bill (an abandoned checkout). */
   voidBill(billId: string, key: string): Promise<PosCommandReceiptDto>;
   setPreparation(orderId: string, status: 'preparing' | 'completed', expectedRevision: number, key: string): Promise<PosCommandReceiptDto>;
@@ -205,8 +213,21 @@ export function createPosRemote(options: PosRemoteOptions): PosRemote {
       }
       if (input.member) {
         const { memberId, allocation } = input.member;
-        const allocations = [allocation === 'method' ? { kind: allocation, method: input.method, amount: quote.payable } : { kind: allocation, amount: quote.payable }];
-        const terminal = allocation === 'method' && input.method !== 'cash' ? paymentBody(input.method, quote.payable, quote.quoteRevision, input.terminal).terminal : undefined;
+        const pass = input.pass;
+        const target = pass?.line;
+        const line = target && ('allocationId' in target
+          ? quote.lines.find(line => line.allocationId === target.allocationId)
+          : quote.lines[target.index]);
+        if (pass && !line) throw new PortError(409, 'CONFLICT', 'MEMBERSHIP_UNAVAILABLE');
+        const coverage = pass && line ? Math.floor(line.amount / line.qty) : 0;
+        if (pass && coverage !== pass.expectedCoverage) return { status: 'quote-changed', billId, quote };
+        const amount = quote.payable - coverage;
+        const tender = allocation === 'method' ? { kind: allocation, method: input.method, amount } : { kind: allocation, amount };
+        const allocations = [
+          ...(pass && line ? [{ kind: pass.kind, membershipId: pass.membershipId, allocationId: line.allocationId, quantity: 1 }] : []),
+          ...(amount > 0 ? [tender] : []),
+        ];
+        const terminal = amount > 0 && allocation === 'method' && input.method !== 'cash' ? paymentBody(input.method, amount, quote.quoteRevision, input.terminal).terminal : undefined;
         const body = { memberId, allocations };
         const memberQuote = await transport.request<PosMemberQuote>({ method: 'POST', path: `${path}/member-quote`, body, signal });
         const request = { method: 'POST' as const, path: `${path}/member-payments`, body: { ...body, quoteRevision: memberQuote.quoteRevision, accountRevision: memberQuote.accountRevision, ...(terminal ? { terminal } : {}) }, signal };
@@ -246,6 +267,11 @@ export function createPosRemote(options: PosRemoteOptions): PosRemote {
     },
     memberBalance(memberId, signal) {
       return reads.one({ resource: 'pos.member-account', path: `${POS_PATH}/member-accounts/${encodeURIComponent(memberId)}` }, { signal });
+    },
+    async memberPasses(memberId, signal) {
+      const page = await reads.all<MemberPassDto>({ resource: 'pos.member-passes', path: '/memberships',
+        query: { memberId, status: 'active', limit: PAGE } }, { maxPages: MAX_PAGES, signal });
+      return page.items;
     },
 
     async voidBill(billId, key) {

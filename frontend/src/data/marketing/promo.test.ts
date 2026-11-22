@@ -77,13 +77,18 @@ describe('one photo number everywhere (AC-324): widget · window · today’s pr
     expect(model.store).toMatchObject({
       name: '안숭잘부 카페', exteriorPhotoId: 'cafe-storefront', exteriorUrl: '/api/promo/photos/cafe-storefront',
     });
-    expect(model.photoCount).toBe(36);
+    expect(model.photoCount).toBe(177);
     expect(model.canMake).toBe(true);
-    expect(model.menus).toHaveLength(24);
-    for (const menuId of ['m-americano', 'm-cafe-latte', 'm-vanilla-latte', 'm-saltbread', 'm-dolce-latte', 'm-deep-choco']) {
-      expect(model.menus.find(m => m.menuId === menuId)?.photos).toHaveLength(6);
+    expect(model.menus).toHaveLength(25);
+    for (const menuId of ['m-americano', 'm-cafe-latte', 'm-vanilla-latte', 'm-dolce-latte', 'm-deep-choco', 'm-strawberry-cake']) {
+      expect(model.menus.find(m => m.menuId === menuId)?.photos).toHaveLength(10);
     }
-    expect(model.menus.find(m => m.menuId === 'm-coldbrew')?.photos).toEqual([]);
+    expect(model.menus.find(m => m.menuId === 'm-saltbread')?.photos).toHaveLength(14);
+    for (const menuId of ['m-bagel-plain', 'm-basque-cake', 'm-cookie-choco']) {
+      expect(model.menus.find(m => m.menuId === menuId)?.photos).toHaveLength(9);
+    }
+    expect(model.menus.find(m => m.menuId === 'm-chestnut-latte')?.photos).toHaveLength(6);
+    expect(model.menus.filter(m => m.photos.length === 5)).toHaveLength(14);
   });
 
   it('seed 10: materials = photos = financier photos = today’s “영상에 쓸 매장 사진 10장”', () => {
@@ -142,7 +147,7 @@ describe('video.make (AC-329~332·335)', () => {
     bad({ concepts: [] }, 'concepts');
     bad({ concepts: ['x'] }, 'concepts');
     bad({ memo: 'a'.repeat(101) }, 'memo');
-    bad({ referenceId: 'ref-7' }, 'referenceId');
+    bad({ referenceId: 'ref-19' }, 'referenceId');
     bad({ lengthSec: 20 }, 'lengthSec');
     bad({ locale: 'ja' }, 'locale');
     expect(store.getSnapshot().revision).toBe(0);

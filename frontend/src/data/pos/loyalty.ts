@@ -10,7 +10,7 @@ import { deepFreeze } from '../db/freeze';
 export function selectPosLoyaltyRead(snapshot: DataSnapshot): PosLoyaltyRead {
   const t = snapshot.tables, m = t.marketing, date = snapshot.pos?.businessDate ?? TODAY;
   return deepFreeze({
-    members: selectMembers(snapshot, {}).rows.map(r => ({ memberId: r.memberId, customerId: r.customerId, name: r.name, phone: r.phone, grade: r.grade, recentVisits: r.recentVisits })),
+    members: selectMembers(snapshot, {}).rows.map(r => ({ memberId: r.memberId, memberCode: r.memberCode, customerId: r.customerId, name: r.name, phone: r.phone, grade: r.grade, recentVisits: r.recentVisits })),
     passes: snapshot.pos?.money ? selectMemberships(moneyReadBase(snapshot)).memberships.map(p=>({membershipId:p.membershipId,memberId:p.memberId,nameKey:t.membershipProduct.find(x=>x.productId===p.productId)?.nameKey??'',kind:p.productId==='p-americano10'?'americano' as const:p.productId==='p-morning20'?'morning' as const:p.productId==='p-monthly'?'monthly' as const:'unsupported' as const,startsOn:p.startsOn,endsOn:p.endsOn,active:p.status==='active',usesLeft:p.usesRemaining,dailyLimit:p.dailyLimit??null,usedToday:p.uses.filter(u=>!u.canceledAt&&u.at.startsWith(date)).length})) : t.membership.map(p => {
       const product = t.membershipProduct.find(x => x.productId === p.productId);
       const kind = p.productId === 'p-americano10' ? 'americano' as const : p.productId === 'p-morning20' ? 'morning' as const : p.productId === 'p-monthly' ? 'monthly' as const : 'unsupported' as const;

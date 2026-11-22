@@ -1,6 +1,6 @@
 import { createTranslator } from '../../../i18n/translator';
 import { addDays, weekdayOf } from '../../db/time';
-import { maskCustomer } from '../../derive/members';
+import { formatMaskedCustomer } from '../../customer-display';
 import { couponBenefit } from '../../marketing/benefit';
 import { belowPercent, benefitComparison, expiryDiscount, PUBLIC_ISSUE_LIMIT, QUIET_THRESHOLD_PERCENT,
   RECOMMENDED_EXPIRY_RATE, roundPercent, SECOND_DISCOUNT_HOURS } from '../../marketing/calc';
@@ -106,9 +106,8 @@ export function slotModel(day: string, coupons: readonly CouponDto[], sales: Cou
         if (dates.length < 2) return [];
         const previous = recipients.get(member.customerId), last = dates.at(-1)!;
         if (!handled.has(slotId)) {
-          const { name } = maskCustomer({ name: member.name, maskKey: 'data.management.guest' });
           recipients.set(member.customerId, { customerId: member.customerId,
-            name: typeof name === 'string' ? raw(name) : name, consentSms: true, consentNight: false, selectable: true, reasonKey: null,
+            name: raw(formatMaskedCustomer(member.name, member.memberId, member.memberCode)), consentSms: true, consentNight: false, selectable: true, reasonKey: null,
             lastVisit: previous?.lastVisit && previous.lastVisit > last ? previous.lastVisit : last, slotIds: [...(previous?.slotIds ?? []), slotId] });
         }
         return [member.customerId];

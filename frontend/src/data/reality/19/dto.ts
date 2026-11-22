@@ -9,6 +9,7 @@ export type GroupId = typeof GROUP_IDS[number];
 
 export interface GroupCustomerDto {
   readonly memberId: string;
+  readonly memberCode?: string;
   readonly customerId: string;
   /** One masked initial (`김○○`), or null when the service holds none. Never a full name or contact. */
   readonly displayName: string | null;
@@ -129,6 +130,7 @@ export function parseGroupCustomer(value: unknown): GroupCustomerDto {
   const row = record(value);
   return {
     memberId: text(row.memberId), customerId: text(row.customerId), displayName: nullable(row.displayName, v => text(v, 40)),
+    ...(row.memberCode == null ? {} : { memberCode: text(row.memberCode, 32) }),
     groupId: nullable(row.groupId, v => oneOf(v, GROUP_IDS)), visitCount: count(row.visitCount), recentVisits: count(row.recentVisits),
     firstVisitOn: day(row.firstVisitOn), lastVisitOn: day(row.lastVisitOn), daysSinceLast: count(row.daysSinceLast),
     usualCycleDays: nullable(row.usualCycleDays, count), contactAllowed: flag(row.contactAllowed), marketingAllowed: flag(row.marketingAllowed),

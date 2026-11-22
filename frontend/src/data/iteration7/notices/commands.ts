@@ -48,7 +48,8 @@ function handle<T extends NoticeSourceTables>(ctx: NoticeHandlerContext<T>, c: N
   if (c.type === 'notice.saveDraft') {
     const candidate = buildNoticeDraft(t, c, now.slice(0, 10));
     if (!candidate.ok) return candidate;
-    const { existing, draft: normalized } = candidate;
+    const { existing } = candidate;
+    const normalized = { ...candidate.draft, ...(c.channel ? { channel: c.channel, ...(c.talkAudience ? { talkAudience: c.talkAudience } : {}) } : {}) };
     if (existing && JSON.stringify({ ...existing, groupIds: [...existing.groupIds].sort() }) === JSON.stringify(normalized)) return success(t, { noticeId: existing.noticeId, revision: existing.revision });
     const saved = { ...normalized, noticeId: c.noticeId ?? ctx.nextId('notice'), revision: normalized.revision + 1 };
     return success({ ...t, noticeDraft: [...t.noticeDraft.filter(d => d.noticeId !== saved.noticeId), saved], noticePreview: t.noticePreview.filter(p => p.draftId !== saved.noticeId) }, { noticeId: saved.noticeId, revision: saved.revision }, true, 'data.notices.notice.saved');

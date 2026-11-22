@@ -76,7 +76,7 @@ export const seedSupplement = {
   ],
   "taxPayments": [
     {"id":"sample-tax-1","type":"11월 원천세","dueOn":"2026-12-10","basisMonth":"2026-11","basisCategory":"labor","basisAmount":6100000,"amount":183000,"paidOn":null,"status":"unpaid","provenance":"sample"},
-    {"id":"sample-tax-2","type":"하반기 부가세 준비","dueOn":"2027-01-25","basisMonth":"2026-10","basisCategory":"ingredients","basisAmount":9711700,"amount":971170,"paidOn":null,"status":"unpaid","provenance":"sample"}
+    {"id":"sample-tax-2","type":"하반기 부가세 준비","dueOn":"2027-01-25","basisMonth":"2026-10","basisCategory":"ingredients","basisAmount":9909700,"amount":990970,"paidOn":null,"status":"unpaid","provenance":"sample"}
   ],
   "grants": [
     {"id":"sample-grant-1","title":"동작구 소상공인 매장 개선 지원","agency":"동작구","region":"서울 동작구","applyStart":"2026-11-09","applyEnd":"2026-12-04","summary":"카페 조명·안내판 개선 비용 일부 지원","conditions":["동작구 소재 소상공인","사업자등록 확인"],"matchStatus":"matched","provenance":"sample"},
@@ -97,10 +97,7 @@ export const seedSupplement = {
     {"id":"sample-expiry-1","itemId":"i-saltbread","menuId":"m-saltbread","quantityBase":12,"expiresOn":"2026-11-17","provenance":"sample"},
     {"id":"sample-expiry-2","itemId":"i-basque-cake","menuId":"m-basque-cake","quantityBase":8,"expiresOn":"2026-11-17","provenance":"sample"}
   ],
-  "promos": [
-    {"id":"sample-promo-1","menuId":"m-chestnut-latte","concept":"new-item","mood":"warm","title":"가을 끝자락, 보늬밤 라떼","caption":"상도동에서 따뜻하게 즐기는 고소한 밤 라떼","durationSeconds":15,"status":"draft","menuName":"공주 보늬밤 라떼","storeName":"안숭잘부 카페","createdAt":"2026-11-17T15:45:00","provenance":"sample"},
-    {"id":"sample-promo-2","menuId":"m-saltbread","concept":"todays-deal","mood":"clean","title":"오후에 구운 버터 소금빵","caption":"커피와 곁들이기 좋은 오후 간식","durationSeconds":12,"status":"draft","menuName":"겉바속촉 버터 소금빵","storeName":"안숭잘부 카페","createdAt":"2026-11-17T15:45:00","provenance":"sample"}
-  ],
+  "promos": [],
   "cctv": [
     {"date":"2026-11-17","hour":8,"orderCount":8,"unit":"visits","entries":9,"dwellMinutes":19,"status":"ok","provenance":"sample"},
     {"date":"2026-11-17","hour":9,"orderCount":31,"unit":"visits","entries":37,"dwellMinutes":25,"status":"ok","provenance":"sample"},

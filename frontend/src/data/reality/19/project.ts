@@ -41,6 +41,7 @@ export function realView<F extends FeatureId, M>(
 /* ── 손님 그룹 ─────────────────────────────────────────────────────────────────────────────────────────── */
 const customer = (c: GroupCustomerDto): GroupCustomer => ({
   customerId: c.memberId,
+  memberCode: c.memberCode,
   name: c.displayName ? { raw: c.displayName } : { key: 'data.real.groups.noName' },
   visitCount: c.visitCount, lastVisit: c.lastVisitOn, daysSinceLast: c.daysSinceLast, usualCycleDays: c.usualCycleDays,
   consentSms: c.selectable, selectable: c.selectable, reasonKey: c.selectable ? null : 'data.real.groups.blocked.NO_MARKETING_CONSENT',

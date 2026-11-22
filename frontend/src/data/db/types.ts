@@ -82,7 +82,9 @@ export interface FloorSpace { readonly photoKeys: readonly string[]; readonly pl
 export interface FloorLayout { readonly layoutId: string; readonly name: DataText; readonly isCurrent: boolean; readonly aisleCm: number }
 export interface TableSpot { readonly tableId: string; readonly layoutId: string; readonly zone: Zone; readonly seats: number }
 export interface InteriorPlan { readonly mood: Mood; readonly materials: readonly Material[]; readonly memo: DataText | null }
-export interface LocalChange { readonly changeId: string; readonly kind: LocalChangeKind; readonly titleKey: string; readonly whenKey: string; readonly startDate: string; readonly endDate: string | null; readonly distanceM: number; readonly sameCategory: boolean; readonly sourceKey: string; readonly updatedAt: string; readonly ackedAt: string | null }
+export interface LocalChange { readonly changeId: string; readonly kind: LocalChangeKind; readonly titleKey: string; readonly whenKey: string; readonly startDate: string; readonly endDate: string | null; readonly distanceM: number; readonly sameCategory: boolean; readonly sourceKey: string; readonly updatedAt: string; readonly ackedAt: string | null;
+  /** PAR-3 (example mode): the area and the official source link a recorded change carries, as the service's change record does. */
+  readonly region?: string; readonly sourceUrl?: string | null }
 export interface FootTraffic { readonly hour: number; readonly estPeople: number }
 export interface TrendKeyword { readonly keywordId: string; readonly keywordKey: string; readonly categoryKey: string; readonly mentions: number; readonly prevMentions: number | null }
 export type ThreadStatus = 'waiting' | 'draft-ready' | 'send-failed' | 'done';
@@ -98,10 +100,12 @@ export interface ReplyDraft {
 export interface InquiryThread { readonly threadId: string; readonly type: 'message' | 'review' | 'call'; readonly channelKey: string; readonly isPublic: boolean; readonly receivedAt: string; readonly status: ThreadStatus; readonly needsPersonReason: 'refund' | 'complaint' | 'privacy' | 'no-ground' | null; readonly bodyKey: string; readonly draftKey: string | null; readonly groundKeys: readonly string[]; readonly rating: number | null; /** plan-2 (T-058, D-64): review classification; null for messages and calls. */ readonly sentiment: 'positive' | 'negative' | 'neutral' | null ; /** plan-2 AC-318 follow-up: full fake reviewer name (reviews only); screens show only the masked form from the model. */ readonly author?: string | null; readonly replyDraft?: ReplyDraft; readonly sentReplyBody?: string;
   /** F15 (HTTP inbox only): the received text itself (the fixture holds only a message key) and the service record's own fields. */
   readonly bodyRaw?: string;
+  /** PAR-3 (example mode): the title the owner gave an inquiry or review they recorded by hand. */
+  readonly title?: string | null;
   readonly real?: { readonly source: 'manual' | 'review' | 'talktalk'; readonly providerRef: string | null; readonly title: string | null; readonly sourceUrl: string | null; readonly draftSource: 'owner' | 'naver-ai' | 'navis' | null; readonly replyState: 'recorded' | 'saved' | 'accepted' | null; readonly revision: number } }
 export interface AutoReplyRule { readonly channelKey: string; readonly topic: 'hours' | 'location' | 'parking'; readonly enabled: boolean }
 export type OfferStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'withdrawn';
-export interface PartnershipOffer { readonly offerId: string; readonly fromStoreKey: string; readonly visibility: 'direct' | 'public'; readonly titleKey: string; readonly categoryKey: string; readonly termsKey: string; readonly periodStart: string; readonly periodEnd: string; readonly respondBy: string; readonly status: OfferStatus; readonly sharedContactKey: string | null }
+export interface PartnershipOffer { readonly offerId: string; readonly fromStoreKey: string; readonly visibility: 'direct' | 'public'; readonly titleKey: string; readonly categoryKey: string; readonly termsKey: string; readonly periodStart: string; readonly periodEnd: string; readonly respondBy: string; readonly status: OfferStatus; readonly sharedContactKey: string | null; /** PAR-3 (example mode): an offer this store sent; `fromStoreKey` then names the store it went to. */ readonly direction?: 'sent' }
 export interface OfferInterest { readonly offerId: string; readonly sentAt: string }
 export interface Integration { readonly calendar: boolean; readonly phone: boolean; readonly pos: boolean; readonly channels: boolean }
 export interface AppliedKey { readonly command: string; readonly result: unknown }

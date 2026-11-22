@@ -1,9 +1,9 @@
 import type { DashboardLayerId, DashboardPage, RunState } from '../../../../contracts';
-import type { PresentationRunStore } from '../../../../state';
+import { selectDemoRestart, type PresentationRunStore } from '../../../../state';
 import { PortError } from '../port';
 import { toPortError } from '../transport';
 import type { CommandReceipt } from '../port';
-import type { AccountClient, AccountRevisions, AccountSnapshot, PreferencesPatch, ProfilePatch } from './client';
+import { isDemoRestartOwner, type AccountClient, type AccountRevisions, type AccountSnapshot, type PreferencesPatch, type ProfilePatch } from './client';
 
 const LAYERS: readonly DashboardLayerId[] = ['management', 'marketing'];
 export type AccountFlushResult = 'saved' | 'unchanged' | 'conflict' | 'error';
@@ -31,16 +31,19 @@ interface Durable {
   readonly preferences: string;
   readonly done: boolean;
 }
+const demoLayoutChosen = (s: RunState) => selectDemoRestart(s) && s.onboarding.step === 'applying';
+const onboardingDone = (s: RunState) => s.onboarding.step === 'done' || demoLayoutChosen(s);
 const settingsOf = (s: RunState): ProfilePatch => ({
   businessType: s.shopSettings.businessType, paymentStyle: s.shopSettings.paymentStyle, tableLayout: s.shopSettings.tableLayout,
   ...(s.shopSettings.posPreferences ? { posPreferences: s.shopSettings.posPreferences } : {}),
   ...(s.shopSettings.cctvPosLinks ? { cctvPosLinks: s.shopSettings.cctvPosLinks } : {}),
-  onboardingDone: s.onboarding.step === 'done',
+  ...(s.shopSettings.smsSettings ? { smsSettings: s.shopSettings.smsSettings } : {}),
+  onboardingDone: onboardingDone(s),
 });
 const prefsOf = (s: RunState): PreferencesPatch => ({ theme: s.theme, textScale: s.textScale, locale: s.locale });
 const durable = (s: RunState): Durable => ({
   pages: { management: s.boards.management.pages, marketing: s.boards.marketing.pages },
-  profile: JSON.stringify(settingsOf(s)), preferences: JSON.stringify(prefsOf(s)), done: s.onboarding.step === 'done',
+  profile: JSON.stringify(settingsOf(s)), preferences: JSON.stringify(prefsOf(s)), done: onboardingDone(s),
 });
 
 /**
@@ -77,7 +80,7 @@ export function createAccountSync(options: AccountSyncOptions) {
   }
 
   function dirty(s: RunState): { profile: boolean; preferences: boolean; boards: DashboardLayerId[] } {
-    if (!baseline || s.onboarding.step !== 'done') return { profile: false, preferences: false, boards: [] };
+    if (!baseline || !onboardingDone(s)) return { profile: false, preferences: false, boards: [] };
     const now = durable(s);
     return {
       profile: now.profile !== baseline.profile || !baseline.done,
@@ -99,15 +102,17 @@ export function createAccountSync(options: AccountSyncOptions) {
   async function saveOnce(): Promise<void> {
     const s = run.getState();
     const d = dirty(s);
-    // Profile first: the first save of a new store marks onboarding done before its boards exist.
-    if (d.profile) {
+    const demo = demoLayoutChosen(s);
+    const saveProfile = async () => {
       const patch = settingsOf(s);
       const expected = revisions.profile;
-      await save(key => client.saveProfile(patch, expected, key), receipt => {
+      await save(key => client.saveProfile(demo ? { onboardingDone: true } : patch, expected, key), receipt => {
         revisions = { ...revisions, profile: receipt.revision };
         baseline = { ...baseline!, profile: JSON.stringify(patch), done: true };
       });
-    }
+    };
+    // Complete the restart only after the chosen board is durable.
+    if (d.profile && !demo) await saveProfile();
     if (d.preferences) {
       const patch = prefsOf(s);
       const expected = revisions.preferences;
@@ -124,6 +129,7 @@ export function createAccountSync(options: AccountSyncOptions) {
         baseline = { ...baseline!, pages: { ...baseline!.pages, [layer]: board.pages } };
       });
     }
+    if (d.profile && demo) await saveProfile();
   }
 
   let explicit = 0;
@@ -131,15 +137,25 @@ export function createAccountSync(options: AccountSyncOptions) {
     if (timer !== undefined) cancel(timer);
     timer = undefined;
   }
-  function flush(background = false): Promise<AccountFlushResult> {
+  function flush(background = false, restartOnboarding = false): Promise<AccountFlushResult> {
     if (!background) { explicit++; cancelTimer(); }
     chain = chain.then(async () => {
       if (stopped || sessionEnded || !baseline) return 'error';
-      if (background && explicit || !pending && !anyDirty(run.getState())) return 'unchanged';
+      const s = run.getState();
+      if (background && (explicit || demoLayoutChosen(s)) || !restartOnboarding && !pending && !anyDirty(s)) return 'unchanged';
+      if (restartOnboarding && (s.onboarding.step !== 'done' || s.overlay.type !== 'settings' || !isDemoRestartOwner(state.stores))) return 'unchanged';
       publish({ status: 'saving', error: undefined });
       try {
         await pending?.();
         while (!stopped && baseline && (!background || !explicit) && anyDirty(run.getState())) await saveOnce();
+        if (restartOnboarding && !stopped) {
+          const expected = revisions.profile;
+          await save(key => client.saveProfile({ onboardingDone: false }, expected, key), receipt => {
+            revisions = { ...revisions, profile: receipt.revision };
+            baseline = { ...baseline!, profile: JSON.stringify({ ...settingsOf(run.getState()), onboardingDone: false }), done: false };
+            run.actions.restartOnboarding();
+          });
+        }
         retry = 0;
         publish({ status: 'idle', error: undefined });
         return 'saved';
@@ -151,6 +167,10 @@ export function createAccountSync(options: AccountSyncOptions) {
           catch (reloadFailure) { baseline = null; publish({ status: 'error', error: toPortError(reloadFailure, 'GET') }); }
         } else if (error.code === 'UNAUTHENTICATED' || error.code === 'STORE_FORBIDDEN') {
           sessionEnded = true; publish({ status: 'error', error }); options.onSessionEnded?.();
+        } else if (demoLayoutChosen(run.getState())) {
+          // A retry from the loading screen can reuse an unknown-outcome request.
+          if (!error.outcomeUnknown) pending = undefined;
+          publish({ status: 'error', error });
         } else if (!background) {
           // A failed card must not become a later background write. Re-read even when
           // the write may have landed, and block saves if its outcome cannot be read.
@@ -178,10 +198,11 @@ export function createAccountSync(options: AccountSyncOptions) {
     /** Start writing changes back. Call after `load()` has restored the run. */
     attach(): () => void {
       unsubscribe?.();
-      unsubscribe = run.subscribe(s => { if (!stopped && !explicit && anyDirty(s)) kick(); });
+      unsubscribe = run.subscribe(s => { if (!stopped && !explicit && !demoLayoutChosen(s) && anyDirty(s)) kick(); });
       return () => { unsubscribe?.(); unsubscribe = undefined; };
     },
     flush,
+    restartOnboarding: () => flush(false, true),
     getState: () => state,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     dispose() { stopped = true; if (timer !== undefined) cancel(timer); unsubscribe?.(); listeners.clear(); },

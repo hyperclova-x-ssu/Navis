@@ -16,6 +16,6 @@ export function expirySmsCopy(menuName: string, benefit: CouponBenefit) {
   const object = `${menuName}${hangul >= 0 && hangul <= 11171 && hangul % 28 !== 0 ? '을' : '를'}`;
   const won = benefit.value.toLocaleString('en-US');
   const offer = benefit.kind === 'percent' ? `${benefit.value}% 할인해요`
-    : benefit.kind === 'amount' ? `${won}원 할인해요` : `세트 가격 ${won}원에 드려요`;
+    : benefit.kind === 'amount' ? `${won}원 할인해요` : `${won}원에 드려요`;
   return `${object} 오늘만 ${offer}. 오늘 마감 전까지 쓸 수 있어요.`;
 }

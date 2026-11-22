@@ -58,6 +58,13 @@ export function service(options: { readonly sms?: boolean } = {}) {
   backend.on('GET', '/marketing/notices', () => page(state.notices, count(state.notices, ['draft'])));
   backend.on('GET', '/marketing/reviews', () => ({ items: [{ ref: 'rv-1', text: '커피가 맛있어요', keywords: [], media: [], stars: null, reply: null, hasReply: false }], authorNotification: '답글을 올리면 리뷰 작성자에게 알림이 가요.' }));
   backend.on('GET', '/marketing/talktalk/consultations', () => ({ items: [{ ref: 'tt-1', status: 'waiting' }], nextCursor: null }));
+  const sundayHours = '일요일 영업시간은 10:00~20:30입니다.';
+  backend.on('POST', `/marketing/inquiries/${ids.talk}/navis-draft-preview`, () => ({ source: 'navis', text: `안녕하세요.\n${sundayHours}\n감사합니다.`, facts: [sundayHours] }));
+  backend.on('GET', '/marketing/coupons', () => ({ ...page([{
+    couponId: 'reply-coupon', name: '커피 쿠폰', status: 'active', startsOn: '2026-11-20', endsOn: '2026-11-28',
+    benefitType: 'percent', benefitValue: 10,
+    codes: [{ codeId: 'reply-code', code: 'NAVIS10', route: 'place_news', activated: true, unpublishedAt: null, issueCount: 10, used: 1 }],
+  }], 0), businessDate: '2026-11-21' }));
   backend.on('GET', '/marketing/talktalk/marketing/audiences', () => ({ items: [{ audience: 'benefit-subscribers', count: 12 }], quota: { month: '2026-11', assigned: 3 } }));
   backend.on('GET', '/marketing/place/news', () => ({ items: [] }));
   backend.on('POST', '/marketing/notice-reply-approvals', (call: RecordedCall) => {

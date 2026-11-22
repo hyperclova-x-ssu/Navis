@@ -6,6 +6,7 @@
 import type { DetailRef } from '../../contracts';
 import type { DataText, UnitCode } from '../db/types';
 import type { Delta, Period } from '../models/types';
+import type { PROMO_REFERENCE_IDS } from '../../../shared/promo-references.mjs';
 
 /* ───────────── 표 (DATA_MODEL 10.15.2) ───────────── */
 export type CouponRoute = 'place_news' | 'blog' | 'clip' | 'sms';
@@ -15,7 +16,7 @@ export type CouponOrigin = 'slot' | 'expiry' | 'video' | 'group' | 'manual';
 export type VideoMood = 'warm' | 'clean' | 'lively' | 'elegant';
 export type VideoConcept = 'review-roundup' | 'behind-the-scenes' | 'todays-deal' | 'new-item' | 'day-at-shop';
 /** Design reference ids of the real pipeline (DATA_MODEL 10.16.5; replaces the old two templates). */
-export type PromoReferenceId = 'ref-1' | 'ref-2' | 'ref-3' | 'ref-4' | 'ref-5' | 'ref-6';
+export type PromoReferenceId = typeof PROMO_REFERENCE_IDS[number];
 export type PromoLocale = 'ko' | 'en' | 'zh-Hans' | 'zh-Hant';
 export type PromoStage = 'look' | 'story' | 'scenes' | 'merge';
 export type PromoStageState = 'active' | 'done' | 'failed';
@@ -362,6 +363,7 @@ export interface CouponStatusModel {
 export type CustomerGroupId = 'churn-risk' | 'first-visit' | 'regular';
 export interface GroupCustomer {
   readonly customerId: string;
+  readonly memberCode?: string;
   /** The one display alias of this customer (`customerAlias`): the same text the 회원 views show. */
   readonly name: DataText;
   readonly visitCount: number;

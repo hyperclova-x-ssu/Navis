@@ -8,7 +8,7 @@ import type { Row } from '../../messages/sourced';
 /** The widget's own cancel sentences (a bundle of `useBundle`). */
 export const bookingCancelRows = {
   'widget.voice-booking.real.cancelOpen': ['예약 취소하기', 'Cancel booking', '取消预约', '取消預約'],
-  'widget.voice-booking.real.cancelCompletedNpay': ['네이버 예약 취소', 'Cancel NAVER booking', '取消 NAVER 预约', '取消 NAVER 預約'],
+  'widget.voice-booking.real.cancelCompletedNpay': ['네이버 예약 취소하기', 'Cancel NAVER booking', '取消 NAVER 预约', '取消 NAVER 預約'],
   'widget.voice-booking.real.cancelTitle': ['예약 취소', 'Cancel booking', '取消预约', '取消預約'],
   'widget.voice-booking.real.cancelReason': ['취소 사유', 'Cancellation reason', '取消原因', '取消原因'],
   'widget.voice-booking.real.cancelReasonHint': ['손님에게 보여요', 'The customer will see this', '顾客可以看到', '顧客可以看到'],
@@ -40,19 +40,19 @@ export const bookingCancelRows = {
   'widget.voice-booking.real.summaryRefund': ['환불 조건', 'Refund', '退款条件', '退款條件'],
   'widget.voice-booking.real.summaryRefundRate': ['결제 금액의 {n}%', '{n}% of the paid amount', '支付金额的 {n}%', '支付金額的 {n}%'],
   'widget.voice-booking.real.summaryRefundAmount': ['{n}원', '₩{n}', '{n} 韩元', '{n} 韓元'],
-  'widget.voice-booking.real.dropCancel': ['변경 취소하기', "Don't cancel", '不取消了', '不取消了'],
-  'widget.voice-booking.real.cancelNaver': ['{number} 예약 취소하기', 'Cancel booking {number}', '取消预约 {number}', '取消預約 {number}'],
+  'widget.voice-booking.real.dropCancel': ['취소하지 않기', "Don't cancel", '不取消了', '不取消了'],
+  'widget.voice-booking.real.cancelNaver': ['예약 취소하기', 'Cancel booking {number}', '取消预约 {number}', '取消預約 {number}'],
   'widget.voice-booking.real.cancelling': ['취소하고 있어요', 'Canceling', '正在取消', '正在取消'],
   // Result (AC-1617, AC-1618): what was done, never "refunded"; the provider has no inverse of a cancel.
   'widget.voice-booking.real.canceled': ['예약을 취소했어요', 'Booking canceled', '已取消预约', '已取消預約'],
   'widget.voice-booking.real.canceledRefund': ['예약을 취소했어요 · 환불은 네이버에서 처리해요', 'Booking canceled · NAVER will process the refund', '已取消预约 · 退款由 NAVER 处理', '已取消預約 · 退款由 NAVER 處理'],
   'widget.voice-booking.real.canceledNoUndo': ['네이버 예약 취소는 되돌릴 수 없어요', "A canceled NAVER booking can't be restored", 'NAVER 预约取消后无法恢复', 'NAVER 預約取消後無法復原'],
   // Failures of the cancel press.
-  'widget.voice-booking.real.cancelRefused': ['예약 상태가 바뀌었어요. 다시 읽었으니 확인하고 다시 눌러 주세요', 'The booking changed. It was read again; check it and press again',
+  'widget.voice-booking.real.cancelRefused': ['예약 상태가 바뀌었어요. 목록을 확인하고 다시 시도해 주세요', 'The booking changed. Check the list and try again',
     '预约状态已变化，已重新读取，请确认后再按一次', '預約狀態已變更，已重新讀取，請確認後再按一次'],
-  'widget.voice-booking.real.providerRefused': ['네이버가 이 취소를 받지 않았어요. 예약 상태를 다시 읽었으니 확인하고 다시 눌러 주세요', "NAVER didn't accept this cancellation. The booking was read again; check it and press again",
+  'widget.voice-booking.real.providerRefused': ['네이버에서 취소를 받지 않았어요. 목록에서 상태를 확인하고 다시 시도해 주세요', "NAVER didn't accept this cancellation. The booking was read again; check it and press again",
     'NAVER 未接受此次取消。已重新读取预约状态，请确认后再按一次', 'NAVER 未接受此次取消。已重新讀取預約狀態，請確認後再按一次'],
-  'widget.voice-booking.real.providerUnknown': ['네이버에서 처리됐는지 아직 확인하지 못했어요. 목록을 다시 읽었으니 예약 결과를 확인해 주세요', "We couldn't confirm yet whether NAVER processed it. The list was read again; check the booking result",
+  'widget.voice-booking.real.providerUnknown': ['네이버에서 처리됐는지 아직 몰라요. 잠시 뒤 목록에서 상태를 확인해 주세요', "We couldn't confirm yet whether NAVER processed it. The list was read again; check the booking result",
     '尚无法确认 NAVER 是否已处理。已重新读取列表，请确认预约结果', '尚無法確認 NAVER 是否已處理。已重新讀取列表，請確認預約結果'],
 } as const satisfies Readonly<Record<string, Row>>;
 

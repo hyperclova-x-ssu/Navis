@@ -156,12 +156,16 @@ export const channelKeyOf = (row: Pick<InquiryDto, 'source' | 'type'>): string =
   row.source === 'talktalk' ? 'data.channel.naverTalk' : row.source === 'review' ? 'data.channel.naverReview'
     : row.type === 'review' ? 'data.real.inbox.channel.manualReview' : 'data.real.inbox.channel.manualMessage';
 
+/** The reviewer's own star rating sorts a review (4–5 praise, 3 neutral, 1–2 negative); a review without a visible rating stays unsorted. */
+export const starsSentiment = (stars: number | null | undefined): InquiryThread['sentiment'] =>
+  typeof stars !== 'number' ? null : stars >= 4 ? 'positive' : stars <= 2 ? 'negative' : 'neutral';
+
 export function inquiryThread(row: InquiryDto, visibleReview?: ReviewDto): InquiryThread {
   const text = row.text ?? row.title ?? '';
   return {
     threadId: row.id, type: row.type, channelKey: channelKeyOf(row), isPublic: row.type === 'review', receivedAt: localStamp(row.updatedAt),
     status: row.status === 'done' ? 'done' : row.status === 'draft_ready' ? 'draft-ready' : 'waiting', needsPersonReason: null,
-    bodyKey: '', draftKey: null, groundKeys: [], rating: visibleReview?.stars ?? null, sentiment: null, author: null, bodyRaw: text,
+    bodyKey: '', draftKey: null, groundKeys: [], rating: visibleReview?.stars ?? null, sentiment: starsSentiment(visibleReview?.stars), author: null, bodyRaw: text,
     ...(row.draft ? { replyDraft: { body: row.draft.text, sourceText: text, grounding: [], revision: row.revision, origin: row.draft.source === 'owner' ? 'edited' as const : 'generated' as const } } : {}),
     ...(row.reply ? { sentReplyBody: row.reply.text } : {}),
     real: { source: row.source, providerRef: row.providerRef, title: row.title, sourceUrl: row.sourceUrl, draftSource: row.draft?.source ?? null, replyState: row.reply?.state ?? null, revision: row.revision },

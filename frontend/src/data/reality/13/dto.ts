@@ -1,15 +1,17 @@
 import type { DataTables, LocalChange, PartnershipOffer, TrendKeyword } from '../../db/types';
 import { STORE_HOURS, STORE_WEEKDAYS } from '../../store-hours';
 import type { TradeAreaModel } from '../../models/types';
+import type { TrendCandidate, TrendRanking } from './trend-ranking';
 
 export interface PeriodDto { readonly from: string; readonly to: string }
 export type ChangeKind = 'food-license' | 'festival' | 'owner-record';
-export interface CoverageDto { readonly region: string; readonly kinds: readonly ChangeKind[]; readonly referenceDate: string }
+export interface CoverageDto { readonly region: string; readonly kinds: readonly ChangeKind[]; readonly referenceDate: string; readonly fetchedAt?: string | null }
 export interface ChangeDto {
   readonly id: string;
   readonly revision: number;
   readonly title: string;
   readonly kind: ChangeKind;
+  readonly changeType?: 'opening' | 'closure' | null;
   readonly region: string;
   readonly authority: string;
   readonly sourceUrl: string | null;
@@ -36,6 +38,8 @@ export interface OfferDto {
 }
 
 export interface PeerDto { readonly storeId: string; readonly displayName: string }
+/** PAR-3: the example (fixture) mode's participating stores are the stores that sent this store an offer; their id is this prefix plus the store's name key. */
+export const EXAMPLE_PEER_PREFIX = 'example-peer:';
 type SourceStatus = 'available' | 'unavailable' | 'empty';
 interface Series<T> { readonly status: SourceStatus; readonly items: readonly T[] }
 export interface PopulationBand {
@@ -55,6 +59,7 @@ export interface TradeDto {
   readonly period: PeriodDto;
   readonly population: Series<PopulationBand> & { readonly quarter: string; readonly weekday: number };
   readonly sales: Series<HourlySale>;
+  readonly location?: Series<{ readonly address: string; readonly longitude: number; readonly latitude: number }> & { readonly source: 'naver-maps' };
 }
 export interface MenuSale { readonly menuId: string; readonly menuName?: string; readonly businessDate: string; readonly quantity: number }
 export interface SearchSeries extends Series<{ readonly period: string; readonly ratio: number }> {
@@ -65,11 +70,22 @@ export interface TrendsDto {
   readonly period: PeriodDto;
   readonly search: SearchSeries | null;
   readonly sales: Series<MenuSale>;
+  readonly candidates?: readonly TrendCandidate[];
+  readonly sourceRevision?: number;
+  readonly ranking?: TrendRanking;
 }
 /** PN10 blog/Café result links (GAP-MKT): display only. Kept in the trends widget's own state, never in the snapshot, history or Navis facts. */
 export interface SearchLink { readonly title: string; readonly url: string }
-export interface LinkSeries { readonly status: SourceStatus; readonly items: readonly SearchLink[] }
-export interface SearchLinksDto { readonly source: 'naver-search'; readonly use: 'display-only'; readonly blog: LinkSeries; readonly cafearticle: LinkSeries }
+export interface NewsLink extends SearchLink { readonly publishedAt: string }
+export interface PlaceResult { readonly title: string; readonly address: string; readonly category: string; readonly url?: string }
+export type LinkSeries = Series<SearchLink>;
+export interface NewsReferences extends Series<NewsLink> {
+  readonly source: 'naver-search'; readonly use: 'display-only'; readonly region: string; readonly period: PeriodDto;
+}
+export interface SearchLinksDto {
+  readonly source: 'naver-search'; readonly use: 'display-only'; readonly blog: LinkSeries; readonly cafearticle: LinkSeries;
+  readonly news?: Series<NewsLink>; readonly local?: Series<PlaceResult>;
+}
 export interface TrendsResponse extends TrendsDto { readonly links?: SearchLinksDto | null }
 
 /** PN17 Café (GAP-MKT): boards from the owner's approved account grant, and the owner's own post ledger. */
@@ -120,8 +136,8 @@ declare module '../../models/types' {
 export const literal = (value: string) => `seed:${value}`;
 
 export function changeRow(row: ChangeDto): LocalChange {
-  const kind = row.kind === 'festival' ? 'event' : row.kind === 'food-license' ? 'opening' : 'event';
-  return { changeId: row.id, kind, titleKey: literal(row.title), whenKey: `data.real.local.${row.dateKind}`,
+  const kind = row.kind === 'food-license' ? row.changeType === 'closure' ? 'closing' : 'opening' : 'event';
+  return { changeId: row.id, kind, titleKey: literal(row.title), whenKey: row.changeType === 'closure' ? '' : `data.real.local.${row.dateKind}`,
     startDate: row.referenceDate, endDate: null, distanceM: 0, sameCategory: false, sourceKey: literal(row.authority),
     updatedAt: row.updatedAt, ackedAt: row.acknowledgedAt };
 }
@@ -149,7 +165,7 @@ export function tradeHours(model: TradeAreaModel) {
 }
 
 /** Each shared expandable row represents one menu and its total for the returned POS period. */
-function saleTrends(rows: readonly MenuSale[], menuItems: DataTables['menuItem']): TrendKeyword[] {
+export function saleTrends(rows: readonly MenuSale[], menuItems: DataTables['menuItem']): TrendKeyword[] {
   const byMenu = new Map<string, TrendKeyword>();
   for (const row of rows) {
     const previous = byMenu.get(row.menuId);
@@ -182,7 +198,7 @@ export function localTables(data: RealLocal, day: string, menuItems: DataTables[
     realLocal: data,
     localChange: data.changes.map(changeRow),
     footTraffic: openHourBands(data.trade.population.items, data.trade.population.weekday).map(row => ({ hour: row.startHour, estPeople: row.estimate })),
-    trendKeyword: saleTrends(data.trends.sales.items, menuItems),
+    trendKeyword: data.trends.ranking ? [] : saleTrends(data.trends.sales.items, menuItems),
     partnershipOffer: incoming.map(offer => offerRow(offer, data.storeId, data.peers, day)),
     offerInterest: incoming.filter(row => row.interested).map(row => ({ offerId: row.id, sentAt: `${day}T00:00:00+09:00` })),
   };

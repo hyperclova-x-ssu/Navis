@@ -349,7 +349,7 @@ describe('marketing commands (AC-275·281·283)', () => {
     expect(store.getSnapshot()).toBe(before);
     expect(modelOf(store, 'ai-response').waitingCount).toBe(46);
   });
-  it('community: viewing changes nothing; accept 2 → 1 with shared contact; interest only on public offers', () => {
+  it('community: viewing changes nothing; accept 2 → 1 with shared contact; interest on received and public offers, accept only on received', () => {
     const direct = seed.partnershipOffer[0];
     const store = createWidgetDataStore({ partnershipOffer: [direct,
       { ...direct, offerId: 'test-direct' }, { ...direct, offerId: 'test-public', visibility: 'public' },
@@ -359,7 +359,9 @@ describe('marketing commands (AC-275·281·283)', () => {
     let c = modelOf(store, 'community');
     expect(c.pendingCount).toBe(1);
     expect(c.inProgress[0]).toMatchObject({ offerId: direct.offerId, status: 'accepted', sharedContactKey: 'data.offer.contact.phone' });
-    expect(store.dispatch({ type: 'community.sendInterest', offerId: 'test-direct' })).toMatchObject({ ok: false, messageKey: 'data.error.publicOnly' });
+    // PAR-3: interest goes to a received (direct) offer as well as to a public one, as the service does; accept/decline stay for received offers.
+    okResult(store.dispatch({ type: 'community.sendInterest', offerId: 'test-direct' }));
+    expect(store.dispatch({ type: 'community.accept', offerId: 'test-public' })).toMatchObject({ ok: false, messageKey: 'data.error.directOnly' });
     okResult(store.dispatch({ type: 'community.sendInterest', offerId: 'test-public' }));
     c = modelOf(store, 'community');
     expect(c.publicOffers[0].interestSent).toBe(true);

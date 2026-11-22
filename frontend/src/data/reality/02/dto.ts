@@ -75,7 +75,7 @@ export interface PosTableDto {
   readonly state: 'empty' | 'occupied' | 'cleaning' | 'archived'; readonly billId: string | null; readonly openedAt: string | null;
   readonly layoutTableId?: string | null; readonly lastBillId?: string | null;
 }
-export interface PosMemberChoice { readonly memberId: string; readonly customerId?: string; readonly name: string; readonly phoneMasked: string }
+export interface PosMemberChoice { readonly memberId: string; readonly memberCode?: string; readonly customerId?: string; readonly name: string; readonly phoneMasked: string }
 export interface PosMemberQuote { readonly quoteRevision: number; readonly accountRevision: number }
 /** Receipt of a command: `{resourceId,revision,receiptId,affectedSources}` plus the route fields (README). */
 export interface PosCommandReceiptDto {

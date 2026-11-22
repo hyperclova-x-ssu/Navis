@@ -3,7 +3,7 @@ import { addDays, weekdayOf } from '../../db/time';
 import { defineBinding, PortError, type CommandContext, type DomainAdapter, type ListPage, type LoadContext, type PortReads, type PortTransport } from '../00';
 import { menuPath, type MenuDto } from '../01/menu-dto';
 import { issueCardApproval, type CardIntent } from '../15/card-approval';
-import { localTables, type CafeBoardDto, type CafePostDto, type CafePostReceipt, type CafePosts, type ChangeDto, type CoverageDto, type OfferDto, type PeerDto, type PeriodDto, type TradeDto, type TrendsDto, type TrendsResponse } from './dto';
+import { localTables, type CafeBoardDto, type CafePostDto, type CafePostReceipt, type CafePosts, type ChangeDto, type CoverageDto, type NewsReferences, type OfferDto, type PeerDto, type PeriodDto, type TradeDto, type TrendsDto, type TrendsResponse } from './dto';
 
 const changes = '/marketing/local-changes';
 const offers = '/marketing/offers';
@@ -45,6 +45,13 @@ async function readChanges({ reads, signal }: LoadContext) {
 /** The full `/local-trends` answer, including PN10 result links when a keyword is sent. Callers keep `links` out of the snapshot. */
 export function readLocalTrends(reads: PortReads, period: PeriodDto, keyword?: string, signal?: AbortSignal): Promise<TrendsResponse> {
   return reads.one({ resource: 'local-trends', path: trends, query: { ...period, keyword } }, { signal });
+}
+
+/** The detail view holds these references outside the store and Navis facts. */
+export async function readLocalNews(reads: PortReads, period: PeriodDto, signal: AbortSignal) {
+  const result = await reads.one<{ readonly newsReferences?: NewsReferences }>({ resource: 'local-changes', path: changes,
+    query: { ...period, limit: 1, includeNews: 1 } }, { signal });
+  return result.newsReferences;
 }
 
 async function nameMenuSales({ reads, signal }: LoadContext, sales: TrendsDto['sales']): Promise<TrendsDto['sales']> {
@@ -108,7 +115,7 @@ function respond(context: CommandContext, offerId: string, action: 'accept' | 'd
 
 export const localAdapter: DomainAdapter = {
   domain: 'local',
-  sources: ['local', 'local-changes', 'community', 'pos.sales', 'menu'],
+  sources: ['local', 'local-changes', 'local-trends', 'community', 'pos.sales', 'menu'],
   tables: ['realLocal', 'localChange', 'footTraffic', 'trendKeyword', 'partnershipOffer', 'offerInterest'],
   clear() { return { realLocal: undefined }; },
   errorKeys: { OFFER_CLOSED: 'data.real.local.closed', OFFER_EXPIRED: 'data.real.local.expired',
@@ -118,17 +125,19 @@ export const localAdapter: DomainAdapter = {
   async load(context) {
     const { reads, storeId, signal, snapshot } = context;
     const previous = snapshot.tables.realLocal;
-    const keyword = previous?.storeId === storeId ? previous.trends.search?.query.keywordGroups[0]?.groupName : undefined;
     const [local, area, trendRead, offerList, peers, cafe] = await Promise.all([
       readChanges(context),
       reads.one<TradeDto>({ resource: 'trade-area', path: trade, query: { ...salesWeek, quarter, weekday: weekdayOf(calendarDay) } }, { signal }),
-      readLocalTrends(reads, salesWeek, keyword, signal),
+      readLocalTrends(reads, salesWeek, undefined, signal),
       reads.all<OfferDto>({ resource: 'community', path: offers }, { signal }),
       reads.one<{ status: 'available' | 'unavailable'; items: readonly PeerDto[] }>({ resource: 'community-peers', path: `${offers}/peers` }, { signal }),
       readCafePosts(context),
     ]);
     // Search result links are display-only: they stay out of the snapshot (and so out of Navis facts and model context).
-    const trend: TrendsDto = { asOf: trendRead.asOf, period: trendRead.period, search: trendRead.search, sales: await nameMenuSales(context, trendRead.sales) };
+    const trend: TrendsDto = { asOf: trendRead.asOf, period: trendRead.period, candidates: trendRead.candidates,
+      ranking: trendRead.ranking, sourceRevision: trendRead.sourceRevision,
+      search: previous?.storeId === storeId ? previous.trends.search : trendRead.search,
+      sales: trendRead.ranking ? trendRead.sales : await nameMenuSales(context, trendRead.sales) };
     const scopedOffers = offerList.items.filter(row => row.senderStoreId === storeId || row.recipientStoreId === storeId);
     return {
       tables: localTables({ storeId, period: local.period, coverage: local.coverage, changes: local.items, unreadCount: local.unreadCount,

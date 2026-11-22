@@ -48,6 +48,7 @@ export interface ReservationDto {
   readonly phone?: string | null;
   readonly request?: string | null;
   readonly memberId?: string | null;
+  readonly memberCode?: string;
   readonly tableId?: string | null;
   readonly assignmentMode?: 'auto' | 'manual' | null;
   readonly allocationWarning?: string | null;
@@ -112,6 +113,7 @@ export interface PosTableDto {
 export type BookingOrigin = 'local' | 'naver' | 'call';
 export interface BookingMeta {
   readonly origin: BookingOrigin;
+  readonly memberCode?: string;
   readonly bookingNumber?: string;
   readonly product?: string;
   readonly npayLinked?: boolean;
@@ -231,7 +233,8 @@ export function projectBooking(pages: BookingPages): { readonly tables: Pick<Dat
       ? { origin: 'naver', bookingNumber: naver.bookingNumber, product: naver.product, npayLinked: naver.npayLinked,
         ...(Number.isSafeInteger(naver.paymentAmount) && naver.paymentAmount! >= 0 ? { paymentAmount: naver.paymentAmount } : {}), partyKnown: dto.partySize !== null, revision: dto.revision,
         ...(isActions(dto.actions) ? { actions: dto.actions } : {}) }
-      : { origin: dto.source === 'phone_ai' ? 'call' : 'local', partyKnown: dto.partySize !== null, revision: dto.revision, ...tableMeta(table, dto.tableId) };
+      : { origin: dto.source === 'phone_ai' ? 'call' : 'local', partyKnown: dto.partySize !== null, revision: dto.revision,
+        ...(dto.memberId && dto.memberCode ? { memberCode: dto.memberCode } : {}), ...tableMeta(table, dto.tableId) };
   }
   for (const dto of pages.suggestions) {
     if (!(dto.status === 'pending' || dto.status === 'proposed') || visits.has(dto.suggestionId)) continue;

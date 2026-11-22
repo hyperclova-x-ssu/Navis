@@ -7,6 +7,7 @@ import type { DataText } from '../db/types';
 import { maskCustomer } from '../derive/members';
 import type { Period } from '../models/types';
 import { ENDING_SOON_DAYS } from './calc';
+import { PROMO_REFERENCE_IDS } from '../../../shared/promo-references.mjs';
 import type {
   Coupon, CouponCode, CouponRoute, CouponRow, CustomerGroupId, MarketingTables, MktCustomer, MktVisit, PromoLocale, PromoReferenceId, PromoVideo, SegmentRule, VideoConcept, VideoMood,
 } from './types';
@@ -138,7 +139,7 @@ export const createdToday = (c: Coupon): boolean => dateOf(c.createdAt) === TODA
 /* 영상 분위기·컨셉 (PRD 목록 유지; 템플릿·장면 표는 D-80으로 삭제, 영상은 서버가 만든다) */
 export const MOODS: readonly VideoMood[] = ['warm', 'clean', 'lively', 'elegant'];
 export const CONCEPTS: readonly VideoConcept[] = ['review-roundup', 'behind-the-scenes', 'todays-deal', 'new-item', 'day-at-shop'];
-export const REFERENCE_IDS: readonly PromoReferenceId[] = ['ref-1', 'ref-2', 'ref-3', 'ref-4', 'ref-5', 'ref-6'];
+export const REFERENCE_IDS: readonly PromoReferenceId[] = PROMO_REFERENCE_IDS;
 export const LENGTHS: readonly (10 | 15 | 30)[] = [10, 15, 30];
 export const LOCALES: readonly PromoLocale[] = ['ko', 'en', 'zh-Hans', 'zh-Hant'];
 export const videoCode = (m: MarketingTables, v: PromoVideo): CouponCode | undefined => m.couponCode.find((c) => c.videoId === v.videoId);

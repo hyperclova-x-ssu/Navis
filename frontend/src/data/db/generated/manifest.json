@@ -1,12 +1,12 @@
 {
   "formatVersion": 1,
-  "snapshotSha256": "86960c74e5d3448b3244d42fbd8210b5f0a4d8fcf916b7aa0e2ed6077c032e74",
+  "snapshotSha256": "ddd3450806ae8ed51ef24dd45d730d00918fdb22e47f400991ae020f997b1540",
   "sha256": {
-    "content": "986a24e7672cc2d276add5a442576111bada26d29925a315c1c4f9566ef55a2b",
-    "supplement": "9f2a9beaf88166f5dcd303161aa9ac055b5f23d6dab4e5e4e7552b80ce99039e",
+    "content": "f589b9bc9b46c3732732fd61b14ab6b57cacff528b75c41febee263e0ce69fb6",
+    "supplement": "254d2647fc92ee3fa929402d2753b639693003df03a0018e82db0398146b0bc3",
     "config": "028fe0edc4509eff87c51bc7b708f475855d4f88e1797ec51977db1a7ea764c3",
-    "dbGenerator": "e438a4180bf84d13d3f157e20477f02ce9f2d115b341e9bb43a5ce5f24ab84cd",
-    "appGenerator": "7c5fd4827be942d47e14bea82060d62e5f7e2396bf816fde25dafd538e75ba03"
+    "dbGenerator": "1332e1e84255b10d554cd69e40b59c493ace9908d14874a3d3f5241b5657e893",
+    "appGenerator": "716a313584633ccc72db59c76f2580e4f75cbfb43779317aedba963f767d6ab3"
   },
   "generator": {
     "name": "ansungjalbu-erd-v1.1",
@@ -83,25 +83,25 @@
     }
   ],
   "counts": {
-    "dbRows": 184431,
+    "dbRows": 184802,
     "historicalDays": 89,
     "payments": 153,
-    "menu": 24,
+    "menu": 25,
     "members": 460,
     "closings": 89
   },
   "files": {
     "catalog.ts": {
-      "sha256": "6817b3f1bb65e37e61564a8ba0e8b6b58e82ac21ed0be3551c538c531802395f",
-      "bytes": 40914
+      "sha256": "4968b181564fefc35e1398666bc17416a28c9b30f1f9055d2a1bb2948dc1f437",
+      "bytes": 43286
     },
     "today.ts": {
-      "sha256": "7597de38326b489fedf031b5d3d73938e82ecb918bfbe62ebf47b3b3048fafbc",
-      "bytes": 160175
+      "sha256": "838f25eee7de8b528c9fc5a0c7406b91a2c6a2f810b3b3298c278ce58e55eaa8",
+      "bytes": 160342
     },
     "history.ts": {
-      "sha256": "1fbfb97e57e35fed3b044a0e1d22ba7560c1742dcedb564c8bb961a79ecd6cb8",
-      "bytes": 88937
+      "sha256": "39f0609490affca0acb130415d9ef55af64e234ca63b8567bde9680382dc2a87",
+      "bytes": 88925
     },
     "members.ts": {
       "sha256": "ff68228142aac61a3904009c443fa65aca71ea0ac1a5ff9e09b51db41bd915cd",
@@ -112,19 +112,19 @@
       "bytes": 58880
     },
     "operations.ts": {
-      "sha256": "d9d51b7a8ff6f692fc44b5cbedae415c90f1af943290217a53a6352264f64e5d",
-      "bytes": 240664
+      "sha256": "03243787400b24c25ba5d80ff4287fd1f1fb68d7d84214b208070e19bf1d4aa1",
+      "bytes": 240332
     },
     "supplement.ts": {
-      "sha256": "dfbcb7f0821faa92b1041cbe3da6b5313f52baea89001688aa7874b39390ffb5",
-      "bytes": 15295
+      "sha256": "347a489f71242620176452f8c0fd273b138fcbd884ee286324eaf8fb59099968",
+      "bytes": 14557
     },
     "timeline.ts": {
       "sha256": "73f8c85e860a655c952a6add6f751f374cee5027a44c5c76487ec5af9497ba2a",
       "bytes": 373
     },
     "widget-drafts.json": {
-      "sha256": "f32a52f19e6978dec0fd074b821828c9e462feaddf0065a663ffaa667b2c7ef5",
+      "sha256": "527b0a5c55f75791b58f3ea47dd494be9df4ab5955a5dbdf41a1ae1717ffad31",
       "bytes": 19602
     }
   }

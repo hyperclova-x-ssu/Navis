@@ -50,7 +50,9 @@ export function useWidgetViewStatus(featureId: FeatureId | null | undefined, con
   const domains = featureId && isDataWidgetId(featureId) ? widgetDomains(featureId) : NO_DOMAINS;
   const real = useDomainsStateValue(value?.store.real, domains, false);
   if (!value || !snapshot || !featureId || !isDataWidgetId(featureId)) return null;
-  return applyDomainState(selectWidget(snapshot, featureId, condition, real.mode === 'http' ? NORMAL_VARIANT : resolveVariant(featureId, value.preview), featureId === 'briefing' ? { ...previewViewContext(value.preview), ...value.viewContext } : undefined), real).status;
+  const status = applyDomainState(selectWidget(snapshot, featureId, condition, real.mode === 'http' ? NORMAL_VARIANT : resolveVariant(featureId, value.preview), featureId === 'briefing' ? { ...previewViewContext(value.preview), ...value.viewContext } : undefined), real).status;
+  if (featureId === 'credit-receivable' && real.mode === 'http' && status === 'ready' && !selectMoneyRead(snapshot).members.length) return 'empty';
+  return status;
 }
 
 /* ── REAL-PLAN F00: domain state for widgets whose domain runs over HTTP ────────────────────────────────── */

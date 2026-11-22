@@ -99,9 +99,8 @@ export function checkCommunityResponse(snapshot: DataSnapshot, command: Communit
     if (interest && row.interested) return alreadyDone();
     return { ok: true, offer };
   }
-  if (offer.visibility !== (interest ? 'public' : 'direct')) {
-    return reject('VALIDATION', interest ? 'data.error.publicOnly' : 'data.error.directOnly', 'offerId');
-  }
+  // PAR-3 (D-384): like the service, the example data takes interest on a received offer as well as on a public one; accepting or declining is for received offers only.
+  if (!interest && offer.visibility !== 'direct') return reject('VALIDATION', 'data.error.directOnly', 'offerId');
   if (offer.status === 'expired' || offer.status === 'pending' && !communityDeadlineOpen(snapshot, offer)) {
     return reject('CONFLICT', 'data.error.offerExpired', 'offerId');
   }

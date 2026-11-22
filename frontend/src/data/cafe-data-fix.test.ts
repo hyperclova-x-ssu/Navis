@@ -37,9 +37,9 @@ describe('cafe data fixes', () => {
     expect(selectReceipt(h.pos.read(), { paymentId })).toMatchObject({ amount: 3500, lines: [{ amount: 3500, options: expect.arrayContaining([expect.objectContaining({ name: '에스프레소 1샷', extraPrice: 500 })]) }] });
   });
 
-  it('supplies a JPEG for each of the 24 café menu entries and the acceptance memo', () => {
+  it('supplies a JPEG for each of the 25 café menu entries and the acceptance memo', () => {
     const menu = readModel(snapshot, 'menu');
-    expect(menu.rows).toHaveLength(24);
+    expect(menu.rows).toHaveLength(25);
     expect(menu.rows.map(row => row.menuId).sort()).toEqual(seedCatalog.menu.map(row => row.menuId).sort());
     for (const { menuId, customPhotoUrl } of menu.rows) {
       const photoUrl = `/menu-photos/cafe-${menuId.slice(2)}-01.jpeg`;
@@ -47,6 +47,36 @@ describe('cafe data fixes', () => {
       expect(readFileSync(`public${photoUrl}`).subarray(0, 2).toString('hex'), photoUrl).toBe('ffd8');
     }
     expect(getText(menu.rows.find(row => row.menuId === 'm-cafe-latte')?.memo)).toBe('우유는 매일 아침 한강목장 유업유통');
+  });
+
+  it('deducts one finished strawberry cake slice after a paid sale', () => {
+    const h = setup();
+    const menu = h.pos.read().data.catalog.items.find(row => row.menuId === 'm-strawberry-cake')!;
+    const available = () => deriveStock(h.data.getSnapshot(), { date: TODAY }).rows
+      .find(row => row.itemId === 'i-strawberry-cake-slice')?.rawBase;
+    expect(menu).toMatchObject({ price: 6500, unitCost: 2420 });
+    expect(available()).toBe(6);
+    expect(h.pos.execute({ type: 'cart.add', menuId: menu.menuId, qty: 1, optionIds: [], meta: h.meta() }).ok).toBe(true);
+    const billId = getPaymentBillId(h.pos.read());
+    const { revision } = quotePaymentBill(h.pos.read(), billId);
+    expect(h.pos.beginApproval({ billId, quoteRevision: revision, splits: [{ method: 'card', amount: 6500 }], meta: h.meta() }).ok).toBe(true);
+    expect(h.finish().ok).toBe(true);
+    expect(available()).toBe(5);
+  });
+
+  it('deducts one tracked bakery piece after a paid sale', () => {
+    const h = setup();
+    const menu = h.pos.read().data.catalog.items.find(row => row.menuId === 'm-saltbread')!;
+    const available = () => deriveStock(h.data.getSnapshot(), { date: TODAY }).rows
+      .find(row => row.itemId === 'i-saltbread')?.rawBase;
+    expect(available()).toBe(12);
+    const optionIds = [menu.groups[0].options[0].optionId];
+    expect(h.pos.execute({ type: 'cart.add', menuId: menu.menuId, qty: 1, optionIds, meta: h.meta() }).ok).toBe(true);
+    const billId = getPaymentBillId(h.pos.read());
+    const { revision } = quotePaymentBill(h.pos.read(), billId);
+    expect(h.pos.beginApproval({ billId, quoteRevision: revision, splits: [{ method: 'card', amount: 3200 }], meta: h.meta() }).ok).toBe(true);
+    expect(h.finish().ok).toBe(true);
+    expect(available()).toBe(11);
   });
 
   it('classifies 40 reviews and shares the praise count with promo facts', () => {
@@ -126,8 +156,8 @@ describe('cafe data fixes', () => {
     expect(widgetFacts(performance).some(fact => fact.key === 'perf.returnRate')).toBe(false);
   });
 
-  it('keeps 36 approved demo photos, and saved drafts cannot bypass the minimum photo count', () => {
-    expect(readModel(snapshot, 'promo-video')).toMatchObject({ photoCount: 36, materialsCount: 36, state: 'before' });
+  it('shows the approved café photos, and saved drafts cannot bypass the minimum photo count', () => {
+    expect(readModel(snapshot, 'promo-video')).toMatchObject({ photoCount: 177, materialsCount: 177, state: 'before' });
     const marketing = snapshot.tables.marketing;
     const few = createWidgetDataStore({ marketing: { ...marketing, promoPhoto: marketing.promoPhoto.slice(0, 4) } }).getSnapshot();
     expect(selectWidget(few, 'promo-video', { kind: 'default' }, 'normal')).toMatchObject({ status: 'empty', messageKey: 'data.state.promo-video.few-photos' });

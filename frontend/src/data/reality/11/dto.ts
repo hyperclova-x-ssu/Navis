@@ -54,6 +54,8 @@ export interface GrantNoticeDto extends RevisionDto {
   readonly industry: string;
   readonly reviewStatus: 'before' | 'reviewed';
   readonly matchStatus: 'matched' | 'needs-check';
+  readonly matchTier?: 'exact' | 'related';
+  readonly matchReason?: string;
 }
 
 export interface GrantApplicationDto extends RevisionDto {

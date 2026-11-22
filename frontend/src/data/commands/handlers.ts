@@ -23,6 +23,7 @@ import type { CustomOrderCommand } from '../iteration7/custom-orders';
 import { staffHandlers } from '../iteration7/staff/commands';
 import { staffCalendarClock } from '../iteration7/staff/clock';
 import { guardCalendarWrite } from './calendar-guard';
+import { EXAMPLE_PEER_PREFIX } from '../reality/13/dto';
 import { checkCommunityResponse, checkInquiryReply, planInquiryDraft, type CommunityResponseCommand, type InquiryDraftCommand, type InquiryReplyCommand } from './reply-guard'; // N17
 
 export interface HandlerContext { readonly snapshot: DataSnapshot; readonly tables: DataTables; nextId(prefix: string): string }
@@ -37,6 +38,8 @@ const ok = (tables: DataTables, undoable: boolean, noticeKey?: string, params?: 
   ({ ok: true, tables, undoable, ...(noticeKey ? { noticeKey } : {}), ...(params ? { params } : {}), ...(value !== undefined ? { value } : {}) });
 const patch = <T>(rows: readonly T[], match: (row: T) => boolean, change: (row: T) => T): T[] => rows.map((row) => (match(row) ? change(row) : row));
 const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+/** An https link without credentials (the service's own source-URL rule); anything else is not a source. */
+const safeHttps = (value: string): string | null => { try { const url = new URL(value.trim()); return url.protocol === 'https:' && !url.username && !url.password && url.href.length <= 2048 ? url.href : null; } catch { return null; } };
 const raw = (value: string): DataText => ({ raw: value });
 const isInt = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n);
 const isNum = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
@@ -412,13 +415,47 @@ export const handlers: Handlers = {
     return ok({ ...t, floorLayout: t.floorLayout.map((l) => ({ ...l, isCurrent: l.layoutId === c.layoutId })) }, true, 'data.notice.layoutApplied', { seats });
   },
   'floorPlan.generateFromPhotos': ({ tables: t }) => ok({ ...t, floorSpace: { ...t.floorSpace, planGenerated: true } }, true, 'data.notice.planGenerated'),
-  'inquiry.create': realOnly,
+  // PAR-3: the example mode records an inquiry or review the owner received elsewhere, like the service: a waiting record with the owner's own text.
+  'inquiry.create': ({ tables: t, nextId }, c) => {
+    const title = text(c.title), body = text(c.body);
+    if (!title || [...title].length > 100) return fail('VALIDATION', 'data.error.titleRequired', 'title');
+    if (!body || [...body].length > 4000) return fail('VALIDATION', 'data.error.replyInvalidBody', 'body');
+    if (c.kind !== 'message' && c.kind !== 'review') return fail('VALIDATION', 'data.error.replyInvalidBody', 'kind');
+    const link = c.sourceUrl ? safeHttps(c.sourceUrl) : null;
+    if (c.sourceUrl && (!link || !/(^|\.)naver\.com$/u.test(new URL(link).hostname))) return fail('VALIDATION', 'data.real.inbox.error.INVALID_SOURCE_URL', 'sourceUrl');
+    const threadId = nextId('inq-own');
+    return ok({ ...t, inquiryThread: [...t.inquiryThread, { threadId, type: c.kind, channelKey: c.kind === 'review' ? 'data.real.inbox.channel.manualReview' : 'data.real.inbox.channel.manualMessage',
+      isPublic: c.kind === 'review', receivedAt: NOW, status: 'waiting', needsPersonReason: null, bodyKey: '', draftKey: null, groundKeys: [], rating: null, sentiment: null, author: null, bodyRaw: body, title }] },
+      true, 'data.real.inbox.inquiryRecorded', undefined, { resourceId: threadId });
+  },
   'inquiry.import': realOnly,
   'inquiry.editReply': realOnly,
   'inquiry.deleteReply': realOnly,
   'notice.deleteNews': realOnly,
-  'localChanges.create': realOnly,
-  'community.create': realOnly,
+  // PAR-3: the example mode records the owner's change the way the service does (a new, unacknowledged owner record, valid https source only).
+  'localChanges.create': ({ tables: t, nextId }, c) => {
+    const title = text(c.title), region = text(c.region);
+    if (!title || [...title].length > 160) return fail('VALIDATION', 'data.error.titleRequired', 'title');
+    if (!region || [...region].length > 100) return fail('VALIDATION', 'data.error.titleRequired', 'region');
+    if (!isIsoDate(c.referenceDate)) return fail('VALIDATION', 'data.error.dateInvalid', 'referenceDate');
+    const link = c.sourceUrl ? safeHttps(c.sourceUrl) : null;
+    if (c.sourceUrl && !link) return fail('VALIDATION', 'data.real.local.sourceInvalid', 'sourceUrl');
+    const changeId = nextId('lc-own');
+    return ok({ ...t, localChange: [...t.localChange, { changeId, kind: 'event', titleKey: `seed:${title}`, whenKey: 'data.real.local.recorded-date', startDate: c.referenceDate,
+      endDate: null, distanceM: 0, sameCategory: false, sourceKey: 'seed:사장님 기록', updatedAt: NOW, ackedAt: null, region, sourceUrl: link }] }, true, 'data.real.local.recorded', undefined, { resourceId: changeId });
+  },
+  // PAR-3: the example mode sends an offer to one of the stores that offered to this store, as the service does to a participating store.
+  'community.create': ({ tables: t, nextId }, c) => {
+    const peerKey = c.recipientStoreId.startsWith(EXAMPLE_PEER_PREFIX) ? c.recipientStoreId.slice(EXAMPLE_PEER_PREFIX.length) : '';
+    if (!peerKey || !t.partnershipOffer.some(o => o.direction !== 'sent' && o.fromStoreKey === peerKey)) return fail('VALIDATION', 'data.real.local.peersUnavailable', 'recipientStoreId');
+    const title = text(c.title), terms = text(c.terms);
+    if (!title || [...title].length > 160) return fail('VALIDATION', 'data.error.titleRequired', 'title');
+    if (!terms || [...terms].length > 1000) return fail('VALIDATION', 'data.error.titleRequired', 'terms');
+    if (!isIsoDate(c.startsOn) || !isIsoDate(c.endsOn) || !isIsoDate(c.respondBy) || c.endsOn < c.startsOn || c.respondBy > c.endsOn) return fail('VALIDATION', 'data.error.dateInvalid', 'startsOn');
+    const offerId = nextId('ofr-sent');
+    return ok({ ...t, partnershipOffer: [...t.partnershipOffer, { offerId, fromStoreKey: peerKey, visibility: 'direct', titleKey: `seed:${title}`, categoryKey: 'data.real.local.offer', termsKey: `seed:${terms}`,
+      periodStart: c.startsOn, periodEnd: c.endsOn, respondBy: `${c.respondBy}T23:59:00`, status: 'pending', sharedContactKey: null, direction: 'sent' }] }, true, 'data.real.local.offerCreated', undefined, { resourceId: offerId });
+  },
   'briefing.acknowledge': realOnly,
   'localChanges.acknowledge': ({ tables: t }, c) => {
     const change = t.localChange.find((x) => x.changeId === c.changeId);

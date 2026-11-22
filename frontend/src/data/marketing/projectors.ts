@@ -217,10 +217,11 @@ const projectCouponStatus: Projector<'coupon-status'> = (ctx, condition, variant
 /* 손님 그룹 */
 export function buildCustomerGroups(ctx: ModelContext): CustomerGroupsModel {
   const m = tables(ctx);
+  const memberCodes = new Map(ctx.snapshot.tables.memberProfile.map(profile => [profile.customerId, profile.memberCode]));
   const rule = ruleOf(m);
   const segs = marketingCohorts(m);
   const row = (s: (typeof segs)[number]): GroupCustomer => ({
-    customerId: s.customer.customerId, name: customerAlias(s.customer), visitCount: s.visitCount, lastVisit: s.lastVisit, daysSinceLast: s.daysSinceLast, usualCycleDays: s.usualCycleDays,
+    customerId: s.customer.customerId, memberCode: memberCodes.get(s.customer.customerId), name: customerAlias(s.customer), visitCount: s.visitCount, lastVisit: s.lastVisit, daysSinceLast: s.daysSinceLast, usualCycleDays: s.usualCycleDays,
     consentSms: s.customer.consentSms, selectable: s.customer.consentSms, reasonKey: s.customer.consentSms ? null : 'data.marketing.error.noConsent',
   });
   const of = (id: CustomerGroupId) => segs.filter((s) => s.group === id).map(row);

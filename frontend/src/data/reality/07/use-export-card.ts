@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useRealPort } from '../../react';
+import { useRealPort, useWidgetDataStore } from '../../react';
 import { PortError } from '../00';
+import { fixtureExports } from './fixture-exports';
 import {
   exportApprovalExpired, exportOutcome, issueExportApproval, requiresSecondConfirmation, submitExport,
   type CalendarPushReceipt, type ExportCard, type ExportOperation, type WorksPushReceipt,
@@ -30,6 +31,8 @@ const fresh = ({ operation, resourceId, expectedRevision, expectedStaffRevision 
  */
 export function useExportCard({ onDone }: { readonly onDone?: (receipt: ExportReceipt, operation: ExportOperation) => void } = {}) {
   const port = useRealPort();
+  const store = useWidgetDataStore();
+  const http = port?.state('staff').mode === 'http';
   const [state, setState] = useState<ExportCardState>();
   const current = useRef<ExportCardState | undefined>(undefined);
   const active = useRef<AbortController | null>(null);
@@ -49,13 +52,23 @@ export function useExportCard({ onDone }: { readonly onDone?: (receipt: ExportRe
 
   const press = useCallback(async () => {
     const now = current.current;
-    if (!port || !now || active.current || now.phase === 'done' || now.phase === 'stale' || now.phase === 'sending') return;
+    if (!now || active.current || now.phase === 'done' || now.phase === 'stale' || now.phase === 'sending') return;
     const controller = new AbortController();
     const { signal } = controller;
     active.current = controller;
     let card = now.card;
     update({ phase: 'sending', card });
     try {
+      if (!http) {
+        if (requiresSecondConfirmation(card.operation) && now.phase !== 'confirm') {
+          update({ phase: 'confirm', card });
+          return;
+        }
+        const receipt = fixtureExports(store).submit(card);
+        update({ phase: 'done', card, receipt });
+        done.current?.(receipt, card.operation);
+        return;
+      }
       if (!card.submitted) {
         if (exportApprovalExpired(card)) throw new PortError(409, 'CONFLICT', 'APPROVAL_EXPIRED');
         const needsSecond = requiresSecondConfirmation(card.operation);
@@ -88,7 +101,7 @@ export function useExportCard({ onDone }: { readonly onDone?: (receipt: ExportRe
     } finally {
       if (active.current === controller) active.current = null;
     }
-  }, [port]);
+  }, [http, port, store]);
 
-  return { state, open, press, close, available: !!port };
+  return { state, open, press, close };
 }

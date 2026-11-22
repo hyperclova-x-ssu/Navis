@@ -21,11 +21,16 @@ export interface NaverOrderPage {
 /** Order status rows keep provider IDs separate and leave unreported POS cells empty. */
 export interface NaverOrderStatusRow {
   readonly id: string;
+  readonly ordinal: number;
+  readonly publicOrderNumber: string | undefined;
   readonly naver: NaverOrder;
 }
 
-export function projectNaverOrderStatus(order: NaverOrder): NaverOrderStatusRow {
-  return { id: `naver:${order.orderNumber}`, naver: order };
+export function projectNaverOrderStatus(order: NaverOrder, ordinal: number): NaverOrderStatusRow {
+  const number = order.orderNumber.trim();
+  // The provider wire also uses orderNumber as the lookup key for records with no public number.
+  const internal = /^order-\d+$/iu.test(number) || /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/iu.test(number);
+  return { id: `naver:${order.orderNumber}`, ordinal, publicOrderNumber: internal ? undefined : number || undefined, naver: order };
 }
 
 export type NaverTransition = { kind: 'prepare'; preparationMinutes: number } | { kind: 'pickup' };

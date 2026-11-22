@@ -77,7 +77,7 @@ export const projectAiResponse: Projector<'ai-response'> = (ctx, condition, vari
     draft: th.sentReplyBody !== undefined ? { raw: th.sentReplyBody } : th.replyDraft ? { raw: th.replyDraft.body } : th.draftKey ? { key: th.draftKey } : null,
     groundKeys: th.replyDraft ? th.replyDraft.grounding.map(line => `seed:${line}`) : th.groundKeys,
     // End N17 saved copy.
-    rating: th.rating, waiting: th.status !== 'done', sentiment: th.sentiment, authorMasked: maskAuthor(th.author),
+    rating: th.rating, waiting: th.status !== 'done', sentiment: th.sentiment, authorMasked: maskAuthor(th.author), ...(th.title ? { title: th.title } : {}),
   }));
   const waiting = threads.filter((th) => th.waiting);
   // HTTP: NAVER reviews and consultations that wait for a reply but are not in the queue yet count with the queue (one rule, RV-REALVERIFY-4).
@@ -107,10 +107,13 @@ export const projectCommunity: Projector<'community'> = (ctx, condition, variant
     offerId: o.offerId, fromStoreKey: o.fromStoreKey, visibility: o.visibility, titleKey: o.titleKey, categoryKey: o.categoryKey, termsKey: o.termsKey, period: { start: o.periodStart, end: o.periodEnd },
     respondBy: o.respondBy, status: o.status, sharedContactKey: o.sharedContactKey, interestSent: t.offerInterest.some((i) => i.offerId === o.offerId),
   });
-  const offers = [...t.partnershipOffer].sort((a, b) => a.respondBy.localeCompare(b.respondBy) || a.offerId.localeCompare(b.offerId)).map(toOffer);
+  // PAR-3: an offer the example mode's owner sent is a sent offer, not a received one.
+  const byDeadline = (a: (typeof t.partnershipOffer)[number], b: (typeof t.partnershipOffer)[number]) => a.respondBy.localeCompare(b.respondBy) || a.offerId.localeCompare(b.offerId);
+  const offers = [...t.partnershipOffer].filter(o => o.direction !== 'sent').sort(byDeadline).map(toOffer);
   const real = t.realLocal;
-  const sent = real?.offers.filter(row => row.senderStoreId === real.storeId)
-    .map(row => ({ ...toOffer(offerRow(row, real.storeId, real.peers, APP_CLOCK.calendarDate)), interestSent: row.interested }));
+  const sent = real ? real.offers.filter(row => row.senderStoreId === real.storeId)
+    .map(row => ({ ...toOffer(offerRow(row, real.storeId, real.peers, APP_CLOCK.calendarDate)), interestSent: row.interested }))
+    : [...t.partnershipOffer].filter(o => o.direction === 'sent').sort(byDeadline).map(toOffer);
   const pending = offers.filter(o => o.visibility === 'direct' && o.status === 'pending' && (!real || real.offers.some(row => row.id === o.offerId && row.canRespond)));
   const model: CommunityModel = {
     pendingCount: pending.length, received: offers.filter((o) => o.visibility === 'direct'), pending,

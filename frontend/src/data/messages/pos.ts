@@ -26,7 +26,7 @@ const ko = {
   'order.receipt.incomeInvalid': '휴대폰 번호를 숫자 10~11자리로 넣어 주세요',
   'order.receipt.businessInvalid': '사업자 번호를 숫자 10자리로 넣어 주세요',
   'data.management.cancelSummary': '취소',
-  'data.pos.asOf': '{date} · {time} 기준',
+  'data.pos.asOf': '{time} 기준',
   'data.pos.missingTask': '누락 의심 주문 {count}건 · #{no} {item} · {n}분째예요',
   'data.pos.completedVisits': '방문 완료 {n}건',
   'data.pos.navisMissing': '누락 의심 주문이 {count}건 있어요: #{no} {time} {item}, {n}분째 완료 전. 진행 중 {open}건이에요. 완료를 눌렀는지 확인해 보세요.',

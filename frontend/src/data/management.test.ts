@@ -47,10 +47,11 @@ describe('반복 5 공용 원본과 파생값', () => {
   it('시작 재고와 메뉴별 사용을 정수 단위로 계산하고 7일 잔량을 연결한다', () => {
     const s = createWidgetDataStore().getSnapshot();
     const stock = deriveStock(s, day);
+    // D-439 lowers the seeded salt-bread stock for the ref-1 countdown.
     expect(['i-milk', 'i-bean-house', 'i-cup-takeout', 'i-vanilla-syrup', 'i-saltbread', 'i-basque-cake'].map((id) => {
       const r = stock.rows.find((r) => r.itemId === id)!;
       return [r.opening, r.usedToday, r.display];
-    })).toEqual([[42360, 21960, 20400], [8046, 2358, 5688], [607, 201, 1406], [3205, 655, 2550], [53, 16, 37], [21, 3, 18]]);
+    })).toEqual([[42360, 21960, 20400], [8046, 2358, 5688], [607, 201, 1406], [3205, 655, 2550], [28, 16, 12], [21, 3, 18]]);
     expect(stock).toMatchObject({ restockCount: 0, outOfStockCount: 0 });
     expect(deriveSuggestions(s, day)).toEqual([]);
     const history = selectStockHistory(s, { itemId: 'i-milk', period: 'last7days' });

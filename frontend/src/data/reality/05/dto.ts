@@ -5,9 +5,11 @@ import { addDays, weekdayOf } from '../../db/time';
 import type { MemberAccountTxn, MembershipProduct, MembershipTerms, MembershipUse, MoneyRead } from '../../iteration7/accounting/types';
 import type { selectMoneyReceipt } from '../../iteration7/accounting/selectors';
 import type { MemberFundingTarget, TerminalRecord } from './commands';
+import { memberDisplayId } from '../../customer-display';
 
 export interface MemberDto {
   readonly memberId: string;
+  readonly memberCode?: string;
   readonly customerId: string;
   readonly name: string;
   readonly phoneMasked: string;
@@ -115,7 +117,7 @@ export function projectMemberTables(realMembers: RealMembersSnapshot, marketing:
   return {
     realMembers,
     memberProfile: members.map(m => ({ memberId: m.memberId, dbMemberId: m.memberId, customerId: m.customerId,
-      joinedOn: m.joinedOn, gradeOverride: m.gradeOverride })),
+      memberCode: memberDisplayId(m.memberId, m.memberCode, m.name) || undefined, joinedOn: m.joinedOn, gradeOverride: m.gradeOverride })),
     memberNote: members.flatMap(m => m.notes.map(n => ({ memberId: m.memberId, noteId: n.noteId, body: { raw: n.body }, updatedAt: n.updatedAt }))),
     membershipProduct: realMembers.products.map(p => ({ productId: p.productId, nameKey: p.name, kind: p.kind, uses: p.totalUses,
       validDays: p.validDays, dailyLimit: p.dailyLimit ?? null, price: p.soldPrice })),

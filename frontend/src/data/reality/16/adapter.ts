@@ -78,6 +78,8 @@ export const promoAdapter: DomainAdapter = {
     DRAFT_REQUIRED: 'promo.real.draftRequired',
     MANUAL_UPLOAD_REQUIRED: 'promo.real.manual',
     POST_LINK_REQUIRED: 'promo.real.linkRequired',
+    PROMO_SELECTION_UNAVAILABLE: 'promo.error.selectionUnavailable',
+    PROMO_NOT_READY: 'promo.error.notReady',
     BUSY: 'data.marketing.error.busy',
   },
   async load({ reads, storeId, signal, snapshot }) {

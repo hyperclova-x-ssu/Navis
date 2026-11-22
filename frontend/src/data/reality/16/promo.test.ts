@@ -77,6 +77,19 @@ function setup(retry = false) {
 }
 
 describe('promo HTTP cutover', () => {
+  it.each([
+    ['PROMO_SELECTION_UNAVAILABLE', 'promo.error.selectionUnavailable'],
+    ['PROMO_NOT_READY', 'promo.error.notReady'],
+  ])('maps the %s rejection to the promo guidance', async (code, messageKey) => {
+    const { backend, open } = setup();
+    const { store, port } = open();
+    await port.load('promo');
+    expect(await executePromo(store, { type: 'promo.saveDraft', patch: input })).toMatchObject({ ok: true });
+    backend.on('POST', `${base}/drafts/draft/generate`, () => reply(409, { code }));
+    expect(await store.execute({ type: 'video.make', input, idempotencyKey: 'confirm-generation' }))
+      .toMatchObject({ ok: false, reason: code, messageKey });
+  });
+
   it('projects authoritative assets, draft revision, job and publication after a fresh session', async () => {
     const { backend, open } = setup();
     const { store, port } = open();

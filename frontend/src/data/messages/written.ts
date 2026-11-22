@@ -282,6 +282,7 @@ export const writtenRows = {
   'data.notice.posted': ['게시했어요', 'Posted', '已发布', '已發布'],
   'data.notice.replyDraftSaved': ['답변 초안을 저장했어요', 'Reply draft saved', '回复草稿已保存', '已儲存回覆草稿'], // N17
   'data.notice.offerAccepted': ['제안을 수락했어요', 'Offer accepted', '已接受提议', '已接受提案'],
+  'data.notice.namedOfferAccepted': ['‘{title}’ 제안을 수락했어요', 'Accepted “{title}”', '已接受“{title}”', '已接受「{title}」'],
   'data.notice.offerDeclined': ['제안을 거절했어요', 'Offer declined', '已拒绝提议', '已拒絕提案'],
   'data.notice.interestSent': ['관심을 보냈어요', 'Interest sent', '已表示感兴趣', '已表示有興趣'],
 

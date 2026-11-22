@@ -102,5 +102,5 @@ export const seedSupplement = cutoff ? {
   localChanges: fullSupplement.localChanges.filter(row => fixtureOccurred(row.updatedAt)),
   notices: fullSupplement.notices.filter(row => fixtureOccurred(row.createdAt)),
   customOrders: fullSupplement.customOrders.filter(row => fixtureOccurred(row.receivedAt)),
-  promos: fullSupplement.promos.filter(row => fixtureOccurred(row.createdAt)),
+  promos: fullSupplement.promos,
 } : fullSupplement;

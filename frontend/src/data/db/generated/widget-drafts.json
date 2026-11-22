@@ -308,15 +308,15 @@
       "sentiment": null
     },
     {
-      "threadId": "c32f4505-f921-5b46-b257-884f07da5aff",
-      "type": "message",
-      "body": "어제 오후 2시쯤 결제한 영수증(카드 끝자리 4821) 지출증빙용으로 재발행 받을 수 있을까요?",
-      "sentiment": null
-    },
-    {
       "threadId": "f03322af-a273-5d6f-a7a5-d96594e98173",
       "type": "review",
       "body": "오후에 4인 테이블에 혼자 짐 펴놓고 자리 비운 손님이 있었는데 매장 정리가 안 돼서 앉을 곳이 없었어요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "c32f4505-f921-5b46-b257-884f07da5aff",
+      "type": "message",
+      "body": "어제 오후 2시쯤 결제한 영수증(카드 끝자리 4821) 지출증빙용으로 재발행 받을 수 있을까요?",
       "sentiment": null
     },
     {
@@ -338,15 +338,15 @@
       "sentiment": null
     },
     {
-      "threadId": "9e14ec6b-ee59-58a1-8b91-26d296271fc6",
-      "type": "message",
-      "body": "공주 보늬밤 라떼 시즌 메뉴는 언제까지 판매하나요? 12월에도 마실 수 있는지 궁금합니다.",
-      "sentiment": null
-    },
-    {
       "threadId": "96afc366-9b30-576e-bba2-d75aebd4bdd6",
       "type": "review",
       "body": "아메리카노 3천 원이라 가격 부담이 적고 양도 넉넉합니다. 공강 시간에 친구들이랑 자주 들러요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "9e14ec6b-ee59-58a1-8b91-26d296271fc6",
+      "type": "message",
+      "body": "공주 보늬밤 라떼 시즌 메뉴는 언제까지 판매하나요? 12월에도 마실 수 있는지 궁금합니다.",
       "sentiment": null
     },
     {
@@ -356,15 +356,15 @@
       "sentiment": null
     },
     {
-      "threadId": "b0edbc58-56e1-5419-9885-5a8b7d5d2670",
-      "type": "message",
-      "body": "바스크 치즈케이크 홀케이크로도 사전 주문 판매하시나요? 다음 주 금요일에 필요해서요.",
-      "sentiment": null
-    },
-    {
       "threadId": "c5b1c3c7-b88e-5f02-9788-20d2c03c5808",
       "type": "review",
       "body": "사장님이랑 알바분들이 항상 웃으면서 응대해 주셔서 기분이 좋습니다. 텀블러 들고 가면 꼼꼼히 챙겨 주세요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "b0edbc58-56e1-5419-9885-5a8b7d5d2670",
+      "type": "message",
+      "body": "바스크 치즈케이크 홀케이크로도 사전 주문 판매하시나요? 다음 주 금요일에 필요해서요.",
       "sentiment": null
     },
     {
@@ -392,27 +392,27 @@
       "sentiment": null
     },
     {
-      "threadId": "2a0c7051-baa8-549c-bbad-627c89e6d50d",
-      "type": "message",
-      "body": "내일 학과 세미나 때문에 아메리카노 15잔, 라떼 5잔 단체 주문하려는데 오전 9시 30분까지 픽업 가능할까요? 연락처 010-0000-1842입니다.",
-      "sentiment": null
-    },
-    {
       "threadId": "97b28981-89d9-5061-bcf0-47f35aee9822",
       "type": "review",
       "body": "겉바속촉 소금빵이랑 바닐라빈 라떼 조합이 최고예요. 학교 앞 카페 중에 디저트 퀄리티가 제일 괜찮은 편입니다.",
       "sentiment": null
     },
     {
-      "threadId": "fef28503-3969-5b69-8d66-eb29c6858006",
+      "threadId": "2a0c7051-baa8-549c-bbad-627c89e6d50d",
       "type": "message",
-      "body": "아메리카노 10잔 정기권 구매하면 디카페인 아메리카노로도 차감 사용이 가능한가요?",
+      "body": "내일 학과 세미나 때문에 아메리카노 15잔, 라떼 5잔 단체 주문하려는데 오전 9시 30분까지 픽업 가능할까요? 연락처 010-0000-1842입니다.",
       "sentiment": null
     },
     {
       "threadId": "2ffbbb17-ddf9-50ad-900e-f96ca30a9e33",
       "type": "review",
       "body": "아침 1교시 전에 들러도 음료가 금방 나와서 지각 안 하고 잘 마셨습니다. 아메리카노 산미가 과하지 않고 고소해서 매일 마시기 좋아요.",
+      "sentiment": null
+    },
+    {
+      "threadId": "fef28503-3969-5b69-8d66-eb29c6858006",
+      "type": "message",
+      "body": "아메리카노 10잔 정기권 구매하면 디카페인 아메리카노로도 차감 사용이 가능한가요?",
       "sentiment": null
     },
     {

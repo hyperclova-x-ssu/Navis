@@ -5,16 +5,21 @@ import type { CctvPosLink, PosPreferences } from '../../../../contracts/session'
 import type { AccountRestore } from '../../../../state';
 import { PortError, type CommandReceipt } from '../port';
 import type { PortSession } from '../transport';
+import manifest from '../../../db/generated/manifest.json';
 
 /* ── Wire (PORT.md §10; B00 confirms or amends) ───────────────────────────────────────────────────────── */
 export interface StoreSummary { readonly storeId: string; readonly name: string; readonly role: string; readonly current: boolean }
+export const isDemoRestartOwner = (stores: readonly StoreSummary[]): boolean =>
+  stores.some(store => store.current && store.role === 'owner' && store.storeId === manifest.store.storeId);
 export interface ProfileDto {
   readonly storeId: string; readonly name: string; readonly businessType: BusinessType | null; readonly paymentStyle: PaymentStyle | null; readonly tableLayout: TableLayout | null;
   readonly posPreferences?: PosPreferences; readonly cctvPosLinks?: readonly CctvPosLink[]; readonly onboardingDone: boolean; readonly revision: number;
+  readonly smsSettings?: ShopSettings['smsSettings'];
 }
 export interface PreferencesDto { readonly theme: Theme; readonly textScale: 100 | 125; readonly locale: Locale; readonly revision: number }
 export interface BoardDto { readonly boardId: DashboardLayerId; readonly revision: number; readonly currentPage: number; readonly pages: readonly DashboardPage[] }
-export type ProfilePatch = Pick<ProfileDto, 'businessType' | 'paymentStyle' | 'tableLayout' | 'onboardingDone'> & Partial<Pick<ProfileDto, 'posPreferences' | 'cctvPosLinks'>>;
+export type ProfilePatch = Pick<ProfileDto, 'businessType' | 'paymentStyle' | 'tableLayout' | 'onboardingDone'>
+  & Partial<Pick<ProfileDto, 'posPreferences' | 'cctvPosLinks' | 'smsSettings'>>;
 export type PreferencesPatch = Pick<PreferencesDto, 'theme' | 'textScale' | 'locale'>;
 
 export interface AccountRevisions { readonly profile: number; readonly preferences: number; readonly boards: Readonly<Record<DashboardLayerId, number>> }
@@ -61,12 +66,15 @@ export function createAccountClient(transport: PortSession) {
       ]);
       const p = checkProfile(profile), pref = checkPreferences(preferences), b = checkBoards(boards);
       const settings: ShopSettings = { businessType: p.businessType, paymentStyle: p.paymentStyle, tableLayout: p.tableLayout, revision: p.revision,
-        ...(p.posPreferences ? { posPreferences: p.posPreferences } : {}), ...(p.cctvPosLinks ? { cctvPosLinks: p.cctvPosLinks } : {}) };
+        ...(p.posPreferences ? { posPreferences: p.posPreferences } : {}), ...(p.cctvPosLinks ? { cctvPosLinks: p.cctvPosLinks } : {}),
+        ...(p.smsSettings ? { smsSettings: p.smsSettings } : {}) };
       return {
         stores: Array.isArray(stores?.items) ? stores.items : [], storeName: p.name,
         revisions: { profile: p.revision, preferences: pref.revision, boards: { management: b.management.revision, marketing: b.marketing.revision } },
         restore: {
           theme: pref.theme, textScale: pref.textScale, locale: pref.locale, onboardingDone: p.onboardingDone, settings,
+          // The café seed starts at revision 1. An incomplete later profile resumes the café's layout-only restart.
+          resumeDemoRestart: !p.onboardingDone && p.storeId === manifest.store.storeId && p.revision > 1,
           boards: {
             management: { pages: b.management.pages, currentPage: b.management.currentPage, revision: b.management.revision },
             marketing: { pages: b.marketing.pages, currentPage: b.marketing.currentPage, revision: b.marketing.revision },
@@ -74,7 +82,7 @@ export function createAccountClient(transport: PortSession) {
         },
       };
     },
-    saveProfile: (patch: ProfilePatch, expectedRevision: number, idempotencyKey: string) =>
+    saveProfile: (patch: Partial<ProfilePatch>, expectedRevision: number, idempotencyKey: string) =>
       transport.request<CommandReceipt>({ method: 'PATCH', path: '/profile', body: patch, expectedRevision, idempotencyKey }),
     savePreferences: (patch: PreferencesPatch, expectedRevision: number, idempotencyKey: string) =>
       transport.request<CommandReceipt>({ method: 'PATCH', path: '/preferences', body: patch, expectedRevision, idempotencyKey }),
