@@ -27,7 +27,7 @@ services:
       NAVIS_DB_HOST: customer-check-db
       NAVIS_REDIS_URL: redis://customer-check-redis:6379
     secrets:
-      - {source: customer_check_migrate, target: customer_migrate_password}
+      - {source: customer_check_migrate, target: customer_mig_password}
     volumes:
       - ./.secrets/test/db:/run/navis-test-db:ro
       - ./services:/app/backend/services:ro
@@ -40,7 +40,7 @@ networks:
   customer-check-data: {internal: true}
   customer-check-cache: {internal: true}
 secrets:
-  customer_check_migrate: {file: ./.secrets/test/db/customer_migrate_password}
+  customer_check_migrate: {file: ./.secrets/test/db/customer_mig_password}
 `;
 
 function compose(...args) {

@@ -1,4 +1,3 @@
-/* global AbortSignal, console, fetch, URL */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { request as httpRequest } from 'node:http';

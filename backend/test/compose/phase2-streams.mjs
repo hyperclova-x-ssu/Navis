@@ -18,7 +18,7 @@ if (!process.argv[2]) {
     compose('run', '--rm', '--pull', 'never', 'streams-tools', 'npm', 'run', 'migrate', '--', 'pos');
     // T-308 provides the domain migration. This disposable DB exercises its outbox grant contract.
     compose('exec', '-T', 'streams-test-db', 'psql', '-Xq', '-U', 'navis_bootstrap', '-d', 'inventory',
-      '--set', 'ON_ERROR_STOP=1', '-c', `SET ROLE inventory_migrate;
+      '--set', 'ON_ERROR_STOP=1', '-c', `SET ROLE inventory_mig;
       CREATE TABLE inventory.outbox (
         event_id uuid PRIMARY KEY, producer text NOT NULL DEFAULT 'inventory', store_id uuid NOT NULL,
         scope_key text NOT NULL, store_seq bigint NOT NULL, event_type text NOT NULL,
@@ -26,7 +26,7 @@ if (!process.argv[2]) {
         payload jsonb NOT NULL, published_at timestamptz, attempt_count integer NOT NULL DEFAULT 0,
         next_attempt_at timestamptz, UNIQUE (scope_key, store_seq)
       );
-      CREATE POLICY fixture_writer ON inventory.outbox TO inventory_migrate
+      CREATE POLICY fixture_writer ON inventory.outbox TO inventory_mig
         USING (store_id = nullif(current_setting('app.store_id', true), '')::uuid)`);
     for (let pass = 0; pass < 2; pass++) {
       compose('exec', '-T', 'streams-test-db', '/docker-entrypoint-initdb.d/20-stream-access.sh');
@@ -155,7 +155,7 @@ async function runInContainer(phase, scopes) {
       await effects.query(`CREATE TABLE IF NOT EXISTS inventory.t307_stream_effect (
         store_id uuid NOT NULL, event_id uuid NOT NULL
       );
-      GRANT SELECT, INSERT ON inventory.t307_stream_effect TO inventory_runtime`);
+      GRANT SELECT, INSERT ON inventory.t307_stream_effect TO inventory_run`);
 
       const a1 = await insert(a, 1);
       crash('crash-publish', 71);
