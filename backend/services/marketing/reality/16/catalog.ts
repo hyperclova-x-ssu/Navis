@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import type { PromoCatalogInput } from '../../../../../frontend/src/data/marketing/types.ts';
 import { loadReferences } from '../../../../../frontend/server/promo/references.mjs';
 import type { FileBinding } from '../../promo/contracts.ts';
@@ -12,6 +13,7 @@ export type AccountPhoto = {
   menuId: string | null;
   width: number;
   height: number;
+  contentUrl?: string;
   binding: FileBinding;
 };
 export type PromoAccountCatalog = {
@@ -19,7 +21,7 @@ export type PromoAccountCatalog = {
    * Return only rights-approved ready Account photos for this owner/store. Upload photoIds are
    * the hyphen-free marketing asset UUIDs. Resolve worker-readable bindings in Account storage.
    */
-  photos(owner: Owner, uploads: readonly Asset[]): Promise<readonly AccountPhoto[]>;
+  photos(owner: Owner, uploads: readonly Asset[], db?: PoolClient): Promise<readonly AccountPhoto[]>;
   verifyUpload: PromoRealityOptions['verifyUpload'];
 };
 
@@ -28,10 +30,10 @@ export function createPromoCatalog(account: PromoAccountCatalog, venueForOwner: 
   return {
     references: loadReferences(),
     verifyUpload: account.verifyUpload,
-    async catalogForOwner(owner, uploads) {
+    async catalogForOwner(owner, uploads, db) {
       const venue = await venueForOwner(owner);
       if (!venue) return null;
-      const photos = await account.photos(owner, uploads);
+      const photos = await account.photos(owner, uploads, db);
       const photoUrl = (fileId: string) => `/api/v1/stores/${owner.storeId}/files/${fileId}/content`;
       const byMenu = new Map<string, string[]>();
       const rows: Photo[] = [];
@@ -40,7 +42,7 @@ export function createPromoCatalog(account: PromoAccountCatalog, venueForOwner: 
         if (!/^[a-z0-9-]{1,32}$/.test(photo.photoId) || Object.hasOwn(bindings, photo.photoId)) continue;
         bindings[photo.photoId] = { ...photo.binding, sourceFileId: photo.fileId };
         const { photoId, menuId, width, height } = photo;
-        rows.push({ photoId, menuId, width, height, url: photoUrl(photo.fileId) });
+        rows.push({ photoId, menuId, width, height, url: photo.contentUrl ?? photoUrl(photo.fileId) });
         if (menuId !== null) {
           const menuPhotos = byMenu.get(menuId) ?? [];
           menuPhotos.push(photoId);

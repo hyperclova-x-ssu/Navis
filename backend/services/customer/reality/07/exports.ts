@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import type { ObjectStorage } from '../../../../packages/object-storage/index.ts';
 import { listProjections } from './projection.ts';
 import { listEvents, listShifts, loadEntities, readPreferences, type Scope } from './records.ts';
 import { invalid, type CalendarEvent, type CalendarSource, type Category } from './wire.ts';
@@ -5,6 +7,7 @@ import { invalid, type CalendarEvent, type CalendarSource, type Category } from 
 type Entry = { id: string; revision: number; source: CalendarSource; category: Category; title: string;
   date: string; endDate?: string; time?: string | null; endTime?: string | null; memo?: string | null; todo?: boolean };
 const exportLimit = 2000;
+export type CalendarExportStorage = Pick<ObjectStorage, 'get' | 'put'>;
 const stamp = (date: Date) => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 const dayStamp = (day: string) => day.replaceAll('-', '');
 const tomorrow = (day: string) => new Date(Date.parse(day) + 86_400_000).toISOString().slice(0, 10);
@@ -100,4 +103,31 @@ export async function calendarExport(scope: Scope, start: string, end: string, n
   const lines = ['BEGIN:VCALENDAR', 'PRODID:-//Navis//Store Calendar//KO', 'VERSION:2.0', 'CALSCALE:GREGORIAN',
     ...entries.flatMap(row => entryLines(row, scope.storeId, now, timezone)), 'END:VCALENDAR'];
   return lines.map(fold).join('\r\n') + '\r\n';
+}
+
+export async function archiveCalendarExport(storage: CalendarExportStorage, storeId: string, start: string, end: string, body: string) {
+  const bytes = Buffer.from(body);
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  const key = `stores/${storeId}/documents/calendar/${start}_${end}/${digest}.ics`;
+  const signal = AbortSignal.timeout(5_000);
+  try {
+    await storage.put(key, bytes, 'text/calendar', signal);
+    const stored = await storage.get(key, signal);
+    if (!stored) return;
+    if (stored.contentLength !== null && stored.contentLength !== bytes.length) {
+      stored.body.destroy();
+      return;
+    }
+    const chunks: Buffer[] = [];
+    let length = 0;
+    for await (const chunk of stored.body as AsyncIterable<Buffer>) {
+      length += chunk.length;
+      if (length > bytes.length) return;
+      chunks.push(chunk);
+    }
+    const archived = Buffer.concat(chunks, length);
+    return archived.equals(bytes) ? archived : undefined;
+  } catch {
+    return undefined;
+  }
 }

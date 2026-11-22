@@ -1,12 +1,16 @@
 import { timingSafeEqual } from 'node:crypto';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { readFile } from 'node:fs/promises';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { validateInput } from '../../../../frontend/server/promo/service.mjs';
-import type { loadReferences } from '../../../../frontend/server/promo/references.mjs';
+import { listReferences, type loadReferences } from '../../../../frontend/server/promo/references.mjs';
+import type { ObjectStorage } from '../../../packages/object-storage/index.ts';
 import { isUuid, sha256, type CatalogSnapshot, type PromoArtifacts } from './contracts.ts';
 import { enqueuePromo, getPromoJob, promoView, PromoRouteError, type ConfirmedCard } from './jobs.ts';
+import { byteRange, configuredPromoMediaStorage, createPromoMedia } from './media.ts';
 
 export const promoJobsPath = '/internal/v1/marketing/stores/:storeId/promo/jobs';
+const referencesPath = '/internal/v1/marketing/stores/:storeId/promo/references';
 type StoreParams = { storeId: string };
 type JobParams = StoreParams & { jobId: string };
 
@@ -14,8 +18,10 @@ interface PromoRoutesOptions {
   confirmToken?: string;
   readToken: string;
   references: ReturnType<typeof loadReferences>;
+  galleryReferences?: ReturnType<typeof loadReferences>;
   catalogForStore?: (storeId: string) => Promise<CatalogSnapshot | null>;
   artifacts: Pick<PromoArtifacts, 'read'>;
+  objectStorage?: ObjectStorage | null;
 }
 
 function authenticate(request: FastifyRequest<{ Params: StoreParams }>, credential: Buffer) {
@@ -45,12 +51,13 @@ function checkedCard(body: unknown, key: unknown): ConfirmedCard {
   return card as ConfirmedCard;
 }
 
-function byteRange(header: string, size: number) {
-  const range = /^bytes=(\d*)-(\d*)$/.exec(header);
-  if (!range || (!range[1] && !range[2])) return null;
-  const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
-  const end = range[1] && range[2] ? Math.min(size - 1, Number(range[2])) : size - 1;
-  return start <= end && start < size ? { start, end } : null;
+function sendBytes(reply: FastifyReply, bytes: Buffer, mime: string, header?: string) {
+  reply.type(mime).header('accept-ranges', 'bytes').header('x-content-type-options', 'nosniff');
+  if (!header) return reply.send(bytes);
+  const range = byteRange(header, bytes.length);
+  if (!range) return reply.code(416).header('content-range', `bytes */${bytes.length}`).send();
+  return reply.code(206).header('content-range', `bytes ${range.start}-${range.end}/${bytes.length}`)
+    .send(bytes.subarray(range.start, range.end + 1));
 }
 
 export function registerPromoRoutes(app: FastifyInstance, database: Pool, options: PromoRoutesOptions) {
@@ -60,6 +67,9 @@ export function registerPromoRoutes(app: FastifyInstance, database: Pool, option
   }
   const confirm = confirmToken && Buffer.from(sha256(`Bearer ${confirmToken}`), 'hex');
   const read = Buffer.from(sha256(`Bearer ${options.readToken}`), 'hex');
+  const storage = options.objectStorage === undefined ? configuredPromoMediaStorage() : options.objectStorage;
+  const media = storage && createPromoMedia(database, storage);
+  const gallery = options.galleryReferences ?? options.references;
   const authorizeRead = async (request: FastifyRequest<{ Params: JobParams }>) => {
     authenticate(request, read);
     if (!isUuid(request.params.jobId)) throw new PromoRouteError(404, 'NOT_FOUND');
@@ -103,19 +113,66 @@ export function registerPromoRoutes(app: FastifyInstance, database: Pool, option
     routes.get<{ Params: JobParams }>(`${promoJobsPath}/:jobId`, { onRequest: authorizeRead }, async ({ params }) =>
       promoView(await getPromoJob(database, params.storeId, params.jobId)));
 
+    routes.get<{ Params: StoreParams }>(referencesPath, async request => {
+      const { storeId } = authenticate(request, read);
+      const list = listReferences(gallery);
+      const names = media ? await media.referenceNames(storeId) : undefined;
+      return { ...list, storeId, references: list.references.flatMap(ref => {
+        if (names && (!names.has(`reference/${ref.id}/poster.jpg`) || !names.has(`reference/${ref.id}/preview.mp4`))) return [];
+        const base = `/api/v1/stores/${storeId}/promo/references/${ref.id}`;
+        return [{ ...ref, posterUrl: `${base}/poster.jpg`, previewUrl: `${base}/preview.mp4` }];
+      }) };
+    });
+
+    routes.get<{ Params: StoreParams & { referenceId: string; asset: string } }>(
+      `${referencesPath}/:referenceId/:asset`, async (request, reply) => {
+        const { storeId } = authenticate(request, read);
+        const { referenceId, asset } = request.params;
+        const ref = gallery.refs.get(referenceId);
+        if (!ref || (asset !== 'poster.jpg' && asset !== 'preview.mp4')) throw new PromoRouteError(404, 'NOT_FOUND');
+        const mime = asset === 'poster.jpg' ? 'image/jpeg' : 'video/mp4';
+        if (media) {
+          const row = await media.fixture(storeId, `reference/${referenceId}/${asset}`);
+          if (!row) throw new PromoRouteError(404, 'NOT_FOUND');
+          if (row.content_type !== mime) throw new PromoRouteError(503, 'UNAVAILABLE');
+          return media.send(reply, row, { range: request.headers.range, privateCache: true });
+        }
+        const bytes = await readFile(asset === 'poster.jpg' ? ref.posterPath : ref.previewPath);
+        reply.header('cache-control', 'private, max-age=3600');
+        return sendBytes(reply, bytes, mime, request.headers.range);
+      });
+
     routes.get<{ Params: JobParams; Querystring: { download?: string } }>(
       `${promoJobsPath}/:jobId/video.mp4`, { onRequest: authorizeRead }, async ({ params, headers, query }, reply) => {
         const job = await getPromoJob(database, params.storeId, params.jobId);
         if (job.status !== 'done' || !job.asset_id) throw new PromoRouteError(404, 'NOT_FOUND');
-        const { bytes, mime } = await options.artifacts.read({ storeId: params.storeId, resourceId: params.jobId }, job.asset_id);
-        if (mime !== 'video/mp4' || bytes.length !== job.result?.sizeBytes) throw new PromoRouteError(503, 'UNAVAILABLE');
-        reply.type(mime).header('accept-ranges', 'bytes').header('x-content-type-options', 'nosniff');
+        const scope = { storeId: params.storeId, resourceId: params.jobId };
+        const stored = await media?.findArtifact(scope, job.asset_id);
+        if (stored && (!stored.ready || stored.purpose !== 'promo_output' || stored.bytes !== job.result?.sizeBytes)) {
+          throw new PromoRouteError(503, 'UNAVAILABLE');
+        }
         if (query.download === '1') reply.header('content-disposition', `attachment; filename="navis-promo-${job.job_id}.mp4"`);
-        if (!headers.range) return reply.send(bytes);
-        const range = byteRange(headers.range, bytes.length);
-        if (!range) return reply.code(416).header('content-range', `bytes */${bytes.length}`).send();
-        return reply.code(206).header('content-range', `bytes ${range.start}-${range.end}/${bytes.length}`)
-          .send(bytes.subarray(range.start, range.end + 1));
+        if (stored && media) return media.send(reply, stored, { range: headers.range });
+        const { bytes, mime } = await options.artifacts.read(scope, job.asset_id);
+        if (mime !== 'video/mp4' || bytes.length !== job.result?.sizeBytes) throw new PromoRouteError(503, 'UNAVAILABLE');
+        return sendBytes(reply, bytes, mime, headers.range);
+      });
+
+    routes.get<{ Params: JobParams & { asset: string } }>(
+      `${promoJobsPath}/:jobId/:asset`, { onRequest: authorizeRead }, async ({ params }, reply) => {
+        const { asset, jobId, storeId } = params;
+        const poster = asset === 'poster.jpg';
+        if (!media || (!poster && asset !== 'scene.html')) throw new PromoRouteError(404, 'NOT_FOUND');
+        const job = await getPromoJob(database, storeId, jobId);
+        const fileId = poster ? job.result?.posterAssetId : job.result?.sceneAssetId;
+        if (job.status !== 'done' || !fileId) throw new PromoRouteError(404, 'NOT_FOUND');
+        const row = await media.findArtifact({ storeId, resourceId: jobId }, fileId);
+        if (!row || !row.ready || row.purpose !== (poster ? 'promo_poster' : 'promo_scene')) {
+          throw new PromoRouteError(503, 'UNAVAILABLE');
+        }
+        if (!poster) reply.header('content-disposition', 'attachment; filename="scene.html"')
+          .header('content-security-policy', "default-src 'none'; sandbox");
+        return media.send(reply, row);
       });
   });
 }

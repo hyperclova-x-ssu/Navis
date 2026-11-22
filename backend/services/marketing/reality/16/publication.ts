@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { PromoArtifacts, PromoJob } from '../../promo/contracts.ts';
+import type { createPromoMedia } from '../../promo/media.ts';
 import { inStore } from '../../transaction.ts';
 import { command, emitPromoChange, receipt, type Owner, type Receipt } from './state.ts';
 import { conflict, notFound, postingLink, type Channel, type PublishInput } from './wire.ts';
@@ -79,7 +80,8 @@ export async function attest(pool: Pool, owner: Owner, key: unknown, jobId: stri
   return result.value.receipt;
 }
 
-export async function publish(pool: Pool, ports: PublicationPorts, owner: Owner, key: unknown, jobId: string, input: PublishInput) {
+export async function publish(pool: Pool, ports: PublicationPorts, owner: Owner, key: unknown, jobId: string, input: PublishInput,
+  readStoredArtifact?: ReturnType<typeof createPromoMedia>['readArtifact']) {
   const { channel } = input;
   const social = channel === 'reels' || channel === 'shorts' ? ports.social?.channels[channel] : undefined;
   const send = channel === 'clip' || channel === 'place-news'
@@ -90,7 +92,9 @@ export async function publish(pool: Pool, ports: PublicationPorts, owner: Owner,
   let bytes: Uint8Array | undefined;
   const reservation = await command(pool, owner, key, ['publish', jobId, input], async (db, receiptId) => {
     const video = await finishedJob(db, owner.storeId, jobId);
-    const artifact = await ports.artifacts.read({ storeId: owner.storeId, resourceId: jobId }, video.assetId);
+    const scope = { storeId: owner.storeId, resourceId: jobId };
+    const artifact = await readStoredArtifact?.(scope, video.assetId, undefined, db)
+      ?? await ports.artifacts.read(scope, video.assetId);
     if (artifact.mime !== 'video/mp4' || artifact.bytes.length !== video.bytes) throw conflict('PROMO_NOT_READY');
     bytes = artifact.bytes;
     const { rowCount } = await db.query(`

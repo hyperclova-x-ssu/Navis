@@ -1,7 +1,9 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { promisify } from 'node:util';
 import type { Pool } from 'pg';
 import { PromoError, reasonOf } from '../../../../frontend/server/promo/errors.mjs';
 import { createPipeline } from '../../../../frontend/server/promo/pipeline.mjs';
@@ -9,9 +11,11 @@ import { photoAssets } from '../../../../frontend/server/promo/renderer.mjs';
 import type { loadPlanningTemplates } from '../../../../frontend/server/promo/templates/runtime.mjs';
 import type { loadReferences } from '../../../../frontend/server/promo/references.mjs';
 import { fingerprint, sha256, stages, type CheckpointStage, type PromoArtifacts, type PromoResult } from '../../../services/marketing/promo/contracts.ts';
+import { configuredPromoMediaStorage, createPromoMedia } from '../../../services/marketing/promo/media.ts';
 import { inStore } from '../../../services/marketing/transaction.ts';
+import type { ObjectStorage } from '../../../packages/object-storage/index.ts';
 import { createAttemptRunner, UnsettledAttempt } from './attempts.ts';
-import type { createUsageClient } from './clients.ts';
+import type { createPhotoContentClient, createUsageClient } from './clients.ts';
 import { checkpoint, claim, complete, defer, fail, LostLease, renew, withLease, type Lease } from './leases.ts';
 import type { PromoProvider } from './providers.ts';
 import type { createPhotoAnalysis } from './photo-analysis.ts';
@@ -30,8 +34,10 @@ type PipelineOptions = Parameters<typeof createPipeline>[0];
 interface WorkerOptions {
   database: Pool;
   artifacts: PromoArtifacts;
+  objectStorage?: ObjectStorage | null;
   meter: ReturnType<typeof createUsageClient>;
   provider: PromoProvider;
+  photoContent?: ReturnType<typeof createPhotoContentClient>;
   photoAnalysis?: ReturnType<typeof createPhotoAnalysis>;
   templates?: ReturnType<typeof loadPlanningTemplates>;
   references: ReturnType<typeof loadReferences>;
@@ -48,9 +54,20 @@ interface WorkerOptions {
 }
 
 const readJson = <T>(value: Buffer): T => JSON.parse(value.toString('utf8'));
+const exec = promisify(execFile);
+
+async function extractPoster(file: string, signal: AbortSignal) {
+  const { stdout } = await exec(process.env.NAVIS_FFMPEG_PATH ?? 'ffmpeg', [
+    '-nostdin', '-hide_banner', '-loglevel', 'error', '-threads', '1', '-filter_threads', '1', '-ss', '1', '-i', file,
+    '-frames:v', '1', '-vf', 'scale=360:-2', '-f', 'image2pipe', '-vcodec', 'mjpeg', 'pipe:1',
+  ], { signal, timeout: 10_000, encoding: 'buffer', maxBuffer: 512 * 1024 });
+  if (stdout[0] !== 0xff || stdout[1] !== 0xd8) throw new Error('Promo poster extraction failed');
+  return stdout;
+}
 
 export function createPromoWorker({
-  database, artifacts, meter, provider, photoAnalysis, templates, references, music, musicDir, checkScene, renderVideo, checkVideo,
+  database, artifacts: fallback, objectStorage = configuredPromoMediaStorage(), meter, provider, photoContent, photoAnalysis, templates,
+  references, music, musicDir, checkScene, renderVideo, checkVideo,
   leaseMs = 30_000, retryDelayMs = 5_000, reconcileWindowMs = 5 * 60_000, onError,
 }: WorkerOptions) {
   if (!Number.isSafeInteger(leaseMs) || leaseMs < 300 || leaseMs > 300_000
@@ -58,6 +75,8 @@ export function createPromoWorker({
       || !Number.isInteger(reconcileWindowMs) || reconcileWindowMs < 1 || reconcileWindowMs > 2_147_483_647) {
     throw new Error('Invalid promo timing');
   }
+  const media = objectStorage && createPromoMedia(database, objectStorage);
+  const artifacts = media ? media.artifacts(fallback) : fallback;
 
   async function process(lease: Lease, signal: AbortSignal, directory: string) {
     const { input, stage, catalog_snapshot: snapshot, store_id: storeId, job_id: jobId } = lease;
@@ -81,12 +100,18 @@ export function createPromoWorker({
         : snapshot.catalog.photos.find(photo => photo.photoId === id),
       async readPhoto(id: string) {
         if (!Object.hasOwn(snapshot.photos, id)) return null;
-        const { resourceId, fileId } = snapshot.photos[id];
-        const { bytes, mime } = await artifacts.read({ storeId, resourceId }, fileId, signal);
+        const { resourceId, fileId, photoAssetId, sha256: expectedHash } = snapshot.photos[id];
+        const photo = await (photoAssetId
+          ? photoContent?.stage(storeId, photoAssetId, directory, signal)
+          : artifacts.read({ storeId, resourceId }, fileId, signal));
+        if (!photo) throw new Error('Promo Object Storage is off');
+        const { bytes, mime } = photo;
         if (!['image/jpeg', 'image/png', 'image/webp'].includes(mime)) throw new PromoError('AI_BAD_OUTPUT', undefined);
+        const digest = sha256(bytes);
+        if (photoAssetId && expectedHash && digest !== expectedHash) throw new PromoError('AI_BAD_OUTPUT', undefined);
         const menuId = photoSource.photoInfo(id)?.menuId;
         const menuName = snapshot.catalog.menus.find(menu => menu.menuId === menuId)?.names.en ?? '';
-        return { bytes, mediaType: mime, lookKey: fingerprint({ bytes: sha256(bytes), menuName }) };
+        return { bytes, mediaType: mime, lookKey: fingerprint({ bytes: digest, menuName }) };
       },
     };
     if (!references.rules) throw new PromoError('AI_BAD_OUTPUT', undefined);
@@ -95,11 +120,16 @@ export function createPromoWorker({
       rules: { ...references.rules, photo: { ...references.rules.photo, exteriorId: snapshot.catalog.store.exteriorPhotoId } },
     };
     const sceneRunner = attempts.runner('scenes');
+    let renderedHtml: string | undefined;
     const pipeline = createPipeline({
       runner: sceneRunner, sceneRunner, lookRunner: attempts.runner('look'),
       storyRunner: attempts.runner('story', { retryInvalid: !templates }),
       lookModel: attempts.model('look'), model: attempts.model('scenes'),
-      photoSource, references: jobReferences, music, musicDir, cacheDir: directory, checkScene, checkVideo, renderVideo,
+      photoSource, references: jobReferences, music, musicDir: media ? directory : musicDir, cacheDir: directory,
+      checkScene, checkVideo, renderVideo: (options: Parameters<WorkerOptions['renderVideo']>[0]) => {
+        if (typeof options.html === 'string') renderedHtml = options.html;
+        return renderVideo(options);
+      },
       fault: null, onSceneCheck: undefined, templates, promotionFacts: snapshot.promotionFacts, storeId,
       readPhotoMeta: photoAnalysis && (async (id: string, stageSignal: AbortSignal) => {
         const photo = await photoSource.readPhoto(id);
@@ -143,6 +173,11 @@ export function createPromoWorker({
       } else {
         const [story, scene] = await Promise.all([load('story'), load('scenes')]);
         job.fixCount = scene.fixCount;
+        if (media && story.music) {
+          const file = story.music.file;
+          const audio = await media.readMusic(storeId, file, signal);
+          await writeFile(join(directory, file), audio, { mode: 0o600, signal });
+        }
         const { rules, fonts, contract } = jobReferences;
         const assets = await photoAssets(photoSource, [...input.photoIds, snapshot.catalog.store.exteriorPhotoId]);
         const ctx = { ...story.promptCtx, rules, fonts, contract };
@@ -158,6 +193,13 @@ export function createPromoWorker({
         await withLease(database, lease, async () => undefined);
         // The account identity is per lease. Even a late upload cannot touch the winning worker's bytes.
         const assetId = await artifacts.put(scope, `video-${lease.lease_token}`, 'promo_output', 'video/mp4', bytes, signal);
+        if (media) {
+          if (!renderedHtml) throw new Error('Promo render produced no scene');
+          const poster = await extractPoster(outFile, signal);
+          result.posterAssetId = await media.putArtifact(scope, `poster-${lease.lease_token}`, 'promo_poster', 'image/jpeg', poster, signal);
+          result.sceneAssetId = await media.putArtifact(scope, `scene-${lease.lease_token}`, 'promo_scene', 'application/octet-stream',
+            Buffer.from(renderedHtml, 'utf8'), signal);
+        }
         await complete(database, lease, assetId, result);
       }
     } finally {

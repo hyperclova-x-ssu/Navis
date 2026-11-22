@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { ObjectStorage } from '../../../../packages/object-storage/index.ts';
 import { applyCommand } from '../../ledger.ts';
 import { commandReceipt, integer, methods, object, PosError } from '../../wire.ts';
 import { readFinance } from '../09/finance.ts';
@@ -17,6 +18,7 @@ export const maxExportRows = 20_000;
 export const officialLinks = { hometax: 'https://www.hometax.go.kr/' } as const;
 const contentTypes = { csv: 'text/csv; charset=utf-8', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } as const;
 type Format = keyof typeof contentTypes;
+export type TaxExportStorage = Pick<ObjectStorage, 'get' | 'put'>;
 
 type ExpenseDb = { expenseId: string; date: string; category: string; amount: number; evidence: string; memo: string | null; receiptId: string | null };
 type PaymentDb = { taxPaymentId: string; type: string; amount: number; dueOn: string; paidOn: string | null; status: 'paid' | 'unpaid'; files: number };
@@ -129,19 +131,58 @@ export async function previewExport(tx: FinanceTx, value: unknown) {
   return { from, to, preview, verification, estimate, connections, officialLinks, asOf: tx.at.toISOString(), sourceRevision };
 }
 
-function files(from: string, to: string, csv: Buffer, xlsx: Buffer) {
-  const base = `navis-tax-${from}_${to}`;
-  return {
-    csv: { filename: `${base}.csv`, contentType: contentTypes.csv, size: csv.length, sha256: sha256(csv) },
-    xlsx: { filename: `${base}.xlsx`, contentType: contentTypes.xlsx, size: xlsx.length, sha256: sha256(xlsx) },
-  };
+function fileMetadata(from: string, to: string, format: Format, bytes: Buffer, digest = sha256(bytes)) {
+  return { filename: `navis-tax-${from}_${to}.${format}`, contentType: contentTypes[format],
+    size: bytes.length, sha256: digest };
+}
+
+function taxObjectKey(storeId: string, format: Format, digest: string) {
+  return `stores/${storeId}/documents/tax/${digest}.${format}`;
+}
+
+async function archiveTaxFiles(storage: TaxExportStorage, storeId: string, bytes: Record<Format, Buffer>,
+  info: Record<Format, ReturnType<typeof fileMetadata>>) {
+  const signal = AbortSignal.timeout(5_000);
+  try {
+    for (const format of ['csv', 'xlsx'] as const) {
+      const key = taxObjectKey(storeId, format, info[format].sha256);
+      await storage.put(key, bytes[format], info[format].contentType.split(';', 1)[0], signal);
+    }
+  } catch {
+    throw new PosError(503, 'TAX_EXPORT_STORAGE_UNAVAILABLE');
+  }
+  return { csv: info.csv.size, xlsx: info.xlsx.size };
+}
+
+async function readArchivedTaxFile(storage: TaxExportStorage, key: string, size: number, digest: string) {
+  const chunks: Buffer[] = [];
+  let length = 0;
+  try {
+    const object = await storage.get(key, AbortSignal.timeout(5_000));
+    if (!object) throw new PosError(503, 'TAX_EXPORT_STORAGE_UNAVAILABLE');
+    if (object.contentLength !== null && object.contentLength !== size) {
+      object.body.destroy();
+      throw new PosError(503, 'TAX_EXPORT_INTEGRITY');
+    }
+    for await (const chunk of object.body as AsyncIterable<Buffer>) {
+      length += chunk.length;
+      if (length > size) throw new PosError(503, 'TAX_EXPORT_INTEGRITY');
+      chunks.push(chunk);
+    }
+  } catch (error) {
+    if (error instanceof PosError) throw error;
+    throw new PosError(503, 'TAX_EXPORT_STORAGE_UNAVAILABLE');
+  }
+  const bytes = Buffer.concat(chunks, length);
+  if (length !== size || sha256(bytes) !== digest) throw new PosError(503, 'TAX_EXPORT_INTEGRITY');
+  return bytes;
 }
 
 /**
  * `tax.export({period})`: freezes the verified rows. Pass the preview's `sourceRevision` as `expectedSourceRevision`
  * so the file can only be made from the figures the owner saw.
  */
-export function createExport(tx: FinanceTx, key: string, body: unknown) {
+export function createExport(tx: FinanceTx, key: string, body: unknown, storage?: TaxExportStorage) {
   const input = object(body, ['from', 'to', 'expectedSourceRevision']);
   let from: string, to: string;
   try {
@@ -161,13 +202,14 @@ export function createExport(tx: FinanceTx, key: string, body: unknown) {
     if (built.rows.length > maxExportRows) throw new PosError(400, 'TAX_EXPORT_TOO_LARGE', { max: maxExportRows });
     const exportId = randomUUID();
     const csv = encodeCsv(built.rows), xlsx = encodeXlsx(built.rows, built.summary, tx.at);
-    const info = files(from, to, csv, xlsx);
+    const info = { csv: fileMetadata(from, to, 'csv', csv), xlsx: fileMetadata(from, to, 'xlsx', xlsx) };
+    const objectSizes = storage && await archiveTaxFiles(storage, tx.storeId, { csv, xlsx }, info);
     await tx.db.query(`
       INSERT INTO pos.tax_export (store_id, export_id, from_date, to_date, created_by, created_at, source_revision, row_count,
         csv_sha256, xlsx_sha256, snapshot)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     `, [tx.storeId, exportId, from, to, tx.actorId, tx.at, built.sourceRevision, built.rows.length, info.csv.sha256, info.xlsx.sha256,
-      { rows: built.rows, summary: built.summary, preview: built.preview, verification: built.verification }]);
+      { rows: built.rows, summary: built.summary, preview: built.preview, verification: built.verification, objectSizes }]);
     return { ...commandReceipt(exportId, 1, ['pos.tax-exports']), exportId, from, to, createdAt: tx.at.toISOString(),
       rowCount: built.rows.length, preview: built.preview, verification: built.verification, sourceRevision: built.sourceRevision, files: info };
   });
@@ -175,7 +217,8 @@ export function createExport(tx: FinanceTx, key: string, body: unknown) {
 
 type ExportDb = {
   exportId: string; from: string; to: string; createdAt: Date; rowCount: number; sourceRevision: string;
-  csvSha256: string; xlsxSha256: string; snapshot: { rows: ExportRow[]; summary: SummaryRow[]; preview: unknown; verification: unknown };
+  csvSha256: string; xlsxSha256: string; snapshot: { rows: ExportRow[]; summary: SummaryRow[]; preview: unknown; verification: unknown;
+    objectSizes?: Record<Format, number> };
 };
 const exportColumns = `export_id AS "exportId", from_date::text AS "from", to_date::text AS "to", created_at AS "createdAt",
   row_count AS "rowCount", source_revision AS "sourceRevision", csv_sha256 AS "csvSha256", xlsx_sha256 AS "xlsxSha256"`;
@@ -214,18 +257,25 @@ export async function listExports(tx: FinanceTx, value: unknown) {
   return { items, nextCursor, asOf: tx.at.toISOString(), sourceRevision: contentRevision({ items, nextCursor }) };
 }
 
+function renderSnapshot(row: ExportDb, format: Format) {
+  const csv = encodeCsv(row.snapshot.rows);
+  const xlsx = encodeXlsx(row.snapshot.rows, row.snapshot.summary, row.createdAt);
+  if (sha256(csv) !== row.csvSha256 || sha256(xlsx) !== row.xlsxSha256) throw new PosError(503, 'TAX_EXPORT_INTEGRITY');
+  return format === 'csv' ? csv : xlsx;
+}
+
 /** The SPA holds its bearer token in memory, so the file is returned as base64 JSON for a Blob download. */
-export async function exportFile(tx: FinanceTx, exportId: string, value: unknown) {
+export async function exportFile(tx: FinanceTx, exportId: string, value: unknown, storage?: TaxExportStorage) {
   const input = query(value, ['format']);
   const format: Format = input.format === undefined ? 'csv' : input.format === 'csv' || input.format === 'xlsx' ? input.format : (() => {
     throw new PosError(400, 'INVALID_FORMAT');
   })();
   const row = await readExport(tx, exportId, true);
-  const csv = encodeCsv(row.snapshot.rows);
-  const xlsx = encodeXlsx(row.snapshot.rows, row.snapshot.summary, row.createdAt);
-  const info = files(row.from, row.to, csv, xlsx);
-  if (info.csv.sha256 !== row.csvSha256 || info.xlsx.sha256 !== row.xlsxSha256) throw new PosError(503, 'TAX_EXPORT_INTEGRITY');
-  const content = format === 'csv' ? csv : xlsx;
-  return { exportId, format, ...info[format], contentBase64: content.toString('base64'), asOf: tx.at.toISOString(),
+  const digest = format === 'csv' ? row.csvSha256 : row.xlsxSha256;
+  const size = row.snapshot.objectSizes?.[format];
+  const content = storage && size !== undefined
+    ? await readArchivedTaxFile(storage, taxObjectKey(tx.storeId, format, digest), size, digest)
+    : renderSnapshot(row, format);
+  return { exportId, format, ...fileMetadata(row.from, row.to, format, content, digest), contentBase64: content.toString('base64'), asOf: tx.at.toISOString(),
     sourceRevision: Number(row.sourceRevision) };
 }

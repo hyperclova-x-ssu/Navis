@@ -17,12 +17,12 @@ import { virtualSigningClock } from '../../packages/naver/config/clock.ts';
 import { RedisStreams } from '../../packages/streams/redis.ts';
 import { createFixtureSms, fixtureStore } from '../../services/marketing/app.ts';
 import { createMarketingProvider } from '../../services/marketing/naver/index.ts';
-import type { CatalogSnapshot, PromoInput } from '../../services/marketing/promo/contracts.ts';
+import { isUuid, type CatalogSnapshot, type PromoInput } from '../../services/marketing/promo/contracts.ts';
 import { inStore } from '../../services/marketing/transaction.ts';
 import { createSensWire } from './naver/pn13-sens.ts';
 import { createLiveSens, liveSensRequested, loadLiveSens } from './naver/sens-live.ts';
 import { createNoticeSmsWorker, noticeSmsOperations } from './notice/sms.ts';
-import { createArtifactClient, createUsageClient } from './promo/clients.ts';
+import { configuredPhotoContent, createArtifactClient, createUsageClient } from './promo/clients.ts';
 import { createPromoConsumer } from './promo/events.ts';
 import { loadLivePromo } from './promo/live.ts';
 import { createPhotoAnalysis } from './promo/photo-analysis.ts';
@@ -187,10 +187,16 @@ async function main() {
       : await createFixturePromoRuntime(database, storeId, scratch);
     const artifacts = createArtifactClient({ baseUrl: requiredEnv('NAVIS_ACCOUNT_BASE_URL'),
       token: fileSecret('NAVIS_MARKETING_ACCOUNT_TOKEN_FILE') });
+    const photoContent = configuredPhotoContent();
     const meter = createUsageClient({ baseUrl: requiredEnv('NAVIS_INSIGHT_BASE_URL'), token: fileSecret('NAVIS_PROMO_INSIGHT_TOKEN_FILE') });
     const photoAnalysis = livePromo ? createPhotoAnalysis({
       database, preferredModels: cafePhotoSeedModels, examples: loadPhotoExamples(),
       async load(storeId, { resourceId, fileId }, signal) {
+        if (isUuid(fileId) && resourceId === `photo-${fileId}`) {
+          if (!photoContent) throw new Error('Promo Object Storage is off');
+          const { bytes, mime } = await photoContent.read(storeId, fileId, signal);
+          return { bytes, mediaType: mime };
+        }
         const { bytes, mime } = await artifacts.read({ storeId, resourceId }, fileId, signal);
         return { bytes, mediaType: mime };
       },
@@ -218,7 +224,7 @@ async function main() {
       if (counts.failed) process.exitCode = 1;
       return;
     }
-    const promo = createPromoWorker({ database, ...runtime, artifacts, meter, photoAnalysis, onError: code => console.error(code) });
+    const promo = createPromoWorker({ database, ...runtime, artifacts, meter, photoContent, photoAnalysis, onError: code => console.error(code) });
     const sms = createSensWorker(database, {
       policy: createFixtureSms(fileSecret('NAVIS_FIXTURE_SMS_KEY_FILE'), process.env.NAVIS_FIXTURE_SMS_ENABLED === '1').policy,
       transport: createFixtureSmsTransport(requiredEnv('NAVIS_FIXTURE_SMS_STATE_DIR')),

@@ -1,4 +1,8 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { readSecret } from '../../../packages/db/index.ts';
 import { isUuid, sha256, type PromoArtifacts } from '../../../services/marketing/promo/contracts.ts';
+import { maxPhotoBytes } from '../../../services/marketing/promo/photo-assets.ts';
 import type { PromoUsage } from '../../../services/insight/usage.ts';
 
 type Endpoint = { baseUrl: string; token: string };
@@ -62,4 +66,61 @@ export function createUsageClient(endpoint: Endpoint): Meter {
       await response.body?.cancel();
     },
   };
+}
+
+const photoTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+export function createPhotoContentClient(endpoint: Endpoint) {
+  const request = workloadClient(endpoint);
+
+  async function read(storeId: string, photoId: string, signal?: AbortSignal) {
+    if (!isUuid(storeId) || !isUuid(photoId)) throw new Error('Invalid promo photo scope');
+    const response = await request(`/internal/photos/${photoId}/content`, {
+      method: 'GET', headers: { 'x-navis-store-id': storeId },
+    }, signal);
+    const mime = response.headers.get('content-type') ?? '';
+    if (!photoTypes.has(mime)) {
+      await response.body?.cancel();
+      throw new Error('Invalid promo photo content type');
+    }
+    if (!response.body) throw new Error('Invalid promo photo size');
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > maxPhotoBytes) {
+          await reader.cancel();
+          throw new Error('Invalid promo photo size');
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    if (!size) throw new Error('Invalid promo photo size');
+    return { bytes: Buffer.concat(chunks, size), mime };
+  }
+
+  return {
+    read,
+    async stage(storeId: string, photoId: string, directory: string, signal?: AbortSignal) {
+      const { bytes, mime } = await read(storeId, photoId, signal);
+      const file = join(directory, photoId);
+      await writeFile(file, bytes, { mode: 0o600, signal });
+      return { bytes: await readFile(file, { signal }), mime };
+    },
+  };
+}
+
+export function configuredPhotoContent(env: NodeJS.ProcessEnv = process.env) {
+  const mode = env.NAVIS_OBJECT_STORAGE_MODE ?? 'off';
+  if (mode === 'off') return undefined;
+  if (mode !== 's3') throw new Error('Invalid NAVIS_OBJECT_STORAGE_MODE');
+  const { NAVIS_MARKETING_BASE_URL: baseUrl, NAVIS_MARKETING_SMS_WORKER_TOKEN_FILE: tokenFile } = env;
+  if (!baseUrl || !tokenFile) throw new Error('Missing marketing worker photo endpoint configuration');
+  return createPhotoContentClient({ baseUrl, token: readSecret(tokenFile) });
 }

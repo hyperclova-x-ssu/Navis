@@ -9,6 +9,7 @@ import { allowWorkloadReads, briefingReadPaths } from '../../packages/contracts/
 import { demoIdentity } from '../account/identity.ts';
 import type { CatalogSnapshot, PromoArtifacts } from './promo/contracts.ts';
 import { registerPromoRoutes } from './promo/routes.ts';
+import { registerPhotoReads } from './promo/photo-routes.ts';
 import { registerLocalMarketingRoutes, type LocalOptions } from './reality/13/routes.ts';
 import { registerCouponRoutes, type CouponRouteOptions } from './reality/14/routes.ts';
 import { registerNoticeApprovals, verifyNoticeApproval } from './reality/15/approval.ts';
@@ -74,6 +75,7 @@ export function createMarketingApp(database: Pool, options?: {
   briefingToken?: string;
   coupons?: Omit<CouponRouteOptions, 'gatewayToken'>;
   promo?: Omit<PromoRealityOptions, 'gatewayToken'>;
+  photos?: Omit<Parameters<typeof registerPhotoReads>[2], 'gatewayToken' | 'bundledStoreId'>;
   groups?: Pick<GroupsPerformanceOptions, 'channels' | 'today' | 'coupons' | 'now' | 'memberCodes'>;
 }) {
   // W5 serves the fixture catalog and assets. Render tools and live keys stay off until A6.
@@ -86,7 +88,19 @@ export function createMarketingApp(database: Pool, options?: {
       : options ? 'SELECT 1 FROM marketing.promo_job LIMIT 0' : 'SELECT 1';
     await Promise.all([database.query(readiness), promo?.ready]);
   });
-  if (promo && browserToken) mountBrowserMiddleware(app, browserToken, promoBrowserRoutes, promo);
+  if (promo && browserToken) {
+    const hidePhoto = Boolean(records?.photos?.storage);
+    const hideReference = hidePhoto && process.env.NAVIS_OBJECT_STORAGE_MEDIA_ENABLED === '1';
+    const middleware = Object.assign((req: Parameters<typeof promo>[0], res: Parameters<typeof promo>[1], next: () => void) => {
+      const path = (req.url ?? '').split('?')[0];
+      if ((hidePhoto && path.startsWith('/api/promo/photos/')) || (hideReference && path.startsWith('/api/promo/references/'))) {
+        next();
+        return Promise.resolve();
+      }
+      return promo(req, res, next);
+    }, { close: () => promo.close() });
+    mountBrowserMiddleware(app, browserToken, promoBrowserRoutes, middleware);
+  }
   if (records) {
     const { readToken, briefingToken, local, notice } = records;
     const now = notice?.now ?? (() => new Date());
@@ -101,6 +115,7 @@ export function createMarketingApp(database: Pool, options?: {
       briefingReadPaths.marketing, [local?.commandToken, options?.promoToken, options?.confirmSmsToken]);
     if (local) registerLocalMarketingRoutes(app, database, { ...local, readToken });
     if (records.coupons) registerCouponRoutes(app, database, { ...records.coupons, gatewayToken: readToken });
+    registerPhotoReads(app, database, { ...records.photos, gatewayToken: readToken, bundledStoreId: fixtureStore });
     registerNoticeApprovals(app, database, readToken, now);
     registerNoticeReplyRoutes(app, database, { ...notice, gatewayToken: readToken, verifyApproval: verifyNoticeApproval(now) });
     registerGroupsPerformanceRoutes(app, database, { ...records.groups, gatewayToken: readToken });
@@ -123,7 +138,7 @@ export function createMarketingApp(database: Pool, options?: {
 
     // Register only the smoke's synthetic inputs, under their stable fixture identities.
     registerPromoRoutes(app, database, {
-      confirmToken: promoToken, readToken, references: refs, artifacts,
+      confirmToken: promoToken, readToken, references: refs, galleryReferences: records?.promo?.references, artifacts,
       async catalogForStore(storeId) {
         if (storeId !== fixtureStore) return null;
         const selected = [...INPUT.photoIds, exteriorPhotoId];

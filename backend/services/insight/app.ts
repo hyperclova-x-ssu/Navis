@@ -1,7 +1,8 @@
 import type { Pool } from 'pg';
 import { createApp } from '../../infra/http.ts';
 import { confirmProposal, confirmationSchema, type CardConfirmation, type MarketingEndpoint } from './actions.ts';
-import { aggregateSchema, ingestAggregate, readCctv, type Aggregate } from './cctv.ts';
+import { aggregateSchema, ingestAggregate, readCctv, registerCctvSampleMedia, type Aggregate } from './cctv.ts';
+import type { ObjectStorage } from '../../packages/object-storage/index.ts';
 import type { NavisProvider } from './navis.ts';
 import { registerB10Routes, undoObservationReceipt } from './reality/10/routes.ts';
 import { registerManualsGrants } from './reality/11/routes.ts';
@@ -18,13 +19,15 @@ const salesQuery = { type: 'object', required: ['from', 'to'], additionalPropert
   properties: { from: date, to: date } };
 
 export function createInsightApp(pool: Pool, {
-  gatewayToken, promoToken, forecastToken, provider, marketing, manualsGrants, briefing, naverReads, now = () => new Date(), logging = true, cctvEnabled = true,
+  gatewayToken, promoToken, forecastToken, provider, marketing, manualsGrants, briefing, naverReads, now = () => new Date(), logging = true,
+  cctvEnabled = true, cctvObjectStorage,
 }: {
   gatewayToken?: string; promoToken?: string; forecastToken?: string; marketing?: MarketingEndpoint;
   manualsGrants?: Pick<Parameters<typeof registerManualsGrants>[2], 'verifyPhoto' | 'provider'>;
   briefing?: Pick<BriefingOptions, 'readers' | 'readOpenings'>;
   naverReads?: Omit<NaverReadOptions, 'gatewayToken' | 'now'>;
   provider?: NavisProvider; now?: () => Date; logging?: boolean; cctvEnabled?: boolean;
+  cctvObjectStorage?: ObjectStorage | null;
 } = {}) {
   const tokens = [gatewayToken, promoToken, forecastToken].filter(Boolean);
   const credentials = marketing ? [...tokens, marketing.token] : tokens;
@@ -45,6 +48,7 @@ export function createInsightApp(pool: Pool, {
     });
 
     if (gatewayToken) {
+      registerCctvSampleMedia(routes, pool, gatewayToken, cctvObjectStorage);
       registerB10Routes(routes, pool, gatewayToken, now, { registerUndo: false });
       registerManualsGrants(routes, pool, {
         ...manualsGrants, gatewayToken, now,

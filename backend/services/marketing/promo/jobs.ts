@@ -69,10 +69,15 @@ export async function getPromoJob(pool: Pool, storeId: string, jobId: string) {
 
 export function promoView(job: PromoJob) {
   const { job_id, store_id, status, stage, input, started_at, stage_started_at, fail_reason, asset_id, result } = job;
+  const base = `/api/v1/stores/${store_id}/promo/jobs/${job_id}`;
+  const { posterAssetId, sceneAssetId, ...details } = result ?? {};
   return {
     jobId: job_id, status, stage, stageState: status === 'done' || status === 'failed' ? status : 'active',
     lookCount: input.photoIds.length, startedAt: started_at.toISOString(), stageStartedAt: stage_started_at.toISOString(),
     failReason: fail_reason, assetId: asset_id,
-    result: result && { ...result, fileUrl: `/api/v1/stores/${store_id}/promo/jobs/${job_id}/video.mp4` },
+    result: result && { ...details, fileUrl: `${base}/video.mp4`,
+      ...(posterAssetId ? { posterUrl: `${base}/poster.jpg` } : {}),
+      ...(sceneAssetId ? { sceneDownloadUrl: `${base}/scene.html` } : {}),
+    },
   };
 }

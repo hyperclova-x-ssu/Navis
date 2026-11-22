@@ -5,7 +5,7 @@ export const stages = ['look', 'story', 'scenes', 'merge'] as const;
 export type Stage = typeof stages[number];
 export type CheckpointStage = Exclude<Stage, 'merge'>;
 export type PromoInput = PromoVideoInput;
-export type FileBinding = { resourceId: string; fileId: string; sourceFileId?: string; sha256?: string };
+export type FileBinding = { resourceId: string; fileId: string; sourceFileId?: string; sha256?: string; photoAssetId?: string };
 export type CatalogSnapshot = {
   catalog: PromoCatalogInput;
   photos: Record<string, FileBinding>;
@@ -29,6 +29,8 @@ export interface PromoResult {
   sizeBytes: number;
   music: { trackId: string; title: string; artist: string; license: 'CC0-1.0' } | null;
   fixCount: number;
+  posterAssetId?: string;
+  sceneAssetId?: string;
 }
 
 export interface PromoJob {

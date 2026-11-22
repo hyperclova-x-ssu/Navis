@@ -123,7 +123,7 @@ it.runIf(Boolean(url))('persists owner assets, drafts, a FAKE job and separate p
     const clips = vi.fn(async () => ({ clip: { ref: 'clip-1', state: 'processing' as const, link: null } }));
     const readClip = vi.fn(async () => ({ ref: 'clip-1', state: 'published' as const, link: 'https://clip.naver.com/a' }));
     const ports: PromoRealityOptions = {
-      ...catalog, gatewayToken: readToken, artifacts,
+      ...catalog, gatewayToken: readToken, artifacts, objectStorage: null,
       readMenuPrice: async (scope, name) => scope.storeId === storeId && name === primary.names.ko ? 4900 : null,
       naver: naverPromoPublish(() => ({ news: { create: news }, clips: { upload: clips, read: readClip } })),
     };
@@ -132,7 +132,7 @@ it.runIf(Boolean(url))('persists owner assets, drafts, a FAKE job and separate p
     for (const service of [app, fresh]) {
       registerPromoReality(service, pool, ports);
       registerPromoRoutes(service, pool, {
-        confirmToken: randomUUID(), readToken, references: refs, artifacts, catalogForStore: async () => null,
+        confirmToken: randomUUID(), readToken, references: refs, artifacts, objectStorage: null, catalogForStore: async () => null,
       });
     }
     const gatewayProof = process.env.NAVIS_B16_TEST_GATEWAY === '1';
@@ -272,7 +272,7 @@ it.runIf(Boolean(url))('persists owner assets, drafts, a FAKE job and separate p
           ? { state: 'received', output: storyOutput, usage: null } : { state: 'unknown' },
       });
       const worker = createPromoWorker({
-        database: pool, artifacts, provider, references: refs, meter: { record: async () => {} },
+        database: pool, artifacts, objectStorage: null, provider, references: refs, meter: { record: async () => {} },
         music: [], musicDir: '.', checkScene: async () => ({ violations: [], checkMs: 0 }),
         renderVideo: async ({ outFile }) => { await writeFile(outFile, video); },
         checkVideo: async () => ({ info: { durationSec: 10, width: 720, height: 1280, fps: 30 }, violations: [] }),

@@ -326,6 +326,7 @@ services:
       NAVIS_MARKETING_CUSTOMER_SMS_TOKEN_FILE: /run/secrets/marketing_customer_sms_token
       NAVIS_MARKETING_SMS_WORKER_TOKEN_FILE: /run/secrets/marketing_sms_worker_token
       NAVIS_NAVER_VIRTUAL_TALKTALK_CALLBACK_TOKEN_FILE: /run/secrets/nvirtual_talktalk_marketing_token
+      NAVIS_OBJECT_STORAGE_MODE: "off"
       NAVIS_NAVER_VIRTUAL_ACCOUNT_ID: ansungjalbu-cafe
       NAVIS_NAVER_VIRTUAL_STORE_ID: c05409a6-f082-5964-a787-c1ed3184988b
       NAVIS_NAVER_VIRTUAL_PROVIDER_CREDENTIALS_DIR: /run/secrets
@@ -443,6 +444,7 @@ services:
       NAVIS_NAVER_VIRTUAL_TOKEN_FILE: /run/secrets/nvirtual_marketing_worker_token
       NAVIS_MARKETING_BASE_URL: http://marketing:3000
       NAVIS_MARKETING_SMS_WORKER_TOKEN_FILE: /run/secrets/marketing_sms_worker_token
+      NAVIS_OBJECT_STORAGE_MODE: "off"
       NAVIS_NAVER_VIRTUAL_ACCOUNT_ID: ansungjalbu-cafe
       NAVIS_NAVER_VIRTUAL_STORE_ID: c05409a6-f082-5964-a787-c1ed3184988b
       NAVIS_NAVER_VIRTUAL_CLOCK: ${NAVIS_NAVER_VIRTUAL_CLOCK:-fixed}

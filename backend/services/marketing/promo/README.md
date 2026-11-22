@@ -27,3 +27,19 @@ T-316 owns the Compose entrypoint, migration CLI wiring, relay identity/grants a
 ## Acceptance in local Compose
 
 Use the existing `test-db` and cached `tools` image in `navis-backend-local`. Attach a disposable Redis service to the internal `test-data` network. Set `NAVIS_PROMO_TEST_REDIS_URL` to its Compose hostname and run Vitest on `services/marketing/promo/promo.test.ts`. Mount the current backend services/workers and sibling `server` and `shared` directories into the tools image. The acceptance run verifies the real T-311 confirmation and usage APIs, T-312 artifact checks, PostgreSQL RLS and Redis redelivery with fake model and media I/O.
+
+## Private photo catalog
+
+`NAVIS_OBJECT_STORAGE_MODE` defaults to `off`. In `s3`, Marketing reads the private bucket using `NAVIS_OBJECT_STORAGE_ENDPOINT`, `NAVIS_OBJECT_STORAGE_REGION`, `NAVIS_OBJECT_STORAGE_BUCKET`, `NAVIS_OBJECT_STORAGE_ACCESS_KEY_FILE`, and `NAVIS_OBJECT_STORAGE_SECRET_KEY_FILE`. The marketing worker reads photo snapshots from the Marketing internal endpoint using its existing workload token and store scope.
+
+Apply `20261122113400_photo_asset.sql` before backfilling. Run the backfill with the Marketing runtime database role against the intended store. The tools image includes both source directories. For a mounted bundle, supply `--menu-photo-dir` and `--promo-photo-dir` as needed.
+
+```sh
+node services/marketing/promo/backfill-photos.ts --store-id <store-uuid>
+```
+
+The command reports file, unique SHA-256, uploaded object, and promo alias counts. Run it again against the same bucket and DB to confirm that `uploaded` is zero. Existing menu attachment IDs and promo selection IDs survive cutover. The same `promo_status_changed.v1` event and SHA-256 analysis queue are used for owner-confirmed uploads.
+
+For the disposable MinIO trial, generate local file credentials with `sh infra/object-storage-test-secrets.sh` and add `-f compose.object-storage-test.yaml` after `-f compose.yaml`. The overlay initializes a private bucket on the Compose network.
+
+The current images support the bundled fallback for `off`. An S3-only image variant that omits those files is a follow-up.

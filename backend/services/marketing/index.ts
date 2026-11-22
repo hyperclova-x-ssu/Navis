@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import type { PoolClient } from 'pg';
 import { createExamplePhotoSource } from '../../../frontend/server/promo/photo-source.mjs';
+import { readBounded } from '../../../frontend/server/media/validation.mjs';
 import { listen } from '../../infra/http.ts';
 import { disposableReplayClock } from '../../packages/contracts/replay-clock.ts';
 import { createSensSettingsReader } from './reality/15/sens-settings.ts';
 import { dbPool, fileSecret, readSecret, requiredEnv } from '../../packages/db/index.ts';
 import { promoSeedFileId } from '../../packages/contracts/promo-photos.ts';
+import { createObjectStorage } from '../../packages/object-storage/index.ts';
 import type { NaverBinding } from '../../packages/naver/config/index.ts';
 import { createNaverTransport } from '../../packages/naver/transport/index.ts';
 import { createArtifactClient } from '../../workers/marketing-worker/promo/clients.ts';
@@ -22,6 +25,8 @@ import { createSearchPort } from './naver/pn10-search.ts';
 import { PromoRouteError } from './promo/jobs.ts';
 import { sha256 } from './promo/contracts.ts';
 import { createPromoMenuPriceRead } from './promo/menu-facts.ts';
+import { bundledMenuPhotos } from './promo/bundled-photos.ts';
+import { maxPhotoBytes, photoContentUrl, readPromoPhotoAliases } from './promo/photo-assets.ts';
 import { createHttpCouponSources, createPosBillReader } from './reality/14/clients.ts';
 import { createPersonaCouponPort } from './reality/14/coupon-provider.ts';
 import { couponPosHandlers } from './reality/14/redemptions.ts';
@@ -46,8 +51,10 @@ import { pn10SearchInterest } from './reality/13/sources.ts';
 import { createMarketingStreamConsumers, mergeStreamHandlers } from './reality/19/consumers.ts';
 import type { ReplyQueue, TodaySources } from './reality/19/ports.ts';
 import { createGroupMemberCodeReader } from './reality/19/routes.ts';
+import { inStore } from './transaction.ts';
 
 const pool = dbPool('marketing');
+const photoStorage = createObjectStorage();
 const replayNow = disposableReplayClock();
 const phase3 = process.env.NAVIS_PHASE3_FIXTURES === '1';
 const gatewayToken = phase3 || process.env.NAVIS_GATEWAY_MARKETING_TOKEN_FILE
@@ -228,6 +235,8 @@ if (accountUrl && artifactFile && artifacts) {
   const catalog = source.listCatalog();
   const venue = { ...catalog, store: { ...catalog.store, location: catalog.store.location.split(' (')[0] } };
   const seed = source.listPhotoIds().map(photoId => ({ ...source.photoInfo(photoId)!, fileId: promoSeedFileId(fixtureStore, photoId) }));
+  const menuIds = new Map(bundledMenuPhotos.map(photo => [photo.legacyMenuId, photo.menuId]));
+  const promoMenuIds = new Map(bundledMenuPhotos.map(photo => [photo.menuId, photo.legacyMenuId]));
   const read = async (owner: { storeId: string; actorId: string }, path: string, body = {}) => {
     const response = await fetch(new URL(`/internal/v1/account/stores/${owner.storeId}/promo-input/${path}`, account), {
       method: 'POST', redirect: 'error', signal: AbortSignal.timeout(2500),
@@ -241,11 +250,30 @@ if (accountUrl && artifactFile && artifacts) {
   };
   promo = {
     artifacts,
+    photoUpload: photoStorage && {
+      storage: photoStorage,
+      catalogMenuId: menuId => menuIds.get(menuId) ?? menuId,
+      promoMenuId: menuId => promoMenuIds.get(menuId) ?? menuId,
+      async read(owner, fileId) {
+        const photo = await read(owner, `${fileId}/bytes`);
+        if (!photo?.body) return null;
+        return {
+          width: Number(photo.headers.get('x-navis-photo-width')),
+          height: Number(photo.headers.get('x-navis-photo-height')),
+          contentType: photo.headers.get('content-type') ?? '',
+          bytes: await readBounded(photo.body, maxPhotoBytes),
+        };
+      },
+    },
     readMenuPrice: inventoryCouponToken
       ? createPromoMenuPriceRead(requiredEnv('NAVIS_MARKETING_INVENTORY_URL'), inventoryCouponToken) : undefined,
     ...createPromoCatalog({
-      async photos(owner, uploads) {
-        const candidates = [...seed, ...uploads.map(row => ({ ...row, photoId: row.assetId.replaceAll('-', '') }))];
+      async photos(owner, uploads, db) {
+        const uploaded = uploads.map(row => ({ ...row, photoId: row.assetId.replaceAll('-', '') }));
+        const uploadIds = uploaded.flatMap(row => row.photoAssetId ? [row.photoAssetId] : []);
+        const readAliases = (client: PoolClient) => readPromoPhotoAliases(client, owner.storeId, uploadIds);
+        const aliases = photoStorage && (db ? await readAliases(db) : await inStore(pool, owner.storeId, readAliases));
+        const candidates = photoStorage ? uploaded : [...seed.map(row => ({ ...row, photoAssetId: undefined })), ...uploaded];
         const ready = new Set<string>();
         for (let offset = 0; offset < candidates.length; offset += 160) {
           const fileIds = candidates.slice(offset, offset + 160).map(row => row.fileId);
@@ -254,9 +282,17 @@ if (accountUrl && artifactFile && artifacts) {
           if (!Array.isArray(values) || values.some(value => typeof value !== 'string')) throw new Error('Invalid ready photo response');
           values.forEach(fileId => ready.add(fileId));
         }
-        return candidates.filter(row => ready.has(row.fileId)).map(row => ({
-          ...row, binding: { fileId: row.fileId, resourceId: row.photoId },
-        }));
+        const storedSeed = aliases ? seed.flatMap(row => {
+          const asset = aliases.get(row.photoId);
+          if (!asset) return [];
+          return [{ ...row, width: asset.width, height: asset.height, contentUrl: photoContentUrl(owner.storeId, asset.photoId),
+            binding: { fileId: row.fileId, resourceId: row.photoId, photoAssetId: asset.photoId, sha256: asset.sha256 } }];
+        }) : [];
+        return [...storedSeed, ...candidates.filter(row => ready.has(row.fileId)).map(row => {
+          const asset = aliases && row.photoAssetId ? aliases.get(row.photoAssetId) : undefined;
+          return { ...row, contentUrl: asset && photoContentUrl(owner.storeId, asset.photoId),
+            binding: { fileId: row.fileId, resourceId: row.photoId, photoAssetId: asset?.photoId, sha256: asset?.sha256 } };
+        })];
       },
       async verifyUpload(owner, fileId) {
         const photo = await read(owner, `${fileId}/bytes`);
@@ -268,6 +304,7 @@ if (accountUrl && artifactFile && artifacts) {
       },
     }, async owner => owner.storeId === fixtureStore ? venue : null),
     async bindPhoto(owner, photoId, binding) {
+      if (binding.photoAssetId) return binding;
       const photo = await read(owner, `${binding.fileId}/bytes`);
       if (!photo) throw new PromoRouteError(409, 'PROMO_SELECTION_UNAVAILABLE');
       const mime = photo.headers.get('content-type') ?? '';
@@ -276,6 +313,9 @@ if (accountUrl && artifactFile && artifacts) {
       return { resourceId: photoId, fileId, sourceFileId: binding.fileId, sha256: sha256(bytes) };
     },
   };
+}
+if (photoStorage && (!gatewayToken || !smsWorkerToken || !promo)) {
+  throw new Error('Marketing object storage requires configured gateway, worker, and promo account workloads');
 }
 const promoForGroups = promo;
 const today: TodaySources = {
@@ -292,7 +332,7 @@ const today: TodaySources = {
   assets: promoForGroups && (async (db, scope, day, actorId) => {
     const { rows: stored } = await db.query<Asset>(
       `SELECT ${assetColumns} FROM marketing.promo_asset WHERE store_id=$1`, [scope]);
-    const snapshot = await promoForGroups.catalogForOwner({ storeId: scope, actorId }, stored);
+    const snapshot = await promoForGroups.catalogForOwner({ storeId: scope, actorId }, stored, db);
     if (!snapshot) throw new Error('Approved promo catalog unavailable');
     const photos = snapshot.catalog.photos.filter(photo => photo.menuId !== null);
     const { rows: [publication] } = await db.query<{ count: number }>(`
@@ -354,7 +394,8 @@ const app = createMarketingApp(pool, phase3 && gatewayToken ? {
     } : undefined,
     audiences: ({ storeId }) => scopedNotices(storeId).talktalkMarketing.audiences(),
     campaign: ({ storeId }, input) => scopedNotices(storeId).campaign(input),
-  } }, promo, coupons: coupons && { ...coupons, now: replayNow },
+  } }, promo, photos: { storage: photoStorage, workerToken: photoStorage ? smsWorkerToken || undefined : undefined },
+  coupons: coupons && { ...coupons, now: replayNow },
   groups: { channels: naver, today, coupons: coupons && couponLedger, now: replayNow,
     memberCodes: customerCouponToken
       ? createGroupMemberCodeReader(requiredEnv('NAVIS_MARKETING_CUSTOMER_URL'), customerCouponToken) : undefined },

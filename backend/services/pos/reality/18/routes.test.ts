@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type HTTPMethods } from 'fastify';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -27,8 +28,8 @@ const evidence = new Map<string, TaxEvidenceFile>();
 const verifyCalls: unknown[] = [];
 let verifierDown = false;
 
-const owner: PosOwnerRouteWithPreflight = (method, path, mode, handler) => {
-  app.route<{ Params: { storeId: string; id?: string } }>({ method, url: '/pos/:storeId' + path,
+const ownerFor = (target: typeof app): PosOwnerRouteWithPreflight => (method, path, mode, handler) => {
+  target.route<{ Params: { storeId: string; id?: string } }>({ method, url: '/pos/:storeId' + path,
     async handler(req, reply) {
       try {
         const { storeId } = req.params;
@@ -42,6 +43,7 @@ const owner: PosOwnerRouteWithPreflight = (method, path, mode, handler) => {
       }
     } });
 };
+const owner = ownerFor(app);
 
 beforeAll(async () => {
   await runMigrations('pos', fileURLToPath(new URL('../../migrations/', import.meta.url)), 'test');
@@ -309,6 +311,75 @@ it('exports a verified ledger whose CSV and XLSX match the preview the owner saw
   expect(await reason('POST', '/tax-exports', { from: '2025-11-16', to: day })).toBe('INVALID_PERIOD');
   expect((await ok('GET', '/tax-exports/preview?from=2025-11-17&to=2026-11-17')).verification.status).toBe('verified');
   expect(await reason('GET', `/tax-exports/preview?${period}&format=csv`)).toBe('INVALID_REQUEST');
+});
+
+it('archives both tax files on owner creation and downloads verified bytes within the same store', async () => {
+  const archived = Fastify();
+  const objects = new Map<string, Buffer>();
+  const writes: string[] = [];
+  const reads: string[] = [];
+  let failWorkbook = true;
+  registerTaxRoutes(ownerFor(archived), { objectStorage: {
+    async put(key: string, bytes: Buffer) {
+      writes.push(key);
+      if (failWorkbook && key.endsWith('.xlsx')) throw new Error('storage unavailable');
+      objects.set(key, bytes);
+    },
+    async get(key: string) {
+      reads.push(key);
+      const bytes = objects.get(key);
+      return bytes && { body: Readable.from([bytes]), contentLength: bytes.length, contentType: null };
+    },
+  } });
+  const send = (method: 'GET' | 'POST', path: string, payload?: object, key = randomUUID(), store = otherStore) =>
+    archived.inject({ method, url: `/pos/${store}${path}`, payload, headers: { 'idempotency-key': key } });
+  const period = { from: day, to: day };
+  const commandKey = randomUUID();
+  try {
+    const legacy = await ok('POST', '/tax-exports', period, undefined, otherStore);
+    const legacyPath = `/tax-exports/${legacy.exportId}/file`;
+    const oldFile = await send('GET', legacyPath);
+    expect(oldFile.statusCode).toBe(200);
+    expect(oldFile.json().sha256).toBe(legacy.files.csv.sha256);
+    expect(reads).toEqual([]);
+
+    const failed = await send('POST', '/tax-exports', period, commandKey);
+    expect(failed.statusCode).toBe(503);
+    expect(failed.json().reason).toBe('TAX_EXPORT_STORAGE_UNAVAILABLE');
+    expect((await send('GET', '/tax-exports')).json().items.map((row: { exportId: string }) => row.exportId)).toEqual([legacy.exportId]);
+
+    failWorkbook = false;
+    const created = await send('POST', '/tax-exports', period, commandKey);
+    expect(created.statusCode).toBe(200);
+    const receipt = created.json();
+    const csvPath = `/tax-exports/${receipt.exportId}/file?format=csv`;
+    const workbookPath = `/tax-exports/${receipt.exportId}/file?format=xlsx`;
+    const keys = writes.slice(-2);
+    expect(keys).toEqual([
+      expect.stringMatching(new RegExp(`^stores/${otherStore}/documents/tax/.+\\.csv$`)),
+      expect.stringMatching(new RegExp(`^stores/${otherStore}/documents/tax/.+\\.xlsx$`)),
+    ]);
+    const writeCount = writes.length;
+    expect((await send('POST', '/tax-exports', period, commandKey)).json()).toEqual(receipt);
+    expect(writes).toHaveLength(writeCount);
+
+    expect((await send('GET', csvPath, undefined, undefined, storeId)).statusCode).toBe(404);
+    expect(reads).toEqual([]);
+    for (const [index, path] of [csvPath, workbookPath].entries()) {
+      const file = await send('GET', path);
+      expect(file.statusCode).toBe(200);
+      expect(Buffer.from(file.json().contentBase64, 'base64')).toEqual(objects.get(keys[index]));
+    }
+    expect(reads).toEqual(keys);
+    expect((await ok('GET', csvPath, undefined, undefined, otherStore)).sha256).toBe(receipt.files.csv.sha256);
+
+    objects.set(keys[0], Buffer.alloc(objects.get(keys[0])!.length));
+    expect((await send('GET', csvPath)).json().reason).toBe('TAX_EXPORT_INTEGRITY');
+    objects.delete(keys[1]);
+    expect((await send('GET', workbookPath)).json().reason).toBe('TAX_EXPORT_STORAGE_UNAVAILABLE');
+  } finally {
+    await archived.close();
+  }
 });
 
 it('verifies tax evidence outside the store lock and rejects an intervening tax revision', async () => {

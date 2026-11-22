@@ -133,6 +133,7 @@ export const insightRecordRoutes: readonly RecordRoute[] = [
   ['GET', '/insight/briefings'], ['POST', '/insight/briefings/:businessDay/ack'],
   ['GET', '/insight/financial-center/recommendations'], ['GET', '/insight/financial-center/recommendations/:ref'],
   ['GET', '/insight/review-insights'], ['GET', '/insight/channel-reports/search-ads'],
+  ['GET', '/insight/cctv-samples/:asset'],
 ];
 
 export const marketingLocalRoutes: readonly RecordRoute[] = [
@@ -164,6 +165,7 @@ export const marketingNoticeRoutes: readonly RecordRoute[] = [
 
 export const marketingPromoRoutes: readonly RecordRoute[] = [
   ['GET', '/marketing/promo/assets'], ['POST', '/marketing/promo/assets'],
+  ['GET', '/marketing/photos'], ['POST', '/marketing/photos'], ['GET', '/marketing/photos/:photoId/content'],
   ['GET', '/marketing/promo/drafts'], ['POST', '/marketing/promo/drafts'],
   ['PATCH', '/marketing/promo/drafts/:draftId'],
   ['POST', '/marketing/promo/drafts/:draftId/generate'], ['GET', '/marketing/promo/publications'],
@@ -171,6 +173,8 @@ export const marketingPromoRoutes: readonly RecordRoute[] = [
   ['POST', '/marketing/promo/jobs/:jobId/clip'], ['POST', '/marketing/promo/jobs/:jobId/reels'],
   ['POST', '/marketing/promo/jobs/:jobId/shorts'],
   ['GET', '/promo/jobs/:jobId'], ['GET', '/promo/jobs/:jobId/video.mp4'],
+  ['GET', '/promo/jobs/:jobId/poster.jpg'], ['GET', '/promo/jobs/:jobId/scene.html'],
+  ['GET', '/promo/references'], ['GET', '/promo/references/:referenceId/:asset'],
 ];
 
 export const marketingCouponRoutes: readonly RecordRoute[] = [

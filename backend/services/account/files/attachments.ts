@@ -1,10 +1,12 @@
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
+import { createObjectStorage, type ObjectStorage } from '../../../packages/object-storage/index.ts';
 import { emitAccountEvent } from '../reality/00/outbox.ts';
 import { accountErrors, accountRoot, accountStoreHandler, notFound, type AccountParams } from '../reality/00/routes.ts';
 import { AccountError, integer, invalid, keyPattern, maxAttachmentBytes, option, record, uuid } from '../reality/00/wire.ts';
 import { inStore } from '../transaction.ts';
+import { attachmentStorageUnavailable, readAttachmentBytes, withAttachmentStorage, type AttachmentContent } from './attachment-storage.ts';
 
 const photoPurposes = ['menu-photo', 'promo-photo', 'custom-reference-photo'] as const;
 const purposes = [...photoPurposes, 'receipt-evidence', 'tax-evidence', 'manual-evidence', 'grant-evidence'] as const;
@@ -14,7 +16,7 @@ const shaPattern = /^[0-9a-f]{64}$/;
 const prefix = `${accountRoot}/files`;
 
 type Metadata = { fileId: string; purpose: typeof purposes[number]; contentType: typeof contentTypes[number]; size: number; sha256: string };
-type Attachment = Metadata & { state: 'pending' | 'complete' | 'revoked'; bytes?: Buffer };
+type Attachment = Metadata & AttachmentContent & { state: 'pending' | 'complete' | 'revoked' };
 const metadataColumns = 'file_id AS "fileId", purpose, content_type AS "contentType", size, sha256';
 
 function formatMatches(bytes: Buffer, contentType: Metadata['contentType']) {
@@ -43,7 +45,7 @@ async function findFile(client: PoolClient, store: string, id: unknown, includeB
   const fileId = requireId(id, 'fileId');
   // Column selection is fixed internally. State and metadata reads avoid fetching the stored bytes.
   const { rows: [file] } = await client.query<Attachment>(`
-    SELECT ${metadataColumns}, state ${includeBytes ? ', bytes' : ''}
+    SELECT ${metadataColumns}, state, object_key AS "objectKey" ${includeBytes ? ', bytes' : ''}
     FROM account.attachment WHERE store_id = $1 AND file_id = $2
   `, [store, fileId]);
   if (!file || file.state === 'revoked') throw notFound();
@@ -52,7 +54,8 @@ async function findFile(client: PoolClient, store: string, id: unknown, includeB
 
 export function registerAttachments(
   app: FastifyInstance, pool: Pool, verifyWorkload: (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>,
-  { inventoryToken, posToken, insightToken }: { inventoryToken?: string; posToken?: string; insightToken?: string } = {},
+  { inventoryToken, posToken, insightToken, objectStorage = createObjectStorage() }:
+    { inventoryToken?: string; posToken?: string; insightToken?: string; objectStorage?: ObjectStorage } = {},
 ) {
   app.register(async scope => {
     const options = { onRequest: verifyWorkload };
@@ -63,7 +66,7 @@ export function registerAttachments(
       const { 'idempotency-key': key } = request.headers;
       if (typeof key !== 'string' || !keyPattern.test(key)) throw invalid('idempotencyKey', 'IDEMPOTENCY_KEY_REQUIRED');
       const metadata = parseMetadata(request.body);
-      const { rows: [previous] } = await client.query<Attachment>(`
+      const { rows: [previous] } = await client.query<Metadata>(`
         SELECT ${metadataColumns} FROM account.attachment
         WHERE store_id = $1 AND user_id = $2 AND idempotency_key = $3
       `, [storeId, actor.sub, key]);
@@ -77,10 +80,12 @@ export function registerAttachments(
         return { ...original, fileId };
       }
       const fileId = randomUUID();
+      // Reserve the deterministic key before any bucket write so an interrupted upload can be retried or revoked.
+      const objectKey = objectStorage ? `account/attachments/${storeId}/${fileId}/${metadata.sha256}` : null;
       await client.query(`
-        INSERT INTO account.attachment (store_id, file_id, user_id, idempotency_key, purpose, content_type, size, sha256)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `, [storeId, fileId, actor.sub, key, metadata.purpose, metadata.contentType, metadata.size, metadata.sha256]);
+        INSERT INTO account.attachment (store_id, file_id, user_id, idempotency_key, purpose, content_type, size, sha256, object_key)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [storeId, fileId, actor.sub, key, metadata.purpose, metadata.contentType, metadata.size, metadata.sha256, objectKey]);
       return { ...metadata, fileId };
     }, true));
 
@@ -92,8 +97,13 @@ export function registerAttachments(
           || request.headers['content-type']?.split(';')[0] !== file.contentType || !formatMatches(bytes, file.contentType)
           || createHash('sha256').update(bytes).digest('hex') !== file.sha256) throw invalid('content', 'FILE_INVALID');
         if (file.state === 'pending') {
-          await client.query('UPDATE account.attachment SET bytes = $3 WHERE store_id = $1 AND file_id = $2',
-            [storeId, file.fileId, bytes]);
+          const { objectKey } = file;
+          if (objectKey) {
+            await withAttachmentStorage(objectStorage, (storage, signal) => storage.put(objectKey, bytes, file.contentType, signal));
+          } else {
+            await client.query('UPDATE account.attachment SET bytes = $3 WHERE store_id = $1 AND file_id = $2',
+              [storeId, file.fileId, bytes]);
+          }
         }
         reply.code(204);
         return null;
@@ -101,33 +111,54 @@ export function registerAttachments(
 
     scope.post<{ Params: AccountParams }>(`${prefix}/:fileId/complete`, options, accountStoreHandler(pool, true, async (client, { store_id: storeId }, request) => {
       record(request.body ?? {}, []);
-      const { fileId, state, bytes, ...metadata } = await findFile(client, storeId, request.params.fileId, true);
-      if (!bytes) throw new AccountError(409, 'CONFLICT', 'FILE_NOT_READY');
+      const file = await findFile(client, storeId, request.params.fileId, true);
+      const { fileId, state, purpose, contentType, size, sha256 } = file;
       if (state === 'pending') {
+        if (!await readAttachmentBytes(objectStorage, file)) throw new AccountError(409, 'CONFLICT', 'FILE_NOT_READY');
         await client.query("UPDATE account.attachment SET state = 'complete' WHERE store_id = $1 AND file_id = $2", [storeId, fileId]);
-        await emitAccountEvent(client, 'account.file_changed.v1', fileId, { storeId, fileId, purpose: metadata.purpose, state: 'complete' });
+        await emitAccountEvent(client, 'account.file_changed.v1', fileId, { storeId, fileId, purpose, state: 'complete' });
       }
-      return { fileId, ...metadata };
+      return { fileId, purpose, contentType, size, sha256 };
     }, true));
 
     scope.get<{ Params: AccountParams }>(`${prefix}/:fileId/content`, options, accountStoreHandler(pool, true, async (client, { store_id: storeId }, request, reply) => {
       const file = await findFile(client, storeId, request.params.fileId, true);
-      if (file.state !== 'complete' || !file.bytes) throw notFound();
+      if (file.state !== 'complete') throw notFound();
+      const bytes = await readAttachmentBytes(objectStorage, file);
+      if (!bytes) throw attachmentStorageUnavailable();
       reply.type(file.contentType).header('x-content-type-options', 'nosniff').header('content-disposition', 'attachment');
-      return file.bytes;
+      return bytes;
     }));
 
-    scope.delete<{ Params: AccountParams }>(`${prefix}/:fileId`, options, accountStoreHandler(pool, true, async (client, { store_id: storeId }, request, reply) => {
-      const fileId = requireId(request.params.fileId, 'fileId');
-      const { rows: [deleted] } = await client.query<{ purpose: Metadata['purpose'] }>(`
-        UPDATE account.attachment SET state = 'revoked', bytes = NULL
-        WHERE store_id = $1 AND file_id = $2 AND state <> 'revoked' RETURNING purpose
-      `, [storeId, fileId]);
-      if (deleted) await emitAccountEvent(client, 'account.file_changed.v1', fileId,
-        { storeId, fileId, purpose: deleted.purpose, state: 'revoked' });
-      reply.code(204);
-      return null;
-    }, true));
+    scope.delete<{ Params: AccountParams }>(`${prefix}/:fileId`, options, async (request, reply) => {
+      let cleanup: { storeId: string; fileId: string; objectKey: string } | undefined;
+      const result = await accountStoreHandler(pool, true, async (client, { store_id: storeId }) => {
+        const fileId = requireId(request.params.fileId, 'fileId');
+        const { rows: [file] } = await client.query<Pick<Attachment, 'purpose' | 'state' | 'objectKey'>>(`
+          SELECT purpose, state, object_key AS "objectKey" FROM account.attachment WHERE store_id = $1 AND file_id = $2
+        `, [storeId, fileId]);
+        if (file && file.state !== 'revoked') {
+          await client.query("UPDATE account.attachment SET state = 'revoked', bytes = NULL WHERE store_id = $1 AND file_id = $2",
+            [storeId, fileId]);
+          await emitAccountEvent(client, 'account.file_changed.v1', fileId, { storeId, fileId, purpose: file.purpose, state: 'revoked' });
+        }
+        if (file?.objectKey) cleanup = { storeId, fileId, objectKey: file.objectKey };
+      }, true)(request, reply);
+      if (reply.sent) return result;
+      return accountErrors(reply, async () => {
+        // Revoke access first. Keep the key if cleanup fails so another DELETE can retry safely.
+        if (cleanup) {
+          const { storeId, fileId, objectKey } = cleanup;
+          await withAttachmentStorage(objectStorage, (storage, signal) => storage.remove(objectKey, signal));
+          await inStore(pool, storeId, client => client.query(`
+            UPDATE account.attachment SET object_key = NULL
+            WHERE store_id = $1 AND file_id = $2 AND state = 'revoked' AND object_key = $3
+          `, [storeId, fileId, objectKey]));
+        }
+        reply.code(204);
+        return null;
+      });
+    });
   });
 
   for (const [purpose, token] of [

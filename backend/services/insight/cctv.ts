@@ -1,6 +1,9 @@
+import { createHash } from 'node:crypto';
+import type { FastifyInstance } from 'fastify';
 import type { Pool } from 'pg';
+import { createObjectStorage, type ObjectStorage } from '../../packages/object-storage/index.ts';
 import { transact } from '../../packages/streams/transaction.ts';
-import { fingerprint, hash, InsightError, inStore, isUuid, setStore } from './scope.ts';
+import { fingerprint, hash, InsightError, inStore, isUuid, requireOwner, setStore, type StoreParams } from './scope.ts';
 import { appendObservationEvent } from './reality/10/commands.ts';
 
 const bucketMinutes = 5;
@@ -147,4 +150,84 @@ export function readCctv(pool: Pool, storeId: string) {
       ORDER BY p.bucket_start DESC, p.camera_id LIMIT 24`, [storeId]);
     return { buckets: rows };
   }, true);
+}
+
+export const cctvSampleTypes = {
+  'store-sample.mp4': 'video/mp4', 'store-sample-detections.json': 'application/json',
+  'cafe17.mp4': 'video/mp4', 'cafe17-detections.json': 'application/json',
+} as const;
+type SampleAsset = keyof typeof cctvSampleTypes;
+type SampleRow = { object_key: string; sha256: string; bytes: number; content_type: string };
+
+function cctvSampleRange(header: string, size: number) {
+  const match = /^bytes=(\d{0,16})-(\d{0,16})$/.exec(header);
+  if (!match || (!match[1] && !match[2])) return null;
+  const first = Number(match[1]);
+  const last = Number(match[2]);
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last)) return null;
+  const start = match[1] ? first : Math.max(0, size - last);
+  const end = match[1] && match[2] ? Math.min(size - 1, last) : size - 1;
+  return start <= end ? { start, end } : null;
+}
+
+export function registerCctvSampleMedia(routes: FastifyInstance, pool: Pool, gatewayToken: string,
+  storage?: ObjectStorage | null) {
+  const objects = storage === undefined && process.env.NAVIS_OBJECT_STORAGE_MEDIA_ENABLED === '1'
+    ? createObjectStorage() : storage;
+  routes.get<{ Params: StoreParams & { asset: string } }>(
+    '/internal/v1/insight/stores/:storeId/insight/cctv-samples/:asset', async (req, reply) => {
+      const { storeId } = requireOwner(req, gatewayToken);
+      const { asset } = req.params;
+      if (!Object.hasOwn(cctvSampleTypes, asset)) throw new InsightError(404, 'NOT_FOUND');
+      if (!objects) throw new InsightError(404, 'CCTV_SAMPLE_BUNDLED');
+      const row = await inStore(pool, storeId, async db => (await db.query<SampleRow>(`
+        SELECT object_key, sha256, bytes, content_type FROM insight.cctv_sample_media
+        WHERE store_id = $1 AND asset = $2`, [storeId, asset])).rows[0], true);
+      if (!row) throw new InsightError(404, 'NOT_FOUND');
+      const etag = `"${row.sha256}"`;
+      const cache = () => reply.header('cache-control', 'private, max-age=86400')
+        .header('etag', etag).header('vary', 'Authorization');
+      if (req.headers['if-none-match']?.split(',').some(value => {
+        const match = value.trim();
+        return match === '*' || match.replace(/^W\//, '') === etag;
+      })) return cache().code(304).send();
+
+      const range = req.headers.range ? cctvSampleRange(req.headers.range, row.bytes) : undefined;
+      if (range === null) return reply.code(416).header('content-range', `bytes */${row.bytes}`).send();
+      let object;
+      try {
+        object = range ? await objects.getRange?.(row.object_key, `bytes=${range.start}-${range.end}`)
+          : await objects.get(row.object_key);
+      } catch {
+        throw new InsightError(503, 'SERVICE_UNAVAILABLE');
+      }
+      const length = range ? range.end - range.start + 1 : row.bytes;
+      const contentRange = range && `bytes ${range.start}-${range.end}/${row.bytes}`;
+      if (!object || object.contentLength !== length || object.contentType !== row.content_type
+          || (contentRange && object.contentRange !== contentRange)) {
+        object?.body.destroy();
+        throw new InsightError(503, 'SERVICE_UNAVAILABLE');
+      }
+      cache().type(row.content_type).header('accept-ranges', 'bytes').header('content-length', length)
+        .header('x-content-type-options', 'nosniff');
+      if (contentRange) reply.code(206).header('content-range', contentRange);
+      return reply.send(object.body);
+    });
+}
+
+/** Seed only the repository's approved example files. Live camera footage stays on the device. */
+export async function seedCctvSampleMedia(pool: Pool, storage: ObjectStorage, storeId: string, asset: SampleAsset, bytes: Buffer) {
+  if (!isUuid(storeId) || !Object.hasOwn(cctvSampleTypes, asset) || !bytes.length || bytes.length > 32 * 1024 * 1024) {
+    throw new Error('Invalid CCTV sample');
+  }
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const key = `stores/${storeId}/insight/cctv-samples/${sha256}/${asset}`;
+  const mime = cctvSampleTypes[asset];
+  await storage.put(key, bytes, mime);
+  await inStore(pool, storeId, db => db.query(`
+    INSERT INTO insight.cctv_sample_media (store_id, asset, content_type, object_key, sha256, bytes)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (store_id, asset) DO UPDATE SET
+      object_key = EXCLUDED.object_key, sha256 = EXCLUDED.sha256, bytes = EXCLUDED.bytes, updated_at = clock_timestamp()
+    WHERE cctv_sample_media.sha256 <> EXCLUDED.sha256`, [storeId, asset, mime, key, sha256, bytes.length]));
 }

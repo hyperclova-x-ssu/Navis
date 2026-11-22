@@ -8,12 +8,12 @@ export type Owner = { storeId: string; actorId: string };
 export type Source = 'promo-assets' | 'promo-drafts' | 'promo-publications' | 'promo-jobs';
 export type Receipt = { resourceId: string; revision: number; receiptId: string; affectedSources: Source[] };
 export type Draft = { draftId: string; revision: number; input: Partial<PromoInput>; jobId: string | null; updatedAt: Date };
-export type Asset = { assetId: string; fileId: string; menuId: string | null; width: number; height: number };
+export type Asset = { assetId: string; fileId: string; menuId: string | null; width: number; height: number; photoAssetId?: string | null };
 export type Publication = { publicationId: string; jobId: string; channel: Channel; method: 'attestation' | 'provider';
   state: 'pending' | 'published' | 'failed'; revision: number; providerRef: string | null; link: string | null; createdAt: Date };
 
 export const draftColumns = 'draft_id AS "draftId", revision, input, job_id AS "jobId", updated_at AS "updatedAt"';
-export const assetColumns = 'asset_id AS "assetId", file_id AS "fileId", menu_id AS "menuId", width, height';
+export const assetColumns = 'asset_id AS "assetId", file_id AS "fileId", menu_id AS "menuId", width, height, photo_id AS "photoAssetId"';
 export const publicationColumns = `publication_id AS "publicationId", job_id AS "jobId", channel, method,
   state, revision, provider_ref AS "providerRef", link, created_at AS "createdAt"`;
 

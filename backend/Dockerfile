@@ -58,6 +58,7 @@ COPY backend/infra/browser-api.ts ./infra/
 COPY backend/packages/contracts/index.ts ./packages/contracts/index.ts
 COPY backend/packages/contracts/replay-clock.ts ./packages/contracts/replay-clock.ts
 COPY backend/packages/db/index.ts ./packages/db/index.ts
+COPY --from=workload-source /runtime/packages/object-storage/ ./packages/object-storage/
 USER node
 
 FROM backend-runtime AS api-gateway

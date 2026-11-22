@@ -2,12 +2,13 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { ApprovalError } from '../../../../packages/approvals/index.ts';
+import { createObjectStorage } from '../../../../packages/object-storage/index.ts';
 import { NaverError } from '../../../account/naver/wire.ts';
 import { createCalendarNaverCommands, type NaverCalendarOptions } from './naver.ts';
 import { withCustomerStore } from '../../claims.ts';
 import { isUuid } from '../../pos-client.ts';
 import { execute, getEntity, type Command } from './commands.ts';
-import { calendarExport } from './exports.ts';
+import { archiveCalendarExport, calendarExport, type CalendarExportStorage } from './exports.ts';
 import { listProjections, projectionCursor } from './projection.ts';
 import { listEvents, listShifts, listStaff, lockCalendarStaff, publicRow, readPreferences, sourceRevision, staffHistory, type Scope } from './records.ts';
 import { idempotencyKey, invalid, listing, object, period, ScheduleError, uuid } from './wire.ts';
@@ -29,7 +30,9 @@ function page<T>(rows: readonly T[], limit: number, key: (row: T) => string, asO
   return { items, nextCursor: rows.length > limit ? key(items[limit - 1]) : null, asOf: asOf.toISOString(), sourceRevision };
 }
 
-export function registerCalendarStaffRoutes(app: FastifyInstance, pool: Pool, gatewayToken: string, { now = () => new Date(), naver }: { now?: () => Date; naver?: NaverCalendarOptions } = {}) {
+export function registerCalendarStaffRoutes(app: FastifyInstance, pool: Pool, gatewayToken: string, {
+  now = () => new Date(), naver, objectStorage = createObjectStorage(),
+}: { now?: () => Date; naver?: NaverCalendarOptions; objectStorage?: CalendarExportStorage } = {}) {
   const expected = digest(gatewayToken);
   async function authorize(req: Request, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
@@ -114,12 +117,18 @@ export function registerCalendarStaffRoutes(app: FastifyInstance, pool: Pool, ga
     return page(rows, options.limit, row => `${row.source}:${row.sourceId}`, now(), await sourceRevision(ctx, 'projections'));
   });
   route('GET', '/calendar/preferences', ctx => readPreferences(ctx));
-  route('GET', '/calendar/exports', async (ctx, req, reply) => {
+  register('GET', '/calendar/exports', async ({ transaction, ...scope }, req, reply) => {
     const { start, end } = period(object(req.query, ['startDate', 'endDate']));
     if (start === null || end === null) throw invalid('startDate', 'INVALID_DATE_RANGE');
-    const body = await calendarExport(ctx, start, end, now(), ctx.timezone);
+    const body = await transaction(async db => {
+      const ctx = { ...scope, db };
+      await lockCalendarStaff(ctx, true);
+      return calendarExport(ctx, start, end, now(), ctx.timezone);
+    });
+    const content = objectStorage ? await archiveCalendarExport(objectStorage, scope.storeId, start, end, body) : body;
+    if (content === undefined) return reply.code(503).send({ code: 'SERVICE_UNAVAILABLE', reason: 'CALENDAR_EXPORT_STORAGE_UNAVAILABLE' });
     reply.header('content-type', 'text/calendar; charset=utf-8').header('content-disposition', 'attachment; filename="navis-calendar.ics"');
-    return body;
+    return content;
   });
 
   for (const [type, path, domain, field] of [

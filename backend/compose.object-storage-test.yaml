@@ -1,0 +1,71 @@
+# Use with compose.yaml and a disposable project and volume suffix.
+x-photo-storage-env: &photo-storage-env
+  NAVIS_OBJECT_STORAGE_MODE: s3
+  NAVIS_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+  NAVIS_OBJECT_STORAGE_REGION: kr-standard
+  NAVIS_OBJECT_STORAGE_BUCKET: navis-object-storage-test
+  NAVIS_OBJECT_STORAGE_ACCESS_KEY_FILE: /run/secrets/object_storage_access_key
+  NAVIS_OBJECT_STORAGE_SECRET_KEY_FILE: /run/secrets/object_storage_secret_key
+
+x-photo-runtime: &photo-runtime
+  environment: *photo-storage-env
+  networks: [object-storage]
+  depends_on:
+    minio-init: { condition: service_completed_successfully }
+  secrets: &photo-secrets [object_storage_access_key, object_storage_secret_key]
+
+services:
+  minio:
+    image: ${NAVIS_OBJ_TEST_MINIO_IMAGE:-cgr.dev/chainguard/minio@sha256:548147b5fc95a67e3e45285dff7e0e50326c3eb1977c6218039461771156c5e7}
+    command: [server, /data, '--address', ':9000']
+    user: '0:0'
+    networks: [object-storage]
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/object_storage_access_key
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/object_storage_secret_key
+      MINIO_SITE_REGION: kr-standard
+      MINIO_BROWSER: 'off'
+    secrets: *photo-secrets
+    volumes: [object-storage-data:/data]
+
+  minio-init:
+    build: &tools-build { context: .., dockerfile: backend/Dockerfile, target: tools }
+    command: [node, test/compose/object-storage-init.ts]
+    environment: *photo-storage-env
+    networks: [object-storage]
+    depends_on:
+      minio: { condition: service_started }
+    secrets: *photo-secrets
+
+  marketing:
+    <<: *photo-runtime
+    environment:
+      <<: *photo-storage-env
+      NAVIS_OBJECT_STORAGE_MEDIA_ENABLED: '1'
+  marketing-worker:
+    <<: *photo-runtime
+    environment:
+      <<: *photo-storage-env
+      NAVIS_OBJECT_STORAGE_MEDIA_ENABLED: '1'
+  insight:
+    <<: *photo-runtime
+    environment:
+      <<: *photo-storage-env
+      NAVIS_OBJECT_STORAGE_MEDIA_ENABLED: '1'
+  account: *photo-runtime
+  pos: *photo-runtime
+  customer: *photo-runtime
+  tools:
+    <<: *photo-runtime
+    build: *tools-build
+    secrets: [object_storage_access_key, object_storage_secret_key, marketing_run_password]
+
+networks:
+  object-storage: { internal: true }
+
+volumes:
+  object-storage-data:
+
+secrets:
+  object_storage_access_key: { file: ./.secrets/local/object_storage_access_key }
+  object_storage_secret_key: { file: ./.secrets/local/object_storage_secret_key }

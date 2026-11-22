@@ -443,8 +443,16 @@ export function createGateway({
           if (!claims) return reply;
           const store = claims.store_id.toLowerCase();
           const headers = new Headers(actorHeaders(claims, token, req));
-          if (service === 'marketing' && suffix.endsWith('/video.mp4') && typeof req.headers.range === 'string') {
+          const photoContent = service === 'marketing' && suffix === '/marketing/photos/:photoId/content';
+          const referenceMedia = service === 'marketing' && suffix === '/promo/references/:referenceId/:asset';
+          const cctvSample = service === 'insight' && suffix === '/insight/cctv-samples/:asset';
+          const cacheableMedia = photoContent || referenceMedia || cctvSample;
+          if (((service === 'marketing' && suffix.endsWith('/video.mp4')) || referenceMedia || cctvSample)
+            && typeof req.headers.range === 'string') {
             headers.set('range', req.headers.range);
+          }
+          if (cacheableMedia && typeof req.headers['if-none-match'] === 'string') {
+            headers.set('if-none-match', req.headers['if-none-match']);
           }
           const key = req.headers['idempotency-key'];
           if (typeof key === 'string') headers.set('idempotency-key', key);
@@ -481,6 +489,14 @@ export function createGateway({
           const response = await request(upstream, `/internal/v1/${service}/stores/${store}${path}${query ? `?${query}` : ''}`, {
             method, headers, body, signal: AbortSignal.timeout(timeout),
           });
+          if (cacheableMedia && [200, 206, 304].includes(response.status)) {
+            for (const name of ['content-length', 'etag', 'vary']) {
+              const value = response.headers.get(name);
+              if (value !== null) reply.header(name, value);
+            }
+            const cache = response.headers.get('cache-control');
+            if (cache?.startsWith('private,')) reply.header('cache-control', cache);
+          }
           if ((service === 'insight' || service === 'marketing') && response.status >= 400 && response.status < 500
             && response.headers.get('content-type')?.startsWith('application/json')) {
             const failure = await response.clone().json().catch(() => null);

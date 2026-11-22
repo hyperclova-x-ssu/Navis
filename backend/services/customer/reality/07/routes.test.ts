@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { createApp } from '../../../../infra/http.ts';
@@ -13,9 +14,9 @@ const token = randomBytes(32).toString('hex');
 const actor = randomUUID();
 let now = new Date('2026-11-21T06:45:00Z');
 
-function createService() {
+function createService(options: Parameters<typeof registerCalendarStaffRoutes>[3] = {}) {
   const app = createApp('customer', async () => {}, false);
-  registerCalendarStaffRoutes(app, pool, token, { now: () => now });
+  registerCalendarStaffRoutes(app, pool, token, { now: () => now, ...options });
   return app;
 }
 
@@ -171,6 +172,58 @@ it('downloads only selected sources and escapes text without losing the local sh
   expect(response.body.split('\r\n').every(line => Buffer.byteLength(line) <= 75)).toBe(true);
   expect(response.body).not.toContain('세금');
   expect((await request(store, 'GET', '/calendar/projections')).json().items).toEqual([expect.objectContaining({ sourceId: taxId })]);
+});
+
+it('archives the authorized calendar download in a store-isolated object and returns the verified bytes', async () => {
+  const store = randomUUID();
+  const other = randomUUID();
+  const date = '2026-11-25';
+  const path = `/calendar/exports?startDate=${date}&endDate=${date}`;
+  expect((await request(store, 'POST', '/calendar/events', { kind: 'event', title: '매장 점검', date })).statusCode).toBe(201);
+  const existing = await request(store, 'GET', path);
+  const objects = new Map<string, Buffer>();
+  const reads: string[] = [];
+  let corrupt = false;
+  const archived = createService({ objectStorage: {
+    async put(key: string, bytes: Buffer, contentType: string) {
+      expect(contentType).toBe('text/calendar');
+      objects.set(key, bytes);
+    },
+    async get(key: string) {
+      reads.push(key);
+      const object = objects.get(key);
+      const bytes = corrupt && object ? Buffer.alloc(object.length) : object;
+      return bytes && { body: Readable.from([bytes]), contentLength: bytes.length, contentType: 'text/calendar' };
+    },
+  } });
+  try {
+    const url = route(store, path);
+    expect((await archived.inject({ url })).statusCode).toBe(401);
+    expect((await archived.inject({ url, headers: headers(other) })).statusCode).toBe(403);
+    expect(objects.size).toBe(0);
+    expect(reads).toEqual([]);
+
+    const downloaded = await archived.inject({ url, headers: headers(store, undefined, randomUUID()) });
+    expect(downloaded.statusCode).toBe(200);
+    expect(downloaded.headers).toMatchObject({ 'cache-control': 'no-store', 'content-disposition': 'attachment; filename="navis-calendar.ics"' });
+    expect(downloaded.rawPayload).toEqual(existing.rawPayload);
+    expect([...objects.keys()]).toEqual([expect.stringMatching(new RegExp(`^stores/${store}/documents/calendar/.+\\.ics$`))]);
+    const [key] = objects.keys();
+    expect(objects.get(key)).toEqual(downloaded.rawPayload);
+    expect(reads).toContain(key);
+
+    const outsider = await archived.inject({ url: route(other, path), headers: headers(other) });
+    expect(outsider.statusCode).toBe(200);
+    expect(outsider.body).not.toContain('매장 점검');
+    expect([...objects.keys()]).toContainEqual(expect.stringContaining(`stores/${other}/documents/calendar/`));
+
+    corrupt = true;
+    const invalid = await archived.inject({ url, headers: headers(store) });
+    expect(invalid.statusCode).toBe(503);
+    expect(invalid.json().reason).toBe('CALENDAR_EXPORT_STORAGE_UNAVAILABLE');
+  } finally {
+    await archived.close();
+  }
 });
 
 it('rejects unauthenticated, mismatched and non-owner writes and hides another store in PostgreSQL', async () => {

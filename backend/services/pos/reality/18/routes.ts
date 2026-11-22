@@ -1,7 +1,8 @@
+import { createObjectStorage } from '../../../../packages/object-storage/index.ts';
 import { uuid } from '../../wire.ts';
 import type { PosOwnerRouteWithPreflight } from '../../preflight.ts';
 import type { VerifyTaxEvidence } from './evidence-client.ts';
-import { createExport, exportDetail, exportFile, listExports, previewExport } from './exports.ts';
+import { createExport, exportDetail, exportFile, listExports, previewExport, type TaxExportStorage } from './exports.ts';
 import { prepareAttachEvidence, createPayment, deletePayment, detachEvidence, listPayments, markPaid, paymentDetail, updatePayment } from './payments.ts';
 import { checkReview, listReviews } from './reviews.ts';
 import { undoTax } from './undo.ts';
@@ -17,7 +18,8 @@ export const taxGatewayRoutes = [
 ] as const;
 
 /** Register on the gateway-owner registrar that requires the operating clock (same as the B09 finance routes). */
-export function registerTaxRoutes(owner: PosOwnerRouteWithPreflight, { verifyEvidence }: { verifyEvidence?: VerifyTaxEvidence } = {}) {
+export function registerTaxRoutes(owner: PosOwnerRouteWithPreflight, { verifyEvidence, objectStorage = createObjectStorage() }:
+  { verifyEvidence?: VerifyTaxEvidence; objectStorage?: TaxExportStorage } = {}) {
   owner('GET', '/tax-payments', 'read', (tx, _params, _body, _key, query) => listPayments(tx, query));
   owner('GET', '/tax-payments/:id', 'read', (tx, { id }) => paymentDetail(tx, uuid(id)));
   owner('POST', '/tax-payments', 'command', (tx, _params, body, key) => createPayment(tx, key, body));
@@ -33,8 +35,8 @@ export function registerTaxRoutes(owner: PosOwnerRouteWithPreflight, { verifyEvi
   owner('POST', '/tax-reviews/:id/check', 'command', (tx, { id }, body, key) => checkReview(tx, key, uuid(id), body));
   owner('GET', '/tax-exports/preview', 'read', (tx, _params, _body, _key, query) => previewExport(tx, query));
   owner('GET', '/tax-exports', 'read', (tx, _params, _body, _key, query) => listExports(tx, query));
-  owner('POST', '/tax-exports', 'command', (tx, _params, body, key) => createExport(tx, key, body));
+  owner('POST', '/tax-exports', 'command', (tx, _params, body, key) => createExport(tx, key, body, objectStorage));
   owner('GET', '/tax-exports/:id', 'read', (tx, { id }) => exportDetail(tx, uuid(id)));
-  owner('GET', '/tax-exports/:id/file', 'read', (tx, { id }, _body, _key, query) => exportFile(tx, uuid(id), query));
+  owner('GET', '/tax-exports/:id/file', 'read', (tx, { id }, _body, _key, query) => exportFile(tx, uuid(id), query, objectStorage));
   owner('POST', '/tax/receipts/:id/undo', 'command', (tx, { id }, body, key) => undoTax(tx, key, uuid(id), body));
 }

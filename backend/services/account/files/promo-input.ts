@@ -2,9 +2,11 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from 'pg';
 import { validateMedia } from '../../../../frontend/server/media/validation.mjs';
+import { createObjectStorage, type ObjectStorage } from '../../../packages/object-storage/index.ts';
 import { uuid as uuidPattern, invalid, record } from '../reality/00/wire.ts';
 import { accountErrors, notFound } from '../reality/00/routes.ts';
 import { inStore } from '../transaction.ts';
+import { attachmentStorageUnavailable, readAttachmentBytes, type AttachmentContent } from './attachment-storage.ts';
 
 const prefix = '/internal/v1/account/stores/:storeId/promo-input';
 const ownerPhotos = `
@@ -52,7 +54,7 @@ function dimensions(mime: string, bytes: Buffer) {
   } catch { /* The stored file has no readable dimensions. */ }
 }
 
-export function registerPromoInputRoutes(app: FastifyInstance, pool: Pool, token: string) {
+export function registerPromoInputRoutes(app: FastifyInstance, pool: Pool, token: string, objectStorage: ObjectStorage | undefined = createObjectStorage()) {
   const expected = digest(`Bearer ${token}`);
   const onRequest = async (req: FastifyRequest, reply: FastifyReply) => {
     reply.header('cache-control', 'no-store');
@@ -75,11 +77,15 @@ export function registerPromoInputRoutes(app: FastifyInstance, pool: Pool, token
       const storeId = id(req.params.storeId);
       const actorId = id(record(req.body, ['actorId']).actorId);
       const fileId = id(req.params.fileId);
-      const { rows: [photo] } = await inStore(pool, storeId, db => db.query<{ mime: string; bytes: Buffer }>(
-        `SELECT f.content_type AS mime, f.bytes ${ownerPhotos} AND f.file_id=$3`, [storeId, actorId, fileId]));
-      const size = photo && dimensions(photo.mime, photo.bytes);
+      const { rows: [photo] } = await inStore(pool, storeId, db => db.query<AttachmentContent & { mime: string }>(`
+        SELECT f.content_type AS mime, f.bytes, f.object_key AS "objectKey", f.size, f.sha256
+        ${ownerPhotos} AND f.file_id=$3`, [storeId, actorId, fileId]));
+      if (!photo) throw notFound();
+      const bytes = await readAttachmentBytes(objectStorage, photo);
+      if (!bytes) throw attachmentStorageUnavailable();
+      const size = dimensions(photo.mime, bytes);
       if (!size) throw notFound();
       reply.type(photo.mime).header('x-navis-photo-width', size.width).header('x-navis-photo-height', size.height);
-      return photo.bytes;
+      return bytes;
     }));
 }

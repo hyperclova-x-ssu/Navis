@@ -3,10 +3,13 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import { validateInput } from '../../../../../frontend/server/promo/service.mjs';
 import type { loadReferences } from '../../../../../frontend/server/promo/references.mjs';
+import type { ObjectStorage } from '../../../../packages/object-storage/index.ts';
 import { fingerprint, isUuid, sha256, type CatalogSnapshot, type FileBinding, type PromoInput } from '../../promo/contracts.ts';
 import { insertPromoJob, PromoRouteError } from '../../promo/jobs.ts';
+import { configuredPromoMediaStorage, createPromoMedia } from '../../promo/media.ts';
 import type { PromoMenuPriceRead } from '../../promo/menu-facts.ts';
 import { queuePhotoAnalysis } from '../../promo/photo-analysis-store.ts';
+import { insertPhoto, photoPath, storePhoto, type PhotoUpload } from '../../promo/photo-assets.ts';
 import { inStore } from '../../transaction.ts';
 import { attest, publish, type PublicationPorts } from './publication.ts';
 import { assetColumns, draftColumns, getDraft, preparedCommand, publicationColumns, receipt,
@@ -18,9 +21,16 @@ export const promoRealityPath = '/internal/v1/marketing/stores/:storeId/marketin
 export type PromoRealityOptions = PublicationPorts & {
   gatewayToken: string;
   references: ReturnType<typeof loadReferences>;
+  objectStorage?: ObjectStorage | null;
   // Account resolves rights and ready bytes for seed assets and eligible attachments in this store.
-  catalogForOwner(owner: Owner, uploads: readonly Asset[]): Promise<CatalogSnapshot | null>;
+  catalogForOwner(owner: Owner, uploads: readonly Asset[], db?: PoolClient): Promise<CatalogSnapshot | null>;
   verifyUpload(owner: Owner, fileId: string): Promise<{ width: number; height: number } | null>;
+  photoUpload?: {
+    storage: Pick<ObjectStorage, 'put'>;
+    read(owner: Owner, fileId: string): Promise<PhotoUpload | null>;
+    catalogMenuId?(menuId: string): string;
+    promoMenuId?(menuId: string): string;
+  };
   bindPhoto?: (owner: Owner, photoId: string, attachment: FileBinding) => Promise<FileBinding>;
   readMenuPrice?: PromoMenuPriceRead;
   uploadTargets?: Partial<Record<Channel, string>>;
@@ -87,6 +97,8 @@ function validateSelections(input: Partial<PromoInput>, snapshot: CatalogSnapsho
 
 export function registerPromoReality(app: FastifyInstance, pool: Pool, options: PromoRealityOptions) {
   if (!options.gatewayToken) throw new Error('Promo reality requires a gateway credential');
+  const storage = options.objectStorage === undefined ? configuredPromoMediaStorage() : options.objectStorage;
+  const media = storage && createPromoMedia(pool, storage);
   const uploadTargets = Object.fromEntries(Object.entries(options.uploadTargets ?? {}).map(([channel, raw]) => {
     const url = new URL(raw);
     if (url.protocol !== 'https:' || url.username || url.password || url.port
@@ -143,43 +155,56 @@ export function registerPromoReality(app: FastifyInstance, pool: Pool, options: 
       };
     });
 
-    routes.post<{ Params: Params; Querystring: Query }>(`${promoRealityPath}/assets`, { bodyLimit: 2048 }, async request => {
+    async function registerAsset(request: Request) {
       const { scope, key } = mutation(request);
       const body = record(request.body, ['fileId', 'menuId', 'rightsConfirmed']);
       const fileId = id(body.fileId);
-      const menuId = body.menuId === null ? null : identifier(body.menuId);
+      const requestedMenuId = body.menuId === null ? null : identifier(body.menuId);
+      const menuId = requestedMenuId && (options.photoUpload?.promoMenuId?.(requestedMenuId) ?? requestedMenuId);
       if (body.rightsConfirmed !== true) throw badRequest();
       const result = await preparedCommand(pool, scope, key, ['asset', fileId, menuId], async () => {
-        const verified = await options.verifyUpload(scope, fileId);
+        const upload = options.photoUpload ? await options.photoUpload.read(scope, fileId) : undefined;
+        const verified = options.photoUpload ? upload : await options.verifyUpload(scope, fileId);
         if (!verified) throw notFound();
         if (!Number.isInteger(verified.width) || !Number.isInteger(verified.height)
             || verified.width < 1 || verified.height < 1 || verified.width > 16384 || verified.height > 16384) throw unavailable();
         const uploads = menuId === null ? null : await inStore(pool, scope.storeId, db => readAssets(db, scope.storeId));
         const assetId = randomUUID();
         let pendingAnalysis: Parameters<typeof queuePhotoAnalysis>[2] | undefined;
+        let menuName: string | undefined;
         if (uploads) {
           const catalog = await options.catalogForOwner(scope, uploads);
           const menu = catalog?.catalog.menus.find(menu => menu.menuId === menuId);
           if (!menu) throw notFound();
-          if (options.bindPhoto) {
+          menuName = menu.names.en;
+          if (!upload && options.bindPhoto) {
             const resourceId = `analysis-${fileId}`;
             const binding = await options.bindPhoto(scope, resourceId, { fileId, resourceId });
             if (binding.sha256) pendingAnalysis = { ...binding, sha256: binding.sha256, menuName: menu.names.en };
           }
         }
+        const storageMenuId = menuId && (options.photoUpload?.catalogMenuId?.(menuId) ?? menuId);
+        const object = upload && options.photoUpload
+          ? await storePhoto(options.photoUpload.storage, scope.storeId, upload, storageMenuId) : undefined;
         return async (db, receiptId) => {
           if (uploads) await checkAssets(db, scope.storeId, uploads);
+          const photoId = object ? await insertPhoto(db, scope.storeId, object) : null;
           const { rowCount } = await db.query(`
-            INSERT INTO marketing.promo_asset (store_id, asset_id, file_id, menu_id, width, height)
-            VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (store_id, file_id) DO NOTHING`,
-          [scope.storeId, assetId, fileId, menuId, verified.width, verified.height]);
+            INSERT INTO marketing.promo_asset (store_id, asset_id, file_id, menu_id, width, height, photo_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (store_id, file_id) DO NOTHING`,
+          [scope.storeId, assetId, fileId, menuId, verified.width, verified.height, photoId]);
           if (!rowCount) throw conflict('ASSET_ALREADY_REGISTERED');
-          if (pendingAnalysis) await queuePhotoAnalysis(db, scope.storeId, pendingAnalysis);
+          const analysis = object && photoId && menuName
+            ? { sha256: object.sha256, fileId: photoId, resourceId: `photo-${photoId}`, menuName }
+            : pendingAnalysis;
+          if (analysis) await queuePhotoAnalysis(db, scope.storeId, analysis);
           return { receipt: receipt(receiptId, assetId, 1, sources.assets) };
         };
       });
       return result.value.receipt;
-    });
+    }
+    routes.post(`${promoRealityPath}/assets`, { bodyLimit: 2048 }, registerAsset);
+    routes.post(photoPath, { bodyLimit: 2048 }, registerAsset);
 
     routes.get<{ Params: Params; Querystring: Query }>(`${promoRealityPath}/drafts`, request => {
       const { storeId } = owner(request);
@@ -303,7 +328,7 @@ export function registerPromoReality(app: FastifyInstance, pool: Pool, options: 
     for (const channel of ['place-news', 'clip', 'reels', 'shorts'] as const) {
       routes.post<{ Params: Params; Querystring: Query }>(`${promoRealityPath}/jobs/:jobId/${channel}`, { bodyLimit: 32768 }, async (request, reply) => {
         const { scope, key } = mutation(request);
-        const result = await publish(pool, options, scope, key, id(request.params.jobId), publicationCard(request.body, channel));
+        const result = await publish(pool, options, scope, key, id(request.params.jobId), publicationCard(request.body, channel), media?.readArtifact);
         return reply.code(202).send(result);
       });
     }
