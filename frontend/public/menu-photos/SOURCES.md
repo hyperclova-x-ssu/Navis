@@ -1,5 +1,15 @@
 # 안숭잘부 카페 메뉴 사진
 
-이 폴더의 6장은 안숭잘부 카페 데모를 위해 2026-11-20에 Codex 이미지 생성으로 만든 AI 생성 샘플입니다. 실제 고객이 촬영한 사진은 없습니다. 판매 수량 상위 6개 메뉴마다 사진 1장을 원본 그대로 사용합니다.
+안숭잘부 카페 데모의 메뉴 24종에 사용하는 AI 생성 이미지입니다. 각 메뉴에 JPEG 한 장을 사용합니다.
+
+2026-11-20 · Codex 이미지 생성으로 만든 원본 6장
+
+- `americano`, `cafe-latte`, `deep-choco`, `dolce-latte`, `saltbread`, `vanilla-latte`
+
+2026-11-22 · 원본 6장을 참고 이미지로 제공해 Codex 내장 이미지 생성으로 3×3 사진 시트 두 장을 만든 뒤, 메뉴별로 잘라 정사각형 JPEG로 저장했습니다.
+
+- `bagel-plain`, `basque-cake`, `caramel-macchiato`, `chamomile-tea`, `chestnut-latte`, `coldbrew`
+- `cookie-choco`, `decaf-americano`, `earlgrey-milktea`, `earlgrey-tea`, `einspanner-choco`, `grapefruit-ade`
+- `hazelnut-americano`, `jeju-matcha`, `lemon-ade`, `oat-matcha`, `pumpkin-einspanner`, `yuja-chamomile`
 
 [원본과 선정 기준](../../server/promo/assets/SOURCES.md)
