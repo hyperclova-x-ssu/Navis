@@ -4,7 +4,7 @@
 // isolated recorder; the same run writes poster.jpg (360x640 at meta.posterAt) and preview.mp4
 // (meta.previewFrom..previewTo, 360x640, 30fps, h264, no audio, +faststart). Never runs on owner requests.
 //
-// Usage (from 04_app):
+// Usage (from frontend):
 //   node server/promo/references/tools/render-gallery.mjs [ref-1 ref-2 ...] [--full <dir>] [--skip-check]
 //   --full <dir>  also writes the full-length mp4 (720x1280, music + 0.6s fade like merge) and three frames
 //                 (start / middle / ending) into <dir> for review. Not used by the app.

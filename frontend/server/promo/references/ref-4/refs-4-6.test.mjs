@@ -1,7 +1,7 @@
 /* global structuredClone */
 // T-085 tests for ref-4~6: the same per-reference tests as T-084's tools/references.test.mjs
 // (meta vs PROMO_TEMPLATES, text checker, static + scene checker, 24-char location, determinism, gallery files).
-// D-83: Korean only. Run from 04_app: node --test server/promo/references/ref-4/refs-4-6.test.mjs
+// D-83: Korean only. Run from frontend: node --test server/promo/references/ref-4/refs-4-6.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';

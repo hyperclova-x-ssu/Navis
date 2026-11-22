@@ -1,6 +1,8 @@
 # AI 홍보 영상 대본 생성
 
-`POST /api/promo/jobs` (API-22)의 `story` 단계는 NAVER CLOVA Studio HCX-007의 Chat Completions v3 Structured Outputs를 사용합니다. 서버 프로세스에 `CLOVASTUDIO_API_KEY`를 주입합니다. `CLOVASTUDIO_BASE_URL`은 선택 항목입니다. 대본 모델은 HCX-007로 고정합니다. `look`(사진 분석)은 NAVER HCX-005가 기본입니다(D-328 Q3). 서버 프로세스에 `NAVIS_PROMO_HCX_PILOT=false`를 설정하면 `look`에 Claude CLI를 사용합니다. `scenes`(렌더용 HTML)는 기본이 Claude CLI입니다(D-327 Q7, 아래 “장면 제공자”).
+`POST /api/promo/jobs` (API-22)의 `story` 단계는 NAVER CLOVA Studio HCX-007의 Chat Completions v3 Structured Outputs를 사용합니다. 서버 프로세스에 `CLOVASTUDIO_API_KEY`를 주입합니다. `CLOVASTUDIO_BASE_URL`은 선택 항목입니다. 대본 모델은 HCX-007로 고정합니다. `scenes`(렌더용 HTML)는 기본이 Claude CLI입니다(D-327 Q7, 아래 “장면 제공자”).
+
+`NAVIS_PROMO_HCX_PILOT`을 설정하지 않으면 서비스의 `look`(사진 분석)은 NAVER HCX-005를 사용합니다(D-328 Q3). 변수를 설정할 때는 정확히 `true`인 경우에만 NAVER를 사용합니다. `false`, `0`, `off`, `no`, 빈 값, 오타 등은 Claude CLI로 전환합니다. 이 설정은 사진 분석에만 적용됩니다. 서비스의 사진 분석 호출 한도는 작업 단위입니다. 사진은 최대 5장이고 러너 재시도와 시간 초과 재시도는 각각 1회입니다. 일일 또는 전체 호출 한도는 없습니다.
 
 ## 요청과 검사
 

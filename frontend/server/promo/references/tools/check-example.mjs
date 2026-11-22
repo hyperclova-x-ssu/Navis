@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* global process, console */
 // Check one or more reference examples: story text checker + static check + isolated scene checker.
-// Usage (from 04_app): node server/promo/references/tools/check-example.mjs ref-1 [ref-2 ...]
+// Usage (from frontend): node server/promo/references/tools/check-example.mjs ref-1 [ref-2 ...]
 import { checkStory } from './lib/check-story.mjs';
 import { runSceneCheck } from './lib/check-scene.mjs';
 import { loadCatalog, loadReference, loadRules } from './lib/env.mjs';

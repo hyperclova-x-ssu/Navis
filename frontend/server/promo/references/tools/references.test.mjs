@@ -1,7 +1,7 @@
 /* global structuredClone */
 // T-084 tests: rules/meta constants vs PROMO_TEMPLATES, example stories (text checker), example code
 // (static + isolated scene checker, ko only per D-83), checker sanity, determinism, gallery files.
-// Run from 04_app: node --test server/promo/references/tools/*.test.mjs
+// Run from frontend: node --test server/promo/references/tools/*.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';

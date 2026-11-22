@@ -35,6 +35,16 @@ test('the standalone live pilot requires explicit opt-in', () => {
   assert.equal(readConfig({ NAVIS_PROMO_HCX_PILOT: 'true' }).hcxPilot, true);
 });
 
+test('service photo look defaults to NAVER and any configured value other than true disables it', () => {
+  assert.equal(readConfig({}).hcxLookEnabled, true);
+  assert.equal(readConfig({ NAVIS_PROMO_HCX_PILOT: 'true' }).hcxLookEnabled, true);
+  for (const value of ['false', 'False', '0', 'off', 'no', '', 'typo', 'true ']) {
+    const config = readConfig({ NAVIS_PROMO_HCX_PILOT: value });
+    assert.equal(config.hcxLookEnabled, false, JSON.stringify(value));
+    assert.equal(config.hcxPilot, false, JSON.stringify(value));
+  }
+});
+
 test('switching from Claude photo look to HCX uses a separate photo cache', async t => {
   const dir = await tempDir(t);
   const claude = [];

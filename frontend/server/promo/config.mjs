@@ -12,10 +12,11 @@ export const SCENE_PROVIDERS = ['claude', 'naver', 'claude-api'];
 export function readConfig(env = process.env) {
   const krw = Number(env.NAVIS_PROMO_KRW_PER_USD);
   const hcxPilotFlag = env.NAVIS_PROMO_HCX_PILOT;
+  const hcxPilot = hcxPilotFlag === 'true';
   return {
     model: env.NAVIS_PROMO_CLAUDE_MODEL || 'sonnet',
-    hcxPilot: hcxPilotFlag === 'true', // Explicit opt-in for the standalone live pilot.
-    hcxLookEnabled: hcxPilotFlag !== 'false', // D-328 Q3: default for the service's photo look.
+    hcxPilot,
+    hcxLookEnabled: hcxPilotFlag === undefined || hcxPilot, // D-328 Q3: default only when unset.
     sceneProvider: SCENE_PROVIDERS.includes(env.NAVIS_PROMO_SCENE_PROVIDER) ? env.NAVIS_PROMO_SCENE_PROVIDER : 'claude',
     claudeApiApproved: env.NAVIS_PROMO_CLAUDE_API_APPROVED === 'true',
     dir: env.NAVIS_PROMO_DIR || join(tmpdir(), 'navis-promo'),

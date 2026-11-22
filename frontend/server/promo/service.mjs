@@ -106,6 +106,7 @@ const ymd = d => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`
 export function createPromoService(deps = {}) {
   const env = deps.env || process.env;
   const origins = deps.allowedOrigins ?? new Map();
+  const originAllowed = deps.originAllowed ?? (req => privateOriginAllowed(req, origins));
   const config = { ...readConfig(env), ...deps.config };
   const photoSource = deps.photoSource || createExamplePhotoSource({ sourceId: config.photoSource });
   const references = deps.references || loadReferences(deps.referencesDir);
@@ -229,7 +230,7 @@ export function createPromoService(deps = {}) {
     let decoded;
     try { decoded = decodeURIComponent(path); } catch { return fail(res, 400, 'BAD_REQUEST'); }
     if (decoded !== path || path.includes('..') || path.includes('//')) return fail(res, 404, 'NOT_FOUND');
-    if (!privateOriginAllowed(req, origins) || (req.method === 'POST' && !req.headers.origin)) return fail(res, 403, 'FORBIDDEN');
+    if (!originAllowed(req) || (req.method === 'POST' && !req.headers.origin)) return fail(res, 403, 'FORBIDDEN');
     try {
       await ready;
       return await handle(req, res, path, new URLSearchParams(q >= 0 ? raw.slice(q + 1) : ''));
