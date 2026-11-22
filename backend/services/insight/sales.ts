@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { PermanentStreamError, StreamConsumer, type RedisStreams, type StreamEnvelope } from '../../packages/streams/index.ts';
 import { fingerprint, InsightError, inStore, isDate, isUuid } from './scope.ts';
+import { posTableChanged } from './reality/10/projection.ts';
 
 const saleType = 'pos.sale_recognized.v1';
 const correctionType = 'pos.sale_corrected.v1';
@@ -100,6 +101,14 @@ export function createInsightSalesConsumer(
   return new StreamConsumer({
     database, redis, service: 'insight', producer: 'pos', group: 'insight', name,
     handlers: { [saleType]: recognize, [correctionType]: correct }, ...hooks,
+  });
+}
+
+// This group replays retained table events that the earlier sales group skipped.
+export function createInsightTableConsumer(database: Pool, redis: RedisStreams, name: string) {
+  return new StreamConsumer({
+    database, redis, service: 'insight', producer: 'pos', group: 'insight-tables', name,
+    handlers: { 'pos.table_changed.v1': posTableChanged },
   });
 }
 

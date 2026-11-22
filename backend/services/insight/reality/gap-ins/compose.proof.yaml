@@ -1,0 +1,126 @@
+# GAP-INS test-only stack: real PostgreSQL, the real naver-virtual and Insight entrypoints, the real gateway
+# code in the proof container. Internal networks only (no egress, no published ports): FAKE/virtual NAVER only.
+# Paths are mounted at their host locations so the worktree's node_modules symlinks resolve.
+name: gapins-proof
+x-node: &node
+  image: ubuntu:22.04
+  working_dir: ${GAPINS_APP:?app path required}/backend
+  volumes:
+    - ${GAPINS_APP}:${GAPINS_APP}:ro
+    - ${GAPINS_MODULES:?backend node_modules required}:${GAPINS_MODULES}:ro
+    - ${GAPINS_ROOT_MODULES:?app node_modules required}:${GAPINS_ROOT_MODULES}:ro
+    - ${GAPINS_NODE:?linux node 22 binary required}:/usr/local/bin/node:ro
+  networks: [proof]
+x-ready: &ready
+  healthcheck:
+    test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/readyz').then(r => { if (!r.ok) process.exitCode = 1 }, () => { process.exitCode = 1 })"]
+    interval: 2s
+    timeout: 3s
+    retries: 60
+services:
+  test-db:
+    image: postgres:17.11-bookworm@sha256:665dc7b37ac52a17e298511414c21d23ffa4e6a6ef6225b3e5d59c7afb35e994
+    environment:
+      POSTGRES_USER: navis_bootstrap
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_bootstrap_password
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    secrets: [db_bootstrap_password]
+    tmpfs: [/var/lib/postgresql/data]
+    volumes:
+      - ${GAPINS_APP}/backend/infra/postgres:/docker-entrypoint-initdb.d:ro
+      - ${GAPINS_TEST_SECRETS:?test secrets required}/db:/run/navis-db:ro
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, navis_bootstrap, -d, postgres]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks: [proof]
+  test-redis:
+    image: redis:8.2.9-alpine@sha256:30abb90e62f14b737010746def3ba99cc79fe19dcdb3d37b41f21fc62e7da19d
+    command: [redis-server, --save, '', --appendonly, 'no']
+    tmpfs: [/data]
+    networks: [proof]
+  naver-virtual:
+    <<: [*node, *ready]
+    entrypoint: [/bin/sh, -c]
+    command:
+      - >-
+        node --experimental-transform-types --disable-warning=ExperimentalWarning services/naver-virtual/migrate.ts &&
+        node --experimental-transform-types --disable-warning=ExperimentalWarning services/naver-virtual/seed.ts &&
+        exec node --experimental-transform-types --disable-warning=ExperimentalWarning services/naver-virtual/index.ts
+    depends_on:
+      test-db: {condition: service_healthy}
+    environment:
+      NAVIS_DB_HOST: test-db
+      NAVIS_NAVER_VIRTUAL_CLOCK: fixed
+      NAVIS_NAVER_VIRTUAL_GRANTS_FILE: /run/secrets/nvirtual_grants
+    secrets: [nvirtual_mig_password, nvirtual_run_password, nvirtual_grants, nvirtual_insight_token,
+      nvirtual_ads_customer, nvirtual_ads_id, nvirtual_ads_key]
+  insight:
+    <<: [*node, *ready]
+    entrypoint: [/bin/sh, -c]
+    command:
+      - >-
+        node --experimental-transform-types --disable-warning=ExperimentalWarning packages/db/cli.ts migrate insight &&
+        exec node --experimental-transform-types --disable-warning=ExperimentalWarning services/insight/index.ts
+    depends_on:
+      test-db: {condition: service_healthy}
+      naver-virtual: {condition: service_healthy}
+    environment:
+      NAVIS_DB_HOST: test-db
+      NAVIS_PHASE3_FIXTURES: '1'
+      NAVIS_INSIGHT_FIXTURE_NOW: '2026-11-17T06:45:00.000Z'
+      NAVIS_GATEWAY_INSIGHT_TOKEN_FILE: /run/secrets/gateway_insight_token
+      NAVIS_NAVER_VIRTUAL_ORIGIN: http://naver-virtual:3000
+      NAVIS_NAVER_VIRTUAL_TOKEN_FILE: /run/secrets/nvirtual_insight_token
+      NAVIS_NAVER_VIRTUAL_ACCOUNT_ID: ansungjalbu-cafe
+      NAVIS_NAVER_VIRTUAL_STORE_ID: c05409a6-f082-5964-a787-c1ed3184988b
+      NAVIS_NAVER_VIRTUAL_PROVIDER_CREDENTIALS_DIR: /run/secrets
+      NAVIS_INSIGHT_ADS_RECORD: cmp-a001-01-000000000000001
+    secrets: [insight_mig_password, insight_run_password, gateway_insight_token, nvirtual_insight_token,
+      nvirtual_ads_customer, nvirtual_ads_id, nvirtual_ads_key]
+  proof:
+    <<: *node
+    profiles: [proof]
+    entrypoint: [node, --experimental-transform-types, --disable-warning=ExperimentalWarning,
+      services/insight/reality/gap-ins/compose-proof.mjs]
+    command: [verify]
+    environment:
+      NAVIS_DB_HOST: test-db
+      GAPINS_OUT: /proof-out
+    secrets: [gateway_insight_token, nvirtual_mig_password]
+    volumes:
+      - ${GAPINS_APP}:${GAPINS_APP}:ro
+      - ${GAPINS_MODULES}:${GAPINS_MODULES}:ro
+      - ${GAPINS_ROOT_MODULES}:${GAPINS_ROOT_MODULES}:ro
+      - ${GAPINS_NODE}:/usr/local/bin/node:ro
+      - ${GAPINS_OUT:?output dir required}:/proof-out
+  tests:
+    <<: *node
+    profiles: [tests]
+    entrypoint: [node, node_modules/vitest/vitest.mjs, run, --maxWorkers=2, --testTimeout=30000]
+    command: [services/insight]
+    environment:
+      NODE_ENV: test
+      NAVIS_INSIGHT_TEST_REDIS_URL: redis://test-redis:6379/1
+    volumes:
+      - ${GAPINS_APP}:${GAPINS_APP}:ro
+      - ${GAPINS_MODULES}:${GAPINS_MODULES}:ro
+      - ${GAPINS_ROOT_MODULES}:${GAPINS_ROOT_MODULES}:ro
+      - ${GAPINS_NODE}:/usr/local/bin/node:ro
+      - ${GAPINS_TEST_SECRETS}/db:/run/navis-test-db:ro
+secrets:
+  db_bootstrap_password: {file: '${GAPINS_TEST_SECRETS}/db_bootstrap_password'}
+  nvirtual_mig_password: {file: '${GAPINS_TEST_SECRETS}/db/nvirtual_mig_password'}
+  nvirtual_run_password: {file: '${GAPINS_TEST_SECRETS}/db/nvirtual_run_password'}
+  insight_mig_password: {file: '${GAPINS_TEST_SECRETS}/db/insight_mig_password'}
+  insight_run_password: {file: '${GAPINS_TEST_SECRETS}/db/insight_run_password'}
+  nvirtual_grants: {file: '${GAPINS_PROOF_SECRETS:?synthetic provider secrets required}/persona-grants.json'}
+  nvirtual_insight_token: {file: '${GAPINS_PROOF_SECRETS}/nvirtual_insight_token'}
+  gateway_insight_token: {file: '${GAPINS_PROOF_SECRETS}/gateway_insight_token'}
+  nvirtual_ads_customer: {file: '${GAPINS_PROOF_SECRETS}/nvirtual_ads_customer'}
+  nvirtual_ads_id: {file: '${GAPINS_PROOF_SECRETS}/nvirtual_ads_id'}
+  nvirtual_ads_key: {file: '${GAPINS_PROOF_SECRETS}/nvirtual_ads_key'}
+networks:
+  proof: {internal: true}

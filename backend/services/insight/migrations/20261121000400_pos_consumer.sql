@@ -30,13 +30,13 @@ ALTER TABLE insight.stream_checkpoint ENABLE ROW LEVEL SECURITY;
 ALTER TABLE insight.stream_checkpoint FORCE ROW LEVEL SECURITY;
 ALTER TABLE insight.stream_inbox ENABLE ROW LEVEL SECURITY;
 ALTER TABLE insight.stream_inbox FORCE ROW LEVEL SECURITY;
-CREATE POLICY stream_runtime_scope ON insight.stream_checkpoint TO insight_runtime, insight_migrate
+CREATE POLICY stream_runtime_scope ON insight.stream_checkpoint TO insight_run, insight_mig
   USING (scope_key = (SELECT current_setting('app.stream_scope', true)));
-CREATE POLICY stream_runtime_scope ON insight.stream_inbox TO insight_runtime, insight_migrate
+CREATE POLICY stream_runtime_scope ON insight.stream_inbox TO insight_run, insight_mig
   USING (scope_key = (SELECT current_setting('app.stream_scope', true)));
-GRANT SELECT, INSERT, UPDATE (last_seq) ON insight.stream_checkpoint TO insight_runtime;
+GRANT SELECT, INSERT, UPDATE (last_seq) ON insight.stream_checkpoint TO insight_run;
 GRANT SELECT, INSERT, UPDATE (status, attempts, retry_at, reason, envelope, notified_at)
-  ON insight.stream_inbox TO insight_runtime;
+  ON insight.stream_inbox TO insight_run;
 
 -- Down Migration
 DROP TABLE insight.stream_inbox, insight.stream_checkpoint;

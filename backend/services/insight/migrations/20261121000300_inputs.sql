@@ -153,19 +153,19 @@ BEGIN
   ] LOOP
     EXECUTE format('ALTER TABLE insight.%I ENABLE ROW LEVEL SECURITY', table_name);
     EXECUTE format('ALTER TABLE insight.%I FORCE ROW LEVEL SECURITY', table_name);
-    EXECUTE format('CREATE POLICY store_scope ON insight.%I TO insight_runtime, insight_migrate
+    EXECUTE format('CREATE POLICY store_scope ON insight.%I TO insight_run, insight_mig
       USING (store_id = (SELECT nullif(current_setting(''app.store_id'', true), '''')::uuid))', table_name);
   END LOOP;
 END $$;
 
-CREATE POLICY device_token ON insight.cctv_device FOR SELECT TO insight_runtime
+CREATE POLICY device_token ON insight.cctv_device FOR SELECT TO insight_run
   USING (token_hash = (SELECT current_setting('app.cctv_token_hash', true)));
 
 GRANT SELECT, INSERT ON insight.ai_usage, insight.assistant_proposal,
   insight.sales_recognition, insight.sales_line, insight.sales_correction, insight.sales_restoration,
-  insight.people_count_bucket, insight.table_occupancy_bucket TO insight_runtime;
-GRANT UPDATE (confirmed_at, job_id) ON insight.assistant_proposal TO insight_runtime;
-GRANT SELECT ON insight.camera, insight.cctv_device, insight.table_zone TO insight_runtime;
+  insight.people_count_bucket, insight.table_occupancy_bucket TO insight_run;
+GRANT UPDATE (confirmed_at, job_id) ON insight.assistant_proposal TO insight_run;
+GRANT SELECT ON insight.camera, insight.cctv_device, insight.table_zone TO insight_run;
 
 -- Down Migration
 DROP TABLE insight.table_occupancy_bucket, insight.people_count_bucket, insight.table_zone,

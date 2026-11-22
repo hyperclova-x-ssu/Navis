@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { transact } from '../../packages/streams/transaction.ts';
 import { fingerprint, hash, InsightError, inStore, isUuid, setStore } from './scope.ts';
+import { appendObservationEvent } from './reality/10/commands.ts';
 
 const bucketMinutes = 5;
 const bucketMs = bucketMinutes * 60_000;
@@ -110,7 +111,7 @@ export async function ingestAggregate(pool: Pool, token: string, body: Aggregate
         EXCEPT
         SELECT zone_version_id FROM insight.table_zone z
         WHERE z.store_id=c.store_id AND z.camera_id=c.camera_id AND z.zone_set_revision=c.zone_set_revision
-      )`, [storeId, cameraId, zoneRevision, zoneIds]);
+      ) FOR SHARE OF c`, [storeId, cameraId, zoneRevision, zoneIds]);
     if (!authorized.rowCount) throw new InsightError(409, 'ZONE_VERSION_MISMATCH');
 
     const inserted = await db.query(`
@@ -125,6 +126,8 @@ export async function ingestAggregate(pool: Pool, token: string, body: Aggregate
       FROM jsonb_to_recordset($6::jsonb) AS zone(
         zone_version_id uuid, occupied_seconds int, finished_sessions int, finished_seconds_sum bigint, to_clear_events int
       )`, [...identity, zoneRevision, JSON.stringify(entries)]);
+    await appendObservationEvent(db, storeId, now, 'insight.cctv_bucket_recorded.v1', cameraId,
+      { cameraId, bucketStart: start, zoneSetRevision: zoneRevision, status });
     return false;
   });
 }

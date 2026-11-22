@@ -1,0 +1,35 @@
+# Test-only stack. The provider hostname is private and has no published port.
+name: pn-a3-proof
+x-node: &node
+  image: ubuntu:22.04
+  entrypoint: [/usr/local/bin/node, --experimental-transform-types, /app/backend/services/insight/naver/compose-proof.mjs]
+  volumes:
+    - ${PN_A3_APP:?app tree required}:/app:ro
+    - ${PN_A3_NODE}:/usr/local/bin/node:ro
+    - ${PN_A3_MODULES}:/app/backend/node_modules:ro
+    - ${PN_A3_PROVIDER}:/app/backend/services/naver-virtual:ro
+    - ${PN_A3_CONTRACTS}:/app/backend/packages/naver:ro
+  networks: [fixtures]
+services:
+  db:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: naver_virtual
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, postgres, -d, naver_virtual]
+      interval: 1s
+      timeout: 3s
+      retries: 20
+    networks: [fixtures]
+  naver-virtual:
+    <<: *node
+    command: [serve]
+    depends_on:
+      db: {condition: service_healthy}
+  proof:
+    <<: *node
+    command: [verify]
+    profiles: [proof]
+networks:
+  fixtures: {internal: true}

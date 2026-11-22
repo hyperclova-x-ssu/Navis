@@ -3,6 +3,10 @@ import { createApp } from '../../infra/http.ts';
 import { confirmProposal, confirmationSchema, type CardConfirmation, type MarketingEndpoint } from './actions.ts';
 import { aggregateSchema, ingestAggregate, readCctv, type Aggregate } from './cctv.ts';
 import type { NavisProvider } from './navis.ts';
+import { registerB10Routes, undoObservationReceipt } from './reality/10/routes.ts';
+import { registerManualsGrants } from './reality/11/routes.ts';
+import { registerBriefing, type BriefingOptions } from './reality/12/routes.ts';
+import { registerNaverInsightReads, type NaverReadOptions } from './reality/gap-ins/routes.ts';
 import { readSales } from './sales.ts';
 import { bearer, InsightError, requireOwner, requireStore, type StoreParams } from './scope.ts';
 import { promoUsageSchema, recordUsage, type PromoUsage } from './usage.ts';
@@ -14,9 +18,12 @@ const salesQuery = { type: 'object', required: ['from', 'to'], additionalPropert
   properties: { from: date, to: date } };
 
 export function createInsightApp(pool: Pool, {
-  gatewayToken, promoToken, forecastToken, provider, marketing, now = () => new Date(), logging = true, cctvEnabled = true,
+  gatewayToken, promoToken, forecastToken, provider, marketing, manualsGrants, briefing, naverReads, now = () => new Date(), logging = true, cctvEnabled = true,
 }: {
   gatewayToken?: string; promoToken?: string; forecastToken?: string; marketing?: MarketingEndpoint;
+  manualsGrants?: Pick<Parameters<typeof registerManualsGrants>[2], 'verifyPhoto'>;
+  briefing?: Pick<BriefingOptions, 'readers' | 'readOpenings'>;
+  naverReads?: Omit<NaverReadOptions, 'gatewayToken' | 'now'>;
   provider?: NavisProvider; now?: () => Date; logging?: boolean; cctvEnabled?: boolean;
 } = {}) {
   const tokens = [gatewayToken, promoToken, forecastToken].filter(Boolean);
@@ -38,6 +45,14 @@ export function createInsightApp(pool: Pool, {
     });
 
     if (gatewayToken) {
+      registerB10Routes(routes, pool, gatewayToken, now, { registerUndo: false });
+      registerManualsGrants(routes, pool, {
+        ...manualsGrants, gatewayToken, now,
+        undoObservation: ({ now: at, storeId, actorId, db }, id, body, query, key) =>
+          undoObservationReceipt({ at, storeId, actorId, db }, id, body, query, key),
+      });
+      registerBriefing(routes, pool, { ...briefing, gatewayToken, now });
+      registerNaverInsightReads(routes, { ...naverReads, gatewayToken, now });
       routes.get<{ Params: StoreParams }>(stores + '/briefing/cctv', async req =>
         readCctv(pool, requireOwner(req, gatewayToken).storeId));
       if (marketing) {

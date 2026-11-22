@@ -15,8 +15,18 @@ import { readSales } from './sales.ts';
 import { InsightError, isUuid, type OwnerScope } from './scope.ts';
 import { normalizeOutcome, recordUsage } from './usage.ts';
 
-type FixtureFetch = (url: string, init: { body: string; headers: Record<string, string>; signal?: AbortSignal }) => Promise<Response>;
-export type NavisProvider = { mode: 'fixture'; fetch?: FixtureFetch };
+type StudioFetch = (url: string, init: { body: string; headers: Record<string, string>; signal?: AbortSignal }) => Promise<Response>;
+export type NavisProvider = {
+  mode: 'fixture';
+  fetch?: StudioFetch;
+  fetchForOwner?: (scope: OwnerScope) => StudioFetch | undefined;
+} | {
+  mode: 'live';
+  apiKey: string;
+  baseUrl?: string;
+  agentModel?: string;
+  fetch?: StudioFetch;
+};
 
 type Turn = {
   scope: OwnerScope;
@@ -104,16 +114,21 @@ async function projectAgentInput(pool: Pool, storeId: string, input: AgentReques
 
 export function createNavis(pool: Pool, provider: NavisProvider, now: () => Date, reportError: () => void) {
   const context = new AsyncLocalStorage<Turn>();
-  const fixtureFetch = provider.fetch ?? navisAgentFakeFetch;
+  const live = provider.mode === 'live';
+  const providerFetch = provider.fetch ?? (live ? globalThis.fetch : navisAgentFakeFetch);
+  const fetchForOwner = live ? undefined : provider.fetchForOwner;
   const bridgeOptions = {
-    agentFetchImpl: fixtureFetch,
-    // Select the metered, per-scope bridge profile with an injected transport.
-    // The fixture adapter does all I/O in-process.
-    agentMode: 'live', agentModel: 'HCX-005', apiKey: randomUUID(), baseUrl: 'https://navis-agent.invalid',
-    fetchImpl(url: string, init: Parameters<FixtureFetch>[1]) {
+    // Both transports use the bridge's scoped conversation and metering profile.
+    agentMode: 'live',
+    agentModel: live ? provider.agentModel : 'HCX-005',
+    agentApiKey: live ? provider.apiKey : randomUUID(),
+    baseUrl: live ? provider.baseUrl : 'https://navis-agent.invalid',
+    fetchImpl(url: string, init: Parameters<StudioFetch>[1]) {
       const id = new Headers(init.headers).get('x-ncp-clovastudio-request-id');
-      if (id) context.getStore()?.outbound.add(id);
-      return fixtureFetch(url, init);
+      const turn = context.getStore();
+      if (id) turn?.outbound.add(id);
+      const scopedFetch = turn && fetchForOwner?.(turn.scope);
+      return (scopedFetch ?? providerFetch)(url, init);
     },
     resolveAgentScope() {
       const turn = context.getStore();

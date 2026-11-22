@@ -42,9 +42,8 @@ async function startJob(
     body: JSON.stringify({ proposalId, snapshotRevision: revision, input, source: 'card' }),
   });
   if (result.status === 409) {
-    const body = await result.json().catch(() => null);
-    const code = body?.code === 'STALE_SNAPSHOT' ? 'STALE_SNAPSHOT' : 'ACTION_CONFLICT';
-    throw new InsightError(409, code);
+    await result.body?.cancel();
+    throw new InsightError(409, 'ACTION_CONFLICT');
   }
   if (![200, 201, 202].includes(result.status)) {
     await result.body?.cancel();

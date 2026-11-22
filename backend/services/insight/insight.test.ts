@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -56,9 +57,18 @@ let runtime: Pool;
 let app: ReturnType<typeof createInsightApp>;
 let retry = true;
 let outbound = 0;
-let revision = 7;
+let marketingConflict = false;
 let loseResponse = false;
 const domainJobs = new Map<string, string>();
+
+test('rejects a frozen Insight clock before database setup outside Phase 3 fixture mode', () => {
+  const boot = spawnSync(process.execPath, ['--experimental-transform-types', fileURLToPath(new URL('./index.ts', import.meta.url))], {
+    env: { NAVIS_INSIGHT_FIXTURE_NOW: '2026-11-17T06:45:00Z', NAVIS_PHASE3_FIXTURES: '0' },
+    encoding: 'utf8', timeout: 5_000,
+  });
+  expect(boot.status).toBe(1);
+  expect(boot.stderr).toContain('Error: NAVIS_INSIGHT_FIXTURE_NOW requires NAVIS_PHASE3_FIXTURES=1');
+});
 
 beforeAll(async () => {
   // The shared migration-runner test owns insight.schema_migrations on test-db.
@@ -81,7 +91,7 @@ beforeAll(async () => {
   } finally {
     await migrate.end();
   }
-  domain.post<{ Params: { storeId: string }; Body: { snapshotRevision: number } }>(
+  domain.post<{ Params: { storeId: string } }>(
     '/internal/v1/marketing/stores/:storeId/promo/jobs', async (req, reply) => {
       if (req.headers.authorization !== `Bearer ${marketingToken}`) return reply.code(401).send();
       calls.push({ store: req.params.storeId, actor: req.headers['x-navis-user-id'],
@@ -90,7 +100,7 @@ beforeAll(async () => {
       if (typeof key !== 'string') return reply.code(400).send();
       const saved = domainJobs.get(key);
       if (saved) return reply.code(200).send({ jobId: saved });
-      if (req.body.snapshotRevision !== revision) return reply.code(409).send({ code: 'STALE_SNAPSHOT' });
+      if (marketingConflict) return reply.code(409).send({ code: 'ACTION_CONFLICT' });
       const jobId = randomUUID();
       domainJobs.set(key, jobId);
       if (loseResponse) {
@@ -167,6 +177,38 @@ describe('T-311 local Insight acceptance', () => {
     expect(calls).toHaveLength(0);
   });
 
+  test('uses the live Studio transport and meters it in the authenticated store', async () => {
+    const outboundUrls: string[] = [];
+    const live = createInsightApp(runtime, {
+      gatewayToken, now, logging: false,
+      provider: {
+        mode: 'live', apiKey: 'fixture-live-key', agentModel: 'HCX-007', baseUrl: 'https://studio.example',
+        fetch: async (url: string, init: Parameters<typeof navisAgentFakeFetch>[1]) => {
+          outboundUrls.push(url);
+          expect(new Headers(init.headers).get('authorization')).toBe('Bearer fixture-live-key');
+          return navisAgentFakeFetch(url, init);
+        },
+      },
+    });
+    try {
+      const read = { method: 'POST' as const, url: root + '/navis/chat',
+        payload: { ...agent, layer: 'management', intent: { kind: 'read', sourceId: 'pos' } } };
+      expect((await live.inject({ ...read, headers: { ...owner, 'x-navis-store-role': 'staff' } })).statusCode).toBe(403);
+      expect(outboundUrls).toHaveLength(0);
+      const response = await live.inject({ ...read, headers: owner });
+      expect(response.statusCode).toBe(200);
+      expect(decode(response.body, 'done')).toEqual([{ outcome: 'reply' }]);
+      expect(outboundUrls.length).toBeGreaterThan(0);
+      expect(new Set(outboundUrls)).toEqual(new Set(['https://studio.example/v3/chat-completions/HCX-007']));
+      const { rows } = await scoped(db => db.query(
+        "SELECT outcome FROM insight.ai_usage WHERE feature = 'navis' AND model = 'HCX-007'"));
+      expect(rows).toEqual(outboundUrls.map(() => ({ outcome: 'success' })));
+      expect(decode(response.body, 'action_proposal')).toHaveLength(0);
+    } finally {
+      await live.close();
+    }
+  });
+
   test('prepares a card, ignores conversational confirmation, and dispatches exactly one scoped marketing action', async () => {
     const proposal = await prepare();
     expect(proposal).toMatchObject({ snapshotRevision: 7, command: 'video.make', args: wireArgs });
@@ -178,7 +220,9 @@ describe('T-311 local Insight acceptance', () => {
     const payload = { source: 'card', snapshotRevision: 7, runId: agent.runId };
     const confirm = (headers = owner, body = payload, target = url) => app.inject({ method: 'POST', url: target, headers, payload: body });
     expect((await confirm(owner, { ...payload, source: 'text' })).statusCode).toBe(400);
-    expect((await confirm(owner, { ...payload, snapshotRevision: 8 })).statusCode).toBe(409);
+    const stale = await confirm(owner, { ...payload, snapshotRevision: 8 });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toEqual({ code: 'STALE_SNAPSHOT' });
     expect((await confirm({ ...owner, 'x-navis-store-role': 'staff' })).statusCode).toBe(403);
     expect((await confirm({ ...owner, 'x-navis-user-id': randomUUID() })).statusCode).toBe(404);
     expect((await confirm({ ...owner, 'x-navis-store-id': otherStoreId }, payload, url.replace(storeId, otherStoreId))).statusCode).toBe(404);
@@ -191,16 +235,16 @@ describe('T-311 local Insight acceptance', () => {
     }]);
   });
 
-  test('preserves a stale-domain response at the card boundary', async () => {
+  test('returns a marketing conflict at the card boundary', async () => {
     const proposal = await prepare();
-    revision++;
+    marketingConflict = true;
     try {
       const response = await app.inject({ method: 'POST', url: root + `/navis/proposals/${proposal.proposalId}/confirm`,
         headers: owner, payload: { source: 'card', snapshotRevision: 7, runId: agent.runId } });
       expect(response.statusCode).toBe(409);
-      expect(response.json()).toEqual({ code: 'STALE_SNAPSHOT' });
+      expect(response.json()).toEqual({ code: 'ACTION_CONFLICT' });
     } finally {
-      revision--;
+      marketingConflict = false;
     }
   });
 
@@ -232,7 +276,7 @@ describe('T-311 local Insight acceptance', () => {
     expect((await post({ ...attempt, attemptId: randomUUID(), reservedTokens: 120 })).statusCode).toBe(400);
     expect((await post({ ...attempt, attemptId: randomUUID(), reasoningTokens: 8 })).statusCode).toBe(400);
     expect((await post({ ...attempt, attemptId: randomUUID(), mode: 'text', reasoningTokens: 2 })).statusCode).toBe(201);
-    const { inputTokens, outputTokens, reasoningTokens, ...withoutUsage } = attempt;
+    const { inputTokens: _inputTokens, outputTokens: _outputTokens, reasoningTokens: _reasoningTokens, ...withoutUsage } = attempt;
     expect((await post({ ...withoutUsage, attemptId: randomUUID(), outcome: 'rate_limited' })).statusCode).toBe(201);
     expect((await scoped(db => db.query(`SELECT count(*)::int AS count, count(input_tokens)::int AS reported,
       sum(reasoning_tokens)::int AS reasoning FROM insight.ai_usage WHERE feature='promo'`))).rows)
