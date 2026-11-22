@@ -66,7 +66,7 @@
   --settings-width: 720px;
   --coach-gap: 12px; --coach-tail: 8px;
   --coach-min-height: 90px; --coach-body-max-height: 238px; --coach-tail-base: 16px;
-  --ai-conversation-width: 480px; --ai-conversation-height: 800px; --ai-conversation-height-b: 960px; --toast-max-width: 680px; --toast-min-height: 64px; --blur-dialog: 8px; --blur-drawer: 20px;
+  --ai-conversation-width: 520px; --ai-conversation-height: 800px; --ai-conversation-height-b: 960px; --toast-max-width: 680px; --toast-min-height: 64px; --blur-dialog: 8px; --blur-drawer: 20px;
   --switch-track-width: 44px; --switch-track-height: 24px; --switch-thumb-size: 20px; --switch-thumb-gap: 2px;
   --layer-base: 0; --layer-rail: 10; --layer-drawer: 20; --layer-drag: 30; --layer-dialog: 40; --layer-coach: 50; --layer-toast: 60;
   --motion-ease-out: cubic-bezier(.23,1,.32,1); --motion-ease-in-out: cubic-bezier(.77,0,.175,1); --motion-ease-drawer: cubic-bezier(.32,.72,0,1);

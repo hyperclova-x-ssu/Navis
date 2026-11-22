@@ -58,17 +58,17 @@ describe('시작 설정 경계',()=>{
   });
 });
 
-it('테이블 수와 전체 및 개별 좌석을 바꾸면 6/18 → 8/22 → 8/32 → 8/30을 유지한다',()=>{
+it('테이블 수와 전체 및 개별 좌석을 바꾸면 11/30 → 13/34 → 13/52 → 13/50을 유지한다',()=>{
  const run=createRunStore({screenPreset:screenPresets.A,catalog:getRegistry('A'),time:timePolicy,theme:'light',reducedMotion:true,clock:()=>0});
  render(<UiProvider screenPreset={screenPresets.A} reducedMotion><OnboardingScreen run={run}/></UiProvider>);
  fireEvent.click(screen.getByRole('button',{name:'카페'}));fireEvent.click(screen.getByRole('radio',{name:/후불형/}));
- expect(screen.getAllByText('테이블 6개 · 18석').length).toBeGreaterThan(0);
+ expect(screen.getAllByText('테이블 11개 · 30석').length).toBeGreaterThan(0);
  fireEvent.click(screen.getByRole('button',{name:'테이블 수 늘리기'}));fireEvent.click(screen.getByRole('button',{name:'테이블 수 늘리기'}));
- expect(screen.getAllByText('테이블 8개 · 22석').length).toBeGreaterThan(0);
+ expect(screen.getAllByText('테이블 13개 · 34석').length).toBeGreaterThan(0);
  fireEvent.click(screen.getByRole('button',{name:'모든 테이블 같게 늘리기'}));fireEvent.click(screen.getByRole('button',{name:'모든 테이블 같게 늘리기'}));
- expect(screen.getAllByText('테이블 8개 · 32석').length).toBeGreaterThan(0);
+ expect(screen.getAllByText('테이블 13개 · 52석').length).toBeGreaterThan(0);
  fireEvent.click(screen.getByRole('button',{name:'T1 줄이기'}));fireEvent.click(screen.getByRole('button',{name:'T1 줄이기'}));
- expect(screen.getAllByText('테이블 8개 · 30석').length).toBeGreaterThan(0);
+ expect(screen.getAllByText('테이블 13개 · 50석').length).toBeGreaterThan(0);
 });
 
 it.each(['cafe','restaurant','pub','beauty','retail','academy','fitness','other',null] as const)('%s 업종의 후불형은 음식 업종만 테이블을 켠다',business=>{

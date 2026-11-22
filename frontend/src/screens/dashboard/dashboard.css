@@ -91,9 +91,11 @@
 @keyframes dashboard-ai-arrive { from { opacity:0; } to { opacity:1; } }
 .ui-root[data-reduced-motion="true"] .dashboard-ai-created > .ui-panel-surface { animation-duration:var(--motion-duration-reduced); }
 
-.dashboard-ai-launcher { position:absolute; z-index:var(--layer-drawer); right:calc(var(--layout-margin) + (var(--rail-width) - var(--space-16))/2); bottom:calc(var(--layout-margin) + var(--space-4)); width:var(--space-16); height:var(--space-16); display:grid; place-items:center; padding:0; border:var(--stroke-hairline) solid var(--input); border-radius:50%; background:var(--card); color:var(--card-foreground); box-shadow:var(--shadow-floating); cursor:pointer; touch-action:manipulation; transition:transform var(--motion-duration-press) var(--motion-ease-out); }
-.dashboard-ai-launcher[aria-expanded="true"] { background:var(--card); border-color:var(--selection-foreground); }
+.dashboard-ai-launcher { position:absolute; z-index:var(--layer-drawer); right:calc(var(--layout-margin) + (var(--rail-width) - var(--space-16))/2); bottom:calc(var(--layout-margin) + var(--space-4)); width:var(--space-16); height:var(--space-16); display:grid; place-items:center; padding:0; border:var(--stroke-hairline) solid var(--input); border-radius:50%; background:var(--primary); color:var(--primary-foreground); box-shadow:var(--shadow-floating); cursor:pointer; touch-action:manipulation; transition:transform var(--motion-duration-press) var(--motion-ease-out); }
+.dashboard-ai-launcher[aria-expanded="true"] { background:var(--selection); color:var(--selection-foreground); border:var(--stroke-control) solid var(--selection-foreground); }
 .dashboard-ai-launcher img { width:var(--space-8); height:var(--space-8); }
+/* UXP-1: the POS screen has no rail and its bottom-right corner holds 결제하기 / [완료]; the launcher takes the free header slot in the rail's column (same x as the board layers, 64 px, vertically centred on the 48-px header buttons). */
+.dashboard-ai-launcher[data-layer="orders-payment"] { top:var(--layout-margin); bottom:auto; }
 .dashboard-ai-launcher:focus-visible { outline:var(--stroke-focus) solid var(--ring); outline-offset:var(--focus-offset); }
 .dashboard-ai-launcher:active { transform:scale(var(--motion-scale-press)); }
 .dashboard-ai[data-drag-hidden="true"]{visibility:hidden;pointer-events:none}
@@ -124,10 +126,11 @@
    positions (same padding, same title-to-body gap --panel-title-gap); the body is the remaining height, so the widget's own fit drops lines when a second title line leaves too little. */
 .ui-root[data-screen-preset][data-text-scale] .dashboard-screen .ui-feature-panel[data-flow="true"][data-width][data-height]>.ui-panel-surface { display:flex; flex-direction:column; }
 .ui-root[data-screen-preset][data-text-scale] .dashboard-screen .ui-feature-panel[data-flow="true"][data-width][data-height] .ui-panel-title { position:static; flex:none; margin:0 var(--target-default) var(--panel-title-gap) calc(var(--space-5) + var(--stroke-control)); }
-.ui-root[data-screen-preset][data-text-scale] .dashboard-screen .ui-feature-panel[data-flow="true"][data-width][data-height][data-editing="true"] .ui-panel-title { margin-left:calc(var(--target-default) + var(--space-2)); margin-right:0; }
+/* Layout-edit title (SCREENS: x64, DS 4.4): the remove button sits at x8..56, so the title starts at x64 (8px clear). The margin is measured from the content edge, hence the padding is taken off. */
+.ui-root[data-screen-preset][data-text-scale] .dashboard-screen .ui-feature-panel[data-flow="true"][data-width][data-height][data-editing="true"] .ui-panel-title { margin-left:calc(var(--space-16) - var(--panel-padding)); margin-right:0; }
 .ui-root[data-screen-preset][data-text-scale] .dashboard-screen .ui-feature-panel[data-flow="true"][data-width][data-height] .ui-panel-content { position:static; flex:1 1 auto; min-height:0; inset:auto; }
 .ui-root[data-screen-preset="A"][data-text-scale="125"] .dashboard-screen .ui-feature-panel[data-height="1"] { --panel-title-gap:var(--space-6); }
-.dashboard-screen .ui-feature-panel[data-height="1"][data-width="4"]:is([data-feature-id="marketing-today"],[data-feature-id="marketing-performance"]) { --panel-title-gap:var(--space-4); }
+.dashboard-screen .ui-feature-panel[data-height="1"][data-width="4"][data-feature-id="marketing-today"] { --panel-title-gap:var(--space-4); }
 .dashboard-screen .ui-metric { display:flex; flex-direction:column; }
 .dashboard-screen .ui-metric-value { order:0; font-size:var(--type-metric-hero); line-height:var(--leading-metric-hero); }
 .dashboard-screen .ui-metric-label { display:block; order:1; margin-top:var(--space-1); font-size:var(--type-caption); line-height:var(--leading-caption); }
@@ -143,17 +146,18 @@
 .ui-root[data-screen-preset="B"][data-text-scale="125"] .dashboard-screen .ui-feature-panel[data-height="1"] { --panel-hero-size:3.25rem; --panel-hero-leading:3.5rem; }
 .dashboard-screen .ui-feature-panel .ui-metric-value { font-size:var(--panel-hero-size); line-height:var(--panel-hero-leading); }
 .dashboard-screen .ui-feature-panel .ui-metric-unit { display:inline; margin:0 0 0 var(--space-1); max-width:none; }
-.ui-root[data-screen-preset][data-text-scale] .dashboard-screen .ui-feature-panel[data-editing="true"] .ui-panel-title { left:calc(var(--surface-padding) + var(--target-default) + var(--space-2)); }
+/* BUG-003: this rule has to out-rank the regular title rule above (it carries [data-width][data-height] too), otherwise the x50 title stays under the remove button in edit mode. The help button is hidden while editing, so the title runs to the content edge. */
+.ui-root[data-screen-preset][data-text-scale] .dashboard-screen .ui-feature-panel[data-width][data-height][data-editing="true"] .ui-panel-title { left:var(--space-16); right:var(--surface-padding); }
 
 /* U-A1 header: the title + date block is centred on the page width, not on the grid column. The layer tabs stay left
    (app shell), the closing / edit / settings buttons stay right, and the date shrinks with an ellipsis before the
    block can reach either side. The extra selector weight beats the shell's `margin-left` rule for this block. */
-.dashboard-screen .dashboard-header>div:first-child:not(.ui-edit-toolbar) { position:absolute; top:calc(var(--layout-margin) + var(--layout-header)/2); left:50%; transform:translate(-50%,-50%); margin-left:0; width:max-content; max-width:calc(var(--canvas-width) - (var(--space-16)*9 + var(--space-4))*2); min-width:0; display:flex; align-items:baseline; justify-content:center; gap:var(--space-4); }
-.dashboard-screen .dashboard-header>div:first-child:not(.ui-edit-toolbar) h1 { flex:none; white-space:nowrap; }
-.dashboard-screen .dashboard-header>div:first-child:not(.ui-edit-toolbar) p { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+:is(.dashboard-screen,.order-screen) .dashboard-header>div:first-child:not(.ui-edit-toolbar) { position:absolute; top:calc(var(--layout-margin) + var(--layout-header)/2); left:50%; transform:translate(-50%,-50%); margin-left:0; width:max-content; max-width:calc(var(--canvas-width) - (var(--space-16)*9 + var(--space-4))*2); min-width:0; display:flex; align-items:baseline; justify-content:center; gap:var(--space-4); }
+:is(.dashboard-screen,.order-screen) .dashboard-header>div:first-child:not(.ui-edit-toolbar) h1 { flex:none; white-space:nowrap; }
+:is(.dashboard-screen,.order-screen) .dashboard-header>div:first-child:not(.ui-edit-toolbar) p { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dashboard-header-actions { margin-left:auto; }
 /* K-E 8: while the example-state chip is in the shell header (ExampleChip.tsx reports --example-chip-left), the title block ends before it instead of staying centred under it; the date shrinks with an ellipsis. */
-.ui-root[data-example-chip] .dashboard-screen .dashboard-header>div:first-child:not(.ui-edit-toolbar) { left:auto; right:calc(var(--canvas-width) - var(--example-chip-left) + var(--space-4)); transform:translateY(-50%); max-width:calc(var(--example-chip-left) - var(--space-4) - (var(--space-16)*9 + var(--space-4))); justify-content:flex-end; }
+.ui-root[data-example-chip] :is(.dashboard-screen,.order-screen) .dashboard-header>div:first-child:not(.ui-edit-toolbar) { left:auto; right:calc(var(--canvas-width) - var(--example-chip-left) + var(--space-4)); transform:translateY(-50%); max-width:calc(var(--example-chip-left) - var(--space-4) - (var(--space-16)*9 + var(--space-4))); justify-content:flex-end; }
 
 /* U-A1 category flyout: the top follows the clicked rail button (DashboardScreen sets --drawer-y / --drawer-arrow-y on the
    portal host); an arrow on its right edge points at that button. */
@@ -167,7 +171,9 @@
 .ui-dialog > .dashboard-navis-dock .dashboard-ai { max-width:calc(100% - var(--space-8)*2); max-height:calc(100% - var(--detail-header-height) - var(--space-16) - var(--space-8)*3 - var(--space-4)*2); }
 .ui-dialog > .dashboard-navis-dock .dashboard-ai-launcher { bottom:var(--space-8); }
 /* K-E 17: parked in a detail window's header row (navis.tsx measures --navis-header-right / --navis-header-top): left of the window controls, clear of every bottom-right action. */
-.ui-dialog > .dashboard-navis-dock[data-header-dock] .dashboard-ai-launcher { right:calc(var(--navis-header-right) + var(--space-4)); top:var(--navis-header-top); bottom:auto; }
+.ui-dialog > .dashboard-navis-dock[data-header-dock] .dashboard-ai-launcher { right:calc(var(--navis-header-right) + var(--space-4)); top:var(--navis-header-top); bottom:auto; width:var(--space-12); height:var(--space-12); }
+/* UXS-6: 48 px like the neighbouring expand / help / close controls, so the logo shrinks to the 28-px row icon size. */
+.ui-dialog > .dashboard-navis-dock[data-header-dock] .dashboard-ai-launcher img { width:var(--icon-row); height:var(--icon-row); }
 .ui-dialog > .dashboard-navis-dock .dashboard-ai { bottom:calc(var(--space-8) + var(--space-16) + var(--space-4)); }
 
 .ui-portal-host:has(.ui-drawer:not(.ui-overlay-exit)) .dashboard-navis-standby .dashboard-ai { right:calc(var(--layout-margin) + var(--rail-width) + var(--rail-gap)*2 + var(--drawer-width)); }

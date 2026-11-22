@@ -20,8 +20,18 @@ export function validateTableLayout(value: unknown): value is TableLayout {
 
 export const tableLayoutEnabled = (businessType: BusinessType | null, paymentStyle: PaymentStyle | null): boolean => paymentStyle === 'postpaid' && (businessType === 'cafe' || businessType === 'restaurant' || businessType === 'pub');
 
+/**
+ * The onboarding and settings editor start from the same cafe the reservation seed is built on (SCR-202 '기본 자리', D-312/D-313):
+ * T1~T8 2 seats, T9~T10 4 seats, T11 6 seats = 11 tables, 30 seats. Cells are the seed's (x, y) rows minus one.
+ */
+const DEFAULT_TABLES: readonly Pick<StoreTable, 'seats' | 'column' | 'row'>[] = [
+  { seats: 2, column: 0, row: 0 }, { seats: 2, column: 1, row: 0 }, { seats: 2, column: 2, row: 0 }, { seats: 2, column: 3, row: 0 },
+  { seats: 2, column: 4, row: 0 }, { seats: 2, column: 5, row: 0 }, { seats: 2, column: 6, row: 0 }, { seats: 2, column: 0, row: 2 },
+  { seats: 4, column: 1, row: 2 }, { seats: 4, column: 2, row: 2 }, { seats: 6, column: 3, row: 2 },
+];
+
 export function createTableLayout(layoutId = 'store-tables'): TableLayout {
-  return freeze({ layoutId, columns: 9, rows: 6, revision: 0, tables: Array.from({ length: 6 }, (_, index) => ({ tableId: `T${index + 1}`, number: index + 1, seats: index < 3 ? 2 : 4, column: 1 + index % 3 * 3, row: index < 3 ? 1 : 3 })) });
+  return freeze({ layoutId, columns: 9, rows: 6, revision: 0, tables: DEFAULT_TABLES.map((table, index) => ({ tableId: `T${index + 1}`, number: index + 1, ...table })) });
 }
 
 export function resizeTableCount(layout: TableLayout, count: number): TableLayout | null {

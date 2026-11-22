@@ -1,7 +1,6 @@
 import {selectCommonNotice} from '../../state';
 import {CommonNotice} from '../../app/CommonNotice';
 import {beginDashboard} from '../../app/test-session';
-import navisAsset from '../../assets/brand/navis-symbol.svg';
 import '../../ui/test-setup';
 import '@testing-library/jest-dom/vitest';
 import {act, cleanup, fireEvent, render, screen, waitFor, within} from '@testing-library/react';
@@ -58,6 +57,6 @@ it('reflects a data command in the panel at once and offers the data undo on the
 it('holds idle and briefing safety while the conversation is open and restarts on close',async()=>{
  let now=0;const preset=screenPresets.A,run=createRunStore({screenPreset:preset,catalog:getRegistry('A'),time:timePolicy,clock:()=>now,theme:'light',reducedMotion:true});beginDashboard(run,'cafe');run.actions.dismissCoach();
  render(<KitProviders preset={preset} theme="light" textScale={100} reducedMotion><DashboardScreen run={run}/></KitProviders>);
- const launcher=screen.getByRole('button',{name:'Navis 열기'});expect(launcher.querySelector('img')).toHaveAttribute('src',navisAsset);fireEvent.click(launcher);expect(screen.getByRole('button',{name:'Navis 닫기'})).toHaveAttribute('aria-expanded','true');act(()=>{now+=60000;run.actions.tick();});expect(run.getState().idle.mode).toBe('active');expect(run.getState().briefing).toBe('pending');expect(run.getState().briefingSafeSince).toBeNull();
+ const launcher=screen.getByRole('button',{name:'Navis 열기'});expect(launcher.querySelector('img')?.getAttribute('src')).toContain('navis-symbol');expect(launcher.querySelector('svg.ai-glyph')).toBeNull();fireEvent.click(launcher);expect(screen.getByRole('button',{name:'Navis 닫기'})).toHaveAttribute('aria-expanded','true');act(()=>{now+=60000;run.actions.tick();});expect(run.getState().idle.mode).toBe('active');expect(run.getState().briefing).toBe('pending');expect(run.getState().briefingSafeSince).toBeNull();
  fireEvent.click(within(screen.getByRole('region',{name:'Navis'})).getByRole('button',{name:'닫기'}));expect(run.getState().activeInputs).toEqual([]);expect(run.getState().idle.lastInputAt).toBe(now);act(()=>run.dispose());
 });

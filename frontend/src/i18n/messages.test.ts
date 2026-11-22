@@ -4,15 +4,29 @@ import { posBundle } from './messages/pos';
 import { findDuplicateKeys, findKoGaps } from './bundles';
 import { createTranslator } from './translator';
 import { locales } from '../contracts';
+import { bookingCancelCopy } from '../data/reality/06/messages';
+import { dataBundle } from '../data/messages';
+import { mktCouponBundle } from '../features/widgets/mkt-coupon/messages';
 import { localesMap, reviewKeys } from './locales-map.test-data';
 import { readLocalesTables } from './locales-doc.test-util';
-import type { Locale } from './types';
+import { locales20Map, locales20ReferenceRows } from './locales20-map.test-data';
+import type { Locale, MessageBundle } from './types';
 
 const tables = readLocalesTables();
+// LOCALES 20 writes placeholders in Korean ({이유}); the catalog uses the ICU names the other columns already use.
+const norm20 = (s: string) => s
+  .replace(/\{이유\}/g, '{reason}').replace(/\{지역\}/g, '{area}').replace(/\{기준일\}/g, '{date}').replace(/\{시\}/g, '{h}');
 const norm = (s: string) => s
   .replace(/\{기능 이름\}(은\/는|을\/를|이\/가|과\/와)/g, '{name, particle, $1}')
   .replace(/\{기능 이름\}/g, '{name}').replace(/\{현재\}/g, '{current}').replace(/\{전체\}/g, '{total}').replace(/\{레이어\}/g, '{layer}');
+// LOCALES 20 (D-323 ⑦) retired the “(예시)” tails from screen text. The older §5/§9 rows keep them until their owner rewrites the doc, so those cells are compared without the tail.
+const noTail = (s: string) => s.replace(/\s?(?:\(예시\)|\(sample\)|（示例）|（範例）)/gu, '');
 const all = [commonBundle, widgetNamesBundle];
+const smsSetupRows = [
+  ['문자 발신 번호가 비어 있을 때 안내', 'widget.slot-coupon.adHelp'],
+  ['무료 수신 거부 번호가 비어 있을 때 안내', 'widget.slot-coupon.optOutHelp'],
+  ['공지 문자 번호 설정 안내', 'data.real.inbox.notice.smsSetup'],
+] as const;
 const plan2Rows: readonly (readonly [string, string])[] = [
  [
   "추천 배치로 시작(마케팅, D-66)",
@@ -135,7 +149,8 @@ const plan2Rows: readonly (readonly [string, string])[] = [
   "marketing.postFirst"
  ]
 ] as const;
-const raw = (l: Locale, key: string) => ((all.find((b) => key in b.ko)!)[l] as Record<string, string | undefined>)[key];
+const raw = (l: Locale, key: string, bundles: readonly MessageBundle<string>[] = all) =>
+  (bundles.find(b => Object.hasOwn(b.ko, key))?.[l] as Record<string, string | undefined> | undefined)?.[key];
 
 describe('LOCALES 2~7절 표의 모든 칸 대조', () => {
   it.each(locales)('keeps the retired D-323 demo notices out of the copy bundles (%s)', locale => {
@@ -154,7 +169,7 @@ describe('LOCALES 2~7절 표의 모든 칸 대조', () => {
       it(`${m.sec}절 ${m.match} / ${l}`, () => {
         const row = tables[m.sec].find((r) => r[colId] === m.match);
         expect(row, m.match).toBeDefined();
-        const cell = norm(row![colOf(m.sec, l)]);
+        const cell = norm(noTail(row![colOf(m.sec, l)]));
         if (m.wrap) {
           expect(`09:00 / 17:30 (${raw(l, m.keys[0])})`).toBe(cell);
         } else {
@@ -163,7 +178,7 @@ describe('LOCALES 2~7절 표의 모든 칸 대조', () => {
       });
     }
   }
-  const MARKETING_IDS = ['marketing-today', 'slot-coupon', 'expiry-coupon', 'promo-video', 'coupon-status', 'customer-groups', 'marketing-performance'];
+  const MARKETING_IDS = ['marketing-today', 'slot-coupon', 'expiry-coupon', 'promo-video', 'coupon-status', 'customer-groups'];
   for (const id of MARKETING_IDS) {
     for (const l of locales) {
       it(`4.1절 \`${id}\` / ${l}`, () => {
@@ -176,17 +191,17 @@ describe('LOCALES 2~7절 표의 모든 칸 대조', () => {
       });
     }
   }
-  for (const [match, key] of plan2Rows) {
+  for (const [match, key] of [...plan2Rows, ...smsSetupRows]) {
     for (const l of locales) {
       it(`9.1·9.2절 ${match} / ${l}`, () => {
         const row = tables['9'].find((r) => r[0] === match);
         expect(row, match).toBeDefined();
-        expect(raw(l, key)).toBe(row![1 + locales.indexOf(l)]);
+        expect(raw(l, key, [commonBundle, mktCouponBundle, dataBundle])).toBe(noTail(row![1 + locales.indexOf(l)]));
       });
     }
   }
-  it('9.1·9.2절의 모든 행이 marketing.* 키로 옮겨졌다(9.3절 위젯별 문구는 T-059·T-060)', () => {
-    const covered = new Set<string>(plan2Rows.map(([m]) => m));
+  it('9.1·9.2절의 모든 행이 앱 문구 키에 대응한다', () => {
+    const covered = new Set<string>([...plan2Rows, ...smsSetupRows].map(([m]) => m));
     const start = tables['9'].findIndex((r) => r[0] === '추천 배치로 시작(마케팅, D-66)');
     const end = tables['9'].findIndex((r) => r[0] === '게시 전 안내');
     expect(start).toBeGreaterThan(-1);
@@ -236,9 +251,34 @@ describe('LOCALES 2~7절 표의 모든 칸 대조', () => {
   });
 });
 
+describe('LOCALES 20절 페르소나 연결 기능 문구 (D-343~D-347)', () => {
+  const rows = (tables['20'] ?? []).filter(r => r[0] !== '위치');
+  it('accounts for every row as catalog copy or an explicit design reference', () => {
+    expect(rows.map(r => r[0]).sort()).toEqual([...locales20Map.map(m => m.match), ...locales20ReferenceRows].sort());
+  });
+  for (const m of locales20Map) {
+    for (const l of locales) {
+      it(`20절 ${m.match} / ${l}`, () => {
+        const row = rows.find(r => r[0] === m.match);
+        expect(row, m.match).toBeDefined();
+        const cell = norm20(row![1 + locales.indexOf(l)]);
+        // Some Chinese cells write the list separator without a space before it (“…（相对值）/ …”), so split on the slash.
+        expect(m.keys.map(k => raw(l, k, [commonBundle, bookingCancelCopy, dataBundle])))
+          .toEqual(cell.split(m.separator ?? /\s*\/\s*/u));
+      });
+    }
+  }
+  it('has no integration chip copy that LOCALES 20 replaced (calendar “연결됨(예시)” chip, “연결 대기”)', () => {
+    for (const l of locales) {
+      expect(commonBundle[l], l).not.toHaveProperty(['common.integration.naverCalendar']);
+      for (const b of all) for (const v of Object.values(b[l] as Record<string, string>)) expect(v, `${b.id} ${l}`).not.toMatch(/연결 대기|Connection pending|等待连接|等待連線/u);
+    }
+  });
+});
+
 describe('묶음 규칙', () => {
-  it('마케팅 12개 이름·설명·별명은 네 언어를 보존한다', () => {
-    const ids = ['local-changes', 'trade-area', 'local-trends', 'ai-response', 'community', 'marketing-today', 'slot-coupon', 'expiry-coupon', 'promo-video', 'coupon-status', 'customer-groups', 'marketing-performance'];
+  it('마케팅 11개 이름·설명·별명은 네 언어를 보존한다', () => {
+    const ids = ['local-changes', 'trade-area', 'local-trends', 'ai-response', 'community', 'marketing-today', 'slot-coupon', 'expiry-coupon', 'promo-video', 'coupon-status', 'customer-groups'];
     for (const id of ids) for (const part of ['title', 'coach', 'aliases']) {
       for (const l of locales) expect(raw(l, `widget.${id}.${part}`), `${id} ${part} ${l}`).toBeTruthy();
     }

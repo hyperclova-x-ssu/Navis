@@ -23,4 +23,5 @@ export const closingBundle = { id:'closing', ko:{
  'closing.close':'마감 정산하기','closing.undo':'마감 되돌리기','closing.empty':'오늘 결제 내역이 없어요',
  'closing.filteredEmpty':'이 결제 수단으로 결제한 내역이 없어요','closing.error':'결제 내역을 불러오지 못했어요',
  'closing.blocked':'결제 내역을 불러온 뒤 마감할 수 있어요','closing.count':'{n}건',
+ 'closing.loading':'마감 정보를 불러오는 중이에요','closing.undoConfirm':'정말 되돌릴까요? 한 번 더 눌러 주세요','closing.removeConfirm':'정말 지울까요?',
 },en:{},'zh-Hans':{},'zh-Hant':{} } as const satisfies MessageBundle<string>;

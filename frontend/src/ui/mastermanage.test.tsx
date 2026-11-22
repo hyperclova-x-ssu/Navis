@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { UiProvider } from './UiProvider';
 import { screenPresets } from '../layout/presets';
 import { I18nProvider } from '../i18n';
-import { createTableLayout } from '../layout/table-layout';
+import { sixTableLayout as createTableLayout } from '../layout/table-layout-fixture';
 import { TableGridEditor } from './components/table-grid-editor';
 import { ChoiceCard, TemplateCard } from './components/onboarding';
 import { Spotlight, TourCard, placeTourCard } from './components/tour';

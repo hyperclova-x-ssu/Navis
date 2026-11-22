@@ -71,8 +71,8 @@ describe('first-page explicit entrances (T-208b)',()=>{
   act(()=>vi.advanceTimersByTime(1));expect(run.getState().guidance.visualPending).toBe(false);
  });
  it.each([
-  ['template',false,6,20,200],['three',false,3,40,200],['recommended',false,8,24,200],
-  ['template',true,6,0,80],['three',true,3,0,80],['recommended',true,8,0,80],
+  ['template',false,6,20,200],['three',false,3,40,200],['recommended',false,7,24,200],
+  ['template',true,6,0,80],['three',true,3,0,80],['recommended',true,7,0,80],
  ] as const)('%s reduced=%s starts the actual fly layers instead of inheriting the first page suppression',(path,reduced,count,stagger,duration)=>{
   const {run}=mount({template:path==='template',reduced});
   if(path==='recommended'){act(()=>{run.actions.switchLayer('marketing');});fireEvent.click(screen.getByRole('button',{name:'추천 배치로 시작하기'}));}

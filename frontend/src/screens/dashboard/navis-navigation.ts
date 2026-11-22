@@ -14,9 +14,14 @@ import { dataBundles, resolveDataText, TODAY, type WidgetDataStore } from '../..
 import { matchWidget, norm } from '../../features/assistant/question';
 import { assistantDomains, readNavisCondition, widgetStatusQuery } from '../../features/assistant/snapshot';
 import type { DomainDetail } from '../../features/assistant/domains/registry';
-import { supportedConditions } from '../../data/conditions';
-import { parseNavisNumber } from '../../features/assistant/navis-input';
+import { readInventoryTurn } from '../../features/assistant/domains/inventory';
+import { isNavisLayoutNavigationConflict } from '../../features/assistant/domains/layout';
+import { operationsDomain } from '../../features/assistant/domains/operations';
+import { normalizeCondition, supportedConditions } from '../../data/conditions';
+import { navisScopeIssue, normalizeNavisName, parseNavisDate, parseNavisNumber, parseNavisPeriod, resolveNavisName } from '../../features/assistant/navis-input';
 import { navisTranslator } from '../../features/assistant/messages';
+import type { AgentHandoff } from '../../features/assistant/types';
+import { widgetHandoffRef } from '../../features/assistant/widget-handoff';
 
 export const NAVIS_RETURN_FOCUS = 'dashboard-navis-return';
 
@@ -58,22 +63,34 @@ function address(state: RunState): Address {
 }
 const sameAddress = (a: Address, b: Address) => a.layer === b.layer && a.page === b.page;
 const result = (success: boolean): NavigationResult => success ? 'opened' : 'unavailable';
+const stable = (value: unknown): unknown => Array.isArray(value) ? value.map(stable)
+  : value && typeof value === 'object'
+    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, stable(child)]))
+    : value;
+
+function matchesMountedDetail(current: DetailRef, requested: DetailRef) {
+  if (requested.view && !requested.prefill && current.prefill) return false;
+  return (Object.keys(requested) as (keyof DetailRef)[]).every(key => {
+    if (key === 'condition' && requested.condition?.kind === 'default') return !current.condition || current.condition.kind === 'default';
+    return JSON.stringify(stable(current[key])) === JSON.stringify(stable(requested[key]));
+  });
+}
 
 export function createNavisNavigation(run: RunStore, ports: NavigationPorts) {
   const history: Address[] = [];
-  let restoring = false;
+  let batchAddressChange = false;
   let revision = 0;
+  const recordVisit = (from: Address) => {
+    history.push(from);
+    if (history.length > 12) history.shift();
+  };
   const attach = () => run.subscribe((state, previous) => {
     const from = address(previous);
     const moved = !sameAddress(from, address(state));
     if (moved || state.overlay !== previous.overlay || state.edit.mode !== previous.edit.mode ||
       state.layoutRevision !== previous.layoutRevision || state.runId !== previous.runId) revision++;
     if (state.runId !== previous.runId) { history.length = 0; return; }
-    if (restoring || state.screen !== 'dashboard' || previous.screen !== 'dashboard') return;
-    if (moved) {
-      history.push(from);
-      if (history.length > 12) history.shift();
-    }
+    if (moved && !batchAddressChange && state.screen === 'dashboard' && previous.screen === 'dashboard') recordVisit(from);
   });
 
   /** Owner input is in progress or the screen is not ready. A pending overlay exit is not part of it: navigation waits that out (`exitWait`). */
@@ -107,7 +124,8 @@ export function createNavisNavigation(run: RunStore, ports: NavigationPorts) {
   function exitWait(signal?: AbortSignal): Promise<boolean> | undefined {
     const s = run.getState();
     if (!s.exitPendingToken || s.overlay.type !== 'none') return undefined;
-    return waitForExit(s.exitPendingToken, s.runId, signal).then(released => !released);
+    const atExit = revision;
+    return waitForExit(s.exitPendingToken, s.runId, signal).then(released => !released || signal?.aborted === true || revision !== atExit);
   }
 
   async function afterOverlay(action: () => NavigationResult, signal?: AbortSignal): Promise<NavigationResult> {
@@ -119,7 +137,8 @@ export function createNavisNavigation(run: RunStore, ports: NavigationPorts) {
     if (token && before.overlay.type === 'closing' && before.overlay.returnTo && run.getState().overlay.type === 'detail') {
       return afterOverlay(action, signal);
     }
-    if (!token || !await waitForExit(token, before.runId, signal)) return 'stale';
+    const atExit = revision;
+    if (!token || !await waitForExit(token, before.runId, signal) || signal?.aborted || revision !== atExit) return 'stale';
     return busy() ? 'busy' : action();
   }
 
@@ -131,7 +150,7 @@ export function createNavisNavigation(run: RunStore, ports: NavigationPorts) {
     if (busy(s)) return 'busy';
     if (s.overlay.type === 'detail') {
       const current = s.overlay.stack?.at(-1) ?? { featureId: s.overlay.featureId };
-      if (Object.keys(current).length === 1 && Object.keys(ref).length === 1 && current.featureId === ref.featureId) return 'already';
+      if (matchesMountedDetail(current, ref)) return 'already';
       return result(run.actions.openLinkedDetail(ref));
     }
     if (s.edit.mode === 'edit') return 'busy';
@@ -153,13 +172,13 @@ export function createNavisNavigation(run: RunStore, ports: NavigationPorts) {
     const state = run.getState();
     const prior = history.at(-1);
     if (!prior) return 'noHistory';
-    restoring = true;
+    batchAddressChange = true;
     try {
       if (prior.layer !== state.layer && !run.actions.switchLayer(prior.layer)) return 'busy';
       if (prior.layer !== 'orders-payment' && !run.actions.goToPage(prior.page)) return 'unavailable';
       history.pop();
       return 'opened';
-    } finally { restoring = false; }
+    } finally { batchAddressChange = false; }
   };
 
   async function execute(command: string, args: Args, signal?: AbortSignal): Promise<NavigationResult> {
@@ -196,8 +215,18 @@ export function createNavisNavigation(run: RunStore, ports: NavigationPorts) {
           || (args.layer !== undefined && args.layer !== placement.layer)) return 'unavailable';
         if (s.edit.mode === 'edit' && s.layer !== placement.layer) return 'busy';
         return afterOverlay(() => {
-          if (run.getState().layer !== placement.layer && !run.actions.switchLayer(placement.layer)) return 'busy';
-          if (!run.actions.goToPage(placement.pageIndex)) return 'unavailable';
+          const latest = run.getState();
+          const target = findPlacement(latest, feature);
+          if (target?.layer !== placement.layer || target.pageIndex !== placement.pageIndex) return 'stale';
+          const from = address(latest);
+          batchAddressChange = true;
+          try {
+            if (latest.layer !== target.layer && !run.actions.switchLayer(target.layer)) return 'busy';
+            if (!run.actions.goToPage(target.pageIndex)) return 'unavailable';
+          } finally {
+            batchAddressChange = false;
+            if (!sameAddress(from, address(run.getState()))) recordVisit(from);
+          }
           ports.highlight(feature);
           return 'opened';
         }, signal);
@@ -258,8 +287,12 @@ export function createNavisNavigation(run: RunStore, ports: NavigationPorts) {
     }
   }
 
-  function handoff(destination: { readonly featureId: string; readonly command?: string; readonly draft?: Args }, signal?: AbortSignal) {
-    const { featureId, command, draft = {} } = destination;
+  function handoff(destination: AgentHandoff, signal?: AbortSignal) {
+    const { featureId, command, draft = {}, step } = destination;
+    if (step) {
+      const ref = widgetHandoffRef(destination);
+      return ref ? openDetail(ref, signal) : 'invalid';
+    }
     if (command === 'menu.create' && featureId === 'menu') {
       const { name, price, category } = draft;
       if (Object.keys(draft).some(key => !['name', 'price', 'category'].includes(key)) || !validateAgentPrefill(featureId, draft) ||
@@ -270,7 +303,9 @@ export function createNavisNavigation(run: RunStore, ports: NavigationPorts) {
     }
     if (command) {
       const policy = agentCommandPolicy(command, draft);
-      if (!policy || policy.policy === 'propose' || policy.featureId !== featureId || !validateAgentCommandArgs(command, draft) || agentNavigationHandoffIssue(command, draft)) return 'invalid';
+      // The cancellation handoff only opens a row. Reason, refund and confirmation belong to the widget.
+      const bookingCancel = command === 'booking.cancel' && featureId === 'voice-booking';
+      if (!policy || policy.policy === 'propose' && !bookingCancel || policy.featureId !== featureId || !validateAgentCommandArgs(command, draft) || agentNavigationHandoffIssue(command, draft)) return 'invalid';
     } else if (Object.keys(draft).length) return 'invalid';
     if (featureId === 'pos-closing') return closing(command === 'pos.drawerMovement' ? 'drawer' : 'sales', false, signal);
     if (featureId === 'settings') return execute('ui.open_settings', {}, signal);
@@ -308,15 +343,72 @@ const navigationAliases: readonly [FeatureId, RegExp][] = [
   ['menu', /메뉴(?:판|\s+위젯)/u], ['custom-order', /케이크\s*주문/u],
   ['members', /ㅎㅇㅁㄹ/u], ['staff-schedule', /직원\s*스케줄/u], ['voice-booking', /^예약/u], ['manuals', /매뉴얼/u], ['grants', /지원사업/u],
   ['ai-response', /응대|답변\s*대기/u], ['community', /제안\s*(?:목록|화면)/u],
-  ['customer-groups', /고객\s*그룹/u], ['coupon-status', /쿠폰\s*현황/u],
+  ['customer-groups', /고객\s*그룹/u], ['coupon-status', /쿠폰\s*현황|진행\s*중인\s*쿠폰|^쿠폰\s*(?:위젯|패널)\s*(?:보드|대시보드|어디|위치|몇)/u],
+  ['margin', /^ㅁㅈ\s/u], ['tax', /^ㅅㅁㄱㄹ\s/u],
 ];
 
+const quotedValue = /"[^"\n]+"|“[^”\n]+”|'[^'\n]+'|‘[^’\n]+’|「[^」\n]+」|『[^』\n]+』/gu;
+const quoteMark = /[“”"'‘’「」『』]/u;
+const negatedNavigation = /(?:하지|열지|보여\s*주지|가지)\s*마|말아\s*줘|무시|ignore\s+|\b(?:don't|never|do not)\b/iu;
+const panelLocation = /어디(?:\s*(?:에\s*)?(?:있|야)|[.!?]?$)|몇\s*페이지|(?:위젯|패널).{0,8}\d+\s*페이지에\s*있|(?:대시)?보드에서\s*(?:찾|보여)|(?:패널|위젯)\s*위치|응대\s*패널\s*보여/u;
+
+function blocksLocalNavigation(input: string) {
+  const text = input.normalize('NFKC').trim();
+  const plain = text.replace(quotedValue, ' ').trim();
+  return navisScopeIssue(text) || negatedNavigation.test(plain)
+    || /(?:공식\s*사이트|웹\s*사이트|브라우저|외부\s*(?:링크|사이트))/u.test(plain);
+}
+
+const blankMenuForm = /^(?:새\s*메뉴\s*(?:입력|등록)\s*(?:창|화면|폼|양식)|메뉴\s*(?:추가|등록)(?:하는)?\s*(?:창|화면|폼|양식))(?:을|를)?(?:\s*(?:열어|띄워|보여)\s*(?:줘|주세요)?)?[.!?]?$/u;
+const namedMenuDetail = /^(.+?)\s+(?:메뉴\s*)?(레시피|옵션|(?:편집|상세)\s*화면|상세)(?:\s*(?:열어|띄워|보여)\s*(?:줘|주세요)?)?[.!?]?$/u;
+const packagedStockView = /^[\p{L}]+\s*\d+(?:[.,]\d+)?\s*(?:kg|g|그램)\s*재고\s*(?:화면\s*)?(?:보여|열어)\s*(?:줘|주세요)?[.!?]?$/iu;
+const datedStaffWeek = /^\d{1,2}\s*월\s*\d{1,2}\s*일\s*주\s*(?:직원\s*)?근무표(?:\s*(?:보여|열어)(?:\s*줘)?)?[.!?]?$/u;
+const cctvPlayback = /(?:카페|CCTV|씨씨티비|분석한|카메라)\s*영상.*(?:틀어|재생|보여|열어)/iu;
+const briefingTaxAlert = /^(?:(?:원천세|세금)\s*알림|브리핑에서\s*세금\s*쪽).*(?:열어|보여|눌러|상세)/u;
+const couponSendView = /^(?:(?:[월화수목금토일]요일\s*)?(?:한산한\s*시간|빈\s*시간)\s*쿠폰|단골\s*쿠폰\s*보내기)\s*(?:화면|창)(?:으로|로)?\s*(?:가|이동|열어|보여)/u;
+const endedCouponList = /^끝난\s*쿠폰\s*\d+\s*장\s*보여\s*줘[.!?]?$/u;
+const quotedNavigationRequest = /열어|열기|보여|띄워|자세히|상세|(?:바꿔서|고쳐서|수정해서).*(?:준비|세팅)|\b(?:open|show)\b|打开|開啟/iu;
+
+function isReportFeature(feature: unknown): feature is 'ledger' | 'margin' | 'tax' {
+  return feature === 'ledger' || feature === 'margin' || feature === 'tax';
+}
+
 /** Only the private browser snapshot can turn a visible item name into an ID. */
-export function classifyNavigation(text: string, state: RunState, snapshot: ReturnType<WidgetDataStore['getSnapshot']>, reference?: FeatureId) {
-  if (widgetStatusQuery(text)) return;
-  const domain = assistantDomains.navigation(text, snapshot, state.locale);
-  if (domain === null) return;
-  if (domain && validateAgentDetailRef(domain.args)) return { ...domain, command: 'ui.openDetail' as const };
+export function classifyNavigation(input: string, state: RunState, snapshot: ReturnType<WidgetDataStore['getSnapshot']>, reference?: FeatureId): RoutedAction | undefined {
+  const text = input.trim();
+  if (blocksLocalNavigation(text) || widgetStatusQuery(text)) return;
+  const screenText = text.replace(quotedValue, ' ').trim();
+  if (quoteMark.test(text) && (quoteMark.test(screenText) || !quotedNavigationRequest.test(screenText))) return;
+  if (blankMenuForm.test(text)) return { command: 'ui.openDetail', args: { featureId: 'menu', view: 'register' } };
+  if (packagedStockView.test(text)) return { command: 'ui.openDetail', args: { featureId: 'inventory-booking', view: 'products' } };
+  if (endedCouponList.test(text)) return { command: 'ui.openDetail', args: { featureId: 'coupon-status', view: 'ended' } };
+  const businessDate = snapshot.pos?.businessDate ?? TODAY;
+  if (datedStaffWeek.test(text)) {
+    const date = parseNavisDate(text, businessDate);
+    if (date) return { command: 'ui.openDetail', args: { featureId: 'staff-schedule', view: 'week', date } };
+    return;
+  }
+  const menuItems = snapshot.tables.menuItem.filter(item => !item.deletedAt && item.kind !== 'retail');
+  const menuLabel = (item: (typeof menuItems)[number]) => resolveDataText(koreanData.t, item.name ?? { key: item.nameKey });
+  const namedDetail = namedMenuDetail.exec(text);
+  if (namedDetail) {
+    const [, name, section] = namedDetail;
+    const { kind, matches } = resolveNavisName(name, menuItems, menuLabel);
+    if (kind === 'ambiguous') return;
+    if (kind === 'exact') {
+      const itemId = matches[0].menuId;
+      const view = section === '레시피' ? 'recipe' : section === '옵션' ? 'options' : 'item';
+      return { command: 'ui.openDetail', args: { featureId: 'menu', itemId, view, ...(view !== 'item' ? { focus: 'action' } : {}) },
+        target: { kind: 'menu', id: itemId }, querySlot: 'name' };
+    }
+  }
+  if (couponSendView.test(screenText)) return { command: 'ui.openDetail', args: { featureId: 'slot-coupon', view: 'send', focus: 'action' } };
+  const operation = cctvPlayback.test(screenText) || briefingTaxAlert.test(screenText)
+    ? operationsDomain.navigation?.(screenText, snapshot, state.locale) : undefined;
+  if (operation?.target?.kind === 'taxPayment') {
+    return { ...operation, command: 'ui.openDetail', args: { ...operation.args, view: 'payments' } };
+  }
+  const domain = operation ?? assistantDomains.navigation(text, snapshot, state.locale);
   const normalized = norm(text);
   const matches = <T,>(items: readonly T[], label: (item: T) => string) => items.filter(item => {
     const value = norm(label(item));
@@ -333,15 +425,45 @@ export function classifyNavigation(text: string, state: RunState, snapshot: Retu
   const words = new Set(text.normalize('NFKC').split(/[^\p{L}\p{N}]+/u).map(norm));
   const ingredients = exactStock.length ? exactStock : stock.filter(item =>
     stockLabel(item).split(/\s+/u).some(word => /^\p{L}{2,}$/u.test(word) && words.has(norm(word))));
-  const menus = matches(snapshot.tables.menuItem.filter(item => !item.deletedAt && item.kind !== 'retail'),
-    item => resolveDataText(koreanData.t, item.name ?? { key: item.nameKey }));
+  const menuText = normalizeNavisName(text);
+  const menus = menuItems.filter(item => {
+    const label = normalizeNavisName(menuLabel(item));
+    return label.length > 1 && menuText.includes(label);
+  });
+  if (menus.length === 1 && /(?:판매가|가격)\s*(?:와|랑|·|,)?\s*원가\s*바꿔\s*보기\s*(?:열어|띄워|보여)/u.test(text)) {
+    const itemId = menus[0].menuId;
+    return { command: 'ui.openDetail', args: { featureId: 'margin', itemId, view: 'simulator', focus: 'action' },
+      target: { kind: 'menu', id: itemId }, querySlot: 'name' };
+  }
   const feature = navigationAliases.find(([, pattern]) => pattern.test(text))?.[0] ?? explicit ?? matchWidget(text);
-  const period = feature && ['ledger', 'margin', 'tax'].includes(feature) &&
-    /최근|지난|이번\s*(?:주|달)|오늘|\d+\s*일|\d{4}-\d{2}-\d{2}/u.test(text)
-    ? readNavisCondition(feature, text, snapshot.pos?.businessDate ?? TODAY) : undefined;
+  const reportFeature = isReportFeature(domain?.args.featureId) ? domain.args.featureId : isReportFeature(feature) ? feature : undefined;
+  const requestedRange = reportFeature ? parseNavisPeriod(screenText, businessDate) : undefined;
+  const range = reportFeature && requestedRange ? normalizeCondition(reportFeature, { kind: 'dateRange', ...requestedRange }) : undefined;
+  const period = range ? range.ok ? range.value : null
+    : reportFeature && /최근|지난|이번\s*(?:주|달)|오늘|\d+\s*일|\d{4}-\d{2}-\d{2}/u.test(screenText)
+      ? readNavisCondition(reportFeature, screenText, businessDate) : undefined;
   const plan = routeNavisNavigation(text, { state, feature, condition: period ?? undefined,
     ingredient: ingredients.length === 1 ? ingredients[0].itemId : undefined,
     menuItem: menus.length === 1 ? menus[0].menuId : undefined, reference });
+  if (domain === null || plan?.command === 'ui.show_panel' && isNavisLayoutNavigationConflict(text)) return;
+  if (!domain && plan?.command !== 'ui.openDetail') return plan;
+  if (period === null && requestedRange) {
+    if (domain && domain.args.featureId === reportFeature && !domain.args.prefill) return { ...domain, command: 'ui.openDetail', unsupportedPeriod: true };
+    if (!domain && plan?.command === 'ui.openDetail') return { ...plan, unsupportedPeriod: true };
+  }
+  const stockDetail = plan?.args.view === 'history' && /열어|상세\s*창/u.test(text);
+  if (!domain && plan?.args.featureId === 'inventory-booking' && !stockDetail
+      && readInventoryTurn(text, snapshot, state.locale)) return;
+  const domainArgs = domain?.args;
+  if (domain && validateAgentDetailRef(domainArgs)) {
+    const usePeriod = period && requestedRange && domain.args.featureId === reportFeature && !domain.args.prefill;
+    const prefill = domain.args.prefill;
+    // A quiet-slot or recipient selection belongs to this browser's unsaved form.
+    const privateCouponSelection = domain.args.featureId === 'slot-coupon' && prefill && typeof prefill === 'object'
+      && ('slotId' in prefill || 'excludeRecipients' in prefill);
+    return { ...domain, command: 'ui.openDetail', ...(privateCouponSelection ? { local: true } : {}),
+      args: usePeriod ? { ...domain.args, condition: period } : domain.args };
+  }
   return plan?.command === 'ui.openDetail' && period === null ? { ...plan, unsupportedPeriod: true } : plan;
 }
 
@@ -350,7 +472,7 @@ export function routeNavisNavigation(input: string, { state, feature, ingredient
   const text = input.normalize('NFKC').trim();
   const compact = text.replace(/\s+/gu, '');
   if (/^(?:매출|입금|수입|일정|스케줄)\s*(?:좀\s*)?보여\s*줘[.!?]?$/u.test(text)) return;
-  if (/하지\s*마|말아\s*줘|무시|ignore\s+|\b(?:don't|never|do not)\b|[“”"'‘’]/iu.test(text)) return;
+  if (blocksLocalNavigation(text) || quoteMark.test(text)) return;
   const to = (command: AgentNavigationCommand, args: AgentWireArgs = {}, local?: boolean): RoutedAction => ({ command, args, local });
   const open = /열(?:어|기|고)|보여\s*줘|띄워|자세히|상세\s*$|켜\s*줘|(?:화면|메뉴)(?:으로|로)?\s*(?:가|이동)|\b(?:open|show)\b|打开|開啟|顯示|显示/iu.test(text);
   if (/마감/.test(text) && /마감\s*(?:해\s*(?:줘|주세요)|처리|취소)|영업\s*종료/.test(text)) return;
@@ -370,6 +492,7 @@ export function routeNavisNavigation(input: string, { state, feature, ingredient
   if (/^(?:관리|마케팅|주문(?:\/결제)?|결제|POS|계산대)(?:\s*(?:화면|탭))?\s*(?:으로|로|을|를)?\s*(?:가|돌아|전환|이동|보여|열)/iu.test(text) || /^(?:관리|마케팅)\s*탭$/u.test(text)) {
     return to('ui.switch_layer', { layer: text.startsWith('관리') ? 'management' : text.startsWith('마케팅') ? 'marketing' : 'pos' });
   }
+  if (feature && panelLocation.test(text)) return to('ui.show_panel', { featureId: feature });
   const explicitPage = text.match(/(?:^|\s)([0-9]+)\s*페이지|\bpage\s+(\d+)\b/iu);
   const ordinal = text.match(/^([가-힣]+)\s*번째\s*페이지/u)?.[1];
   const spokenPage = ordinal && parseNavisNumber(ordinal);
@@ -385,7 +508,7 @@ export function routeNavisNavigation(input: string, { state, feature, ingredient
     ?? text.match(/^위젯\s*검색\s*열어서\s+(.+?)\s+찾아/u)?.[1]
     ?? text.match(/^기능\s*찾기에\s+(.+?)\s+쳐/u)?.[1];
   if (drawerSearch) return to('ui.open_drawer', { group: 'recommended', query: drawerSearch });
-  if (/^(?:기능 목록|추천 (?:위젯|기능)|재고.*기능 서랍|위젯 더 추가)/u.test(text) && open || /카페한테 좋은 기능/u.test(text)) return to('ui.open_drawer', { group:
+  if (/^(?:기능 목록|추천 (?:위젯|기능)|재고.*기능 서랍|위젯 더 추가)/u.test(text) && open || /카페한테 좋은 기능|^위젯\s*더\s*추가할\s*수\s*있는/u.test(text)) return to('ui.open_drawer', { group:
     state.activeBoard === 'management' && !/추천|카페한테/u.test(text) ? 'stock' : 'recommended' });
   if (open && /예시\s*상태|시연용\s*상태|^(?:앱\s*|환경)?설정/u.test(text)) {
     return to('ui.open_settings', /예시|시연용/u.test(text) ? { view: 'preview' } : {});
@@ -400,7 +523,6 @@ export function routeNavisNavigation(input: string, { state, feature, ingredient
   if (menuItem && feature === 'menu' && open) return to('ui.openDetail', { featureId: 'menu', itemId: menuItem });
   if (reference && /^(?:아까\s*)?그(?:거|것)(?:을)?\s*(?:열|보여)|^방금\s*얘기한\s*위젯\s*열/u.test(text)) return to('ui.openDetail', { featureId: reference });
   if (feature && compact !== '쿠폰열어줘' && !/공식.*사이트|브라우저|웹사이트/u.test(text)) {
-    if (/어디(?:\s*(?:있|야)|[.!?]?$)|몇\s*페이지|보드에서\s*찾|(?:패널|위젯)\s*위치|응대\s*패널\s*보여/u.test(text)) return to('ui.show_panel', { featureId: feature });
     if (/위젯.*뭐\s*하는|위젯.*사용법|패널\s*설명|도움말/u.test(text)) return to('ui.open_widget_help', { featureId: feature });
     if (open || feature === 'briefing' && /한번\s*더/u.test(text)) {
       const view = feature === 'ledger' && /지출/u.test(text) ? 'expenses' :
@@ -412,7 +534,9 @@ export function routeNavisNavigation(input: string, { state, feature, ingredient
 }
 
 export function routeMenuForm(input: string) {
-  const match = input.trim().match(/^(.+?)\s+메뉴\s*(?:등록|추가)\s*(?:폼|양식)(?:을|를)?\s*열(?:어|어줘|어주세요)[.!]?$/u);
+  const text = input.normalize('NFKC').trim();
+  if (blocksLocalNavigation(text) || blankMenuForm.test(text)) return;
+  const match = text.match(/^(.+?)\s+메뉴\s*(?:등록|추가)\s*(?:폼|양식)(?:을|를)?\s*열(?:어|어줘|어주세요)[.!]?$/u);
   if (!match) return;
   const [, description] = match;
   const priceMatch = description.match(/\s+(\d[\d,]*)\s*원$/u);
@@ -428,7 +552,9 @@ function openInventoryHistory(root: HTMLElement, itemId: string): boolean {
     .find(node => node.dataset.gridTarget === target && !node.closest('[hidden],[inert],[aria-hidden="true"]'));
   if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') return false;
   if (button.getAttribute('aria-expanded') === 'false') button.click();
-  button.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  // The history is the expansion row under the item's row: keep that in view, not only the toggle.
+  const history = button.closest('tr')?.nextElementSibling;
+  (history ?? button).scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   return true;
 }
 
@@ -503,9 +629,6 @@ export function prepareNavigationRequest(plan: RoutedAction, state: RunState, na
   }
   const agentTurn = { intent: { kind: 'command' as const, command: plan.command, args,
     ...(searches.length ? { querySlot: searches[0].querySlot } : {}) }, slots, page, navigationReadings: readings, navigationSearches: searches };
-  const stable = (value: unknown): unknown => value && typeof value === 'object'
-    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, stable(child)]))
-    : value;
   const resolve = (frame: AgentNavigationAction): AgentWireArgs | undefined => {
     if (navigation.revision() !== revision || frame.command !== plan.command || frame.runId !== state.runId || frame.layer !== layer || frame.page !== page ||
       JSON.stringify(stable(frame.args)) !== JSON.stringify(stable(args))) return;
@@ -517,6 +640,12 @@ export function prepareNavigationRequest(plan: RoutedAction, state: RunState, na
 /** Apply a read-only seed through the widget's ordinary controls where those
  * controls have a stable, existing route. The DetailRef remains the hand-off. */
 export function applyNavisDetailSelection(root: HTMLElement, ref: DetailRef): boolean {
+  if (ref.featureId === 'coupon-status' && ref.view === 'naver') {
+    const section = root.querySelector<HTMLElement>('section[aria-label="네이버 쿠폰"]');
+    if (!section) return false;
+    section.scrollIntoView?.({ block: 'nearest' });
+    return true;
+  }
   if (ref.featureId === 'inventory-booking' && ref.view === 'history' && ref.itemId) return openInventoryHistory(root, ref.itemId);
   if (!ref.condition || (ref.featureId !== 'ledger' && ref.featureId !== 'margin')) return true;
   const condition = ref.condition;

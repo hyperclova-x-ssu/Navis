@@ -1,8 +1,15 @@
 import type { ClosingViewTab, RunStore } from '../../contracts';
 import { tablesEnabled, selectPosPreferences } from '../../pos/tables';
+import { dataSourceFor } from '../../data/reality/00/registry';
 
 export type SettingsStartView = 'preview' | 'tables';
 const pending = new WeakMap<RunStore, SettingsStartView>();
+
+/** The QA address opens the example picker from Settings in dev and fixture builds. */
+export function previewStatesEnabled(): boolean {
+  return (import.meta.env.DEV || dataSourceFor('account') === 'fixture')
+    && new URLSearchParams(globalThis.location?.search).get('qa') === 'preview-states';
+}
 
 /** Opens settings directly on a sub-view (the example-state chip returns to its own screen, SCR-29). */
 export function openSettingsAt(run: RunStore, view: SettingsStartView): void {

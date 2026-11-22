@@ -12,6 +12,8 @@ const rows = [
   ['business.group', '업종', 'Business type', '业态', '業態'],
   ['settings.content', '설정 내용', 'Settings', '设置内容', '設定內容'],
   ['settings.business', '업종', 'Business type', '业态', '業態'],
+  ['settings.switchStore', '매장 바꾸기', 'Switch store', '切换店铺', '切換店家'],
+  ['settings.signOut', '로그아웃', 'Sign out', '退出登录', '登出'],
   ['settings.businessNone', '아직 고르지 않았어요', 'Not chosen yet', '尚未选择', '尚未選擇'],
   ['settings.changeBusiness', '업종 바꾸기', 'Change business type', '更改业态', '更改業態'],
   ['settings.businessChanged', '{business}에 맞게 추천 기능을 바꿨어요', 'Recommendations now fit {business}', '已换成适合{business}的推荐', '已換成適合{business}的推薦'],

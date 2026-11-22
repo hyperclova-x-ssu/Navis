@@ -31,14 +31,16 @@ function stub(id: FeatureId, extra?: (props: WidgetDetailProps) => React.ReactNo
 const linkButton = (target: DetailRef, label: string) => (props: WidgetDetailProps) => <ActionButton onClick={() => props.host.openLinked(target)}>{label}</ActionButton>;
 const modules: WidgetModule[] = [
   stub('calendar', linkButton({ featureId: 'inventory-booking' }, '출처 열기')),
-  stub('inventory-booking', linkButton({ featureId: 'slot-coupon', view: 'send' }, '쿠폰 보기')),
+  stub('inventory-booking', props => <div data-grid-scroll>{linkButton({ featureId: 'slot-coupon', view: 'send' }, '쿠폰 보기')(props)}</div>),
+  stub('ai-response', linkButton({ featureId: 'inventory-booking' }, '출처 열기')),
+  stub('community', linkButton({ featureId: 'inventory-booking' }, '출처 열기')),
   stub('slot-coupon'),
   stub('briefing'),
   stub('suppliers'),
   { ...stub('marketing-today'), Detail: null },
 ];
 
-function setup(locale: Locale = 'ko', reducedMotion = true) {
+function setup(locale: Locale = 'ko', reducedMotion = true, root: FeatureId = 'calendar') {
   const run = createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: timePolicy, clock: () => performance.now(), theme: 'light', reducedMotion });
   beginDashboard(run);
   for (const featureId of ['calendar', 'briefing'] as const) run.actions.applyLayoutIntent({ type: 'add-tap', featureId });
@@ -47,7 +49,7 @@ function setup(locale: Locale = 'ko', reducedMotion = true) {
     const state = useSyncExternalStore(run.subscribe, run.getState);
     return <I18nProvider locale={locale}><WidgetDataProvider store={store}><WidgetRegistryProvider modules={modules}>
       <UiProvider screenPreset={state.screenPreset} theme={state.theme} textScale={state.textScale} reducedMotion={state.reducedMotion}>
-        <main><button id="panel:calendar" onClick={() => run.actions.openDetailRef({ featureId: 'calendar', view: 'week', focus: 'action' }, 'panel:calendar')}>캘린더 열기</button></main>
+        <main><button id="panel:calendar" onClick={() => run.actions.openDetailRef({ featureId: root, ...(root === 'calendar' ? { view: 'week' } : {}), focus: 'action' }, 'panel:calendar')}>캘린더 열기</button></main>
         <DetailOverlay run={run} />
       </UiProvider>
     </WidgetRegistryProvider></WidgetDataProvider></I18nProvider>;
@@ -86,6 +88,44 @@ describe('module detail body (API-13 v4.1)', () => {
 });
 
 describe('one-level detail stack', () => {
+  it.each(['calendar', 'ai-response', 'community'] as const)('restores the %s dialog body when returning from a linked grid', async root => {
+    setup('ko', true, root);
+    await openRoot();
+    const outer = screen.getByTestId(`body-${root}`).closest<HTMLElement>('.ui-overlay-body')!;
+    outer.scrollTop = 780;
+    fireEvent.scroll(outer);
+
+    fireEvent.click(screen.getByRole('button', { name: '출처 열기' }));
+    const linked = await screen.findByTestId('body-inventory-booking');
+    const linkedOuter = linked.closest<HTMLElement>('.ui-overlay-body')!;
+    linkedOuter.scrollTop = 0;
+    fireEvent.scroll(linkedOuter);
+    fireEvent.click(screen.getByRole('button', { name: '돌아가기' }));
+
+    await waitFor(() => expect(screen.getByTestId(`body-${root}`).closest<HTMLElement>('.ui-overlay-body')!.scrollTop).toBe(780));
+  });
+
+  it('restores a linked source that scrolls both the containing dialog and its grid', async () => {
+    setup('ko', true, 'inventory-booking');
+    await openRoot();
+    const root = screen.getByTestId('body-inventory-booking');
+    const outer = root.closest<HTMLElement>('.ui-overlay-body')!;
+    const table = root.querySelector<HTMLElement>('[data-grid-scroll]')!;
+    outer.scrollTop = 40;
+    table.scrollTop = 150;
+    table.scrollLeft = 65;
+    fireEvent.scroll(table);
+
+    fireEvent.click(screen.getByRole('button', { name: '쿠폰 보기' }));
+    const linked = await screen.findByTestId('body-slot-coupon');
+    linked.closest<HTMLElement>('.ui-overlay-body')!.scrollTop = 0;
+    table.scrollTop = 0;
+    table.scrollLeft = 0;
+    fireEvent.click(screen.getByRole('button', { name: '돌아가기' }));
+
+    await waitFor(() => expect([outer.scrollTop, table.scrollTop, table.scrollLeft]).toEqual([40, 150, 65]));
+  });
+
   it('opens a source detail without changing the layer and goes back with 돌아가기', async () => {
     const run = setup(); await openRoot();
     const layer = run.getState().layer;

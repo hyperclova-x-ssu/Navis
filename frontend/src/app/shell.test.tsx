@@ -7,16 +7,17 @@ import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import { createRunStore } from '../state';
 import { timePolicy } from '../ui';
-import { getCatalog, getRegistry } from '../catalog';
+import { getCatalog, getRegistration, getRegistry } from '../catalog';
 import { screenPresets } from '../layout';
 import { ALL_DATA_WIDGET_IDS, previewVariants } from '../data/widget-data';
 import { App } from './App';
 import { createBrowserRun } from './run';
+import { openSettingsAt } from '../screens/settings/start-view';
 
 const OriginalWorker = globalThis.Worker;
 class ReadyWorker { onmessage: ((e: { data: { type: string } }) => void) | null = null; postMessage(message: { type: string }) { if (message.type === 'ready') queueMicrotask(() => this.onmessage?.({ data: { type: 'ready' } })); } terminate() {} }
 beforeEach(() => vi.stubGlobal('Worker', ReadyWorker));
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.stubGlobal('Worker', OriginalWorker); document.documentElement.removeAttribute('lang'); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.stubGlobal('Worker', OriginalWorker); document.documentElement.removeAttribute('lang'); window.history.replaceState(null, '', '/'); });
 const makeRun = () => createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: timePolicy, clock: () => 0, theme: 'light', reducedMotion: true });
 const started = () => { const run = makeRun(); beginDashboard(run,'cafe'); run.actions.startWithThree(); run.actions.dismissCoach(); return run; };
 
@@ -24,7 +25,7 @@ describe('v4 run (T-054 first step)', () => {
   it('browser runs and App resets use the 30-widget registry, not the iteration-3 catalog', () => {
     vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1920); vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1080);
     const run = createBrowserRun({ theme: 'light', reducedMotion: true })!;
-    expect(run.catalog).toHaveLength(30);
+    expect(run.catalog).toHaveLength(29);
     expect(run.catalog.every(feature => 'layer' in feature)).toBe(true);
     // T-055: the iteration-3 22-item list is gone; the run catalog is the registry itself.
     expect(getCatalog('A')).toBe(getRegistry('A'));
@@ -43,7 +44,8 @@ describe('layer menu reads state.layer (AC-174, AC-189)', () => {
     expect(screen.queryByRole('heading', { name: '마케팅은 준비 중이에요' })).not.toBeInTheDocument();
     await user.click(within(nav).getByRole('button', { name: '주문/결제' }));
     expect(run.getState().layer).toBe('orders-payment');
-    expect(screen.getByRole('heading', { name: '주문/결제', level: 1 })).toBeVisible();
+    // D-366: the POS screen shares the layers' header, so its title is the store name.
+    expect(screen.getByRole('heading', { name: '안숭잘부 카페', level: 1 })).toBeVisible();
     await user.click(screen.getByRole('button', { name: '관리' }));
     expect(run.getState().layer).toBe('management');
     expect(run.getState().boards.management.pages).toBe(managementPanels);
@@ -92,17 +94,28 @@ describe('language (AC-207~209, AC-216)', () => {
 });
 
 describe('example-state view (AC-229)', () => {
+  it('keeps the example controls out of ordinary Settings even when a preview deep link is requested', async () => {
+    const run = started();
+    run.actions.setPreviewFamily('empty');
+    render(<App run={run} />);
+    expect(screen.queryByRole('button', { name: /예시 상태:/ })).not.toBeInTheDocument();
+    act(() => openSettingsAt(run, 'preview'));
+    const dialog = await screen.findByRole('dialog', { name: '설정' });
+    expect(within(dialog).queryByRole('button', { name: /예시 상태 보기/ })).not.toBeInTheDocument();
+  });
   it('family choice shows the header chip on the order screen; normal hides it; by-widget picks replace it and a family change clears them', async () => {
+    window.history.replaceState(null, '', '/?qa=preview-states');
     const run = started(); const user = userEvent.setup(); render(<App run={run} />);
     await user.click(screen.getByRole('button', { name: '주문/결제' }));
     expect(screen.queryByRole('button', { name: /예시 상태:/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '설정' }));
-    await user.click(await screen.findByRole('button', { name: /^예시 상태 보기, 정상/ }));
+    expect(await screen.findByRole('dialog', { name: '예시 상태 보기' })).toBeVisible();
     await user.click(screen.getByRole('radio', { name: '비어 있음' }));
     expect(run.getState().preview.family).toBe('empty');
     await user.click(screen.getByRole('button', { name: /^패널별로 고르기/ }));
-    const listed = ALL_DATA_WIDGET_IDS.filter(widget => previewVariants(widget).length >= 2);
-    expect(listed.length).toBe(30);
+    // D-365: 마케팅 성과 stays a data id for the chat, but it has no widget to preview, so the list has one fewer.
+    const listed = ALL_DATA_WIDGET_IDS.filter(widget => getRegistration(widget) && previewVariants(widget).length >= 2);
+    expect(listed.length).toBe(29);
     const rows = screen.getAllByRole('button').filter(button => button.classList.contains('ui-list-select-row'));
     expect(rows).toHaveLength(listed.length+2);
     expect(screen.getByRole('button',{name:/마감 정산 결제 내역/})).toBeInTheDocument();
@@ -120,6 +133,8 @@ describe('example-state view (AC-229)', () => {
     expect(run.getState().preview).toEqual({ family: 'error', overrides: {} });
     await user.click(screen.getByRole('radio', { name: '정상' }));
     expect(run.getState().preview).toEqual({ family: 'normal', overrides: {} });
+    await user.click(screen.getByRole('radio', { name: '결제 실패' }));
+    expect(run.getState().preview).toEqual({ family: 'normal', overrides: {}, pos: 'payment-failure' });
   });
   it('a new run is normal again', () => {
     const run = started(); run.actions.setPreviewFamily('error');

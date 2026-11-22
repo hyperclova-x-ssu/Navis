@@ -60,7 +60,7 @@ it('결제 방식과 테이블 저장은 두 store에 함께 반영하고 성공
   expect(run.getState().shopSettings.tableLayout?.tables).toHaveLength(8);
   expect(data.getSnapshot().tables.shopSettings.tableLayout?.tables).toHaveLength(8);
   expect(run.getState().boards).toEqual(before);
-  expect(screen.getAllByRole('status').filter(node=>node.textContent==='테이블 8개 · 22석으로 바꿨어요')).toHaveLength(1);
+  expect(screen.getAllByRole('status').filter(node=>node.textContent==='테이블 8개 · 16석으로 바꿨어요')).toHaveLength(1);
 });
 
 it.each(['back', 'close', 'escape'] as const)('저장 전 %s는 테이블 초안을 버리고 재진입하면 저장한 값으로 시작한다', async route => {
@@ -78,7 +78,7 @@ it.each(['back', 'close', 'escape'] as const)('저장 전 %s는 테이블 초안
     fireEvent.click(screen.getByRole('button', { name: '설정 열기' }));
   }
   fireEvent.click(await screen.findByRole('button', { name: /테이블 배치(?:하기| 고치기)/ }));
-  expect(await screen.findByRole('spinbutton', { name: '테이블 수' })).toHaveValue(6);
+  expect(await screen.findByRole('spinbutton', { name: '테이블 수' })).toHaveValue(11);
   expect(run.getState().shopSettings.tableLayout).toBeNull();
   expect(data.getSnapshot().tables.shopSettings.tableLayout).toBeNull();
   expect(updateSettings).not.toHaveBeenCalled();
@@ -118,10 +118,10 @@ it('저장 실패는 두 store를 보존하고 같은 로컬 초안으로 재시
   expect(screen.getByRole('alert')).toHaveTextContent('변경을 적용하지 못했어요. 다시 시도해 주세요');
   expect(data.getSnapshot()).toBe(beforeData);
   expect(run.getState().shopSettings).toBe(beforeRun);
-  expect(screen.getByRole('spinbutton',{name:'테이블 수'})).toHaveValue(7);
+  expect(screen.getByRole('spinbutton',{name:'테이블 수'})).toHaveValue(12);
   fireEvent.click(screen.getByRole('button',{name:'저장하기'}));
   await waitFor(()=>expect(screen.getByRole('button',{name:'테이블 배치 고치기'})).toBeVisible());
-  expect(data.getSnapshot().tables.shopSettings.tableLayout?.tables).toHaveLength(7);
+  expect(data.getSnapshot().tables.shopSettings.tableLayout?.tables).toHaveLength(12);
   expect(screen.queryByRole('alert')).toBeNull();
 });
 
@@ -133,6 +133,6 @@ it('테이블 편집기를 닫는 동안 큰 프레임과 마지막 초안을 �
   const exit=document.querySelector<HTMLElement>('[data-testid="ui-overlay-exit"]');
   expect(exit).toHaveAttribute('inert');
   expect(exit).toHaveStyle({width:'calc(var(--canvas-width) - var(--detail-inset) * 2)',height:'calc(var(--canvas-height) - var(--detail-inset) * 2)'});
-  expect(exit?.querySelector<HTMLInputElement>('input[type="number"]')?.value).toBe('7');
+  expect(exit?.querySelector<HTMLInputElement>('input[type="number"]')?.value).toBe('12');
   expect(data.getSnapshot().tables.shopSettings.tableLayout).toBeNull();
 });

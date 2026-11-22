@@ -1,5 +1,5 @@
 // T-056: the Chinese subset fonts must hold every Han / full-width character used by the zh bundles.
-// `NAVIS_WRITE_CHARSET=1 npx vitest run src/assets/fonts` also writes dev/charset-{hans,hant}.txt for the subsetter.
+// NAVIS_WRITE_CHARSET updates the retained charset lists for the subsetter.
 import { describe, expect, it } from 'vitest';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -28,7 +28,10 @@ describe('T-056 CJK subset fonts', () => {
   for (const script of ['zh-Hans', 'zh-Hant'] as Script[]) {
     const chars = charsOf(script);
     if (process.env.NAVIS_WRITE_CHARSET) {
-      writeFileSync(resolve(dir, `dev/charset-${script === 'zh-Hans' ? 'hans' : 'hant'}.txt`), [...chars].sort((a, b) => a - b).map((c) => String.fromCodePoint(c)).join(''));
+      const charsetFile = resolve(dir, `dev/charset-${script === 'zh-Hans' ? 'hans' : 'hant'}.txt`);
+      const retained = Array.from(readFileSync(charsetFile, 'utf8'), (ch) => ch.codePointAt(0)!);
+      const merged = [...new Set([...chars, ...retained])].sort((a, b) => a - b);
+      writeFileSync(charsetFile, merged.map((c) => String.fromCodePoint(c)).join(''));
     }
     for (const weight of [500, 700]) {
       const file = resolve(dir, `${face[script]}-${weight}.woff2`);

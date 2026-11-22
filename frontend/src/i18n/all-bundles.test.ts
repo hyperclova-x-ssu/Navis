@@ -10,7 +10,7 @@ import { createTranslator } from './translator';
 import { formatMessage } from './icu';
 
 const modules = import.meta.glob(
-  ['/src/**/messages.ts', '/src/**/messages/*.ts', '/src/**/*-messages.ts', '!/src/**/*.test.ts', '!/src/**/dev/**'],
+  ['/src/**/messages.ts', '/src/**/messages/*.ts', '/src/**/*-messages.ts', '/src/data/reality/07/export-copy.ts', '!/src/**/*.test.ts', '!/src/**/dev/**'],
   { eager: true },
 ) as Record<string, Record<string, unknown>>;
 const isBundle = (v: unknown): v is MessageBundle<string> => {
@@ -30,6 +30,7 @@ function collect(): readonly MessageBundle<string>[] {
 const bundles = collect();
 const iteration5Ids = ['run', 'data.management', 'ui-management', 'closing', 'arrival', 't207'] as const;
 const iteration6M3Ids = ['pos-payment-tools', 'pos-receipt', 'pos-table-transfer', 'widget.menu.pos'] as const;
+const translatedWidgetIds = ['widget.booking.cancel', 'data.reality.07.export-reasons'] as const;
 const expectedIds = [
   'common', 'widget-names', 'ui', 'dashboard', 'shell', 'detail', 'briefing', 'navis', 'data', 'preview.variant',
   'data-pos', // API-251: POS facts and briefing copy belong to data, not a widget.
@@ -40,6 +41,7 @@ const expectedIds = [
   'ui-pos', 'pos-shell', 'pos-order-status',
   ...iteration6M3Ids,
   'widget.menu.photo',
+  ...translatedWidgetIds,
 ] as const;
 const KEY_TEXT = /\b(?:app|common|group|page|help|format|unit|language|preview|ui|dashboard|settings|shell|detail|briefing|navis|data|marketing|widget|onboarding|placeholder|closing|arrival|run|step|table|tables|payment|start|session|promo)\.[a-z][\w-]*(?:\.[\w.-]+)?\b/u;
 
@@ -62,18 +64,38 @@ describe('all message bundles (T-055 ③, API-12)', () => {
       for (const [key, value] of Object.entries(b.ko)) expect(value.trim(), `${b.id} ko ${key}`).not.toBe('');
     }
   });
-  it('keeps Korean-only rounds untranslated and falls back to Korean in every other locale', () => {
+  it('preserves Korean fallback for Korean-only rows and the localized management camera alert', () => {
     // D-209 / T-244c: archived order-status copy first ships with the POS screen.
     for (const id of [...iteration5Ids, 'ui-pos', 'pos-shell', 'pos-order-status', 'data-pos', ...iteration6M3Ids]) {
       const b = bundles.find(bundle => bundle.id === id);
       expect(b, `Missing bundle: ${id}`).toBeDefined();
       if (!b) continue;
+      const translatedKeys = id === 'data.management' ? ['data.management.alert.camera'] : [];
       for (const locale of ['en', 'zh-Hans', 'zh-Hant'] as const) {
-        expect(b[locale], `${id} ${locale}`).toEqual({});
+        expect(Object.keys(b[locale]), `${id} ${locale}`).toEqual(translatedKeys);
         const t = createTranslator<string>(locale, b);
         for (const [key, value] of Object.entries(b.ko)) {
-          expect(t.t(key), `${id} ${locale} ${key}`).toBe(formatMessage(value, 'ko'));
+          const label = `${id} ${locale} ${key}`;
+          const korean = formatMessage(value, 'ko');
+          if (translatedKeys.includes(key)) {
+            expect(t.t(key).trim(), label).toBeTruthy();
+            expect(t.t(key), label).not.toBe(korean);
+          } else {
+            expect(t.t(key), label).toBe(korean);
+          }
         }
+      }
+    }
+  });
+  it('has a translation in every locale for booking cancellation and calendar export reasons', () => {
+    for (const id of translatedWidgetIds) {
+      const b = bundles.find(bundle => bundle.id === id);
+      expect(b, `Missing bundle: ${id}`).toBeDefined();
+      if (!b) continue;
+      for (const [key, korean] of Object.entries(b.ko)) for (const locale of ['en', 'zh-Hans', 'zh-Hant'] as const) {
+        const text = b[locale][key]?.trim();
+        expect(text, `${id} ${locale} ${key}`).toBeTruthy();
+        expect(text, `${id} ${locale} ${key}`).not.toBe(korean.trim());
       }
     }
   });

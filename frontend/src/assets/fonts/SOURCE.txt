@@ -6,11 +6,13 @@ Subsets of Noto Sans CJK (SIL Open Font License 1.1, see OFL-NotoSansCJK.txt), r
 Source files (Debian/Ubuntu package fonts-noto-cjk 1:20190410+repack1-2, font Version 2.001;hotconv 1.0.107;makeotfexe 2.5.65593):
   /usr/share/fonts/opentype/noto/NotoSansCJK-Medium.ttc  font index 2 = Noto Sans CJK SC Medium (-> NavisHans-500), index 3 = Noto Sans CJK TC Medium (-> NavisHant-500)
   /usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc    font index 2 = Noto Sans CJK SC Bold   (-> NavisHans-700), index 3 = Noto Sans CJK TC Bold   (-> NavisHant-700)
-Only the Han / full-width characters used by the zh-Hans (Hans) and zh-Hant (Hant) values of all message bundles are kept.
+The subsets keep the Han / full-width characters used by the zh-Hans (Hans) and zh-Hant (Hant) message bundles, plus the characters in the existing charset lists.
 Tool: fontTools 4.57.0 subsetter + brotli (temporary, not an app dependency), no hinting, layout feature "vert" only, flavor woff2.
 T-070b(2026-11-10): 같은 원본·옵션으로 다시 만듦, fontTools 4.65.0(GPU 서버)
 T-071b(2026-11-10): CCTV 재생 문구로 글자가 늘어 같은 방법으로 다시 만듦(Hans 860자, Hant 875자), fontTools 4.65.0(GPU 서버)
 Regenerate: bash src/assets/fonts/dev/regenerate.sh   (run from frontend/; see the header of that script)
 Character lists written by the run: dev/charset-hans.txt, dev/charset-hant.txt.
-T-074(2026-11-10): 문구 추가로 Hans 861·Hant 876자, 같은 원본·옵션으로 다시 만듦(GPU 서버에서 <gpu-server>/fontgen/gen.py 실행, fontTools 4.65.0).
+T-074(2026-11-10): 문구 추가로 Hans 861·Hant 876자, 같은 원본·옵션으로 다시 만듦(GPU 서버에서 fontgen/gen.py 실행, fontTools 4.65.0).
 FIX-W6(2026-11-21): N13~N15·D-325 문구 추가로 Hans 856·Hant 871자(疊·歷·史 등 누락 보충), 같은 원본·옵션으로 다시 만듦(GPU 서버 임시 폴더에서 fontgen/gen.py 실행, Noto Sans CJK 2.001, fontTools 4.65.0).
+FONTS-CJK (2026-11-22): Hans 884 and Hant 902 encoded characters per weight, rebuilt from the same Noto Sans CJK 2.001 sources and options with fontTools 4.65.0 and brotli 1.2.1.
+Command from frontend/ with fontTools and brotli available to python3: bash src/assets/fonts/dev/regenerate.sh

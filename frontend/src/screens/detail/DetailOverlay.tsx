@@ -111,6 +111,7 @@ export function DetailOverlay({ run, resolveReturnFocus = resolveById, simulateC
   const retained=useRef<Extract<typeof state.overlay,{type:'detail'}>|null>(null);
   const [bodyHost]=useState(()=>document.createElement('div'));
   const bodies=useRef(new Map<string,React.ReactNode>());
+  const [outerScroll] = useState(() => new WeakMap<HTMLElement, { top: number; left: number }>());
   const currentDescriptor = state.overlay.type === 'detail' ? state.overlay : state.overlay.type === 'none' && state.exitingOverlay?.type === 'detail' ? state.exitingOverlay : null;
   if(currentDescriptor)retained.current=currentDescriptor;
   const descriptor=currentDescriptor??(state.overlay.type==='closing'?retained.current:null);
@@ -118,7 +119,8 @@ export function DetailOverlay({ run, resolveReturnFocus = resolveById, simulateC
   const returnFocusKey = descriptor?.returnFocusKey;
   const stack = descriptor?.type === 'detail' ? descriptor.stack : undefined;
   const depth = stack?.length ?? 1;
-  const detailRef: DetailRef | null = featureId ? stack?.[stack.length - 1] ?? { featureId } : null;
+  const stackTop = stack?.at(-1);
+  const detailRef = useMemo<DetailRef | null>(() => stackTop ?? (featureId ? { featureId } : null), [stackTop, featureId]);
   const translator = useBundle(detailBundle);
   const cctvT = useBundle(cctvBundle).t;
   const cctvMode = useCctvMode();
@@ -200,20 +202,62 @@ export function DetailOverlay({ run, resolveReturnFocus = resolveById, simulateC
   useClosingInput(run);
   useLayoutEffect(()=>{
     if(!active||!detailRef)return;
-    const node=bodyHost,scroll=node.querySelector<HTMLElement>('.ui-data-grid__scroll,[data-grid-scroll]')??node;
-    let live=true,initialFocusPending=true;
-    const wanted=()=>{const saved=selectDetailViewState(run.getState());return saved?.ref.featureId===detailRef.featureId?Array.from(node.querySelectorAll<HTMLElement>('[data-focus-key],[id]')).find(el=>el.dataset.focusKey===saved.focusKey||el.id===saved.focusKey):undefined;};
-    const restore=()=>{const current=run.getState(),saved=selectDetailViewState(current);if(!live||current.overlay.type!=='detail'||!saved||saved.ref.featureId!==detailRef.featureId)return;scroll.scrollTop=saved.scrollTop;scroll.scrollLeft=saved.scrollLeft;wanted()?.focus({preventScroll:true});};
+    const view = bodyHost.querySelector<HTMLElement>(':scope > div:not([hidden])');
+    const viewport = bodyHost.closest<HTMLElement>('.ui-overlay-body');
+    if (!view || !viewport) return;
+    const scroller = () => view.querySelector<HTMLElement>('.ui-data-grid__scroll,[data-grid-scroll]') ?? viewport;
+    let live = true, initialFocusPending = true;
+    const wanted = () => {
+      const saved = selectDetailViewState(run.getState());
+      if (saved?.ref.featureId !== detailRef.featureId) return;
+      return Array.from(view.querySelectorAll<HTMLElement>('[data-focus-key],[id]')).find(el => el.dataset.focusKey === saved.focusKey || el.id === saved.focusKey);
+    };
+    const restore = () => {
+      const current = run.getState(), saved = selectDetailViewState(current);
+      if (!live || current.overlay.type !== 'detail' || saved?.ref.featureId !== detailRef.featureId) return;
+      const scroll = scroller();
+      const outer = outerScroll.get(view);
+      if (outer && scroll !== viewport) { viewport.scrollTop = outer.top; viewport.scrollLeft = outer.left; }
+      scroll.scrollTop = saved.scrollTop;
+      scroll.scrollLeft = saved.scrollLeft;
+      wanted()?.focus({ preventScroll: true });
+    };
+    if (depth > 1 && !selectDetailViewState(run.getState())) { viewport.scrollTop = 0; viewport.scrollLeft = 0; }
     // The kit's default initial focus is Close. A returning controller owns that one
     // initial focus decision; the first user input releases this guard immediately.
     const initialFocus=(event:FocusEvent)=>{if(initialFocusPending&&event.target instanceof HTMLElement&&event.target.matches('[data-ui-close]')&&wanted()){initialFocusPending=false;restore();}};
     const release=()=>{initialFocusPending=false;};
     surface?.addEventListener('focusin',initialFocus,true);surface?.addEventListener('pointerdown',release,true);surface?.addEventListener('keydown',release,true);
     queueMicrotask(restore);const restoreFrame=requestAnimationFrame(restore);
-    const remember=()=>{const el=document.activeElement as HTMLElement|null,prior=selectDetailViewState(run.getState());(run as PresentationRunStore).actions.rememberDetailState({ref:detailRef,tab:prior?.tab??detailRef.view??'',query:node.querySelector<HTMLInputElement>('input[type=search]')?.value??prior?.query??'',sort:prior?.sort??null,filters:prior?.filters??{},expandedRowIds:prior?.expandedRowIds??[],selectedRowId:prior?.selectedRowId??null,scrollTop:scroll.scrollTop,scrollLeft:scroll.scrollLeft,focusKey:el?.dataset.focusKey||el?.id||prior?.focusKey||''});};
-    node.addEventListener('scroll',remember,true);node.addEventListener('focusin',remember);node.addEventListener('change',remember);
-    return()=>{live=false;cancelAnimationFrame(restoreFrame);surface?.removeEventListener('focusin',initialFocus,true);surface?.removeEventListener('pointerdown',release,true);surface?.removeEventListener('keydown',release,true);node.removeEventListener('scroll',remember,true);node.removeEventListener('focusin',remember);node.removeEventListener('change',remember);};
-  },[active,featureId,detailRef?.view,detailRef?.itemId,bodyHost,run,surface]);
+    const remember = () => {
+      const scroll = scroller();
+      outerScroll.set(view, { top: viewport.scrollTop, left: viewport.scrollLeft });
+      const el = document.activeElement as HTMLElement | null, prior = selectDetailViewState(run.getState());
+      (run as PresentationRunStore).actions.rememberDetailState({
+        ref: detailRef, tab: prior?.tab ?? detailRef.view ?? '',
+        query: view.querySelector<HTMLInputElement>('input[type=search]')?.value ?? prior?.query ?? '',
+        sort: prior?.sort ?? null, filters: prior?.filters ?? {}, expandedRowIds: prior?.expandedRowIds ?? [],
+        selectedRowId: prior?.selectedRowId ?? null, scrollTop: scroll.scrollTop, scrollLeft: scroll.scrollLeft,
+        focusKey: el?.dataset.focusKey || el?.id || prior?.focusKey || '',
+      });
+    };
+    const rememberScroll = (event: Event) => {
+      if (event.target === viewport || (event.target instanceof Node && view.contains(event.target))) remember();
+    };
+    viewport.addEventListener('scroll', rememberScroll, true);
+    view.addEventListener('focusin', remember);
+    view.addEventListener('change', remember);
+    return () => {
+      live = false;
+      cancelAnimationFrame(restoreFrame);
+      surface?.removeEventListener('focusin', initialFocus, true);
+      surface?.removeEventListener('pointerdown', release, true);
+      surface?.removeEventListener('keydown', release, true);
+      viewport.removeEventListener('scroll', rememberScroll, true);
+      view.removeEventListener('focusin', remember);
+      view.removeEventListener('change', remember);
+    };
+  },[active,detailRef,depth,bodyHost,outerScroll,run,surface]);
 
   useLayoutEffect(() => {
     if (!active || !compact || fullscreen || !surface) return;

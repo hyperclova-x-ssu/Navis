@@ -20,12 +20,12 @@ beforeEach(() => { now = 0; run = setup(); });
 afterEach(() => run.dispose());
 
 describe('startWithPreset (API-03 v4.1, AC-309~312)', () => {
-  it.each(['A', 'B'] as const)('places the eight widgets in one accepted change on %s, with the cafe table', presetId => {
+  it.each(['A', 'B'] as const)('places the seven widgets in one accepted change on %s, with the cafe table', presetId => {
     run.dispose(); run = setup(presetId); enterMarketing();
     const result = run.actions.startWithPreset();
     expect(result.status).toBe('accepted');
     expect(cells(run.getState().panels)).toEqual(cells(getMarketingPreset('cafe').map(c => ({ ...c, width: c.width, height: c.height }) as Panel)));
-    expect(run.getState().panels).toHaveLength(8);
+    expect(run.getState().panels).toHaveLength(7);
     expect(Math.max(...run.getState().panels.map(p => p.width))).toBeLessThanOrEqual(4);
     expect(run.getState().layoutRevision).toBe(1);
     expect(run.getState().boards.marketing.revision).toBe(1);
@@ -55,7 +55,7 @@ describe('startWithPreset (API-03 v4.1, AC-309~312)', () => {
     expect(run.actions.undo(run.getState().undo!.token).status).toBe('accepted');
     expect(run.getState().panels).toEqual([]); expect(run.getState().starter).toBe('ready');
     expect(run.actions.startWithPreset().status).toBe('accepted');
-    expect(run.getState().panels).toHaveLength(8);
+    expect(run.getState().panels).toHaveLength(7);
   });
   it('rejects a stale revision', () => {
     enterMarketing();
@@ -66,20 +66,20 @@ describe('startWithPreset (API-03 v4.1, AC-309~312)', () => {
     enterMarketing(type); run.actions.startWithPreset();
     const second = run.getState().panels.find(p => p.column === 0 && p.row === 1)!;
     expect(second.featureId).toBe(first);
-    expect(new Set(run.getState().panels.map(p => p.featureId)).size).toBe(8);
+    expect(new Set(run.getState().panels.map(p => p.featureId)).size).toBe(7);
   });
   it('queues the F-03 steps and then the widget explanations in placement order (AC-312)', () => {
     enterMarketing(); run.actions.startWithPreset(); run.actions.visualSettled();
     const g = run.getState().guidance;
     expect(g.queue).toEqual(['move-panel', 'resize-panel']);
-    expect(g.widgetQueue).toEqual(['marketing-today', 'ai-response', 'expiry-coupon', 'promo-video', 'slot-coupon', 'coupon-status', 'customer-groups', 'marketing-performance']);
+    expect(g.widgetQueue).toEqual(['marketing-today', 'ai-response', 'expiry-coupon', 'promo-video', 'slot-coupon', 'coupon-status', 'customer-groups']);
     const seen: string[] = [];
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 9; i++) {
       advance(testTime.coachGapMs);
       const s = run.getState().guidance; const v = s.active ?? s.activeWidget;
       if (v) seen.push(v); run.actions.dismissCoach();if(v==='move-panel')run.actions.enterEditing();if(v==='resize-panel')run.actions.finishEditing();
     }
-    expect(seen).toEqual(['move-panel', 'resize-panel', 'marketing-today', 'ai-response', 'expiry-coupon', 'promo-video', 'slot-coupon', 'coupon-status', 'customer-groups', 'marketing-performance']);
+    expect(seen).toEqual(['move-panel', 'resize-panel', 'marketing-today', 'ai-response', 'expiry-coupon', 'promo-video', 'slot-coupon', 'coupon-status', 'customer-groups']);
     advance(testTime.coachGapMs * 3); expect(run.getState().guidance.active ?? run.getState().guidance.activeWidget).toBeNull();
   });
 });
@@ -92,7 +92,7 @@ describe('skipWidgetCoaches (API-03 v4.1, AC-312)', () => {
     run.actions.skipWidgetCoaches();
     const g = run.getState().guidance;
     expect(g.active).toBeNull(); expect(g.activeWidget).toBeNull(); expect(g.queue).toEqual([]); expect(g.widgetQueue).toEqual([]);
-    expect(Object.values(g.widgetCoach)).toHaveLength(8); expect(new Set(Object.values(g.widgetCoach))).toEqual(new Set(['dismissed']));
+    expect(Object.values(g.widgetCoach)).toHaveLength(7); expect(new Set(Object.values(g.widgetCoach))).toEqual(new Set(['dismissed']));
     expect(g.coach['resize-panel']).toBe('dismissed'); expect(g.coach['move-panel']).toBe('dismissed');
     advance(testTime.coachGapMs * 5);
     expect(run.getState().guidance.active ?? run.getState().guidance.activeWidget).toBeNull();
@@ -103,7 +103,7 @@ describe('skipWidgetCoaches (API-03 v4.1, AC-312)', () => {
     enterMarketing(); run.actions.startWithPreset(); run.actions.visualSettled();
     run.actions.switchLayer('management'); const before = run.getState();
     run.actions.skipWidgetCoaches();
-    expect(run.getState().boards.marketing.guidance.widgetQueue).toHaveLength(8);
+    expect(run.getState().boards.marketing.guidance.widgetQueue).toHaveLength(7);
     expect(run.getState().boards.management.guidance).toBe(before.boards.management.guidance);
     run.actions.skipWidgetCoaches(); expect(run.getState()).toBe(run.getState());
   });
@@ -134,7 +134,7 @@ describe('openDetailRef (API-03 v4.1)', () => {
     expect(run.actions.openDetailRef({ featureId: 'slot-coupon' }, 'k')).toBe(true);
   });
   it('closes with the return focus key', () => {
-    run.actions.openDetailRef({ featureId: 'marketing-performance', focus: 'action' }, 'panel:marketing-today:3');
+    run.actions.openDetailRef({ featureId: 'slot-coupon', focus: 'action' }, 'panel:marketing-today:3');
     run.actions.closeOverlay(); expect(run.getState().exitingOverlay).toMatchObject({ returnFocusKey: 'panel:marketing-today:3' });
   });
 });

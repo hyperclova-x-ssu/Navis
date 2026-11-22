@@ -1,8 +1,9 @@
 import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import type { BusinessType, FeatureId, Locale, PreviewFamily, RunState, RunStore, TableLayout } from '../../contracts';
 import { useBundle } from '../../i18n';
+import { getRegistration } from '../../catalog';
 import {
-  ActionButton, ChoiceSubview, ContentCrossfade, ContentRecovery, DialogFrame, ExampleStateRow, Icon, IconButton, LanguageSelect, LanguageSelectRow,
+  ActionButton, ChoiceSubview, ContentCrossfade, ContentRecovery, DialogFrame, Icon, IconButton, LanguageSelect, LanguageSelectRow,
   LargeTextControl, ListSelectRow, SettingRow, OnboardingFooter, OverlayExitSurface, ThemeTabs, ScrollArea, consumeDismissSequence, useKitT, useUi, type CloseReason, type PresetLayout,
 } from '../../ui';
 import { ALL_DATA_WIDGET_IDS, NORMAL_VARIANT, previewVariantBundle, previewVariants, resolveVariant, variantLabelKey } from '../../data/widget-data';
@@ -12,11 +13,12 @@ import type { TableSettingsPanelProps } from '../../ui/components/table-grid-edi
 import { iteration5Bundle } from '../onboarding/messages';
 import { SessionActionsContext } from '../../app/session-actions';
 import { createTableLayout, tableLayoutEnabled } from '../../layout/table-layout';
+import { useAccountController } from '../../app/account-context-value';
 import { resolveClosingVariant } from '../../data/widget-data';
 import { useShellT } from './use-shell-t';
 import { shellBundle } from './messages';
 import { posBundle } from '../../i18n/messages/pos';
-import { clearSettingsStart, peekSettingsStart, openUnpaidOrders } from './start-view';
+import { clearSettingsStart, peekSettingsStart, openUnpaidOrders, previewStatesEnabled } from './start-view';
 import { selectPosPreferences } from '../../pos/tables';
 import { tableFailureKey } from '../order/tables/actions';
 import { tableTransferBundle } from '../order/tables/messages';
@@ -36,7 +38,7 @@ export interface SettingsOverlayProps {
   readonly verification?: { readonly failContent: boolean; readonly onRetry: () => void };
 }
 /** overview, then one level down (business, language, preview) and a second level under preview (by-widget, one widget). */
-type View = 'pos-preferences' | 'pos-approval' | 'overview' | 'business' | 'payment' | 'tables' | 'closing' | 'language' | 'preview' | 'by-widget' | `widget:${string}`;
+type View = 'stores' | 'pos-preferences' | 'pos-approval' | 'overview' | 'business' | 'payment' | 'tables' | 'closing' | 'language' | 'preview' | 'by-widget' | `widget:${string}`;
 type Announcement = { readonly key: 'language.changed' | 'preview.family.changed' | 'settings.businessChanged' | 'settings.changed'; readonly business?: BusinessType; readonly value?: string; readonly n: number };
 interface BodyProps {
   readonly run: RunStore; readonly state: RunState; readonly view: View; readonly setView: (view: View) => void; readonly onClose: () => void;
@@ -62,7 +64,7 @@ function dialogHeight(_view: View, _textScale: RunState['textScale'], layout: Pr
 function useViewText(view: View) {
   const { t } = useBundle(shellBundle, previewVariantBundle, iteration5Bundle, posBundle);
   const widget = widgetOf(view);
-  const title = view === 'pos-preferences' ? t('pos.settingsTitle') : view === 'pos-approval' ? t('pos.approvalExample') : view === 'payment' ? t('step.payment') : view === 'tables' ? t('step.tables') : view === 'closing' ? t('settings.closing') : view === 'business' ? t('settings.business') : view === 'language' ? t('common.language') : view === 'preview' ? t('common.previewStates')
+  const title = view === 'stores' ? t('settings.switchStore') : view === 'pos-preferences' ? t('pos.settingsTitle') : view === 'pos-approval' ? t('pos.approvalExample') : view === 'payment' ? t('step.payment') : view === 'tables' ? t('step.tables') : view === 'closing' ? t('settings.closing') : view === 'business' ? t('settings.business') : view === 'language' ? t('common.language') : view === 'preview' ? t('common.previewStates')
     : view === 'by-widget' ? t('settings.byWidgetTitle') : widget ? t(`widget.${widget}.title` as never) : t('common.settings');
   return { title, description: undefined };
 }
@@ -70,8 +72,10 @@ function useViewText(view: View) {
 function WidgetVariantList({ state, setView, interactive }: { readonly state: RunState; readonly setView: (view: View) => void; readonly interactive: boolean }) {
   const { t } = useBundle(shellBundle, previewVariantBundle, iteration5Bundle, posBundle);
   // The registry and previewVariants own the current list; closing is a separate target.
-  const listed = ALL_DATA_WIDGET_IDS.filter(id => previewVariants(id).length >= 2);
-  const hidden = ALL_DATA_WIDGET_IDS.length - listed.length;
+  // D-365: a data id without a catalog widget (마케팅 성과's model stays for the chat) has nothing to preview.
+  const widgets = ALL_DATA_WIDGET_IDS.filter((id): id is Exclude<typeof id, 'marketing-performance'> => Boolean(getRegistration(id)));
+  const listed = widgets.filter(id => previewVariants(id).length >= 2);
+  const hidden = widgets.length - listed.length;
   const valueOf = (id: FeatureId) => { const variant = resolveVariant(id, state.preview); return variant === NORMAL_VARIANT ? t('preview.family.normal') : t(variantLabelKey(id as never, variant) as never); };
   return <section className="settings-by-widget" aria-label={t('settings.byWidgetTitle')}>
     {hidden > 0 ? <p className="settings-description">{t('preview.family.singleHidden')}</p> : null}
@@ -97,6 +101,9 @@ function SettingsBody({ run, state, view, setView, onClose, onChoose, announce, 
   const { t } = useBundle(shellBundle, previewVariantBundle, iteration5Bundle, posBundle);
   const kit = useKitT();
   const picks = Object.keys(state.preview.overrides).length;
+  // REAL-PLAN F00: stores and sign-out exist only when the account runs over HTTP.
+  const account = useAccountController();
+  const [switching, setSwitching] = useState(false);
   const unpaid = state.pos.bills.some(bill => bill.status === 'open' || bill.status === 'partial');
   const posPreferences = selectPosPreferences(state.shopSettings);
   const widget = widgetOf(view);
@@ -108,6 +115,7 @@ function SettingsBody({ run, state, view, setView, onClose, onChoose, announce, 
   else if (view === 'payment') body = <ChoiceSubview title={t('step.payment')} value={state.shopSettings.paymentStyle ?? 'prepaid'} options={(['prepaid','postpaid'] as const).map(value=>({value,label:t(`payment.${value}`),description:t(`payment.${value}.description`)}))} onBack={back} onClose={close} onChange={paymentStyle=>{if(interactive && applied(updateSettings?.({...state.shopSettings,paymentStyle})))announce('settings.changed',t(`payment.${paymentStyle}`));}} />;
   else if (view === 'pos-approval') body = <div lang="ko"><ChoiceSubview title={t('pos.approvalExample')} value={state.preview.pos==='payment-failure'?'payment-failure':'normal'} options={[{value:'normal',label:t('preview.family.normal')},{value:'payment-failure',label:t('pos.paymentFailure'),lang:'ko'}]} onBack={back} onClose={close} onChange={value=>{if(interactive)run.actions.setPosPreview(value as 'normal'|'payment-failure');}}/></div>;
   else if (view === 'closing') body = <ChoiceSubview title={t('settings.closing')} value={resolveClosingVariant(state.preview)} options={[{value:'normal',label:t('preview.family.normal')},{value:'no-payments',label:t('settings.empty')},{value:'error',label:t('settings.error')}]} onBack={back} onClose={close} onChange={value=>{if(interactive)run.actions.setClosingPreview(value);}} />;
+  else if (view === 'stores' && account) body = <ChoiceSubview title={t('settings.switchStore')} value={account.stores.find(store => store.current)?.storeId ?? ''} options={account.stores.map(store => ({ value: store.storeId, label: store.name }))} onBack={back} onClose={close} onChange={storeId => { if (!interactive || switching || storeId === account.stores.find(store => store.current)?.storeId) return; setSwitching(true); void account.switchStore(storeId).catch(() => setSwitching(false)); }} />;
   else if (view === 'language') body = <LanguageSelect locale={state.locale} onBack={back} onClose={close} onChange={(next: Locale) => { if (!interactive || next === state.locale) return; if (run.actions.setLocale(next)) announce('language.changed'); }} />;
   else if (view === 'preview') body = <>
     <ChoiceSubview<string> title={t('common.previewStates')} value={state.preview.pos==='payment-failure'?'payment-failure':state.preview.family} onBack={back} onClose={close} options={[...(['normal','empty','error','special'] as const).map(value=>({value,label:t(`preview.family.${value}`),description:value==='special'?t('preview.family.specialHint'):undefined})),{value:'payment-failure',label:t('pos.paymentFailure'),lang:'ko'}]} onChange={value=>{if(!interactive)return;if(value==='payment-failure'){run.actions.setPreviewFamily('normal');run.actions.setPosPreview('payment-failure');}else{run.actions.setPosPreview(null);run.actions.setPreviewFamily(value as PreviewFamily);}announce('preview.family.changed');}}/>
@@ -117,6 +125,7 @@ function SettingsBody({ run, state, view, setView, onClose, onChoose, announce, 
   else if (widget) body = <WidgetVariantChoice run={run} state={state} featureId={widget} onBack={back} onClose={close} interactive={interactive} announce={announce} />;
   else body = <div className="settings-sections">
     <div role="group" aria-label={t('settings.store')}><h3>{t('settings.store')}</h3>
+    {account && account.stores.length > 1 ? <ListSelectRow label={t('settings.switchStore')} value={account.storeName ?? ''} onPress={interactive ? () => setView('stores') : noop} /> : null}
     <div className="settings-business-select" data-business-highlight={highlightBusiness||undefined}><ListSelectRow label={t('settings.business')} value={state.businessType ? kit.t(`ui.business.${state.businessType}`) : t('settings.businessNone')} ariaLabel={t('settings.changeBusiness')} disabled={unpaid} onPress={interactive ? () => setView('business') : noop} /></div>
     {unpaid ? <ActionButton variant="ghost" disabled aria-describedby="settings-unpaid-reason">{t('step.payment')} · {state.shopSettings.paymentStyle ? t(`payment.${state.shopSettings.paymentStyle}`) : '—'}</ActionButton> : <ListSelectRow label={t('step.payment')} value={state.shopSettings.paymentStyle ? t(`payment.${state.shopSettings.paymentStyle}`) : '—'} onPress={interactive ? () => setView('payment') : noop} />}
     <div lang="ko"><ListSelectRow label={t('pos.settingsTitle')} value={t('pos.startValue',{tab:t(`pos.${posPreferences.startTab}`)})} onPress={interactive ? () => setView('pos-preferences') : noop}/>{unpaid ? <div><p id="settings-unpaid-reason">{t('pos.settingsBlocked')}</p><ActionButton variant="secondary" onClick={interactive ? () => openUnpaidOrders(run) : noop}>{t('pos.showOrders')}</ActionButton></div> : null}</div>
@@ -125,7 +134,8 @@ function SettingsBody({ run, state, view, setView, onClose, onChoose, announce, 
     <SettingRow><section className="settings-mode" aria-label={t('settings.mode')}><h3 className="settings-label">{t('settings.mode')}</h3><ThemeTabs value={state.theme} onChange={interactive ? run.actions.setTheme : noop} /></section></SettingRow>
     <SettingRow><LargeTextControl checked={state.textScale === 125} onChange={interactive ? checked => run.actions.setTextScale(checked ? 125 : 100) : noop} /></SettingRow>
     <LanguageSelectRow locale={state.locale} onPress={interactive ? () => setView('language') : noop} />
-    <>{state.preview.pos==='payment-failure'?<span lang="ko"><ListSelectRow label={t('common.previewStates')} value={t('pos.paymentFailure')} onPress={interactive?()=>setView('preview'):noop}/></span>:<ExampleStateRow family={state.preview.family} byWidgetCount={picks} onPress={interactive ? () => setView('preview') : noop} />}</></div>
+    {account ? <SettingRow><ActionButton variant="secondary" disabled={switching} onClick={interactive ? () => { setSwitching(true); void account.signOut().catch(() => setSwitching(false)); } : noop}>{t('settings.signOut')}</ActionButton></SettingRow> : null}
+    </div>
   </div>;
   return <ScrollArea role="region" aria-label={view === 'business' ? t('business.group') : t('settings.content')} className="settings-content">{body}</ScrollArea>;
 }
@@ -136,7 +146,10 @@ function BackButton({ onBack }: { readonly onBack: () => void }) {
 }
 
 function SettingsSession({ run, state, returnFocusRef, onClose, onChoose, announce, verification, updateSettings, tableLinkPicker, tableLinkError }: { readonly run: RunStore; readonly state: RunState; readonly returnFocusRef: RefObject<HTMLElement | null>; readonly onClose: (view: View, reason: CloseReason, tableDraft?:TableLayout) => void; readonly onChoose: (type: BusinessType) => void; readonly announce: BodyProps['announce']; readonly verification?: SettingsOverlayProps['verification']; readonly updateSettings?: SessionActions['updateSettings']; readonly tableLinkPicker?: SettingsOverlayProps['tableLinkPicker']; readonly tableLinkError?: string | null }) {
-  const [view, changeView] = useState<View>(() => peekSettingsStart(run) ?? 'overview');
+  const [view, changeView] = useState<View>(() => {
+    if (peekSettingsStart(run) === 'tables') return 'tables';
+    return previewStatesEnabled() ? 'preview' : 'overview';
+  });
   const [tableDraft,setTableDraft]=useState(state.shopSettings.tableLayout ?? createTableLayout());
   const [error,setError]=useState<'session.error' | ReturnType<typeof tableFailureKey> | null>(null);const [highlightBusiness,setHighlightBusiness]=useState(false);
   useEffect(()=>{if(!highlightBusiness)return;const timer=window.setTimeout(()=>setHighlightBusiness(false),800);return()=>window.clearTimeout(timer);},[highlightBusiness]);

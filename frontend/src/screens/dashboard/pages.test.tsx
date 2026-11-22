@@ -6,11 +6,11 @@ import {useSyncExternalStore} from 'react';
 import {act,cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach,describe,expect,it,vi} from 'vitest';
-import type {FeatureId,Panel,RunStore,WidgetModule} from '../../contracts';
+import type {FeatureId,Locale,Panel,RunStore,WidgetModule} from '../../contracts';
 import {createRunStore,findPlacement} from '../../state';
 import {getRegistry} from '../../catalog';
 import {screenPresets} from '../../layout';
-import {PanelAction,getPresetLayout,timePolicy} from '../../ui';
+import {PanelAction,ScreenTransition,getPresetLayout,timePolicy} from '../../ui';
 import {KitProviders} from '../../ui/test-utils';
 import {DashboardScreen} from './DashboardScreen';
 import {placementRect} from './gestures';
@@ -20,7 +20,7 @@ let activeRun:RunStore|null=null;
 afterEach(()=>{cleanup();activeRun?.dispose();activeRun=null;vi.restoreAllMocks();vi.useRealTimers();});
 /** Stub widget modules (other tasks' modules are not used as test evidence). */
 const stub=(id:FeatureId,extra:Partial<WidgetModule>={}):WidgetModule=>({id,Panel:()=><p data-testid={`body-${id}`}>stub {id}</p>,Detail:()=><p>detail {id}</p>,useSummary:()=>`summary ${id}`,...extra});
-function mount({layer='management',panels=[],pages=1,clock=()=>0,modules=[],business='cafe',locale='ko'}:{layer?:'management'|'marketing';panels?:readonly Panel[];pages?:number;clock?:()=>number;modules?:readonly WidgetModule[];business?:'cafe'|'retail'|null;locale?:'ko'|'en'}={}){
+function mount({layer='management',panels=[],pages=1,clock=()=>0,modules=[],business='cafe',locale='ko',crossfade=false}:{layer?:'management'|'marketing';panels?:readonly Panel[];pages?:number;clock?:()=>number;modules?:readonly WidgetModule[];business?:'cafe'|'retail'|null;locale?:Locale;/** Wrap the board like App.tsx does: a ScreenTransition keyed by screen and layer, so an exiting layer overlaps the arriving one. */crossfade?:boolean}={}){
  const preset=screenPresets.A,run=createRunStore({screenPreset:preset,catalog:getRegistry('A'),time:timePolicy,clock,theme:'light',reducedMotion:true});activeRun=run;
  beginDashboard(run,business);if(locale!=='ko')run.actions.setLocale(locale);if(layer==='marketing')run.actions.switchLayer('marketing');
  if(panels.length)run.actions.applyLayoutIntent({type:'restore',panels});for(let i=1;i<pages;i++)run.actions.addPage();if(pages>1)run.actions.goToPage(0);
@@ -28,7 +28,7 @@ function mount({layer='management',panels=[],pages=1,clock=()=>0,modules=[],busi
  vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockImplementation(function(this:HTMLElement){let r={x:0,y:0,width:48,height:48};if(this.classList.contains('dashboard-grid-bounds'))r=grid;else{const article=this.closest<HTMLElement>('.ui-feature-panel'),p=run.getState().panels.find(p=>p.featureId===article?.dataset.featureId);if(p)r=placementRect(grid,p,preset.grid);else if(this.closest('.ui-function-row'))r={x:getPresetLayout(preset).drawer.x,y:200,width:getPresetLayout(preset).drawer.width,height:72};}return {...r,left:r.x,top:r.y,right:r.x+r.width,bottom:r.y+r.height,toJSON:()=>r};});
  vi.spyOn(HTMLElement.prototype,'offsetWidth','get').mockImplementation(function(this:HTMLElement){return this.classList.contains('ui-popover--coach')?400:48;});
  vi.spyOn(HTMLElement.prototype,'offsetHeight','get').mockImplementation(function(this:HTMLElement){return this.classList.contains('ui-popover--coach')?160:48;});
- function Host(){const s=useSyncExternalStore(run.subscribe,run.getState);return <KitProviders locale={s.locale} preset={preset} theme={s.theme} textScale={s.textScale} reducedMotion modules={modules}><DashboardScreen run={run}/><ExampleStateChipForRun run={run}/></KitProviders>;}
+ function Host(){const s=useSyncExternalStore(run.subscribe,run.getState);return <KitProviders locale={s.locale} preset={preset} theme={s.theme} textScale={s.textScale} reducedMotion modules={modules}><DashboardScreen run={run} renderScreen={crossfade?board=><ScreenTransition screenKey={`${s.screen}:${s.layer}`}>{board}</ScreenTransition>:undefined}/><ExampleStateChipForRun run={run}/></KitProviders>;}
  render(<Host/>);return {run,grid,page:()=>run.getState().boards[run.getState().activeBoard].currentPage};
 }
 const pointer=(node:Element|Document,type:string,x:number,y:number,id=1)=>fireEvent(node,new PointerEvent(type,{pointerId:id,pointerType:'mouse',isPrimary:true,button:0,clientX:x,clientY:y,bubbles:true,cancelable:true}));
@@ -214,16 +214,16 @@ describe('marketing layer (SCR-26·41·42, AC-175·308~312·319)',()=>{
  it('has five groups and a recommended drawer with today’s promotions first',async()=>{
   mount({layer:'marketing'});await act(async()=>{});
   const rail=screen.getByRole('navigation',{name:'기능 열'});expect(within(rail).getAllByRole('button').map(b=>b.textContent)).toEqual(['검색','추천','소식','돈','손님','동네']);
-  const user=userEvent.setup();await user.click(within(rail).getByRole('button',{name:'기능 검색하기'}));expect(await screen.findByRole('dialog',{name:'기능 찾기'})).toHaveTextContent('13개 기능');
+  const user=userEvent.setup();await user.click(within(rail).getByRole('button',{name:'기능 검색하기'}));expect(await screen.findByRole('dialog',{name:'기능 찾기'})).toHaveTextContent('12개 기능');
   await user.click(within(rail).getByRole('button',{name:'추천'}));const drawer=await screen.findByRole('dialog',{name:'추천'});
-  expect(within(drawer).getAllByRole('button').filter(b=>b.classList.contains('ui-function-row')).map(b=>b.getAttribute('aria-label'))).toEqual(['오늘 할 홍보','마케팅 성과','메시지·리뷰 응대','빈 시간 단골 쿠폰','AI 홍보 영상']);
+  expect(within(drawer).getAllByRole('button').filter(b=>b.classList.contains('ui-function-row')).map(b=>b.getAttribute('aria-label'))).toEqual(['오늘 할 홍보','메시지·리뷰 응대','빈 시간 단골 쿠폰','AI 홍보 영상']);
  });
- it('starts with the recommended layout, one Undo, and eight explanations in placement order',async()=>{
+ it('starts with the recommended layout, one Undo, and seven explanations in placement order',async()=>{
   let now=0;const {run}=mount({layer:'marketing',clock:()=>now});await act(async()=>{});
-  expect(screen.queryByRole('button',{name:/3개로 시작하기/})).toBeNull();expect(screen.getByText('패널 8개를 한 번에 추가해 드려요')).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:/3개로 시작하기/})).toBeNull();expect(screen.getByText('패널 7개를 한 번에 추가해 드려요')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button',{name:'추천 배치로 시작하기'}));
-  expect(run.getState().panels).toHaveLength(8);expect(await screen.findByText('패널 8개로 시작했어요')).toBeInTheDocument();expect(screen.getByText('패널 8개를 추가했어요')).toBeInTheDocument();
-  expect(run.getState().guidance.widgetQueue).toEqual(['marketing-today','ai-response','expiry-coupon','promo-video','slot-coupon','coupon-status','customer-groups','marketing-performance']);
+  expect(run.getState().panels).toHaveLength(7);expect(await screen.findByText('패널 7개로 시작했어요')).toBeInTheDocument();expect(screen.getByText('패널 7개를 추가했어요')).toBeInTheDocument();
+  expect(run.getState().guidance.widgetQueue).toEqual(['marketing-today','ai-response','expiry-coupon','promo-video','slot-coupon','coupon-status','customer-groups']);
   fireEvent.click(await screen.findByRole('button',{name:'되돌리기'}));expect(run.getState().panels).toHaveLength(0);expect(screen.getByRole('button',{name:'추천 배치로 시작하기'})).toBeVisible();
  });
 });
@@ -235,6 +235,18 @@ describe('language and example state (F-22, SCR-29)',()=>{
   expect(screen.getByRole('navigation',{name:'Features'})).toBeInTheDocument();expect(screen.getByRole('button',{name:/^손익, row 1 column 1, 1 wide 1 tall/})).toBeInTheDocument();
   expect(screen.getByRole('button',{name:'Open Navis'})).toBeInTheDocument();expect(document.body.textContent).not.toMatch(/dashboard\.|ui\.|navis\./);
  });
+ it.each([
+  ['ko','Navis 열기','Navis 닫기'],
+  ['en','Open Navis','Close Navis'],
+  ['zh-Hans','打开 Navis','关闭 Navis'],
+  ['zh-Hant','開啟 Navis','關閉 Navis'],
+ ] as const)('names the launcher in %s and the fixed chat controls in Korean (D-329 OQ-6)',async(locale,open,close)=>{
+  mount({locale});await act(async()=>{});
+  fireEvent.click(screen.getByRole('button',{name:open}));
+  expect(screen.getByRole('button',{name:close})).toHaveAttribute('aria-expanded','true');
+  expect(screen.getByRole('textbox',{name:'질문하거나 요청해 주세요'})).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'요청 보내기'})).toBeInTheDocument();
+ });
  it('shows the example-state chip in the header when the family is not normal',async()=>{
   const {run}=mount({panels:[ledger]});await act(async()=>{});expect(screen.queryByRole('button',{name:/예시 상태/})).toBeNull();
   act(()=>run.actions.setPreviewFamily('empty'));expect(screen.getByRole('button',{name:/예시 상태: 비어 있음/})).toBeInTheDocument();
@@ -242,6 +254,50 @@ describe('language and example state (F-22, SCR-29)',()=>{
  it('keeps every dashboard key in four languages',()=>{
   for(const locale of ['en','zh-Hans','zh-Hant'] as const)expect(Object.keys(dashboardBundle[locale]).sort()).toEqual(Object.keys(dashboardBundle.ko).sort());
   expect(Object.values(dashboardBundle.ko).every(Boolean)).toBe(true);expect(dashboardReviewStringCount).toBeGreaterThan(0);
+ });
+});
+
+describe('edit mode after a layer round trip (owner report: layout edit broke after Navis opened another screen)',()=>{
+ /** The cross-fade keeps the exiting layer's board mounted next to the arriving one; its late unmount must not clear the arriving grid. */
+ it('keeps dragging a panel after switching to marketing and back through the screen transition',async()=>{
+  const {run,grid}=mount({panels:[ledger],crossfade:true});await act(async()=>{});
+  for(const layer of ['marketing','management'] as const){act(()=>{run.actions.switchLayer(layer);});await waitFor(()=>expect(document.querySelectorAll('.dashboard-screen')).toHaveLength(1));}
+  expect(run.getState().activeBoard).toBe('management');
+  act(()=>run.actions.enterEditing());
+  const button=await screen.findByRole('button',{name:/^손익, 1행 1열/}),r=button.getBoundingClientRect();
+  pointer(button,'pointerdown',r.x+40,r.y+40);pointer(document,'pointermove',r.x+80,r.y+60);await act(async()=>{await new Promise(resolve=>requestAnimationFrame(resolve));});
+  expect(run.getState().gesturePreview?.source).toBe('panel');
+  const drop={x:grid.x+grid.width/2,y:grid.y+grid.height/2};pointer(document,'pointermove',drop.x,drop.y);await act(async()=>{await new Promise(resolve=>requestAnimationFrame(resolve));});pointer(document,'pointerup',drop.x,drop.y);
+  expect(run.getState().gesturePreview).toBeNull();
+  const moved=run.getState().panels.find(p=>p.featureId==='ledger');expect(moved).toBeDefined();expect(moved!.column>0||moved!.row>0).toBe(true);
+ });
+ it('still resizes a panel by its handle after the round trip',async()=>{
+  const {run,grid}=mount({panels:[ledger],crossfade:true});await act(async()=>{});
+  for(const layer of ['marketing','management'] as const){act(()=>{run.actions.switchLayer(layer);});await waitFor(()=>expect(document.querySelectorAll('.dashboard-screen')).toHaveLength(1));}
+  act(()=>run.actions.enterEditing());
+  const handle=await screen.findByRole('button',{name:/손익 크기 바꾸기/}),h=handle.getBoundingClientRect();
+  pointer(handle,'pointerdown',h.x+8,h.y+8);pointer(document,'pointermove',h.x+60,h.y+8);pointer(document,'pointermove',h.x+grid.width/3,h.y+8);await act(async()=>{await new Promise(resolve=>requestAnimationFrame(resolve));});
+  expect(run.getState().gesturePreview?.source).toBe('resize');pointer(document,'pointerup',h.x+grid.width/3,h.y+8);
+  expect(run.getState().panels.find(p=>p.featureId==='ledger')!.width).toBeGreaterThan(1);
+ });
+});
+
+describe('drag render cost (owner: widget edit drag felt heavy)',()=>{
+ it('does not re-render any widget body while a panel is dragged (pointer moves within the layout)',async()=>{
+  const renders:Record<string,number>={};
+  const counting=(id:FeatureId):WidgetModule=>({id,Panel:()=>{renders[id]=(renders[id]??0)+1;return <p>body {id}</p>;},Detail:()=><p>detail {id}</p>,useSummary:()=>`summary ${id}`});
+  const margin:Panel={featureId:'margin',column:5,row:3,width:1,height:1};
+  const {run,grid}=mount({panels:[ledger,margin],modules:[counting('ledger'),counting('margin')]});await act(async()=>{});act(()=>run.actions.enterEditing());
+  const button=screen.getByRole('button',{name:/^손익, 1행 1열/}),r=button.getBoundingClientRect();
+  pointer(button,'pointerdown',r.x+40,r.y+40);pointer(document,'pointermove',r.x+80,r.y+60);await act(async()=>{await new Promise(resolve=>requestAnimationFrame(resolve));});
+  expect(run.getState().gesturePreview?.source).toBe('panel');
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,50));});
+  const before={...renders};
+  // Thirty pointer moves inside the grid, none of them reaching the other panel's cell.
+  for(let i=1;i<=30;i++){pointer(document,'pointermove',r.x+80+i*6,r.y+60+i*3);await act(async()=>{await new Promise(resolve=>requestAnimationFrame(resolve));});}
+  expect(renders).toEqual(before);
+  pointer(document,'pointerup',r.x+260,r.y+150);
+  expect(run.getState().gesturePreview).toBeNull();void grid;
  });
 });
 

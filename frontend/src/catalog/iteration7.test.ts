@@ -4,7 +4,7 @@ import { getLayerCatalog, getRegistration, listFeatures } from './index';
 describe('M3 catalog (API-279)', () => {
   it('adds the staff schedule to management and finds both aliases', () => {
     expect(getLayerCatalog('A', 'management')).toHaveLength(17);
-    expect(getLayerCatalog('A', 'marketing')).toHaveLength(13);
+    expect(getLayerCatalog('A', 'marketing')).toHaveLength(12);
     expect(getRegistration('staff-schedule')).toMatchObject({ label: '직원 스케줄표', layer: 'management', groupId: 'misc' });
     for (const query of ['근무표', '시간표']) {
       expect(listFeatures({ presetId: 'A', layer: 'management', query }).map(f => f.id)).toContain('staff-schedule');

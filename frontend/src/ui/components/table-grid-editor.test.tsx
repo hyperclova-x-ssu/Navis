@@ -5,7 +5,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { UiProvider } from '../UiProvider';
 import { screenPresets } from '../../layout/presets';
-import { createTableLayout, moveTable, resizeTableCount, setTableSeats } from '../../layout/table-layout';
+import { moveTable, resizeTableCount, setTableSeats } from '../../layout/table-layout';
+import { sixTableLayout as createTableLayout } from '../../layout/table-layout-fixture';
 import { TableGridEditor, TableSettingsPanel } from './table-grid-editor';
 afterEach(cleanup);
 function Host({count=6}:{count?:number}){

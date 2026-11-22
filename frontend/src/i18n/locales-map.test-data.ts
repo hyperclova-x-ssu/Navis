@@ -1076,9 +1076,9 @@ export const localesMap = [
  },
  {
   "sec": "5",
-  "match": "가짜 연동 안내",
+  "match": "일정 내보내기 안내 (D-347, 20절로 대체)",
   "keys": [
-   "common.integration.naverCalendar"
+   "common.linked.calendar.downloadFile"
   ],
   "join": " / ",
   "wrap": false

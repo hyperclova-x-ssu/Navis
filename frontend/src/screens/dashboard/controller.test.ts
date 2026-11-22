@@ -120,7 +120,7 @@ describe('pages and edge dwell',()=>{
  it('starts the marketing recommended layout with M-28 flights 24ms apart, top to bottom and left to right',()=>{
   const {run,controller}=pages(1);const flights=vi.fn();const c=createDashboardController(run,{getGridRect:()=>getPresetLayout(screenPresets.A).grid,select:()=>{},consumePointer:()=>{},onActive:()=>{},onFlight:flights,requestFrame:fn=>{fn();return 1;},cancelFrame:()=>{},schedule:()=>0,cancelTimer:()=>{}});void controller;
   run.actions.switchLayer('marketing');c.startPreset({x:700,y:500,width:400,height:56});
-  const plans=flights.mock.calls[0][0] as readonly {featureId:string;index:number;stagger:number}[];expect(plans).toHaveLength(8);expect(plans.map(p=>p.stagger)).toEqual(Array(8).fill(24));expect(plans.map(p=>p.index)).toEqual([0,1,2,3,4,5,6,7]);
-  expect(plans.map(p=>p.featureId)).toEqual(['marketing-today','ai-response','expiry-coupon','promo-video','slot-coupon','coupon-status','customer-groups','marketing-performance']);
+  const plans=flights.mock.calls[0][0] as readonly {featureId:string;index:number;stagger:number}[];expect(plans).toHaveLength(7);expect(plans.map(p=>p.stagger)).toEqual(Array(7).fill(24));expect(plans.map(p=>p.index)).toEqual([0,1,2,3,4,5,6]);
+  expect(plans.map(p=>p.featureId)).toEqual(['marketing-today','ai-response','expiry-coupon','promo-video','slot-coupon','coupon-status','customer-groups']);
  });
 });

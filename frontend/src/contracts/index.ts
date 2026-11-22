@@ -7,6 +7,14 @@ export type * from './pos';
 import type { DetailReturnState, ManagementTemplateId, OnboardingDraft, OnboardingState, RunSessionInput, SessionGate, SessionTransactionPort, ShopSettings, TableLayout, TemplateTour } from './session';
 export type { ChangedValueSlot, DetailReturnState, ManagementTemplate, ManagementTemplateId, OnboardingDraft, OnboardingState, PaymentStyle, PreparedChange, PrepareResult, RunSessionInput, SessionGate, SessionTransaction, SessionTransactionPort, ShopSettings, StoreTable, TableLayout, TemplateTour } from './session';
 export type BusinessType = 'cafe' | 'restaurant' | 'pub' | 'beauty' | 'retail' | 'academy' | 'fitness' | 'other';
+export const MENU_CATEGORIES = ['coffee', 'tea', 'beverage', 'dessert'] as const;
+export type MenuCategory = (typeof MENU_CATEGORIES)[number];
+export type MenuCategoryInput = MenuCategory | 'drink';
+export function normalizeMenuCategory(value: MenuCategoryInput): MenuCategory;
+export function normalizeMenuCategory(value: unknown): MenuCategory | undefined;
+export function normalizeMenuCategory(value: unknown): MenuCategory | undefined {
+  return value === 'drink' ? 'beverage' : MENU_CATEGORIES.find(category => category === value);
+}
 export type FeatureId = 'menu' | 'inventory-booking' | 'suppliers' | 'ledger' | 'margin' | 'tax' | 'members' | 'customer-analysis' | 'manuals' | 'grants' | 'calendar' | 'voice-booking' | 'briefing' | 'staff-schedule' | 'store-environment' | 'custom-order' | 'notice-send' | 'credit-receivable' | 'local-changes' | 'trade-area' | 'local-trends' | 'ai-response' | 'community' | 'marketing-today' | 'slot-coupon' | 'expiry-coupon' | 'promo-video' | 'coupon-status' | 'customer-groups' | 'marketing-performance';
 export type GroupId = 'recommended' | 'products' | 'stock' | 'finance' | 'members' | 'store' | 'misc' | 'schedule' | 'news' | 'money' | 'customers' | 'neighborhood';
 export type CellSpan = 1 | 2 | 3 | 4;
@@ -148,6 +156,7 @@ export interface RunActions {
   readonly setPreviewVariant: (featureId:FeatureId,variant:string|null)=>void;
   readonly resetWidgetPreview: (featureId:FeatureId)=>void;
   readonly showNotice: (notice:NoticeRequest)=>void;
+  readonly supersedeWidgetSuccessNotice: (featureId:FeatureId)=>void;
   readonly acknowledgeBriefing: ()=>void;
 }
 export interface RunStore { readonly catalog: ResolvedCatalog; readonly getState:()=>RunState; readonly subscribe:(listener:(state:RunState,previous:RunState)=>void)=>()=>void; readonly actions:RunActions; readonly nextDeadline:()=>number|null; readonly prepareLayout:()=>Promise<boolean>; readonly session: SessionTransactionPort<RunSessionInput>; readonly dispose:()=>void }
@@ -165,7 +174,7 @@ export interface PreviewSelection { readonly family: PreviewFamily; readonly ove
 export type ClosingViewTab = 'sales' | 'drawer' | 'history';
 /** A browser-local form seed. Widgets may use it to initialize their normal editor. */
 export type DetailPrefill =
-  | { readonly kind: 'menu.create'; readonly name?: string; readonly price?: number; readonly category?: 'drink' | 'dessert' }
+  | { readonly kind: 'menu.create'; readonly name?: string; readonly price?: number; readonly category?: MenuCategoryInput }
   | { readonly kind: 'widget-draft'; readonly command: string; readonly fields: Readonly<Record<string, unknown>> };
 export interface DetailRef {
   readonly featureId: FeatureId;
@@ -189,7 +198,9 @@ export interface DashboardBoard { readonly layerId: DashboardLayerId; readonly p
 export type WidgetCoachStatus = 'queued' | 'visible' | 'dismissed';
 export interface WidgetHelp { readonly featureId: FeatureId; readonly origin: 'panel' | 'detail'; readonly returnFocusKey: string }
 export interface NoticeUndo { readonly target: 'layout' | 'data' | 'pos' | 'run'; readonly token: string }
-export interface NoticeRequest { readonly kind: 'success' | 'complete' | 'error'; readonly messageKey: string; readonly params?: MessageParams; readonly undo?: NoticeUndo; readonly featureId?: FeatureId }
+export interface NoticeRequest { readonly kind: 'success' | 'complete' | 'error'; readonly messageKey: string; readonly params?: MessageParams; readonly undo?: NoticeUndo; readonly featureId?: FeatureId;
+  /** REAL-PLAN: absolute deadline (epoch ms) of a server receipt's undo. The notice never outlives it. */
+  readonly undoUntil?: number }
 export type PageAddResult = { readonly ok: true; readonly index: number } | { readonly ok: false; readonly code: 'PAGE_LIMIT' };
 export type PageFlipResult = { readonly ok: true; readonly pageIndex: number; readonly preview: LayoutResponse } | { readonly ok: false; readonly code: 'NO_NEIGHBOR_PAGE' | 'CANCELLED' };
 /** Widget registry entry (DATA_MODEL 10.7). label is the LOCALES 4 Korean name for development display and Korean search only; screens use nameKey. Conditions live in src/data/conditions.ts. */
@@ -206,7 +217,9 @@ export interface WidgetHost {
   openLinked(ref: DetailRef): void;
   /** v4.1: panel action buttons open another widget's detail (any registry widget). */
   openDetail(ref: DetailRef): void;
-  notify(n: { readonly kind: 'success' | 'complete' | 'error'; readonly messageKey: string; readonly params?: MessageParams; readonly undoToken?: string }): void;
+  notify(n: { readonly kind: 'success' | 'complete' | 'error'; readonly messageKey: string; readonly params?: MessageParams; readonly undoToken?: string; /** The receipt's `undoUntil` (ISO time): the toast honors the server's deadline. */ readonly undoUntil?: string }): void;
+  /** Retire the wording of this widget's previous success while keeping any active undo. */
+  supersedeSuccessNotice?(): void;
   acknowledgeBriefing(): void;
   /** The run's arrival-briefing flag as an external store, so an open briefing detail follows an acknowledgement made elsewhere (chat). Absent in previews and tests. */
   readonly briefingAcknowledged?: { subscribe(listener: () => void): () => void; getSnapshot(): boolean };

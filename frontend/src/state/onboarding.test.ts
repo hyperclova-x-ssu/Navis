@@ -37,7 +37,7 @@ describe('반복 5 온보딩 초안과 단계 경계', () => {
     run.actions.chooseBusiness('cafe');
     run.actions.setOnboardingAnswer({ paymentStyle: 'postpaid' });
     const tables = run.getState().onboarding.draft.tableLayout!;
-    expect(tables.tables.map(t => t.seats)).toEqual([2, 2, 2, 4, 4, 4]);
+    expect(tables.tables.map(t => t.seats)).toEqual([2, 2, 2, 2, 2, 2, 2, 2, 4, 4, 6]);
     expect(run.actions.saveOnboardingTables({ ...tables, tables: tables.tables.map((t, i) => i === 0 ? { ...t, seats: 3 } : t) })).toBe(true);
     run.actions.onboardingBack();
     expect(run.getState().onboarding.step).toBe('tables');
@@ -85,7 +85,7 @@ describe('반복 5 온보딩 초안과 단계 경계', () => {
     const {run}=setup();run.actions.chooseBusiness('cafe');run.actions.setOnboardingAnswer({paymentStyle:'postpaid'});
     run.actions.skipOnboardingTables();run.actions.onboardingBack();
     expect(run.getState().onboarding.step).toBe('tables');
-    expect(run.getState().onboarding.draft.tableLayout!.tables.reduce((sum,t)=>sum+t.seats,0)).toBe(18);
+    expect(run.getState().onboarding.draft.tableLayout!.tables.reduce((sum,t)=>sum+t.seats,0)).toBe(30);
   });
 
   it('낡은 화면 완료 콜백은 새 전환과 새 실행을 준비 완료로 바꾸지 않는다',()=>{

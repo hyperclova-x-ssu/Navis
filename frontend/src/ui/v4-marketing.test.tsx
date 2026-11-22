@@ -181,7 +181,7 @@ describe('ConfirmStep',()=>{
     const { rerender } = renderWithKit(<ConfirmStep count={5} summary={[]} onSend={()=>{}} onCancel={()=>{}} phase="sending"/>);
     expect(screen.getByRole('status')).toHaveTextContent('보내고 있어요');expect(screen.getByRole('button',{name:'다음에'})).toBeDisabled();
     rerender(<ConfirmStep count={5} summary={[]} onSend={()=>{}} onCancel={()=>{}} phase="sent"/>);
-    expect(screen.getByRole('status')).toHaveTextContent('보냈어요(예시)');expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('보냈어요');expect(screen.queryByRole('button')).toBeNull();
   });
 });
 describe('CopyThenPosted',()=>{

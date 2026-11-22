@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import type { RunStore } from '../contracts';
+import type { RunState, RunStore } from '../contracts';
+import { useRunSlice } from './run-slice';
 import type { PosRuntime } from '../pos/runtime';
 import { ActionButton, Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle, ChipChoice, posTimeTokens, useUi } from '../ui';
 import { selectOrderSummary } from '../pos/status';
@@ -18,6 +19,7 @@ import { useAccountingViews, useMoneyRead, useWidgetDataStore, useWidgetView, Wi
 import { dataBundles, resolveDataText, selectMembers } from '../data/widget-data';
 import { cctvOccupancyObservations, cctvPosLinks, selectLinkedTableStates, tableLinksEnabled } from '../data/iteration7/table-links';
 import { createLinkPickers } from '../features/cctv/zones/linked-ui';
+import { useRealCctvLinks } from '../features/cctv/zones/real-links';
 import { cctvBundle, useCctvView } from '../features/cctv';
 import { getLiveClient } from '../features/cctv/live';
 import { useBundle } from '../i18n';
@@ -31,6 +33,10 @@ import type { MoneyReversalReceiptEntry } from '../screens/order/settlement/Mone
 import { getPaymentBillId, quotePaymentBill } from '../pos/loyalty';
 import { SharedPosPaymentDialog, SharedPosReversalDialog } from '../screens/order/settlement';
 import type { SettlementPaymentPhase } from '../screens/order/settlement/SharedPosPaymentDialog';
+import { bindPosBridge } from '../data/reality/02/adapter';
+import { createPosBridge, type PosBridge } from '../data/reality/02/bridge';
+import { createPosRemote } from '../data/reality/02/remote';
+import { PosBridgeProvider, usePosBridge } from '../pos/remote-context';
 
 export interface M2WidgetBindings {
   readonly customPort: CustomOrderPort;
@@ -61,7 +67,14 @@ function CoordinatedReceiptHost({ entry, onClose, returnFocusRef, scheduler = br
   const store = useWidgetDataStore();
   useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   useSyncExternalStore(money.subscribe, money.approval, money.approval);
+  const bridge = usePosBridge();
   if (!entry) return null;
+  // REAL-PLAN F02: over HTTP the receipt and its corrections come from the service (by payment), not from the local money coordinator.
+  if (bridge) {
+    const paymentId = 'paymentId' in entry ? entry.paymentId : entry.settlementId.replace(/^legacy:/, '');
+    return <ReversalReceipt key={`${paymentId}:${entry.view}`} paymentId={paymentId} initialView={entry.view} onClose={onClose}
+      fromMemberLedger={'settlementId' in entry && !entry.settlementId.startsWith('legacy:')} returnFocusRef={returnFocusRef}/>;
+  }
   const settlementId = 'settlementId' in entry ? entry.settlementId : money.receipt({ paymentId: entry.paymentId })?.settlementId;
   return settlementId !== undefined ? <MoneyReceiptRoute key={`${settlementId}:${entry.view}`} settlementId={settlementId} view={entry.view} money={money} onClose={onClose} returnFocusRef={returnFocusRef} scheduler={scheduler}/>
     : 'paymentId' in entry ? <ReversalReceipt key={`${entry.paymentId}:${entry.view}`} paymentId={entry.paymentId} initialView={entry.view} onClose={onClose}/> : null;
@@ -229,12 +242,22 @@ export function useRunCreditBinding(condition: import('../contracts').QueryCondi
   return view.status === 'ready' ? binding : { ...binding, view: { status: view.status === 'error' ? 'error' as const : 'empty' as const } };
 }
 
+/**
+ * The run fields the root host reads. A drag's drop-cell changes, a notice or a selection do not touch them, so the host (and every provider value it
+ * builds: widget data context, M2 widgets, custom orders, credit, settlement, accounting) stays still while a widget is dragged (PERF-DRAG-REAL).
+ */
+const pickM2Slice = (s: RunState) => ({ runId: s.runId, layer: s.layer, shopSettings: s.shopSettings, overlay: s.overlay, linkedOccupancy: s.linkedOccupancy,
+  exitPendingToken: s.exitPendingToken, preview: s.preview, activeInputs: s.activeInputs,
+  // `session.pos.read()` below is built from these (the other fields of the read, runRevision and the data snapshot, do not change what this host renders).
+  pos: s.pos, posUi: s.posUi, posRevision: s.posRevision });
+
 /** One root host: shared money and financial consumers remain mounted across layer changes. */
 export function M2RunHost({ run, children, scheduler = browserApprovalScheduler }: { readonly run: RunStore; readonly children?: ReactNode; readonly scheduler?: ApprovalScheduler }) {
   const session = useSessionActions(), custom = session.custom, money = session.money, data = useWidgetDataStore();
-  const state = useSyncExternalStore(run.subscribe, run.getState), snapshot = useSyncExternalStore(data.subscribe, data.getSnapshot);
+  const state = useRunSlice(run, pickM2Slice), snapshot = useSyncExternalStore(data.subscribe, data.getSnapshot);
   const approval = useSyncExternalStore(money.subscribe, money.approval, money.approval);
-  const view = useCctvView({ video: false }), { t } = useBundle(cctvBundle, posBundle, ...dataBundles);
+  const realLinks = useRealCctvLinks(state.shopSettings, state.overlay);
+  const view = useCctvView({ video: false, enabled: !realLinks.real }), { t } = useBundle(cctvBundle, posBundle, ...dataBundles);
   const [payment, setPayment] = useState<PaymentEntry | null>(null), [paymentFailure, setPaymentFailure] = useState<string | null>(null);
   const [reversal, setReversal] = useState<ReversalEntry | null>(null), [linkError, setLinkError] = useState<string | undefined>();
   const [receipt, setReceipt] = useState<(MoneyReversalReceiptEntry & { context: CustomReturnContext }) | null>(null);
@@ -245,11 +268,12 @@ export function M2RunHost({ run, children, scheduler = browserApprovalScheduler 
   useEffect(() => attachMoneyApprovalScheduler(money, scheduler), [money, scheduler]);
   // The existing reader owns reliability. Always ingest, including an empty source list.
   useLayoutEffect(() => {
+    if (realLinks.real) return;
     const current = run.getState(), activeZoneIds = view.tables.map(zone => zone.id), elapsedNow = current.linkedOccupancy.elapsedNow;
     if (view.mode === 'mock' || getLiveClient().getSnapshot().zones !== null) session.pruneCctvPosLinks(activeZoneIds);
     run.actions.reconcileLinkedOccupancy({ activeZoneIds, elapsedNow }, current.runId);
     for (const observation of cctvOccupancyObservations(view, new Date().toISOString(), elapsedNow)) run.actions.observeLinkedOccupancy(observation, current.runId);
-  }, [run, session, view]);
+  }, [realLinks.real, run, session, view]);
   const read = session.pos.read();
   const joined = useMemo(() => selectLinkedTableStates(read, { occupancy: state.linkedOccupancy, elapsedNow: state.linkedOccupancy.elapsedNow }), [read, state.linkedOccupancy]);
   const zones = useMemo(() => view.tables.map(zone => ({ id: zone.id, label: t(zone.label.key, zone.label.params) })), [view.tables, t]);
@@ -315,12 +339,17 @@ export function M2RunHost({ run, children, scheduler = browserApprovalScheduler 
     openAccounts: memberId => { if (canOpen()) run.actions.openLinkedDetail({ featureId: 'credit-receivable', itemId: memberId }); },
     openOriginalTransaction: (transaction, context) => {
       if (!canOpen()) return;
-      const settlementId = originalMoneySettlement(money.read(), transaction);
+      const settlementId = data.real?.mode('pos') === 'http' && transaction.settlementId
+        ? transaction.settlementId : originalMoneySettlement(money.read(), transaction);
       // A missing original stays an unavailable receipt, never another member's last receipt.
       setReceipt({ settlementId: settlementId ?? '', view: 'receipt', context: retainedReturnContext(context) });
     },
     openMembershipUse: (memberId, membershipId, context) => {
       if (!canOpen()) return;
+      if (data.real?.mode('pos') === 'http') {
+        run.actions.showNotice({ kind: 'error', messageKey: 'pos.notice', params: { message: 'POS 결제에서 회원권을 적용할 수 없어요' } });
+        return;
+      }
       setUseRequest({ memberId, membershipId, context: retainedReturnContext(context) });
       run.actions.closeOverlay();
     },
@@ -377,13 +406,14 @@ export function M2RunHost({ run, children, scheduler = browserApprovalScheduler 
     if (!canOpen()) return;
     setReceipt({ settlementId: row.settlementId, view: 'receipt', context: { selectedId: row.id, returnFocusRef: { current: document.activeElement instanceof HTMLElement ? document.activeElement : null } } });
   } };
-  const hostBinding: M2WidgetBindings = { customPort, tableLinkPicker: pickers.table, resetPreview: run.actions.resetWidgetPreview, busy: approval?.status === 'pending' || pendingReversal.current, cctv: { linkPicker: pickers.zone, linkZones: zones, linkedTables: joined.tables, linkError } };
-  const viewContext = useMemo(() => ({ linkedTableTasks: joined.seatedWithoutOrderTasks.map(task => ({ ...task, params: { ...task.params, table: tables.find(table => table.id === task.tableId)?.label ?? task.params.table } })) }), [joined.seatedWithoutOrderTasks, tables]);
+  const hostBinding: M2WidgetBindings = { customPort, tableLinkPicker: realLinks.real ? realLinks.tablePicker : pickers.table, resetPreview: run.actions.resetWidgetPreview, busy: approval?.status === 'pending' || pendingReversal.current,
+    cctv: realLinks.real ? realLinks.cctv : { linkPicker: pickers.zone, linkZones: zones, linkedTables: joined.tables, linkError } };
+  const viewContext = useMemo(() => ({ linkedTableTasks: realLinks.real ? [] : joined.seatedWithoutOrderTasks.map(task => ({ ...task, params: { ...task.params, table: tables.find(table => table.id === task.tableId)?.label ?? task.params.table } })) }), [realLinks.real, joined.seatedWithoutOrderTasks, tables]);
   const paymentTarget = payment?.quote.target;
   const fundingMemberId = paymentTarget?.purpose === 'custom_order' ? custom.read().tables.customOrder.find(row => row.customOrderId === paymentTarget.customOrderId)?.memberId
     : payment && 'memberId' in payment.quote.target ? payment.quote.target.memberId : undefined;
   const paymentSummary = paymentTarget?.purpose === 'custom_order' ? custom.read().tables.customOrder.find(order => order.customOrderId === paymentTarget.customOrderId)?.productLabel ?? '' : fundingMemberId ? member(fundingMemberId)?.label ?? '' : '';
-  return <WidgetDataProvider store={data} preview={state.preview} viewContext={viewContext}><M2WidgetProvider value={hostBinding}><CustomOrderProvider port={customPort}><CreditPortContext.Provider value={creditPort}><MemberMoneyProvider binding={binding}><SettlementUiProvider value={salePort}><AccountingPresentationProvider value={presentation}>
+  return <WidgetDataProvider store={data} preview={state.preview} viewContext={viewContext}><PosRealHost><M2WidgetProvider value={hostBinding}><CustomOrderProvider port={customPort}><CreditPortContext.Provider value={creditPort}><MemberMoneyProvider binding={binding}><SettlementUiProvider value={salePort}><AccountingPresentationProvider value={presentation}>
     {children}
     {useRequest && state.layer === 'orders-payment' && <MembershipUseHandoff request={useRequest} session={session} onChange={setUseRequest} onReturn={() => {
       const context = useRequest.context;
@@ -398,7 +428,40 @@ export function M2RunHost({ run, children, scheduler = browserApprovalScheduler 
     }} onReset={() => { money.dismissApproval(); setPaymentFailure(null); setPayment(current => current ? { ...current, quote: money.quoteSettlement({ target: current.quote.target, allocations: current.quote.allocations }) } : current); }} onClose={closePayment}/> : null}
     {reversal ? <SharedPosReversalDialog mode="money" key={reversal.key} open quote={reversal.quote} phase={reversal.phase} returnFocusRef={reversal.context.returnFocusRef} cancelOrder={reversal.cancelOrder} onConfirm={confirmReversal} onClose={() => { if (!pendingReversal.current) setReversal(null); }} onRetry={() => setReversal(current => current ? { ...current, key: crypto.randomUUID(), quote: money.quoteReversal(current.quote.input), phase: readyPhase } : null)} onAmountChange={amount => setReversal(current => current ? { ...current, quote: money.quoteReversal({ ...current.quote.input, amount: amount ?? 0 }) } : null)}/> : null}
     <PosReceiptHost entry={receipt} onClose={() => setReceipt(null)} returnFocusRef={receipt?.context.returnFocusRef} scheduler={scheduler}/>
-  </AccountingPresentationProvider></SettlementUiProvider></MemberMoneyProvider></CreditPortContext.Provider></CustomOrderProvider></M2WidgetProvider></WidgetDataProvider>;
+  </AccountingPresentationProvider></SettlementUiProvider></MemberMoneyProvider></CreditPortContext.Provider></CustomOrderProvider></M2WidgetProvider></PosRealHost></WidgetDataProvider>;
+}
+
+/**
+ * REAL-PLAN F02: when the POS domain runs over HTTP, one bridge per run publishes the service's records into the run and carries the
+ * owner's checkout, correction and preparation commands. Fixture builds get no bridge and every POS screen keeps its local behavior.
+ */
+function PosRealHost({ children }: { readonly children: ReactNode }) {
+  const data = useWidgetDataStore(), session = useSessionActions(), real = data.real;
+  const bridge = useMemo<PosBridge | null>(() => {
+    if (!real || real.mode('pos') !== 'http') return null;
+    return createPosBridge({
+      remote: createPosRemote({ transport: real.transport, reads: real.reads }),
+      read: session.pos.read, commit: session.commit,
+      reload: domains => { for (const domain of domains) if (real.mode(domain) === 'http') void real.load(domain, { force: true }); },
+    });
+  }, [real, session]);
+  useEffect(() => {
+    if (!bridge || !real) return;
+    bindPosBridge(bridge);
+    // The port loads the domain once idle (first start, retry, store change) and the adapter drives `bridge.sync()`.
+    const kick = () => {
+      if (real.state('pos').status === 'idle') void real.load('pos');
+      if (real.mode('menu') === 'http' && real.state('menu').status === 'idle') void real.load('menu');
+      // Cart validation needs the current store's ingredient units for the menu's real recipe.
+      if (real.mode('stock') === 'http' && real.state('stock').status === 'idle') void real.load('stock');
+      // R1-F06-2: the table map shows the booking that is due at a table; over HTTP its rows come from the booking domain.
+      if (real.mode('booking') === 'http' && real.state('booking').status === 'idle') void real.load('booking');
+    };
+    kick();
+    const off = real.subscribe(kick);
+    return () => { off(); bindPosBridge(undefined); bridge.dispose(); };
+  }, [real, bridge]);
+  return <PosBridgeProvider value={bridge}>{children}</PosBridgeProvider>;
 }
 
 function MembershipUseHandoff({ request, session, onChange, onReturn }: {

@@ -34,12 +34,12 @@ const fact = (store: WidgetDataStore, id: FeatureId, key: string) => factsOf(sto
 const ok = (r: DataCommandResult) => { if (!r.ok) throw new Error(`${r.code} ${r.messageKey}`); return r; };
 
 describe('widget modules (API-13, AC-271·319)', () => {
-  it('registers exactly the 30 registry widgets (management 17, marketing 13) with a panel, a summary and a detail; only marketing-today has no detail', () => {
+  it('registers exactly the 29 registry widgets (management 17, marketing 12) with a panel, a summary and a detail; only marketing-today has no detail', () => {
     const ids = widgetModules.map(m => m.id);
-    expect(new Set(ids).size).toBe(30);
+    expect(new Set(ids).size).toBe(29);
     expect([...ids].sort()).toEqual(getRegistry('A').map(f => f.id).sort());
     expect(ids.filter(id => getLayerCatalog('A', 'management').some(f => f.id === id))).toHaveLength(17);
-    expect(ids.filter(id => getLayerCatalog('A', 'marketing').some(f => f.id === id))).toHaveLength(13);
+    expect(ids.filter(id => getLayerCatalog('A', 'marketing').some(f => f.id === id))).toHaveLength(12);
     for (const module of widgetModules) {
       expect(typeof module.Panel, module.id).toBe('function');
       expect(typeof module.useSummary, module.id).toBe('function');

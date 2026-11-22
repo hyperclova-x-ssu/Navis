@@ -13,7 +13,9 @@ function freeze<T>(value:T):T {
 }
 export function normalizeSearch(value:string):string { return value.normalize('NFKC').toLocaleLowerCase('ko-KR').replace(/\s+/gu,'').trim(); }
 
-/** API-279 M3: one immutable catalog for management (17) and marketing (13). */
+/** D-365: widgets that left the product. A board saved with one drops it when it loads (src/state/removed-widgets.ts). The id may stay a data-model id (FeatureId) that other widgets and the chat still read. */
+export const REMOVED_WIDGET_IDS:readonly FeatureId[]=Object.freeze(['marketing-performance'] as const);
+/** API-279 M3: one immutable catalog for management (17) and marketing (12). */
 const registryTable: readonly [FeatureId,string,DashboardLayerId,GroupId,DetailFrame,DetailKind,readonly string[]][] = [
  ['menu','메뉴','management','products','large','list-work',[]],
  ['custom-order','주문제작','management','products','large','list-work',['케이크 주문','맞춤 주문']],
@@ -45,7 +47,6 @@ const registryTable: readonly [FeatureId,string,DashboardLayerId,GroupId,DetailF
  ['notice-send','공지 발송','marketing','news','large','list-work',['휴무','공지']],
  ['coupon-status','진행 중인 쿠폰','marketing','money','large','list-work',['쿠폰','진행 중','사용 현황']],
  ['customer-groups','손님 그룹','marketing','customers','large','list-work',['단골','첫 방문','이탈']],
- ['marketing-performance','마케팅 성과','marketing','money','large','chart',['성과','경로','쿠폰 사용']],
 ];
 const registrations:ReadonlyMap<string,WidgetRegistration>=new Map(registryTable.map(([id,label,layer,groupId,frame,kind,aliases])=>[id,freeze({
   id,label,panelTitle:label,aliases,groupId,iconKey:id,layer,
@@ -78,7 +79,7 @@ export function searchFeatures<T>(features:readonly T[],query:string,termsOf:(fe
 const presetLabels: readonly [BusinessType|'general',string][] = [['cafe','카페'],['restaurant','음식점'],['pub','주점'],['beauty','미용·뷰티'],['retail','소매'],['academy','학원'],['fitness','운동'],['other','기타'],['general','']];
 const layerPresetData: Readonly<Record<DashboardLayerId,Readonly<Record<BusinessType|'general',readonly FeatureId[]>>>> = {
  management:managementRecommendations,
- marketing:{cafe:['marketing-today','marketing-performance','ai-response','slot-coupon','promo-video'],restaurant:['marketing-today','marketing-performance','ai-response','slot-coupon','promo-video'],pub:['marketing-today','marketing-performance','ai-response','slot-coupon','promo-video'],beauty:['marketing-today','marketing-performance','slot-coupon','customer-groups','ai-response'],retail:['marketing-today','marketing-performance','expiry-coupon','coupon-status','ai-response'],academy:['marketing-today','marketing-performance','ai-response','slot-coupon','promo-video'],fitness:['marketing-today','marketing-performance','ai-response','slot-coupon','promo-video'],other:['marketing-today','marketing-performance','promo-video','slot-coupon','local-changes'],general:['marketing-today','marketing-performance','ai-response','slot-coupon','promo-video']},
+ marketing:{cafe:['marketing-today','ai-response','slot-coupon','promo-video'],restaurant:['marketing-today','ai-response','slot-coupon','promo-video'],pub:['marketing-today','ai-response','slot-coupon','promo-video'],beauty:['marketing-today','slot-coupon','customer-groups','ai-response'],retail:['marketing-today','expiry-coupon','coupon-status','ai-response'],academy:['marketing-today','ai-response','slot-coupon','promo-video'],fitness:['marketing-today','ai-response','slot-coupon','promo-video'],other:['marketing-today','promo-video','slot-coupon','local-changes'],general:['marketing-today','ai-response','slot-coupon','promo-video']},
 };
 const makePreset=(businessType:BusinessType|'general',label:string,layer:DashboardLayerId):BusinessPreset=>{const recommendationIds=layerPresetData[layer][businessType];return {businessType,label,recommendationIds,starterIds:recommendationIds.slice(0,3),starterMessageKey:businessType==='general'?'starter.general':'starter.business',layer};};
 export const layerBusinessPresets: Readonly<Record<DashboardLayerId,readonly BusinessPreset[]>> = freeze({
@@ -100,10 +101,9 @@ const marketingBase:readonly MarketingPresetCell[]=[
   {featureId:'marketing-today',column:0,row:0,width:4,height:1},
   {featureId:'ai-response',column:0,row:1,width:2,height:1},{featureId:'expiry-coupon',column:2,row:1,width:2,height:1},{featureId:'promo-video',column:4,row:1,width:2,height:1},
   {featureId:'slot-coupon',column:0,row:2,width:2,height:1},{featureId:'coupon-status',column:2,row:2,width:2,height:1},{featureId:'customer-groups',column:4,row:2,width:2,height:1},
-  {featureId:'marketing-performance',column:0,row:3,width:4,height:1},
 ];
 const marketingFirst:Readonly<Partial<Record<BusinessType,FeatureId>>>={beauty:'slot-coupon',retail:'expiry-coupon',other:'promo-video'};
-/** Chosen widget X goes to the 2nd-row first cell, the old 2nd-row first goes to the 3rd-row first cell, the old 3rd-row first goes to X's old cell. Always eight distinct widgets. */
+/** Chosen widget X goes to the 2nd-row first cell, the old 2nd-row first goes to the 3rd-row first cell, the old 3rd-row first goes to X's old cell. Always seven distinct widgets. */
 export function getMarketingPreset(businessType:BusinessType|null):readonly MarketingPresetCell[]{
   const x=(businessType&&marketingFirst[businessType])||marketingBase[1].featureId;
   return Object.freeze(marketingBase.map(cell=>Object.freeze({...cell,featureId:cellOwner(cell,x)})));

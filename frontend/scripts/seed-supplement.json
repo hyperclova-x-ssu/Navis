@@ -8,7 +8,6 @@
       {"zone": "bar", "seats": 6, "occupied": 2}
     ],
     "cameras": [
-      {"cameraId": "sample-entrance", "name": "출입구", "operation": "recording"},
       {"cameraId": "sample-window", "name": "창가 좌석", "operation": "recording"}
     ]
   },

@@ -26,6 +26,7 @@
 .settings-sections>[role="group"] {display:flex;flex-direction:column;gap:var(--space-2);}
 .settings-sections {display:flex;flex-direction:column;gap:var(--space-6);}
 .settings-sections>[role="group"]>h3 {margin:0 0 var(--space-2);}
+.ui-theme-tabs-list>.ui-button {flex:1 1 0;}
 .ui-theme-tabs-list [data-active]>.ui-press-surface {background:var(--selection);color:var(--selection-foreground);border:var(--stroke-control) solid var(--selection-foreground);font-weight:var(--weight-bold);}
 
 [data-business-highlight] .ui-list-select-row>.ui-press-surface {animation:settings-business-highlight 800ms ease-out;}

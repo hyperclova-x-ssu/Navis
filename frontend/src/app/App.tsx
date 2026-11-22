@@ -1,9 +1,11 @@
 import navisLogo from '../assets/brand/navis-logo.svg';
 import '../assets/brand/brand.css';
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import type { LayerId, RunStore } from '../contracts';
+import type { LayerId, RunState, RunStore } from '../contracts';
+import { useRunSlice } from './run-slice';
 import { I18nProvider, useI18n } from '../i18n';
 import { createWidgetDataStore } from '../data/widget-data';
+import { createAppRealPort } from '../data/reality/00/app-port';
 import { WidgetDataProvider } from '../data/react';
 import { WidgetRegistryProvider } from '../features/widgets/registry-context';
 import { widgetModules } from '../features/widgets/registry';
@@ -27,6 +29,7 @@ import { readBrowserPreferences } from './run';
 import {VerificationControls,VerificationFault,type AppVerification} from './verification';
 import {createSessionActions,sessionGateFor,SessionActionsProvider} from './session-actions';
 import {ClosingOverlay} from './ClosingOverlay';
+import {ConnectOrderIntake} from '../connect-kiosk/intake';
 import {layoutEditCopy} from './layout-edit-messages';
 import {CommonNotice} from './CommonNotice';
 import {TemplateTour} from './template-tour';
@@ -35,6 +38,7 @@ import {attachRunTimers,selectTemplateInteractionBlocked} from '../state';
 import {useWidgetDataStore} from '../data/react';
 import {resolveClosingVariant,selectClosing,TODAY} from '../data/widget-data';
 import {ExampleStateChipForRun} from '../screens/settings';
+import {previewStatesEnabled} from '../screens/settings/start-view';
 import {ClosingButton,ClosedDayState} from '../ui';
 import './app.css';
 export interface AppProps { readonly run:RunStore;readonly verification?:AppVerification;readonly onRestart?:()=>void;readonly manageLifecycle?:boolean }
@@ -78,7 +82,8 @@ function RunView({run,verification,fail,clearFailure,setFailure}:ExecutionProps)
         else if(state.overlay.type!=='settings'||!settingsRef.current?.isConnected)settingsRef.current=document.querySelector<HTMLElement>('[data-focus-key="settings"]');
     },[state.screen,state.overlay.type,state.edit.mode,layer]);
     useLayoutEffect(()=>{dashboardRef.current=state.screen==='dashboard'?document.getElementById('dashboard'):null;},[state.screen]);
-    useLayoutEffect(()=>{if(!focusAfterSwitch.current)return;const heading=document.querySelector<HTMLElement>(layer==='management'||layer==='marketing'?'.dashboard-header h1':'.order-header h1');if(heading){heading.tabIndex=-1;heading.focus();focusAfterSwitch.current=false;}},[layer]);
+    // D-366: every layer renders the shared LayerHeader; the exiting layer stays mounted (inert) during a switch, so only the live heading takes focus.
+    useLayoutEffect(()=>{if(!focusAfterSwitch.current)return;const heading=Array.from(document.querySelectorAll<HTMLElement>('.dashboard-header h1')).find(node=>!node.closest('[inert],[data-exiting="true"]'))??null;if(heading){heading.tabIndex=-1;heading.focus();focusAfterSwitch.current=false;}},[layer]);
     // 배치 편집 (U-B): the same edit mode a long press on a panel opens. Keyboard focus follows into the toolbar and back to the button after 완료.
     useLayoutEffect(()=>{
         if(!editFromButton.current)return;
@@ -99,16 +104,18 @@ function RunView({run,verification,fail,clearFailure,setFailure}:ExecutionProps)
     }}>{body}</ScreenTransition>;
     return <>
         {showNavigation?<div className="app-layer-navigation"><img className="navis-logo" src={navisLogo} alt="Navis" /><nav aria-label={t('shell.screens')}>{layerItems.map(item=><ActionButton key={item} variant="ghost" data-layer={item} aria-current={layer===item?'page':undefined} disabled={blocked||posBusy} onClick={()=>switchLayer(item)}>{t(layerLabelKeys[item])}</ActionButton>)}</nav></div>:null}
-        {state.screen==='dashboard'&&state.edit.mode!=='edit'&&state.idle.mode!=='idle'?<div className="app-closing-header"><ExampleStateChipForRun run={run}/><span className="app-closing-badge">{closing.status==='closed'?<ClosedDayState closed variant="header"/>:null}</span>{isPos?null:<span className="app-layout-edit"><ActionButton id="app-layout-edit" data-focus-key="layout-edit" variant="secondary" className="app-layout-edit-button" aria-label={layoutCopy.open} aria-describedby={hasPanels?undefined:editReasonId} disabled={blocked||posBusy||!hasPanels} onClick={()=>{editFromButton.current=true;run.actions.enterEditing();}}><Icon name="move"/>{layoutCopy.button}</ActionButton>{hasPanels?null:<span id={editReasonId} className="app-layout-edit__reason">{layoutCopy.empty}</span>}</span>}<ClosingButton id="app-closing" data-focus-key="closing" closed={closing.status==='closed'} disabled={blocked||posBusy} onClick={()=>run.actions.openClosing('app-closing')}/></div>:null}
+        {state.screen==='dashboard'&&state.edit.mode!=='edit'&&state.idle.mode!=='idle'?<div className="app-closing-header">{previewStatesEnabled()?<ExampleStateChipForRun run={run}/>:null}<span className="app-closing-badge">{closing.status==='closed'?<ClosedDayState closed variant="header"/>:null}</span>{isPos?null:<span className="app-layout-edit"><ActionButton id="app-layout-edit" data-focus-key="layout-edit" variant="secondary" className="app-layout-edit-button" aria-label={layoutCopy.open} aria-describedby={hasPanels?undefined:editReasonId} disabled={blocked||posBusy||!hasPanels} onClick={()=>{editFromButton.current=true;run.actions.enterEditing();}}><Icon name="move"/>{layoutCopy.button}</ActionButton>{hasPanels?null:<span id={editReasonId} className="app-layout-edit__reason">{layoutCopy.empty}</span>}</span>}<ClosingButton id="app-closing" data-focus-key="closing" closed={closing.status==='closed'} disabled={blocked||posBusy} onClick={()=>run.actions.openClosing('app-closing')}/></div>:null}
         <DashboardScreen run={run} manageTimers={false} posBusy={posBusy} ready={settled?.runId===state.runId&&settled.transitionToken===state.transitionToken} renderScreen={board=>transition(state.screen==='business-question'?<OnboardingScreen run={run}/>:isPos?<OrderScreen run={run} onOpenReceipt={setReceiptEntry} linkedTables={m2?.cctv.linkedTables}/>:board)}/>
         <SettingsOverlay run={run} tableLinkPicker={m2?.tableLinkPicker} tableLinkError={m2?.cctv.linkError} returnFocusRef={verification?.scenario==='error-settings'?undefined:settingsRef} verification={{failContent:fail&&verification?.scenario==='error-settings',onRetry:clearFailure}}/><DetailOverlay run={run} simulateContentError={fail&&verification?.scenario==='error-detail'}/><BriefingOverlay run={run} returnFocusRef={dashboardRef} verification={{failContent:fail&&verification?.scenario==='error-briefing',onRetry:clearFailure}}/>
-        <ClosingOverlay run={run} onOpenReceipt={setReceiptEntry}/><PosReceiptHost entry={receiptEntry} onClose={()=>setReceiptEntry(null)}/><TemplateTour run={run}/><CommonNotice run={run}/><PosAlertHost run={run}/>
+        <ClosingOverlay run={run} onOpenReceipt={setReceiptEntry}/><PosReceiptHost entry={receiptEntry} onClose={()=>setReceiptEntry(null)}/><TemplateTour run={run}/><CommonNotice run={run}/><PosAlertHost run={run}/><ConnectOrderIntake run={run}/>
         {verification?<VerificationControls scenario={verification.scenario} state={state} onFailure={setFailure}/>:null}
     </>;
 }
+/** The canvas reads four run fields. A drag's drop-cell change must not re-render it, the UI provider and the POS host below it (PERF-DRAG-REAL). */
+const pickCanvas=(s:RunState)=>({screenPreset:s.screenPreset,theme:s.theme,textScale:s.textScale,reducedMotion:s.reducedMotion});
 function RunCanvas(props:ExecutionProps){
     const {run,verification,fail}=props;
-    const state=useSyncExternalStore(run.subscribe,run.getState);
+    const state=useRunSlice(run,pickCanvas);
     const [viewport]=useState(()=>createViewportSource(run,window));
     const transform=useSyncExternalStore(viewport.subscribe,viewport.getSnapshot);
     const preset=state.screenPreset;
@@ -123,8 +130,13 @@ export function App({run,verification,onRestart,manageLifecycle=true}:AppProps){
     const preview=useSyncExternalStore(run.subscribe,()=>run.getState().preview);
     const system=useSystemPreferences();
     // One fake DB per run: a new run (restart, reset, reload) starts from the seed again.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const dataStore=useMemo(()=>createWidgetDataStore(run.getState().onboarding.step==='done'?{shopSettings:{...run.getState().shopSettings,layoutActivated:false}}:undefined,{runId,sessionGate:sessionGateFor(run),pos:run.getState().pos,readPosUi:()=>run.getState().posUi}),[runId,run]);
+    const dataStore=useMemo(()=>{
+        const store=createWidgetDataStore(run.getState().onboarding.step==='done'?{shopSettings:{...run.getState().shopSettings,layoutActivated:false}}:undefined,{runId,sessionGate:sessionGateFor(run),pos:run.getState().pos,readPosUi:()=>run.getState().posUi});
+        // REAL-PLAN F00: HTTP domains (a no-op on fixture builds). A failed background write rolls back and tells the owner.
+        createAppRealPort(store);
+        return store;
+    },[runId,run]);
+    useEffect(()=>dataStore.real?.onFailure(({result})=>{run.actions.showNotice({kind:'error',messageKey:result.messageKey});}),[dataStore,run]);
     const sessionActions=useMemo(()=>createSessionActions(run,dataStore,sessionGateFor(run)),[run,dataStore]);
     useEffect(()=>()=>sessionActions.pos.dispose(),[sessionActions]);
     const [failure,setFailure]=useState(()=>({runId,active:verification?.initialFailure??false}));

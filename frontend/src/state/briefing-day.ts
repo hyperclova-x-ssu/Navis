@@ -1,12 +1,12 @@
 import manifest from '../data/db/generated/manifest.json';
+import { readAppClock } from '../data/db/app-clock';
 import { STORE_HOURS, STORE_WEEKDAYS } from '../data/store-hours';
-import { businessNow as appBusinessNow } from '../pos/clock';
 
 /**
  * D-327 (2026-11-21): the arrival briefing opens by itself at most once per business day, so a reload,
  * data reset, example state or business-type change in the middle of work never brings it back.
  * A business day runs from the store's opening time minus 2 hours on that weekday until the next
- * day's opening minus 2 hours (Asia/Seoul wall clock, read from the app's business clock, never the device's).
+ * day's opening minus 2 hours, measured in the store's local time.
  */
 export const BRIEFING_LEAD_MINUTES = 120;
 
@@ -17,7 +17,6 @@ const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
 const LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/;
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
-
 const dayKey = (utcMidnightMs: number): string => new Date(utcMidnightMs).toISOString().slice(0, 10);
 /** Minutes (on the wall-clock axis) at which the business day of the calendar day starting at `utcMidnightMs` begins. */
 function businessDayStart(utcMidnightMs: number): number {
@@ -53,9 +52,19 @@ export function browserBriefingStorage(win: Pick<Window, 'localStorage'>): Brief
 export interface BriefingDayOptions {
   /** Where the last shown business day is remembered. Absent or unusable: once per run only. */
   readonly briefingStorage?: BriefingDayStorage | null;
-  /** The app's business clock as local `YYYY-MM-DDTHH:mm`. Defaults to the fixed demo time. */
+  /** The run's store ID. The standalone app defaults to its seed store. */
+  readonly storeId?: string;
+  /** The run's clock as local `YYYY-MM-DDTHH:mm`. Defaults to the shared app clock. */
   readonly businessNow?: () => string;
+  /** REAL-PLAN F12: the service's view of the arrival day (HTTP builds only). Absent: the local rule alone, exactly as before. */
+  readonly briefingServer?: () => BriefingServerDay | null | undefined;
 }
+
+/**
+ * What the service says about the arrival: `arrivalDay` replaces the local weekday rule when it has authoritative weekly opening times (null keeps the local rule),
+ * `acknowledgedDay` is the business day the owner explicitly confirmed. `undefined` from the source means not known yet (the card waits); `null` means no usable answer.
+ */
+export interface BriefingServerDay { readonly arrivalDay: string | null; readonly acknowledgedDay: string | null }
 
 export interface BriefingDayGate {
   /**
@@ -68,15 +77,17 @@ export interface BriefingDayGate {
 }
 
 export function createBriefingDayGate(options: BriefingDayOptions = {}): BriefingDayGate {
-  const clock = options.businessNow ?? appBusinessNow;
-  const key = briefingDayStorageKey();
-  let decided: { readonly runId: string; readonly day: string } | null = null;
+  const clock = options.businessNow ?? (() => readAppClock().local);
+  const key = briefingDayStorageKey(options.storeId);
+  let decided: { readonly runId: string; readonly day: string | null } | null = null;
   let cached: { readonly text: string; readonly day: string | null } | null = null;
-  const today = (): string | null => {
+  const localDay = (): string | null => {
     const text = clock();
     if (cached?.text !== text) cached = { text, day: briefingBusinessDay(text) };
     return cached.day;
   };
+  const server = () => options.briefingServer?.();
+  const today = (): string | null => server()?.arrivalDay ?? localDay();
   const read = (): string | null => {
     try {
       const value = options.briefingStorage?.getItem(key);
@@ -86,14 +97,15 @@ export function createBriefingDayGate(options: BriefingDayOptions = {}): Briefin
   const write = (day: string): void => { try { options.briefingStorage?.setItem(key, day); } catch { /* once per run is the fallback */ } };
   // The decision is remembered per run and business day, so the storage is read only when the card is about to open.
   // An unreadable business clock (day null) stores nothing and decides once per run.
-  const mark = (): string => today() ?? '';
   return {
-    settled: runId => decided !== null && decided.runId === runId && decided.day === mark(),
+    settled: runId => decided?.runId === runId && decided.day === today(),
     claim: runId => {
+      // The service's answer is still on its way: decide nothing and ask again on the next tick.
+      if (options.briefingServer && server() === undefined) return false;
       const day = today();
-      if (decided?.runId === runId && decided.day === mark()) return false;
-      const shown = day !== null && read() === day;
-      decided = { runId, day: mark() };
+      if (decided?.runId === runId && decided.day === day) return false;
+      const shown = day !== null && (read() === day || server()?.acknowledgedDay === day);
+      decided = { runId, day };
       if (day !== null && !shown) write(day);
       return !shown;
     },

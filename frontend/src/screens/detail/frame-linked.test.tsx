@@ -97,3 +97,29 @@ describe.each([{ textScale: 100 as const }, { textScale: 125 as const }])('U-D l
     expect(frame()).toEqual(linked);
   });
 });
+
+/** U-D: the kit animates the dialog's size only through `detail-frame-resize`, which exists only while a fullscreen change runs. */
+describe('U-D detail-frame-resize class', () => {
+  const resizing = () => screen.getByRole('dialog').classList.contains('detail-frame-resize');
+  it('a link and the way back swap frames without the resize transition class', async () => {
+    setup();
+    await openDirect('briefing');
+    expect(resizing()).toBe(false);
+    await openLinked('재고 열기', 'inventory-booking');
+    expect(resizing()).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: '돌아가기' }));
+    await waitFor(() => expect(screen.getByTestId('body-briefing')).toBeVisible());
+    expect(resizing()).toBe(false);
+  });
+  it('the fullscreen toggle adds it for the length of the size change, in both directions, and then drops it', async () => {
+    setup();
+    await openDirect('suppliers');
+    expect(resizing()).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: '자세히 보기 전체 화면으로 보기' }));
+    await waitFor(() => expect(resizing()).toBe(true));
+    await waitFor(() => expect(resizing()).toBe(false), { timeout: 2000 });
+    fireEvent.click(screen.getByRole('button', { name: '자세히 보기 원래 크기로 보기' }));
+    await waitFor(() => expect(resizing()).toBe(true));
+    await waitFor(() => expect(resizing()).toBe(false), { timeout: 2000 });
+  });
+});

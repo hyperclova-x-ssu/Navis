@@ -4,12 +4,12 @@ import { getCatalog,getRegistry,getLayerCatalog,listFeatures } from './index';
 // AC-271 (D-54, T-055): stock-sync is merged into inventory-booking and exists nowhere — no FeatureId, no list, no drawer, no search.
 describe.each(['A','B'] as const)('%s run catalog',presetId=>{
   const catalog=getCatalog(presetId);
-  it('is the 30-widget registry: frozen, one per id, management 17 and marketing 13 (iteration-3 22-item list removed)',()=>{
+  it('is the 29-widget registry: frozen, one per id, management 17 and marketing 12 (마케팅 성과 removed, D-365) (iteration-3 22-item list removed)',()=>{
     expect(catalog).toBe(getRegistry(presetId));
-    expect(new Set(catalog.map(f=>f.id)).size).toBe(30);expect(Object.isFrozen(catalog)).toBe(true);
+    expect(new Set(catalog.map(f=>f.id)).size).toBe(29);expect(Object.isFrozen(catalog)).toBe(true);
     for(const f of catalog){expect(f.presetId).toBe(presetId);expect(Object.isFrozen(f)).toBe(true);}
-    expect(getLayerCatalog(presetId,'management')).toHaveLength(17);expect(getLayerCatalog(presetId,'marketing')).toHaveLength(13);
-    expect(catalog.reduce<Record<string,number>>((sum,f)=>({...sum,[f.groupId]:(sum[f.groupId]??0)+1}),{})).toEqual({products:2,stock:2,finance:3,members:2,store:2,misc:3,schedule:3,neighborhood:4,customers:3,recommended:1,money:3,news:2});
+    expect(getLayerCatalog(presetId,'management')).toHaveLength(17);expect(getLayerCatalog(presetId,'marketing')).toHaveLength(12);
+    expect(catalog.reduce<Record<string,number>>((sum,f)=>({...sum,[f.groupId]:(sum[f.groupId]??0)+1}),{})).toEqual({products:2,stock:2,finance:3,members:2,store:2,misc:3,schedule:3,neighborhood:4,customers:3,recommended:1,money:2,news:2});
   });
   it('has no stock-sync anywhere a user can reach a widget (AC-271)',()=>{
     expect(catalog.some(f=>(f.id as string)==='stock-sync')).toBe(false);

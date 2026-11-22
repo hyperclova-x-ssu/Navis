@@ -1,4 +1,4 @@
-// Commander-only real-screen check. This boots the actual BrowserApp, observes its
+// Maintainer-only real-screen check. This boots the actual BrowserApp, observes its
 // existing stores, and uses wheel input; no scrollTop assignment or scrollIntoView.
 import { runtime } from '../../features/widgets/dev/i5/runtime.mjs';
 import { emptyStart } from '../../features/widgets/dev/i5/walkthrough-support.mjs';

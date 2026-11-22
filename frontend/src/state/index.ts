@@ -1,6 +1,7 @@
 import { createStore } from 'zustand/vanilla';
-import type { BlockedReason, CellSpan, CoachStep, CommandResult, DashboardBoard, DashboardLayerId, DashboardPage, DetailRef, DetailReturnState, FeatureId, GesturePreview, GuidanceProgress, InputSequence, LayerId, LayoutIntent, LayoutResult, LayoutResponse, LayoutWorkerResponse, Notice, OnboardingState, Panel, PreparedChange, PrepareResult, PreviewFamily, PreviewPosition, PreviewTarget, QueryCondition, ResolvedCatalog, RunActions, RunContext, RunOptions, RunResetOptions, RunSessionInput, RunState as BaseRunState, RunStore, SessionTransaction, SessionTransactionPort, TableLayout, TimerScheduler, UndoEntry, UndoPauseReason, WidgetCoachStatus } from '../contracts';
+import type { BlockedReason, CellSpan, CoachStep, CommandResult, DashboardBoard, DashboardLayerId, DashboardPage, DetailRef, DetailReturnState, FeatureId, GesturePreview, GuidanceProgress, InputSequence, LayerId, LayoutIntent, LayoutResult, LayoutResponse, LayoutWorkerResponse, Notice, OnboardingState, Panel, PreparedChange, PrepareResult, PreviewFamily, PreviewPosition, PreviewTarget, QueryCondition, ResolvedCatalog, RunActions, RunContext, RunOptions, RunResetOptions, RunSessionInput, RunState as BaseRunState, RunStore, SessionTransaction, SessionTransactionPort, ShopSettings, TableLayout, TimerScheduler, Theme, Locale, UndoEntry, UndoPauseReason, WidgetCoachStatus } from '../contracts';
 import { locales } from '../contracts';
+import type { NoticeRequest } from '../contracts';
 import { getBusinessPreset, getManagementTemplates, getMarketingPreset, getRegistration } from '../catalog';
 import { evaluate, fastPreview, layoutResult, nearestEmptyRect, samePanels } from '../layout';
 import { layoutCacheKey } from '../layout/cache';
@@ -14,19 +15,51 @@ import { createLinkedOccupancyState, observeLinkedOccupancy, reconcileLinkedOccu
 import type { PosReadSnapshot } from '../contracts/pos';
 import { initializeCustomPos } from '../data/pos/projection';
 import { NORMAL_VARIANT, previewVariants } from '../data/preview/variants';
-import { PAGE_LIMIT } from './navis-layout';
+import { withoutRemovedWidgets } from './removed-widgets';
+import { PAGE_LIMIT, type NavisLayoutPlan } from './navis-layout';
 import { createBriefingDayGate, type BriefingDayOptions } from './briefing-day';
 export { PAGE_LIMIT } from './navis-layout';
 export { briefingBusinessDay, browserBriefingStorage, BRIEFING_LEAD_MINUTES, type BriefingDayOptions, type BriefingDayStorage } from './briefing-day';
 export { runMessages } from './messages';
 
 /** Shell presentation is independent of the board mirrors and their layout undo. */
-export interface CommonNotice extends Notice { readonly remainingMs:number }
-type RunState = BaseRunState & { readonly commonNotice: CommonNotice | null; readonly detailReturn: DetailReturnState | null; readonly detailState: DetailReturnState | null; readonly closingParent: Extract<BaseRunState['overlay'],{type:'detail'}> | null };
+export interface ChatReceiptIdentity { readonly proposalId: string }
+interface ReceiptLayoutUndo { readonly layer: DashboardLayerId; readonly token: string }
+export type ChatReceiptNoticeRequest = NoticeRequest & { readonly chatReceipt: ChatReceiptIdentity; readonly layoutUndo?: ReceiptLayoutUndo };
+type ExpiringNotice = Notice & { readonly absoluteExpiry?: true };
+export interface CommonNotice extends ExpiringNotice {
+  readonly remainingMs: number;
+  readonly chatReceipt?: ChatReceiptIdentity;
+  readonly layoutUndo?: ReceiptLayoutUndo;
+}
+type RunState = BaseRunState & { readonly commonNotice: CommonNotice | null; readonly inlineChatReceipt?: ChatReceiptIdentity; readonly detailReturn: DetailReturnState | null; readonly detailState: DetailReturnState | null; readonly closingParent: Extract<BaseRunState['overlay'],{type:'detail'}> | null };
 export const selectCommonNotice = (state: BaseRunState): CommonNotice | null => 'commonNotice' in state ? (state as RunState).commonNotice : null;
+export function selectChatReceiptNotice(state: BaseRunState): CommonNotice | null {
+  const notice = selectCommonNotice(state);
+  return notice?.chatReceipt && notice.undo && notice.remainingMs > 0 && notice.chatReceipt === (state as RunState).inlineChatReceipt ? notice : null;
+}
+export function selectCommonNoticePresentation(state: BaseRunState): CommonNotice | null {
+  return selectChatReceiptNotice(state) ? null : selectCommonNotice(state);
+}
+export function setChatReceiptVisible(run: RunStore, receipt: ChatReceiptIdentity, visible: boolean) {
+  (run.actions as Partial<RunPresentationActions>).setChatReceiptVisible?.(receipt, visible);
+}
 export const selectDetailReturn = (state: BaseRunState): DetailReturnState | null => 'detailReturn' in state ? (state as RunState).detailReturn : null;
 export const selectDetailViewState = (state: BaseRunState): DetailReturnState | null => 'detailState' in state ? (state as RunState).detailState : null;
+/** REAL-PLAN F00: the durable part of a run, read from the account service when a session starts. */
+export interface AccountRestore {
+  readonly theme:Theme;
+  readonly textScale:100|125;
+  readonly locale:Locale;
+  readonly onboardingDone:boolean;
+  readonly settings:ShopSettings;
+  readonly boards:Readonly<Record<DashboardLayerId,{readonly pages:readonly DashboardPage[];readonly currentPage:number;readonly revision:number}>>;
+}
 export interface RunPresentationActions extends RunActions {
+  readonly commitNavisLayout: (plan: NavisLayoutPlan, options?: { readonly deferNotice?: boolean }) => CommandResult;
+  /** Replace theme, language, settings, onboarding state and both boards with the stored account state. Returns false when it is invalid for this run (the run is left untouched). */
+  readonly restoreAccount:(restore:AccountRestore)=>boolean;
+  readonly setChatReceiptVisible: (receipt: ChatReceiptIdentity, visible: boolean) => void;
   /** Update the current onboarding table draft without advancing its step. */
   readonly updateOnboardingTableDraft:(layout:TableLayout,identity:{readonly runId:string;readonly transitionToken:string})=>boolean;
   readonly rememberDetailState:(state:DetailReturnState)=>boolean;
@@ -229,7 +262,16 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
   function reconcile(s:RunState,previous:RunState,t:number):RunState{
     if(s.templateTour?.status==='waiting'&&s.onboarding.step==='done'&&!s.pageHidden&&t>=s.templateTour.readyAt)s={...s,templateTour:{...s.templateTour,status:'active'}};
     if(s.commonNotice&&t>=s.commonNotice.expiresAt){noticePauses.delete(s.commonNotice.id);s={...s,commonNotice:null};}
-    if(previous.commonNotice&&previous.commonNotice.id!==s.commonNotice?.id)noticePauses.delete(previous.commonNotice.id);
+    if(previous.commonNotice&&previous.commonNotice.id!==s.commonNotice?.id){
+      noticePauses.delete(previous.commonNotice.id);
+      const backing=previous.commonNotice.layoutUndo;
+      if(backing){
+        const board=s.boards[backing.layer];
+        if(board.undo?.token===backing.token){
+          s=writeBoard(s,backing.layer,{undo:null,notice:board.notice?.undoToken===backing.token?null:board.notice});
+        }
+      }
+    }
     if(s.commonNotice){
       for(const layer of dashboardLayers){
         const board=s.boards[layer],saved=commonPauses.get(layer);
@@ -304,7 +346,7 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
     if(changedContext){
       const oldNotice=previous.boards[previous.activeBoard].notice;
       if(oldNotice&&!(oldNotice.messageKey==='duplicate-other-page'&&(previous.boards[previous.activeBoard].currentPage!==proposed.boards[previous.activeBoard].currentPage||previous.overlay.type==='drawer'&&proposed.overlay.type==='none'))&&proposed.boards[previous.activeBoard].notice?.id===oldNotice.id)proposed=writeBoard(proposed,previous.activeBoard,{notice:null});
-      if(previous.commonNotice&&proposed.commonNotice?.id===previous.commonNotice.id)proposed={...proposed,commonNotice:null};
+      if(previous.commonNotice&&!previous.commonNotice.chatReceipt&&proposed.commonNotice?.id===previous.commonNotice.id)proposed={...proposed,commonNotice:null};
     }
     let next=mirror(reconcileOccupancy(reconcile(proposed,previous,t),t));
     const unchanged=()=> (Object.keys(next) as (keyof RunState)[]).every(key=>Object.is(next[key],previous[key]));
@@ -344,9 +386,9 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
     const pausedReasons=undo.pausedReasons.filter(x=>x!==reason);
     return {...undo,pausedReasons,expiresAt:pausedReasons.length?undo.expiresAt:t+undo.remainingMs};
   }
-  /** Data-undo notices follow the same pause rules as layout undo notices. */
-  function pausedNotice<T extends Notice>(notice:T|null,reason:UndoPauseReason,t:number,pause:boolean):T|null{
-    if(!notice)return notice;
+  /** Local notices follow the pause rules for layout undo. Server receipt deadlines keep counting down. */
+  function pausedNotice<T extends ExpiringNotice>(notice:T|null,reason:UndoPauseReason,t:number,pause:boolean):T|null{
+    if(!notice||notice.absoluteExpiry)return notice;
     const entry=noticePauses.get(notice.id);
     if(pause){
       if(entry?.reasons.includes(reason))return notice;
@@ -359,7 +401,7 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
     if(reasons.length){noticePauses.set(notice.id,{...entry,reasons});return notice;}
     noticePauses.delete(notice.id);return {...notice,expiresAt:t+entry.remainingMs};
   }
-  function shellNotice(s:RunState,notice:Notice,t:number):CommonNotice{
+  function shellNotice(s:RunState,notice:ExpiringNotice,t:number):CommonNotice{
     const next=s.pageHidden?pausedNotice(notice,'page-hidden',t,true)!:notice;
     return {...next,remainingMs:noticePauses.get(next.id)?.remainingMs??Math.max(0,next.expiresAt-t)};
   }
@@ -639,8 +681,8 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
     setPosPreview(scenario){
       if(scenario!==null&&!['normal','empty','error','payment-failure'].includes(scenario))return;
       update(s=>{
-        if(s.preview.pos===scenario||scenario===null&&s.preview.pos===undefined)return s;
-        const {pos:_pos,...preview}=s.preview;
+        const {pos,...preview}=s.preview;
+        if(pos===scenario||scenario===null&&pos===undefined)return s;
         return {...s,preview:scenario===null?preview:{...preview,pos:scenario}};
       });
     },
@@ -730,7 +772,7 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
       if(!layout.valid)return rejected('INTERNAL_LAYOUT_ERROR');
       return commitResolved({type:'add-tap',featureId:panels.find(p=>!s.panels.some(old=>old.featureId===p.featureId))?.featureId??panels[0].featureId},layout,baseRevision);
     },
-    commitNavisLayout(plan) {
+    commitNavisLayout(plan, { deferNotice = false } = {}) {
       const s = store.getState(), board = s.boards[plan.layer];
       if (disposed || s.runId !== plan.runId || s.layoutRevision !== plan.layoutRevision || s.activeBoard !== plan.originLayer
         || s.boards[s.activeBoard].currentPage !== plan.originPage || board.pages !== plan.previousPages || board.currentPage !== plan.previousPage) {
@@ -770,7 +812,7 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
           remainingMs: options.time.undoMs, expiresAt: t + options.time.undoMs,
           pausedReasons: current.pageHidden ? ['page-hidden'] : [], consumed: false,
         };
-        const notice: Notice | null = plan.layer === current.activeBoard ? {
+        const notice: Notice | null = !deferNotice && plan.layer === current.activeBoard ? {
           id: unique(), kind: 'success', messageKey: undoKind, layerId: plan.layer, featureId: plan.featureId,
           panel: pages.flatMap(page => page.panels).find(panel => panel.featureId === plan.featureId),
           displacedCount: plan.displaced.length, undoToken: undo.token, expiresAt: undo.expiresAt,
@@ -1091,6 +1133,28 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
       update(s=>({...s,widgetHelp:s.widgetHelp?.origin==='detail'?null:s.widgetHelp,detailState:s.detailReturn,detailReturn:null,overlay:{type:'detail',featureId:first.featureId,returnFocusKey:overlay.returnFocusKey,stack:[first]}}));
       return true;
     },
+    restoreAccount(stored){
+      // D-365: a board saved with a widget that left the product (마케팅 성과) drops it and closes the gap, instead of failing the restore.
+      const restore=withoutRemovedWidgets(stored,grid());
+      if(disposed||!locales.includes(restore.locale)||!dashboardLayers.every(layer=>{
+        const board=restore.boards[layer];
+        return !!board&&board.pages.length>=1&&board.pages.length<=PAGE_LIMIT&&Number.isInteger(board.currentPage)&&board.currentPage>=0&&board.currentPage<board.pages.length
+          &&board.pages.every(page=>{const layout=evaluate(page.panels,grid(),boardCatalog(layer));return layout.valid;});
+      }))return false;
+      update(s=>{
+        const done=restore.onboardingDone;
+        let next:RunState={...s,theme:restore.theme,textScale:restore.textScale,locale:restore.locale,businessType:restore.settings.businessType,shopSettings:immutable({...s.shopSettings,...restore.settings}),
+          ...(done&&s.onboarding.step!=='done'?{screen:'dashboard' as const,transitionToken:unique(),templateTour:null,onboarding:{...s.onboarding,step:'done' as const,selectedTemplateId:null,applyToken:null,draft:{...s.onboarding.draft,businessType:restore.settings.businessType,paymentStyle:restore.settings.paymentStyle,tableLayout:restore.settings.tableLayout}}}:{})};
+        for(const layer of dashboardLayers){
+          const incoming=restore.boards[layer],board=next.boards[layer];
+          // A returning owner is not coached again: every first-run step counts as seen.
+          const guidance:GuidanceProgress=done?{...board.guidance,firstHintSeen:true,dashboardReady:true,visualPending:false,active:null,targetFeatureId:null,queue:[],panelMilestones:{first:true,second:true},coach:{'choose-feature':'dismissed','resize-panel':'dismissed','move-panel':'dismissed'}}:board.guidance;
+          next=writeBoard(next,layer,{pages:incoming.pages,currentPage:incoming.currentPage,revision:incoming.revision,guidance,starter:incoming.pages.some(page=>page.panels.length)?'completed':board.starter,undo:null,notice:null});
+        }
+        return {...next,layoutRevision:s.layoutRevision+1,runRevision:s.runRevision+1};
+      });
+      return true;
+    },
     setLocale(locale){
       if(!locales.includes(locale))return false;
       update(s=>s.locale===locale?s:{...s,locale});return true;
@@ -1129,26 +1193,48 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
         return {...s,preview:{...s.preview,overrides}};
       });
     },
-    showNotice(request){
+    setChatReceiptVisible(receipt, visible) {
+      update(s => {
+        if (visible && s.commonNotice?.chatReceipt === receipt && s.inlineChatReceipt !== receipt) return { ...s, inlineChatReceipt: receipt };
+        if (!visible && s.inlineChatReceipt === receipt) return { ...s, inlineChatReceipt: undefined };
+        return s;
+      });
+    },
+    showNotice(request: NoticeRequest | ChatReceiptNoticeRequest){
       update((s,t)=>{
         const receipt=s.commonNotice;
-        if(request.kind==='error'&&request.messageKey==='UNDO_UNAVAILABLE'&&receipt?.undo?.target==='run'){
+        if(request.kind==='error'&&request.messageKey==='UNDO_UNAVAILABLE'&&(receipt?.undo?.target==='run'||receipt?.chatReceipt)){
           // CommonNotice reports a refused reversal here. Keep the original receipt deadline for retry.
           return {...s,commonNotice:{...receipt,kind:'error',messageKey:'data.error.undoUnavailable'}};
         }
         const undo=request.undo;
         const layoutUndo=undo?.target==='layout'&&s.undo?.token===undo.token;
-        const expiresAt=t+(request.messageKey==='settings.businessChanged'?options.time.noticeMs:options.time.undoMs);
-        let notice:Notice={id:unique(),kind:request.kind,messageKey:request.messageKey,expiresAt,layerId:s.activeBoard,...(request.featureId?{featureId:request.featureId}:{}),...(request.params?{params:request.params}:{}),...(undo?{undo:{target:undo.target,token:undo.token}}:{}),...(layoutUndo?{undoToken:undo.token}:{})};
+        // A server receipt's undo deadline (REAL-PLAN) caps the toast: it never outlives what the server will still accept.
+        const duration=request.messageKey==='settings.businessChanged'?options.time.noticeMs:request.undoUntil===undefined?options.time.undoMs:Math.max(0,Math.min(options.time.undoMs,request.undoUntil-Date.now()));
+        const expiresAt=t+duration;
+        let notice:ExpiringNotice={id:unique(),kind:request.kind,messageKey:request.messageKey,expiresAt,layerId:s.activeBoard,...(request.featureId?{featureId:request.featureId}:{}),...(request.params?{params:request.params}:{}),...(undo?{undo:{target:undo.target,token:undo.token}}:{}),...(layoutUndo?{undoToken:undo.token}:{}),...(request.undoUntil!==undefined?{absoluteExpiry:true}:{})};
         if(undo?.target==='data'&&s.pageHidden)notice=pausedNotice(notice,'page-hidden',t,true)!;
         const posUi=s.posUi.orderUndo&&undo?.token!==s.posUi.orderUndo.token?{...s.posUi,orderUndo:null}:s.posUi;
-        return undo?.target==='layout'?writeActive({...s,posUi},{notice}):{...s,posUi,commonNotice:shellNotice(s,notice,t)};
+        const chatReceipt = 'chatReceipt' in request && (undo?.target === 'data' || undo?.target === 'run') ? request.chatReceipt : undefined;
+        const backing = chatReceipt && 'layoutUndo' in request && undo?.target === 'run' ? request.layoutUndo : undefined;
+        const layoutReceipt = backing && s.boards[backing.layer].undo?.token === backing.token ? {layoutUndo:backing} : {};
+        return undo?.target==='layout'?writeActive({...s,posUi},{notice}):{...s,posUi,commonNotice:{...shellNotice(s,notice,t),...(chatReceipt && {chatReceipt}),...layoutReceipt},inlineChatReceipt:undefined};
+      });
+    },
+    supersedeWidgetSuccessNotice(featureId){
+      update(s=>{
+        const receipt=s.commonNotice;
+        if(receipt?.kind!=='success'||receipt.featureId!==featureId||receipt.chatReceipt)return s;
+        const commonNotice=receipt.undo
+          ? {...receipt,kind:'complete' as const,messageKey:'data.real.receipt.previousChange',params:undefined}
+          : null;
+        return {...s,commonNotice};
       });
     },
     acknowledgeBriefing(){update(s=>s.briefing==='pending'?{...s,briefing:'dismissed',briefingSafeSince:null}:s);},
   };
   const commandActions=new Set<keyof RunPresentationActions>(['applyLayoutIntent','commitAssistantBatch','commitNavisLayout','startWithThree','startWithPreset','applyManagementTemplate','commitPreview','movePanelToPage','undo','updatePreview']);
-  const booleanActions=new Set<keyof RunPresentationActions>(['setPosUi','setOnboardingAnswer','onboardingBack','updateOnboardingTableDraft','saveOnboardingTables','skipOnboardingTables','selectStartTemplate','startEmpty','templateAssembled','nextTemplateTour','closeTemplateTour','openClosing','selectPanel','finishEditing','openDrawer','openSettings','openDetail','openDetailRef','dismissCoach','coachedAction','markFirstHintSeen','inputStarted','inputEnded','consumeInput','switchLayer','goToPage','openWidgetHelp','closeWidgetHelp','openLinkedDetail','detailBack','setLocale','rememberDetailState']);
+  const booleanActions=new Set<keyof RunPresentationActions>(['setPosUi','setOnboardingAnswer','onboardingBack','updateOnboardingTableDraft','saveOnboardingTables','skipOnboardingTables','selectStartTemplate','startEmpty','templateAssembled','restoreAccount','nextTemplateTour','closeTemplateTour','openClosing','selectPanel','finishEditing','openDrawer','openSettings','openDetail','openDetailRef','dismissCoach','coachedAction','markFirstHintSeen','inputStarted','inputEnded','consumeInput','switchLayer','goToPage','openWidgetHelp','closeWidgetHelp','openLinkedDetail','detailBack','setLocale','rememberDetailState']);
   const tourBlockedActions=new Set<keyof RunPresentationActions>(['applyLayoutIntent','commitAssistantBatch','commitNavisLayout','startWithThree','startWithPreset','beginPreview','updatePreview','commitPreview','movePanelToPage','undo','enterEditing','selectPanel','finishEditing','openDrawer','openSettings','openDetail','openDetailRef','openClosing','dismissCoach','coachedAction','skipWidgetCoaches','markFirstHintSeen','switchLayer','goToPage','addPage','flipPageDuringGesture','openWidgetHelp','openLinkedDetail','acknowledgeBriefing','rememberDetailState']);
   const guardedActions=new Map<keyof RunPresentationActions,(...args:unknown[])=>unknown>();
   // One entrance guard also covers synchronous re-entry through any public action.

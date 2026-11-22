@@ -51,7 +51,7 @@ describe('D-22 notice placement inside the canvas grid',()=>{
 describe('T-055 notice sentences through the kit (dashboard copy removed)',()=>{
   it('names the marketing recommended start and keeps the management three-panel start',async()=>{
     const view=render(<UiProvider screenPreset={screenPresets.A}><NoticeHost notice={{id:'m',kind:'success',messageKey:'starter-add',layerId:'marketing',undoToken:'u',expiresAt:6000}} onUndo={()=>{}}/></UiProvider>);
-    expect(await screen.findByRole('status')).toHaveTextContent('패널 8개로 시작했어요');
+    expect(await screen.findByRole('status')).toHaveTextContent('패널 7개로 시작했어요');
     view.unmount();
     render(<UiProvider screenPreset={screenPresets.A}><NoticeHost notice={{id:'g',kind:'success',messageKey:'starter-add',layerId:'management',undoToken:'u',expiresAt:6000}} onUndo={()=>{}}/></UiProvider>);
     expect(await screen.findByRole('status')).toHaveTextContent('패널 3개로 시작했어요');

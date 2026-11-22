@@ -24,9 +24,9 @@ const brokenStorage = (what: 'read' | 'write' | 'both'): BriefingDayStorage => (
 
 interface Harness { run: ReturnType<typeof createRunStore>; advance: (ms: number) => void; finishCoaching: () => void }
 /** One page load: a fresh store (and clock) sharing `storage` and the settable business clock. */
-function load(storage: BriefingDayStorage | null | undefined, clock: { now: string }): Harness {
+function load(storage: BriefingDayStorage | null | undefined, clock: { now: string }, storeId?: string): Harness {
   let t = 0;
-  const run = createRunStore({ screenPreset: preset, catalog: getRegistry('A'), time: testTime, clock: () => t, theme: 'light', businessNow: () => clock.now, ...(storage === undefined ? {} : { briefingStorage: storage }) });
+  const run = createRunStore({ screenPreset: preset, catalog: getRegistry('A'), time: testTime, clock: () => t, theme: 'light', businessNow: () => clock.now, storeId, ...(storage === undefined ? {} : { briefingStorage: storage }) });
   const advance = (ms: number) => { t += ms; run.actions.tick(); };
   // Same path as the state tests: onboarding, three starter widgets, every F-03/F-21 step, then the safe wait.
   const finishCoaching = () => {
@@ -153,8 +153,11 @@ describe('arrival briefing: at most once per business day (D-327)', () => {
   });
   it('a stored day from another store does not suppress this store', () => {
     const storage = new MemoryStorage(); const clock = { now: '2026-11-17T15:45' };
-    storage.setItem('navis.briefing.lastShownDay.other-store', '2026-11-17');
-    expect(opens(load(storage, clock))).toBe(true);
+    storage.setItem(KEY, '2026-11-17');
+    const otherStoreKey = briefingDayStorageKey('other-store');
+    expect(opens(load(storage, clock, 'other-store'))).toBe(true);
+    expect(storage.getItem(otherStoreKey)).toBe('2026-11-17');
+    expect(opens(load(storage, clock, 'other-store'))).toBe(false);
   });
   it('ignores a malformed stored value', () => {
     const storage = new MemoryStorage(); const clock = { now: '2026-11-17T15:45' };

@@ -1,42 +1,57 @@
 import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { RunStore } from '../contracts';
-import { selectCommonNotice, runMessages } from '../state';
+import type { DataCommandResult } from '../data/commands/types';
+import { selectCommonNotice, selectCommonNoticePresentation, runMessages } from '../state';
 import { useWidgetDataStore } from '../data/react';
-import { dataBundles } from '../data/widget-data';
+import { dataBundles, undoDataNoticeResult } from '../data/widget-data';
 import { useBundle } from '../i18n';
 import { posBundle } from '../i18n/messages/pos';
 import { PosContext } from '../pos/react';
 import { orderStatusRuntime } from '../pos/runtime';
 import { closingBundle } from './closing-messages';
 import { shellBundle } from '../screens/settings/messages';
-import { applyAgentRunUndo } from '../features/assistant/agent-actions';
+import { applyAgentReceiptUndo, applyAgentRunUndo } from '../features/assistant/agent-actions';
 import {motion} from 'motion/react';
 import { NoticeFrame, motionTokens,transitionFor,useUi,posClasses,timePolicy } from '../ui';
 export function CommonNotice({run}:{run:RunStore}){
- const state=useSyncExternalStore(run.subscribe,run.getState),notice=selectCommonNotice(state),store=useWidgetDataStore(),translator=useBundle(posBundle,runMessages,closingBundle,shellBundle,...dataBundles),{portalContainer,reducedMotion}=useUi(),contextPos=useContext(PosContext),pos=contextPos?orderStatusRuntime(contextPos):null;
+ const state=useSyncExternalStore(run.subscribe,run.getState),notice=selectCommonNoticePresentation(state),store=useWidgetDataStore(),translator=useBundle(posBundle,runMessages,closingBundle,shellBundle,...dataBundles),{portalContainer,reducedMotion}=useUi(),contextPos=useContext(PosContext),pos=contextPos?orderStatusRuntime(contextPos):null;
  const hover=useRef(false),focused=useRef(false);
+ const noticeId=notice?.id;
  const syncPause=()=>{const paused=hover.current||focused.current;if(paused)run.actions.pauseUndo('toast-focus');else run.actions.resumeUndo('toast-focus');pos?.pauseStatusUndo('focus',paused);};
  const [container,setContainer]=useState<HTMLElement|null>(null);
  useLayoutEffect(()=>{
   const find=()=>setContainer(Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"] .ui-overlay-notice-slot,[role="alertdialog"] .ui-overlay-notice-slot')).reverse().find(slot=>!slot.closest('[inert],[aria-hidden="true"],[data-exiting="true"]'))??portalContainer);
   find();const observer=new MutationObserver(find);observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['inert','aria-hidden','data-exiting']});return()=>observer.disconnect();
  },[portalContainer,state.overlay.type]);
- useLayoutEffect(()=>{if(notice&&(hover.current||focused.current)){run.actions.pauseUndo('toast-focus');pos?.pauseStatusUndo('focus',true);}},[notice?.id,run,pos]);
+ useLayoutEffect(()=>{if(noticeId&&(hover.current||focused.current)){run.actions.pauseUndo('toast-focus');pos?.pauseStatusUndo('focus',true);}},[noticeId,run,pos]);
+ useLayoutEffect(()=>{
+  const receipt=selectCommonNotice(run.getState());
+  if(!noticeId&&receipt?.chatReceipt&&(hover.current||focused.current)){
+   hover.current=false;focused.current=false;
+   run.actions.resumeUndo('toast-focus');
+  }
+ },[noticeId,run]);
  // The shared state preserves six-second undo notices; M1 payment completion has no undo.
  useEffect(()=>{
   if(notice?.messageKey!=='pos.done'||!Number.isFinite(notice.expiresAt))return;
   const id=notice.id,timer=window.setTimeout(()=>{if(selectCommonNotice(run.getState())?.id===id)run.actions.clearNotice();},Math.max(0,notice.remainingMs-(timePolicy.undoMs-timePolicy.noticeMs)));
   return()=>window.clearTimeout(timer);
- },[notice?.id,notice?.expiresAt,run]);
+ },[notice?.id,notice?.expiresAt,notice?.messageKey,notice?.remainingMs,run]);
  if(!notice||!container)return null;
- const undo=(token:string)=>{const result=store.undo(token);if(result.ok)run.actions.showNotice({kind:'complete',messageKey:result.noticeKey??'data.notice.undone'});else run.actions.showNotice({kind:'error',messageKey:result.messageKey});};
+ const undo=(token:string)=>{
+  if(notice.chatReceipt){applyAgentReceiptUndo(run,store,notice.chatReceipt,token);return;}
+  const show=(result:DataCommandResult)=>{if(result.ok)run.actions.showNotice({kind:'complete',messageKey:result.noticeKey??'data.notice.undone'});else run.actions.showNotice({kind:'error',messageKey:result.messageKey});};
+  const outcome=undoDataNoticeResult(store,token);
+  if(outcome instanceof Promise)void outcome.then(show);else show(outcome);
+ };
  const posUndo=notice.undo?.target==='pos';
  const runUndo=notice.undo?.target==='run';
  const localizedNotice=state.locale==='ko'&&notice.messageKey==='data.management.notice.closed'?{...notice,messageKey:'closing.notice.closed'}:notice;
  const visibleNotice=posUndo||runUndo?{...localizedNotice,undoToken:notice.undo!.token}:localizedNotice;
  const undoOther=(token:string)=>{
   if(runUndo){
+   if(notice.chatReceipt){applyAgentReceiptUndo(run,store,notice.chatReceipt,token);return;}
    const ok=applyAgentRunUndo(run,store,token);
    run.actions.showNotice({kind:ok?'complete':'error',messageKey:ok?'data.notice.undone':'UNDO_UNAVAILABLE'});
    return;

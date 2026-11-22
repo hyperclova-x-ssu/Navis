@@ -1,5 +1,5 @@
 import {useTemplateAssembly} from '../../app/template-assembly';
-import {useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState,type ReactNode,type RefObject} from 'react';
+import {memo,useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState,type ReactNode,type RefObject} from 'react';
 import {createPortal} from 'react-dom';
 import {AnimatePresence,LayoutGroup,motion,useIsPresent} from 'motion/react';
 import {DndContext,DragOverlay,getClientRect,useDraggable,useDroppable,useSensor,useSensors} from '@dnd-kit/core';
@@ -7,9 +7,7 @@ import type {DashboardLayerId,FeatureId,GroupId,Panel,PageDirection,QueryConditi
 import {getLayerGroups,getRegistration,listFeatures,searchFeatures} from '../../catalog';
 import {attachRunTimers,findPlacement,selectBoardPanels,selectCommonNotice,selectTemplateInteractionBlocked,type PresentationRunStore} from '../../state';
 import {createTranslator,baseBundles,type MessageBundle} from '../../i18n';
-import {TODAY} from '../../data/widget-data';
-import {store as demoStore} from '../../data/db/generated/manifest.json';
-import {useDataUndo} from '../../data/react';
+import {useDataUndoNotice} from '../../data/react';
 import {createWidgetHost,useWidgetModule} from '../../features/widgets/registry-context';
 import {ActionButton,Card,DashboardGrid,DropPreview,EdgeZoneBand,EditToolbar,FeaturePanel,FirstUseHint,FunctionDrawer,FunctionRailItem,FunctionRow,Icon,IdleChrome,InlineEmpty,NoticeHost,OverlayExitSurface,PageBar,PanelMotionFrame,PanelToolsPopover,RemoveButton,ResizeHandle,SearchField,SkipLink,layoutTokens,motionTokens,panelShape,timePolicy,toCanvasRect,transitionFor,useUi} from '../../ui';
 import {createDashboardController,type ActiveGesture,type EdgeState,type FlightPlan,type SnapPlan} from './controller';
@@ -22,6 +20,7 @@ import {PanelView,type TapEntry} from './PanelView';
 import {DashboardPointerSensor} from './sensors';
 import {useRun} from './use-run';
 import {useDashboardT} from './use-dashboard-t';
+import {LayerHeader} from '../layer-header/LayerHeader';
 import './dashboard.css';
 
 const DEFAULT_CONDITION:QueryCondition=Object.freeze({kind:'default'});
@@ -30,6 +29,12 @@ const projectionKey=(v:ViewportTransform)=>`${v.scale}:${v.offsetX}:${v.offsetY}
 const isEmptyGrid=(target:Element)=>target.matches('.dashboard-grid-bounds,.ui-grid-cell,.ui-dashboard-grid,.dashboard-grid-drop,.dashboard-page-layer');
 const isTextInput=(target:EventTarget|null)=>target instanceof HTMLElement&&(target.isContentEditable||target.matches('input,textarea,select,[role="slider"],[role="textbox"]'));
 function coordinateReader(initial:ViewportTransform){let current=initial;return {get:()=>current,rect:(element:HTMLElement|null)=>toCanvasRect(rawRect(element),current),set:(next:ViewportTransform)=>{const changed=projectionKey(current)!==projectionKey(next);current=next;return changed;}};}
+/**
+ * App wraps the board in a ScreenTransition keyed by layer, so on a layer switch the exiting board stays mounted next to the
+ * arriving one and detaches last. A plain ref (or the setState used as a ref) would then be cleared by the exiting node and
+ * stay empty: no grid rect, no drag. Only the node that is still current may clear its slot.
+ */
+const stateSlot=<T extends Element>(set:(update:(current:T|null)=>T|null)=>void)=>(node:T|null)=>{if(!node)return;set(()=>node);return()=>set(current=>current===node?null:current);};
 /** Search terms: the translated name and aliases plus the Korean ones (API-01 v4 searchFeatures). */
 const koreanNames=createTranslator('ko',...(baseBundles as readonly MessageBundle<string>[]));
 const terms=(t:(key:string)=>string,feature:WidgetRegistration)=>[t(feature.nameKey),koreanNames.t(feature.nameKey),...t(feature.aliasesKey).split('|'),...koreanNames.t(feature.aliasesKey).split('|')].filter(Boolean);
@@ -49,21 +54,22 @@ function PageLayer({children,direction}:{readonly children:ReactNode;readonly di
  return <motion.div className="dashboard-page-layer" custom={direction} variants={{enter:(d:number)=>({opacity:0,x:dx*d}),center:{opacity:1,x:0},exit:(d:number)=>({opacity:0,x:-dx*d})}} initial="enter" animate="center" exit="exit" transition={transitionFor('page',reducedMotion)} aria-hidden={!present||undefined} inert={!present||undefined} data-exiting={!present?'true':undefined}>{children}</motion.div>;
 }
 /** The lifted copy under the pointer: the same widget body as the panel, never interactive. */
-function GhostPanel({run,layer,featureId,width,height,condition,label}:{readonly run:RunStore;readonly layer:DashboardLayerId;readonly featureId:FeatureId;readonly width:number;readonly height:number;readonly condition?:QueryCondition;readonly label:string}){
+const GhostPanel=memo(function GhostPanel({run,layer,featureId,width,height,condition,label}:{readonly run:RunStore;readonly layer:DashboardLayerId;readonly featureId:FeatureId;readonly width:number;readonly height:number;readonly condition?:QueryCondition;readonly label:string}){
  const module=useWidgetModule(featureId),host=useMemo(()=>createWidgetHost(run,{featureId,layer}),[run,featureId,layer]),Body=module?.Panel,preset=run.getState().screenPreset.id;
  const groupId=getRegistration(featureId)?.groupId??'recommended';
  return <FeaturePanel featureId={featureId} label={label} title={label} groupId={groupId} width={width} height={height} editing controls={<><RemoveButton label={label}/><ResizeHandle label={label} width={width} height={height}/></>}>{Body?<Body featureId={featureId} condition={condition??DEFAULT_CONDITION} width={width as 1} height={height as 1} shape={panelShape(width,height)} presetId={preset} editing host={host}/>:null}</FeaturePanel>;
-}
+});
 
 function DashboardContent({run,ready=true,manageTimers=true,posBusy=false,renderScreen}:DashboardScreenProps){
  const s=useRun(run),{portalContainer,reducedMotion,transform,layout,textScale,screenPreset}=useUi();
  const templateSettled=useTemplateAssembly(run);
- const {t,name,translator}=useDashboardT(),dataUndo=useDataUndo();
+ const {t,name,translator}=useDashboardT(),dataUndo=useDataUndoNotice();
  if(!transform)throw new Error('Dashboard requires a positive canvas transform');
  const boardVisible=s.screen==='dashboard'&&s.layer!=='orders-payment';
  const layer=s.activeBoard,board=s.boards[layer],pageIndex=board.currentPage,pageCount=board.pages.length,boardEmpty=board.pages.every(page=>!page.panels.length);
  const [coordinates]=useState(()=>coordinateReader(transform)),readRect=coordinates.rect;
- const [gridNode,setGridNode]=useState<HTMLDivElement|null>(null);const searchRef=useRef<HTMLInputElement>(null),startRef=useRef<HTMLButtonElement>(null),[recommendNode,setRecommendNode]=useState<HTMLButtonElement|null>(null);
+ const [gridNode,setGridNode]=useState<HTMLDivElement|null>(null);const searchRef=useRef<HTMLInputElement>(null),startSlot=useRef<HTMLButtonElement|null>(null),[recommendNode,setRecommendNode]=useState<HTMLButtonElement|null>(null);
+ const gridRef=useMemo(()=>stateSlot<HTMLDivElement>(setGridNode),[]),recommendRef=useMemo(()=>stateSlot<HTMLButtonElement>(setRecommendNode),[]),startRef=useCallback((node:HTMLButtonElement|null)=>{if(!node)return;startSlot.current=node;return()=>{if(startSlot.current===node)startSlot.current=null;};},[]);
  const [snap,setSnap]=useState<(SnapPlan&{projectionKey:string})|null>(null),[active,setActive]=useState<ActiveGesture|null>(null),[flights,setFlights]=useState<readonly FlightPlan[]>([]),[bounds,setBounds]=useState<Rect|null>(null),[searchMode,setSearchMode]=useState(false),[hint,setHint]=useState(false),[tools,setTools]=useState<FeatureId|null>(null),[pendingLong,setPendingLong]=useState<{token:string;requestId:number}|null>(null),[edge,setEdge]=useState<EdgeState|null>(null);
  const [highlights,setHighlights]=useState<readonly FeatureId[]>([]),[created,setCreated]=useState<readonly FeatureId[]>([]),[announcement,setAnnouncement]=useState('');
  const navis=useRef<NavisHandle>(null),posBusyRef=useRef(posBusy);
@@ -100,7 +106,9 @@ function DashboardContent({run,ready=true,manageTimers=true,posBusy=false,render
   return()=>observer?.disconnect();
  },[s.notice?.featureId,s.edit.mode,s.edit.selectedFeatureId,s.panels,s.screenPreset,layout,textScale,nodes]);
  const runtime=useMemo(()=>{const gate=createInputGate(run,()=>{setHint(false);setSnap(null);},()=>controller.cancel());const controller=createDashboardController(run,{getGridRect:()=>gridNode?readRect(gridNode):null,select:id=>{if(id)run.actions.selectPanel(id);},consumePointer:gate.consumePointer,onActive:gesture=>{setActive(gesture);if(gesture)setTools(null);},onCandidateResult:(data,result)=>navis.current?.candidateResult(data,result),onFlight:setFlights,onTools:id=>{run.actions.selectPanel(id);setTools(id);},onDrop:plan=>setSnap({...plan,projectionKey:projectionKey(coordinates.get())}),requestFrame:fn=>window.requestAnimationFrame(fn),cancelFrame:id=>window.cancelAnimationFrame(id),schedule:(fn,ms)=>window.setTimeout(fn,ms),cancelTimer:id=>window.clearTimeout(id),onEdge:setEdge,onDuplicate:featureId=>showPanel(featureId),openPanel});const captured=new WeakMap<HTMLElement,ReturnType<typeof getClientRect>>();return {controller,gate,captured,capture:(node:HTMLElement,rect:DOMRect)=>captured.set(node,toCanvasRect(rect,coordinates.get()))};},[run,gridNode,readRect,coordinates,showPanel,openPanel]);
- const sensors=useSensors(useSensor(DashboardPointerSensor,{run,controller:runtime.controller,gate:runtime.gate,capture:runtime.capture,getTransform:coordinates.get}));
+ // Stable options keep dnd-kit's activators (every panel's listeners) the same between renders, so memoized panels stay still.
+ const sensorOptions=useMemo(()=>({run,controller:runtime.controller,gate:runtime.gate,capture:runtime.capture,getTransform:coordinates.get}),[run,runtime,coordinates]);
+ const sensors=useSensors(useSensor(DashboardPointerSensor,sensorOptions));
  useLayoutEffect(()=>{if(coordinates.set(transform))runtime.controller.cancelForViewportChange();},[coordinates,transform,runtime]);
  useEffect(()=>boardVisible?runtime.gate.attach(document,window):undefined,[runtime,boardVisible]);
  useEffect(()=>()=>runtime.controller.dispose(),[runtime]);
@@ -158,9 +166,9 @@ function DashboardContent({run,ready=true,manageTimers=true,posBusy=false,render
  const currentSnap=snap?.projectionKey===projectionKey(transform)?snap:null,ghostSize=active&&bounds?panelRect(bounds,active.initialPanel,s.screenPreset.grid):null;
  const closeDrawer=(reason:'button'|'Esc'|'outside',event?:Event)=>run.actions.closeOverlay(reason,event?inputSequenceFromEvent(event,run):undefined);
  // Category flyout: its top follows the clicked rail button (the search item for the find drawer), clamped inside the canvas.
- const railRef=useRef<HTMLElement>(null),drawerGroup=drawer?.group,drawerOpen=Boolean(drawer);
+ const railSlot=useRef<HTMLElement|null>(null),railRef=useCallback((node:HTMLElement|null)=>{if(!node)return;railSlot.current=node;return()=>{if(railSlot.current===node)railSlot.current=null;};},[]),drawerGroup=drawer?.group,drawerOpen=Boolean(drawer);
  useLayoutEffect(()=>{
-  const host=portalContainer,rail=railRef.current;if(!drawerOpen||!host||!rail)return;
+  const host=portalContainer,rail=railSlot.current;if(!drawerOpen||!host||!rail)return;
   const place=()=>{
    const button=searchMode?rail.querySelector<HTMLElement>('nav>.ui-rail-item:first-child'):rail.querySelector<HTMLElement>(`[data-template-group="${drawerGroup}"]`),flyout=host.querySelector<HTMLElement>('.ui-drawer:not(.ui-overlay-exit)');
    if(!button||!flyout)return;
@@ -202,17 +210,15 @@ function DashboardContent({run,ready=true,manageTimers=true,posBusy=false,render
  useEffect(()=>{const was=lastOverlay.current;lastOverlay.current=overlayType;if(was==='detail'&&overlayType!=='detail'){const button=actionReturn.current;actionReturn.current=null;if(button?.isConnected)requestAnimationFrame(()=>requestAnimationFrame(()=>button.focus({preventScroll:true})));}else if(overlayType!=='detail'&&was!=='detail')actionReturn.current=null;},[overlayType]);
  // API-03 v4.2: layout notices undo through the board, data notices through the data store (useDataUndo).
  const layoutUndo=useCallback((token:string)=>{runtime.controller.undo(token);},[runtime]);
- const dataUndoNotice=useCallback((token:string)=>{const result=dataUndo(token);run.actions.showNotice(result.ok?{kind:'complete',messageKey:'common.undone'}:{kind:'error',messageKey:result.messageKey});},[dataUndo,run]);
- const startPreset=()=>{const before=run.getState().layoutRevision;runtime.controller.startPreset(readRect(startRef.current));if(run.getState().layoutRevision!==before)setAnnouncement(t('dashboard.announce.preset'));};
+ const dataUndoNotice=useCallback((token:string)=>{const show=(result:{readonly ok:boolean;readonly messageKey?:string})=>run.actions.showNotice(result.ok?{kind:'complete',messageKey:'common.undone'}:{kind:'error',messageKey:result.messageKey!});const outcome=dataUndo(token);if(outcome instanceof Promise)void outcome.then(show);else show(outcome);},[dataUndo,run]);
+ const startPreset=()=>{const before=run.getState().layoutRevision;runtime.controller.startPreset(readRect(startSlot.current));if(run.getState().layoutRevision!==before)setAnnouncement(t('dashboard.announce.preset'));};
  const direction=previousView.current.layer===layer?pageDirection(previousView.current.pageIndex,pageIndex):0;
- const storeName=demoStore?.name?.trim();
- const title=storeName||(translator.locale==='ko'?t('dashboard.title'):t(`app.layer.${layer}`));
  const activeLabel=active?name(active.featureId):'';
  const ghostContent=active&&active.source!=='resize'?<GhostPanel run={run} layer={layer} featureId={active.featureId} width={active.initialPanel.width} height={active.initialPanel.height} condition={active.initialPanel.condition} label={activeLabel}/>:null;
  const dragHidden=active?.source==='candidate'||preview?.source==='candidate';
  const boardBody=boardVisible?(<main className="dashboard-screen" data-idle={String(isIdle)} data-layer={layer}><SkipLink/>
-   <div className="dashboard-main"><IdleChrome idle={isIdle}><header className="dashboard-header">{s.edit.mode==='edit'?<><h1 className="ui-sr-only" lang={storeName?'ko':undefined}>{title}</h1><EditToolbar onDone={finishEditing}/></>:<><div><h1 lang={storeName?'ko':undefined}>{title}</h1><p>{translator.format.date(TODAY,'long')}</p></div><div className="dashboard-header-actions"><ActionButton data-focus-key="settings" variant="outline" onClick={run.actions.openSettings}>{t('common.settings')}</ActionButton></div></>}</header></IdleChrome>
-    <div ref={setGridNode} className="dashboard-grid-bounds" data-testid="dashboard-grid-bounds" id="dashboard" tabIndex={-1} onPointerDownCapture={event=>{if(run.getState().overlay.type==='drawer'){run.actions.closeOverlay('outside',{kind:'pointer',id:event.pointerId});runtime.gate.consumePointer(event.pointerId);event.preventDefault();event.stopPropagation();}}} onClick={event=>{if(event.target instanceof Element&&isEmptyGrid(event.target)){run.actions.dismissCoach();finishEditing();}}}>
+   <div className="dashboard-main"><IdleChrome idle={isIdle}><LayerHeader labelKey={`app.layer.${layer}`} editToolbar={s.edit.mode==='edit'?<EditToolbar onDone={finishEditing}/>:undefined}><ActionButton data-focus-key="settings" variant="outline" onClick={run.actions.openSettings}>{t('common.settings')}</ActionButton></LayerHeader></IdleChrome>
+    <div ref={gridRef} className="dashboard-grid-bounds" data-testid="dashboard-grid-bounds" id="dashboard" tabIndex={-1} onPointerDownCapture={event=>{if(run.getState().overlay.type==='drawer'){run.actions.closeOverlay('outside',{kind:'pointer',id:event.pointerId});runtime.gate.consumePointer(event.pointerId);event.preventDefault();event.stopPropagation();}}} onClick={event=>{if(event.target instanceof Element&&isEmptyGrid(event.target)){run.actions.dismissCoach();finishEditing();}}}>
      <DropTarget>
       <AnimatePresence key={layer} initial={false} custom={direction}>
        <PageLayer key={board.pages[pageIndex].pageId} direction={direction}><LayoutGroup id={board.pages[pageIndex].pageId}>
@@ -221,10 +227,10 @@ function DashboardContent({run,ready=true,manageTimers=true,posBusy=false,render
       </AnimatePresence>
       {preview&&target&&(target.width===1||target.height===1)?<Card className="dashboard-placement-caption" data-status={preview.status} aria-hidden="true">{preview.status==='rejected'?<Icon name="error"/>:null}<span>{preview.status==='pending'?(longPending?t('ui.drop.checking'):t('ui.panel.size',{w:target.width,h:target.height})):preview.status==='rejected'?dropReason:[t('ui.drop.here'),t('ui.panel.size',{w:target.width,h:target.height}),...(preview.displacements.length?[t('ui.drop.displaced',{n:preview.displacements.length})]:[])].join(s.locale==='ko'?'\u00a0·\u00a0':' · ')}</span></Card>:null}
      </DropTarget>
-     {boardEmpty&&!preview?<div className="dashboard-empty"><IdleChrome idle={isIdle}><p>{t('dashboard.empty.hint')}</p>{layer==='marketing'?<><ActionButton ref={startRef} size="primary" onClick={startPreset}>{t('marketing.startPreset')}</ActionButton><p className="dashboard-empty-note">{t('marketing.startPresetHint')}</p></>:<ActionButton ref={startRef} size="primary" onClick={()=>runtime.controller.startThree(readRect(startRef.current))}>{s.businessType?t('dashboard.starter.business',{business:s.businessType}):t('dashboard.starter.general')}</ActionButton>}</IdleChrome></div>:null}
+     {boardEmpty&&!preview?<div className="dashboard-empty"><IdleChrome idle={isIdle}><p>{t('dashboard.empty.hint')}</p>{layer==='marketing'?<><ActionButton ref={startRef} size="primary" onClick={startPreset}>{t('marketing.startPreset')}</ActionButton><p className="dashboard-empty-note">{t('marketing.startPresetHint')}</p></>:<ActionButton ref={startRef} size="primary" onClick={()=>runtime.controller.startThree(readRect(startSlot.current))}>{s.businessType?t('dashboard.starter.business',{business:s.businessType}):t('dashboard.starter.general')}</ActionButton>}</IdleChrome></div>:null}
     </div>
    </div>
-   <IdleChrome idle={isIdle}><aside ref={railRef} className="dashboard-rail ui-glass-card"><nav aria-label={t('dashboard.rail.label')}><FunctionRailItem label={t('common.search')} aria-label={t('app.features.searchAction')} icon="search" selected={Boolean(drawer&&searchMode)} expanded={Boolean(drawer&&searchMode)} onClick={()=>{if(drawer&&searchMode)run.actions.closeOverlay('button');else{setSearchMode(true);run.actions.openDrawer('recommended','');}}}/>{getLayerGroups(layer).map(group=><FunctionRailItem key={group} data-template-group={group} ref={group==='recommended'?setRecommendNode:undefined} groupId={group} label={t(`group.${group}`)} shortLabel={t(`group.rail.${group}`)} icon={group} selected={Boolean(drawer&&!searchMode&&drawer.group===group)} expanded={Boolean(drawer&&!searchMode&&drawer.group===group)} iconSlot={group==='recommended'?<FirstUseHint play={hint}><Icon name="recommended"/></FirstUseHint>:undefined} onClick={()=>openGroup(group)}/>)}</nav></aside></IdleChrome>
+   <IdleChrome idle={isIdle}><aside ref={railRef} className="dashboard-rail ui-glass-card"><nav aria-label={t('dashboard.rail.label')}><FunctionRailItem label={t('common.search')} aria-label={t('app.features.searchAction')} icon="search" selected={Boolean(drawer&&searchMode)} expanded={Boolean(drawer&&searchMode)} onClick={()=>{if(drawer&&searchMode)run.actions.closeOverlay('button');else{setSearchMode(true);run.actions.openDrawer('recommended','');}}}/>{getLayerGroups(layer).map(group=><FunctionRailItem key={group} data-template-group={group} ref={group==='recommended'?recommendRef:undefined} groupId={group} label={t(`group.${group}`)} shortLabel={t(`group.rail.${group}`)} icon={group} selected={Boolean(drawer&&!searchMode&&drawer.group===group)} expanded={Boolean(drawer&&!searchMode&&drawer.group===group)} iconSlot={group==='recommended'?<FirstUseHint play={hint}><Icon name="recommended"/></FirstUseHint>:undefined} onClick={()=>openGroup(group)}/>)}</nav></aside></IdleChrome>
    <PageBar placement="canvas" total={pageCount} current={pageIndex} hidden={isIdle||pageCount===1&&boardEmpty} onSelect={index=>run.actions.goToPage(index)} onAdd={()=>run.actions.addPage()} onLimit={()=>run.actions.addPage()}/>
    <EdgeZoneBand side="left" targetPage={edge?.side==='left'?edge.targetPage:Math.max(1,pageIndex)} visible={edge?.side==='left'}/>
    <EdgeZoneBand side="right" targetPage={edge?.side==='right'?edge.targetPage:pageIndex+2} visible={edge?.side==='right'}/>

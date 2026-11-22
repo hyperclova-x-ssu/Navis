@@ -11,17 +11,17 @@ const groups = {
   'i7-staff':['staff-schedule'], 'mgmt-supply':['calendar','inventory-booking','suppliers'],
   'mkt-local':['local-changes','trade-area','local-trends','ai-response','community'],
   'mkt-coupon':['slot-coupon','expiry-coupon','coupon-status','customer-groups'],
-  'mkt-promo':['marketing-today','promo-video','marketing-performance'],
+  'mkt-promo':['marketing-today','promo-video'],
 } as const;
 
 describe('pure module collection without rendering consumers (API-201)',()=>{
-  it('assembles exactly 30 unique active ids from thirteen contract folders',()=>{
+  it('assembles exactly 29 unique active ids from thirteen contract folders',()=>{
     expect(catalog.collectWidgetModules).toBeTypeOf('function');
     const folders=Object.fromEntries(Object.entries(groups).map(([name,ids])=>[`./${name}/index.ts`,{widgets:ids.map(module)}]));
     expect(Object.keys(folders)).toHaveLength(13);
     const result=catalog.collectWidgetModules(folders);
-    expect(result).toHaveLength(30);
-    expect(new Set(result.map(m=>m.id)).size).toBe(30);
+    expect(result).toHaveLength(29);
+    expect(new Set(result.map(m=>m.id)).size).toBe(29);
     expect(result.map(m=>m.id).sort()).toEqual(catalog.getRegistry('A').map(r=>r.id).sort());
     expect(result.filter(m=>catalog.getRegistration(m.id)?.layer==='management')).toHaveLength(17);
     expect(Object.isFrozen(result)).toBe(true);

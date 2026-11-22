@@ -73,7 +73,7 @@ describe('온보딩 초안 포트 연결', () => {
     expect(run.getState().onboarding).toMatchObject({ step: 'business', selectedTemplateId: null, draft: { businessType: null, paymentStyle: null, tableLayout: null } });
     fireEvent.click(screen.getByRole('button', { name: '카페' }));
     fireEvent.click(screen.getByRole('radio', { name: /후불형/ }));
-    expect(screen.getByRole('spinbutton', { name: '테이블 수' })).toHaveValue(6);
+    expect(screen.getByRole('spinbutton', { name: '테이블 수' })).toHaveValue(11);
   });
 
   it.each([0, 21])('잘못된 테이블 수 %i는 초안과 합계를 바꾸지 않는다', async n => {
@@ -81,7 +81,7 @@ describe('온보딩 초안 포트 연결', () => {
     const before = run.getState().onboarding.draft.tableLayout;
     enterCount(n);
     expect(run.getState().onboarding.draft.tableLayout).toBe(before);
-    expect(screen.getByRole('spinbutton', { name: '테이블 수' })).toHaveValue(6);
+    expect(screen.getByRole('spinbutton', { name: '테이블 수' })).toHaveValue(11);
     await waitFor(()=>expect(screen.getByText('테이블은 1개부터 20개까지 놓을 수 있어요')).toBeVisible());
   });
 
@@ -92,14 +92,14 @@ describe('온보딩 초안 포트 연결', () => {
     vi.spyOn(grid,'getBoundingClientRect').mockReturnValue({x:0,y:0,left:0,top:0,right:936,bottom:624,width:936,height:624,toJSON:()=>({})});
     const pointer=(type:string,x:number,y:number)=>fireEvent(tile,Object.assign(new Event(type,{bubbles:true}),{pointerId:7,button:0,clientX:x,clientY:y}));
     const before=run.getState().onboarding.draft.tableLayout;
-    for(const [x,y] of [[468,156],[-20,156]]){
-      pointer('pointerdown',156,156);pointer('pointermove',x,y);pointer('pointerup',x,y);
+    for(const [x,y] of [[156,52],[-20,52]]){
+      pointer('pointerdown',52,52);pointer('pointermove',x,y);pointer('pointerup',x,y);
       expect(run.getState().onboarding.draft.tableLayout).toBe(before);
       expect(screen.getByText('여기에는 놓을 수 없어요')).toHaveAttribute('role','status');
     }
-    pointer('pointerdown',156,156);pointer('pointermove',260,260);pointer('pointerup',260,260);
-    expect(run.getState().onboarding.draft.tableLayout?.tables[0]).toMatchObject({column:2,row:2});
-    expect(screen.getByText('T1, 가로 3번째 세로 3번째 칸')).toHaveAttribute('role','status');
+    pointer('pointerdown',52,52);pointer('pointermove',780,364);pointer('pointerup',780,364);
+    expect(run.getState().onboarding.draft.tableLayout?.tables[0]).toMatchObject({column:7,row:3});
+    expect(screen.getByText('T1, 가로 8번째 세로 4번째 칸')).toHaveAttribute('role','status');
     expect(run.getState().onboarding.draft.tableLayout?.tables.slice(1)).toEqual(before?.tables.slice(1));
   });
 
@@ -130,7 +130,7 @@ it.each(['en','zh-Hans','zh-Hant'] as const)('%s에서도 결제·테이블·시
   act(()=>run.actions.chooseBusiness('cafe'));
   expect(screen.getByRole('heading',{level:1})).toHaveTextContent('손님이 언제 계산하나요?');
   fireEvent.click(screen.getByRole('radio',{name:/후불형/}));
-  expect(screen.getByRole('spinbutton',{name:'테이블 수'})).toHaveValue(6);
+  expect(screen.getByRole('spinbutton',{name:'테이블 수'})).toHaveValue(11);
   fireEvent.click(screen.getByRole('button',{name:'다음'}));
   expect(screen.getByRole('heading',{level:1})).toHaveTextContent('어떤 화면으로 시작할까요?');
   expect(screen.getByRole('radio',{name:/하루 운영 중심/})).toHaveAttribute('aria-checked','true');

@@ -27,13 +27,14 @@ const rows = [
   ['dashboard.coach.scroll', '코칭 안내 본문', 'Tip text', '提示内容', '提示內容'],
   ['dashboard.navis.open', 'Navis 열기', 'Open Navis', '打开 Navis', '開啟 Navis'],
   ['dashboard.navis.close', 'Navis 닫기', 'Close Navis', '关闭 Navis', '關閉 Navis'],
+  ['dashboard.navis.closedReply', '창을 닫았어요', 'Closed the chat', '已关闭对话', '已關閉對話'],
   ['dashboard.navis.placed', '{name} 패널을 추가했어요', 'Placed {name}', '已放置{name}', '已放置{name}'],
   ['dashboard.drop.blocked', '여기에 놓을 수 없어요', "Can't drop it here", '无法放在这里', '無法放在這裡'],
   ['dashboard.drop.error', '놓을 자리를 확인하지 못했어요. 다시 시도해 주세요', "Couldn't check the spot. Please try again", '无法确认放置位置，请重试', '無法確認放置位置，請重試'],
   ['dashboard.resize.outside', '격자 밖으로 커질 수 없어요', "It can't grow past the grid", '不能超出网格', '不能超出網格'],
   ['dashboard.tools.page', '페이지 보내기', 'Send to a page', '移到其他页面', '移到其他頁面'],
   // DS 11.11 (all four languages given). The preset start notice itself is the kit's ui.notice.presetStarted (T-055).
-  ['dashboard.announce.preset', '패널 8개를 추가했어요', 'Placed 8 widgets', '已放置 8 个小组件', '已放置 8 個小工具'],
+  ['dashboard.announce.preset', '패널 7개를 추가했어요', 'Placed 7 widgets', '已放置 7 个小组件', '已放置 7 個小工具'],
   ['dashboard.announce.layer', '{layer}, {status}', '{layer}, {status}', '{layer}，{status}', '{layer}，{status}'],
 ] as const satisfies readonly Row[];
 

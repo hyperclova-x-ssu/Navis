@@ -28,7 +28,8 @@ describe('one real application composition',()=>{
   expect(screen.getByRole('button',{name:'관리'})).toHaveAttribute('aria-current','page');
   for(const label of ['주문/결제']){
    await user.click(screen.getByRole('button',{name:label}));
-   expect(screen.getByRole('heading',{name:label,level:1})).toHaveFocus();
+   // D-366: the POS header is the shared layer header, so its title is the store name; the live one (inside the order screen) takes focus.
+   const focused=document.activeElement as HTMLElement;expect(focused.tagName).toBe('H1');expect(focused).toHaveTextContent('안숭잘부 카페');expect(focused.closest('.order-screen')).not.toBeNull();
    await waitFor(()=>expect(screen.getByRole('tab',{name:'주문'})).toBeVisible());
    expect(screen.queryByRole('navigation',{name:'기능 열'})).not.toBeInTheDocument();
    expect(screen.getByRole('button',{name:label})).toHaveAttribute('aria-current','page');
@@ -42,12 +43,12 @@ describe('one real application composition',()=>{
   beginDashboard(run,'cafe');run.actions.visualSettled();now+=timePolicy.coachFirstMs;run.actions.tick();
   expect(run.getState().guidance.active).toBe('choose-feature');
   render(<App run={run}/>);await userEvent.setup().click(screen.getByRole('button',{name:'주문/결제'}));
-  await waitFor(()=>expect(screen.getByRole('heading',{name:'주문/결제',level:1})).toBeVisible());expect(run.getState().guidance.active).toBeNull();
+  await waitFor(()=>expect(screen.getByRole('heading',{name:'안숭잘부 카페',level:1})).toBeVisible());expect(run.getState().guidance.active).toBeNull();
  });
  it('supports keyboard selection and preserves the existing editing and pointer blocks',async()=>{
   const run=makeRun();beginDashboard(run,'cafe');run.actions.dismissCoach();const user=userEvent.setup();render(<App run={run}/>);
   const reservations=screen.getByRole('button',{name:'주문/결제'});reservations.focus();await user.keyboard('{Enter}');
-  await waitFor(()=>expect(screen.getByRole('heading',{name:'주문/결제',level:1})).toBeVisible());
+  await waitFor(()=>expect(screen.getByRole('heading',{name:'안숭잘부 카페',level:1})).toBeVisible());
   await user.click(screen.getByRole('button',{name:'관리'}));
   act(()=>run.actions.inputStarted({kind:'pointer',id:42}));
   fireEvent.click(screen.getByRole('button',{name:'주문/결제'}));
@@ -59,10 +60,10 @@ describe('one real application composition',()=>{
   let now=0;const run=createRunStore({screenPreset:screenPresets.A,catalog:getRegistry('A'),time:timePolicy,clock:()=>now,theme:'light',reducedMotion:true});
   beginDashboard(run,'cafe');run.actions.visualSettled();run.actions.dismissCoach();render(<App run={run}/>);
   await userEvent.setup().click(screen.getByRole('button',{name:'주문/결제'}));
-  await waitFor(()=>expect(screen.getByRole('heading',{name:'주문/결제',level:1})).toBeVisible());
+  await waitFor(()=>expect(screen.getByRole('heading',{name:'안숭잘부 카페',level:1})).toBeVisible());
   act(()=>{now+=timePolicy.idleMs+timePolicy.briefingSafeMs+100;run.actions.tick();});
   expect(run.getState().idle.mode).toBe('active');expect(run.getState().briefing).not.toBe('visible');expect(run.getState().guidance.active).toBeNull();
-  await waitFor(()=>expect(screen.getByRole('heading',{name:'주문/결제',level:1})).toBeVisible());
+  await waitFor(()=>expect(screen.getByRole('heading',{name:'안숭잘부 카페',level:1})).toBeVisible());
  });
  it('starts with one question and transitions into the real empty dashboard',async()=>{
   const run=makeRun();const user=userEvent.setup();render(<App run={run}/>);

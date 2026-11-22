@@ -806,6 +806,14 @@ export function buildSeedFiles(inputs) {
     title: `${requireRow(supplier, po.supplierId).name} 입고`,
   }));
   const supplement = buildSupplement(supplementInput, content, catalog, operations, members, today, cutoffTime);
+  const timeline = {
+    expenseAt: Object.fromEntries(index.expenses(date).filter(row => row.created_at <= cutoff).map(row => [row.expense_id, local(row.created_at)])),
+    bookingChangeAt: Object.fromEntries(today.bookings.flatMap(booking => {
+      const change = ordered(index.changes(booking.reservationId).filter(row => row.at <= cutoff), 'at').at(-1);
+      return change ? [[booking.reservationId, local(change.at)]] : [];
+    })),
+    visitsPerOrder: supplementInput.cctv.visitsPerOrder,
+  };
   const files = new Map([
     ['catalog.ts', moduleText('seedCatalog', catalog)],
     ['today.ts', packedModuleText('seedToday', today, 'CafeToday', todayFields)],
@@ -814,6 +822,7 @@ export function buildSeedFiles(inputs) {
     ['closing-history.ts', moduleText('seedClosingHistory', closingHistory)],
     ['operations.ts', moduleText('seedOperations', { ...operations, deliveries }, { suffix: '' })],
     ['supplement.ts', moduleText('seedSupplement', supplement)],
+    ['timeline.ts', moduleText('seedTimeline', timeline, { suffix: ' satisfies { expenseAt: Record<string, string>; bookingChangeAt: Record<string, string>; visitsPerOrder: number }' })],
     ['widget-drafts.json', formatJson({
       grants: supplement.grants,
       manuals: operations.manuals.map(({ manualId, title, category, cautions, steps }) =>
