@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { dbPool } from '../packages/db/index.ts';
 import { connectStreams } from '../packages/streams/index.ts';
 import { hasOutbox, localStreamGroups, OutboxRelay, relayDbPool } from '../packages/streams/relay.ts';
 
@@ -7,12 +8,29 @@ process.once('SIGINT', () => stop.abort());
 process.once('SIGTERM', () => stop.abort());
 
 const redis = await connectStreams('relay');
-const databases = Object.fromEntries(['pos', 'inventory', 'customer'].map(name => [name, relayDbPool(name)]));
+const phase3 = process.env.NAVIS_PHASE3_FIXTURES === '1';
+const databases = {
+  ...Object.fromEntries(['pos', 'inventory', 'customer'].map(name => [name, relayDbPool(name)])),
+  insight: dbPool('insight', 'relay'),
+  marketing: dbPool('marketing', 'relay'),
+};
+const groups = phase3 ? {
+  ...localStreamGroups,
+  inventory: [...localStreamGroups.inventory, 'marketing-supplier'],
+  marketing: [...localStreamGroups.marketing, 'marketing-worker'],
+} : localStreamGroups;
+for (const database of [databases.insight, databases.marketing]) {
+  database.on('error', () => console.error('Relay PostgreSQL connection unavailable'));
+}
 try {
-  await Promise.all(Object.entries(localStreamGroups).map(async ([producer, groups]) => {
+  await Promise.all(Object.entries(groups).map(async ([producer, consumers]) => {
     const database = databases[producer];
     const relay = new OutboxRelay({
-      producer, database, redis, groups: groups.map(name => ({ name, database: databases[name] })),
+      producer, database, redis, groups: consumers.map(name => {
+        const schema = name === 'marketing-worker' || name === 'marketing-supplier' ? 'marketing'
+          : name === 'insight-tables' ? 'insight' : name;
+        return { name, schema, database: databases[schema] };
+      }),
     });
     while (!stop.signal.aborted) {
       let wait = 250;
