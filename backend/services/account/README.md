@@ -23,7 +23,9 @@ Enable demo issuance locally with `NAVIS_BACKEND_DEMO_AUTH=1`. The demo route ot
 
 Serialize refreshes and retry a read that returns `TOKEN_EXPIRED` once after refresh succeeds. Each refresh consumes its old credential and leaves the original eight-hour absolute expiry in place. Reuse revokes the session family and its access tokens on the next authorization. A committed membership deletion removes its session and refresh rows through composite foreign keys. Rejoining permits a new session.
 
-Real login will require cross-tab refresh coordination. An origin-scoped lock must cover the refresh request through completion so the next tab sends the browser's latest cookie. This preserves immediate revocation for actual reuse and keeps refresh credentials hash-only on the server. The demo continues to coordinate within each tab, and sending the same consumed credential twice revokes the family.
+The HTTP catalog uses an origin-scoped Web Lock for both demo issuance and refresh in browsers that support it. The lock covers the request and response so the next tab sends the browser's latest cookie. Browsers without Web Locks still serialize within each tab. Carry the browser lock into real login to preserve immediate revocation of consumed credentials and hash-only refresh storage. [Web Locks API](https://www.w3.org/TR/web-locks/)
+
+Account's migration role seeds identity rows and memberships across stores. Its RLS policies allow that owner role explicitly. Inventory's seed uses a transaction-local store scope for each store.
 
 ## Signer and rollover
 

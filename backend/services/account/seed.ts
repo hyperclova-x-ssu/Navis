@@ -1,12 +1,11 @@
 import type { Pool } from 'pg';
-import content from '../../../db/seed/ansungjalbu/content.json' with { type: 'json' };
-import { generate } from '../../../db/seed/ansungjalbu/generate.mjs';
 import manifest from '../../../frontend/src/data/db/generated/manifest.json' with { type: 'json' };
+import { createSeedContext } from '../../packages/db/seed-context.ts';
 import { demoIdentity } from './identity.ts';
 import { transaction } from './transaction.ts';
 
 // Mirrors inventory's synthetic comparison store. The café IDs come from the snapshot.
-const comparisonStoreId = '33123a19-6780-4d38-9bca-ce96efcf8559';
+export const comparisonStoreId = '33123a19-6780-4d38-9bca-ce96efcf8559';
 const comparisonOwnerId = '62001ca1-8761-5e9a-bd5e-e99fa4010279';
 
 interface SeedUser {
@@ -40,9 +39,8 @@ interface SeedMember {
   updated_at: string;
 }
 
-export async function seed(pool: Pool): Promise<void> {
+export async function seed(pool: Pool, { rows } = createSeedContext()): Promise<void> {
   // The JavaScript generator builds its row arrays dynamically.
-  const { rows } = generate(content, manifest.generator);
   const [cafeUser]: SeedUser[] = rows.app_user;
   const [cafeStore]: SeedStore[] = rows.store;
   const [cafeMember]: SeedMember[] = rows.store_member;
@@ -58,8 +56,8 @@ export async function seed(pool: Pool): Promise<void> {
   const fixtures = [
     { user: cafeUser, store: cafeStore, member: cafeMember },
     {
-      user: { ...cafeUser, user_id: comparisonOwnerId, email: 'comparison-owner@example.invalid', name: 'Synthetic store owner' },
-      store: { ...cafeStore, store_id: comparisonStoreId, display_name: 'Synthetic store' },
+      user: { ...cafeUser, user_id: comparisonOwnerId, email: 'comparison-owner@example.invalid', name: '상도책방 사장님' },
+      store: { ...cafeStore, store_id: comparisonStoreId, display_name: '상도책방' },
       member: { ...cafeMember, store_id: comparisonStoreId, user_id: comparisonOwnerId },
     },
   ];

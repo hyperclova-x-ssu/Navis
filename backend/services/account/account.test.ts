@@ -118,6 +118,45 @@ it('forces RLS and clears store scope on a reused runtime connection', async () 
   }
 });
 
+it('verifies only the current owner’s complete custom reference images for the POS workload', async () => {
+  const posReferenceToken = randomBytes(32).toString('hex');
+  const inventoryFilesToken = randomBytes(32).toString('hex');
+  const server = app({ demoAuth: '1', posReferenceToken, inventoryFilesToken });
+  const { accessToken } = await issue(server);
+  const claims = decodeJwt(accessToken);
+  const root = `/internal/v1/account/stores/${store}/files`;
+  const headers = { ...workloadHeaders, 'x-navis-store-id': store, 'x-navis-store-role': 'owner',
+    'x-navis-user-id': owner, 'x-navis-session-id': String(claims.sid), 'idempotency-key': randomUUID() };
+  const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ncYQAAAAASUVORK5CYII=', 'base64');
+  const metadata = { purpose: 'custom-reference-photo', size: image.length, sha256: createHash('sha256').update(image).digest('hex') };
+  expect((await server.inject({ method: 'POST', url: root, headers,
+    payload: { ...metadata, contentType: 'application/pdf' } })).statusCode).toBe(400);
+  const reserved = await server.inject({ method: 'POST', url: root, headers, payload: { ...metadata, contentType: 'image/png' } });
+  expect(reserved.statusCode).toBe(200);
+  const { fileId } = reserved.json();
+  const check = (token = posReferenceToken, storeId = store, actorId = owner) => server.inject({
+    method: 'POST', url: `/internal/v1/account/stores/${storeId}/files/${fileId}/custom-reference-photo-verify`,
+    headers: { authorization: `Bearer ${token}` }, payload: { actorId },
+  });
+  expect((await check(inventoryFilesToken)).statusCode).toBe(401);
+  expect((await check()).statusCode).toBe(404);
+  expect((await server.inject({ method: 'PUT', url: `${root}/${fileId}/content`, payload: image,
+    headers: { ...headers, 'content-type': 'image/png' } })).statusCode).toBe(204);
+  expect((await server.inject({ method: 'POST', url: `${root}/${fileId}/complete`, headers, payload: {} })).statusCode).toBe(200);
+  expect((await check()).statusCode).toBe(204);
+  expect((await check(posReferenceToken, otherStore)).statusCode).toBe(404);
+  const otherOwner = '62001ca1-8761-5e9a-bd5e-e99fa4010279';
+  await migrate.query(`INSERT INTO account.store_member (store_id, user_id, role, created_at, updated_at)
+    VALUES ($1, $2, 'owner', now(), now())`, [store, otherOwner]);
+  try {
+    expect((await check(posReferenceToken, store, otherOwner)).statusCode).toBe(404);
+  } finally {
+    await migrate.query('DELETE FROM account.store_member WHERE store_id = $1 AND user_id = $2', [store, otherOwner]);
+  }
+  expect((await server.inject({ method: 'DELETE', url: `${root}/${fileId}`, headers })).statusCode).toBe(204);
+  expect((await check()).statusCode).toBe(404);
+});
+
 it('omits demo by default and guards browser and workload requests', async () => {
   expect((await demo(app())).statusCode).toBe(404);
   expect((await demo(app({ demoAuth: 'true' }))).statusCode).toBe(404);
@@ -297,6 +336,22 @@ it('sets Secure for HTTPS refresh and omits demo outside the canonical loopback 
   const rotated = await refresh(issued.cookie, https, headers);
   expect(rotated.statusCode).toBe(200);
   expect(/; Secure(?:;|$)/.test(String(rotated.headers['set-cookie']))).toBe(true);
+});
+
+it('issues the seeded hosted owner only for the configured HTTPS origin and verified gateway', async () => {
+  const publicOrigin = 'https://navis.example.invalid';
+  const hosted = app({ hostedDemoAuth: '1', publicOrigin });
+  const headers = { ...workloadHeaders, host: new URL(publicOrigin).host, origin: publicOrigin };
+  const verified = { ...headers, 'x-navis-demo-gate-verified': '1' };
+  expect((await demo(app({ publicOrigin }), verified)).statusCode).toBe(404);
+  expect((await demo(app({ hostedDemoAuth: '1' }), browserHeaders)).statusCode).toBe(404);
+  expect((await demo(hosted, headers)).statusCode).toBe(403);
+  expect((await demo(hosted, { ...verified, authorization: '' })).statusCode).toBe(401);
+  expect((await demo(hosted, { ...verified, origin: 'https://other.example' })).statusCode).toBe(403);
+  const issued = await issue(hosted, verified);
+  expect(issued.setCookie).toMatch(/; Secure$/);
+  expect(decodeJwt(issued.accessToken)).toMatchObject({ sub: owner, store_id: store, role: 'owner' });
+  expect((await refresh(issued.cookie, hosted, headers)).statusCode).toBe(200);
 });
 
 definePromoArtifactTests();

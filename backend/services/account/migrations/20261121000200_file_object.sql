@@ -25,12 +25,12 @@ CREATE INDEX file_object_abandoned_idx ON account.file_object (store_id, created
 
 ALTER TABLE account.file_object ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account.file_object FORCE ROW LEVEL SECURITY;
-CREATE POLICY file_object_store_scope ON account.file_object TO account_runtime
+CREATE POLICY file_object_store_scope ON account.file_object TO account_run
   USING (store_id = (SELECT NULLIF(current_setting('app.store_id', true), '')::uuid));
-CREATE POLICY file_object_migration_scope ON account.file_object TO account_migrate USING (true);
+CREATE POLICY file_object_migration_scope ON account.file_object TO account_mig USING (true);
 
 GRANT SELECT, INSERT (file_id, store_id, resource_id, artifact_id, purpose, storage_key, mime, size_bytes, sha256),
-  UPDATE (status, created_at) ON account.file_object TO account_runtime;
+  UPDATE (status, created_at) ON account.file_object TO account_run;
 
 -- Down Migration
 DROP TABLE account.file_object;

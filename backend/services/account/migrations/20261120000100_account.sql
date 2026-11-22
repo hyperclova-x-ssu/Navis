@@ -59,27 +59,27 @@ CREATE UNIQUE INDEX refresh_token_active_family_idx ON account.refresh_token (st
 
 ALTER TABLE account.store ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account.store FORCE ROW LEVEL SECURITY;
-CREATE POLICY store_scope ON account.store TO account_runtime, account_migrate
-  USING (current_user = 'account_migrate' OR store_id = NULLIF(current_setting('app.store_id', true), '')::uuid);
+CREATE POLICY store_scope ON account.store TO account_run, account_mig
+  USING (current_user = 'account_mig' OR store_id = NULLIF(current_setting('app.store_id', true), '')::uuid);
 
 ALTER TABLE account.store_member ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account.store_member FORCE ROW LEVEL SECURITY;
-CREATE POLICY store_member_scope ON account.store_member TO account_runtime, account_migrate
-  USING (current_user = 'account_migrate' OR store_id = NULLIF(current_setting('app.store_id', true), '')::uuid);
+CREATE POLICY store_member_scope ON account.store_member TO account_run, account_mig
+  USING (current_user = 'account_mig' OR store_id = NULLIF(current_setting('app.store_id', true), '')::uuid);
 
 ALTER TABLE account.auth_session ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account.auth_session FORCE ROW LEVEL SECURITY;
-CREATE POLICY auth_session_scope ON account.auth_session TO account_runtime, account_migrate
-  USING (current_user = 'account_migrate' OR store_id = NULLIF(current_setting('app.store_id', true), '')::uuid);
+CREATE POLICY auth_session_scope ON account.auth_session TO account_run, account_mig
+  USING (current_user = 'account_mig' OR store_id = NULLIF(current_setting('app.store_id', true), '')::uuid);
 
 ALTER TABLE account.refresh_token ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account.refresh_token FORCE ROW LEVEL SECURITY;
-CREATE POLICY refresh_token_scope ON account.refresh_token TO account_runtime, account_migrate
-  USING (current_user = 'account_migrate' OR store_id = NULLIF(current_setting('app.store_id', true), '')::uuid);
+CREATE POLICY refresh_token_scope ON account.refresh_token TO account_run, account_mig
+  USING (current_user = 'account_mig' OR store_id = NULLIF(current_setting('app.store_id', true), '')::uuid);
 
-GRANT SELECT ON account.store_member TO account_runtime;
-GRANT SELECT, INSERT (store_id, sid, user_id), UPDATE (revoked_at) ON account.auth_session TO account_runtime;
-GRANT SELECT, INSERT (store_id, token_hash, sid), UPDATE (consumed_at) ON account.refresh_token TO account_runtime;
+GRANT SELECT ON account.store_member TO account_run;
+GRANT SELECT, INSERT (store_id, sid, user_id), UPDATE (revoked_at) ON account.auth_session TO account_run;
+GRANT SELECT, INSERT (store_id, token_hash, sid), UPDATE (consumed_at) ON account.refresh_token TO account_run;
 
 -- Down Migration
 DROP TABLE account.refresh_token;
