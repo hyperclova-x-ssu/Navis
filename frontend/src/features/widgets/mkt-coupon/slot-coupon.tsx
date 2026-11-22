@@ -1,19 +1,24 @@
 /**
  * 빈 시간 단골 쿠폰 (slot-coupon, F-48, SCR-37/38): panel (3칸 + PanelAction) and the 4-step send flow
- * (quiet hour -> recipients -> benefit -> message, then send time, confirm, sending, ‘보냈어요(예시)’). Sending has no undo.
+ * (quiet hour -> recipients -> benefit -> message, then send time, confirm and queue). Sending has no undo.
  */
 import { useRef, useState } from 'react';
 import { validateAgentPrefill } from '../../../../shared/navis-agent-schema.mjs';
 import type { DetailRef, WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../../contracts';
-import { useDataDispatch, useWidgetView } from '../../../data/react';
+import { useWidgetView } from '../../../data/react';
+import { addDays } from '../../../data/db/time';
+import { isNightHour } from '../../../data/marketing/calc';
+import { smsSenderConfigured } from '../../../data/reality/14/sms';
 import { TOMORROW } from '../../../data/widget-data';
 import type { SlotCouponModel } from '../../../data/widget-data';
 import {
   ActionButton, BenefitCards, ChipChoice, ConfirmStep, Icon, RecipientList, SendTimePicker, StatusBadge, useKitT,
 } from '../../../ui';
-import { MktPanel } from './panel';
+import { isLargeCard } from '../mkt-local/fit';
+import { CouponSourceNote, MktPanel } from './panel';
+import { useCouponAction, useRealCoupons } from './panel.actions';
 import {
-  DetailNotReady, EditableSmsPreview, Live, LiveText, NoteLine, PanelNotReady, recipientMeta, reportResult, SentStatus, slotLabel, useActionFocus, useFormKey, useKept, useMkt, useSendPhase,
+  DetailNotReady, EditableSmsPreview, extraRow, listRows, Live, LiveText, NoteLine, PanelNotReady, recipientMeta, SentStatus, slotLabel, useActionFocus, useFormKey, useKept, useMkt, useSendPhase,
 } from './shared';
 
 const ID = 'slot-coupon' as const;
@@ -40,8 +45,12 @@ export function SlotCouponPanel({ width, height, shape, editing, host }: WidgetP
   const descs = m.slotCount === 0 ? [t('widget.slot-coupon.allSent')] : shape === 'Q' ? [note ? t(note.messageKey) : t('widget.slot-coupon.panelQ')]
     : shape === 'T' ? [t('widget.slot-coupon.panelQ')] : [t('widget.slot-coupon.panelW', { n: m.regularsCount }), t('widget.slot-coupon.panelQ')];
   const recommended = m.benefits.options.find((o) => o.recommended);
+  // D-333: 3-high cards list 6 quiet slots and 4-high cards every open slot the data has; the 4-high card also says how many matching regulars a slot has (only where it has some).
+  const large = isLargeCard(shape, height);
   const rows = [
-    ...m.openSlots.slice(0, 3).map((slot) => <li key={slot.slotId} data-row-id={slot.slotId}>{t('widget.slot-coupon.slotLine', { slot: slotLabel(f, slot), percent: slot.percent })}</li>),
+    ...m.openSlots.slice(0, listRows(shape, height)).map((slot, index) => <li key={slot.slotId} data-row-id={slot.slotId} {...extraRow(index)}>
+      {t('widget.slot-coupon.slotLine', { slot: slotLabel(f, slot), percent: slot.percent })}{large && slot.regularIds.length > 0 ? `\u00A0·\u00A0${t('widget.slot-coupon.slotRegulars', { n: slot.regularIds.length })}` : ''}
+    </li>),
     ...((shape === 'S' || shape === 'L') && recommended ? [<li key="kept">{t('widget.slot-coupon.keptLine', { amount: money(recommended.marginPerCoupon) })}</li>] : []),
 
   ];
@@ -63,6 +72,7 @@ export function SlotCouponDetail({ detailRef, host }: WidgetDetailProps) {
   const root = useRef<HTMLDivElement>(null);
   useActionFocus(root, detailRef, ['send']);
   return <div ref={root} className="mkt-detail" data-widget={ID}>
+    <CouponSourceNote id={ID} />
     {view.status !== 'ready' ? <DetailNotReady view={view} host={host} /> : <SlotFlow model={view.model} notes={view.notes} host={host} detailRef={detailRef} />}
   </div>;
 }
@@ -70,7 +80,8 @@ export function SlotCouponDetail({ detailRef, host }: WidgetDetailProps) {
 function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: DetailRef; readonly model: SlotCouponModel; readonly notes: Parameters<typeof NoteLine>[0]['notes']; readonly host: WidgetDetailProps['host'] }) {
   const { t, f, dt, money, locale } = useMkt();
   const kit = useKitT();
-  const dispatch = useDataDispatch();
+  const { http, pending, run } = useCouponAction(host);
+  const real = useRealCoupons();
   const { phase, setPhase, startSending } = useSendPhase();
   const [key, renewKey] = useFormKey('slot');
   const open = model.openSlots;
@@ -100,24 +111,34 @@ function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: Detai
   const selected = selectableIds.filter((id) => !offIds.includes(id));
   const defaultBody = dt(model.message.bodies[benefit]);
   const body = edited && edited.benefit === benefit ? edited.text : defaultBody;
-  // Any time of day may be scheduled or sent now: no night restriction (owner decision 2026-11-20).
-  const blocked = !slot || selected.length === 0 || !model.canSend || (mode === 'schedule' && !time);
-  const reason = !slot ? null : selected.length === 0 ? t('marketing.noRecipients') : null;
+  const nightSchedule = mode === 'schedule' && !!time && isNightHour(Number(time.slice(0, 2)));
+  const blocked = !smsSenderConfigured || pending || !slot || selected.length === 0 || !model.canSend || (mode === 'schedule' && (!time || nightSchedule));
+  // T-29: a slot nobody matches already says so inside the recipient list; the line under the button covers only "everyone was switched off".
+  const reason = nightSchedule ? t('widget.slot-coupon.nightBlocked') : slot && recipients.length > 0 && selected.length === 0 ? t('marketing.noRecipients') : null;
   const benefitName = dt(model.benefits.options.find((o) => o.id === benefit)?.name);
-  const whenText = mode === 'now' ? kit.t('ui.send.now') : t('widget.slot-coupon.scheduledAt', { date: f.date(TOMORROW, 'short'), time: time ? f.time(time) : '-' });
+  const hour = real ? Number(real.localAt.slice(11, 13)) : 12;
+  const tomorrow = real ? addDays(real.localAt.slice(0, 10), 1) : TOMORROW;
+  const night = http && isNightHour(hour);
+  const whenText = mode === 'schedule' ? t('widget.slot-coupon.scheduledAt', { date: f.date(tomorrow, 'short'), time: time ? f.time(time) : '-' })
+    : night ? t('widget.slot-coupon.tomorrowAtEight') : kit.t('ui.send.now');
 
   const send = () => {
-    if (!slot) return;
-    const messageEdits = edited && edited.benefit === benefit && edited.text.trim() !== defaultBody.trim() ? edited.text : undefined;
-    const result = dispatch({
-      type: 'coupon.sendSlot', slotIds: [slot.slotId], recipientIds: selected, benefit, idempotencyKey: key,
-      ...(messageEdits ? { messageEdits } : {}), ...(mode === 'schedule' ? { sendAt: `${TOMORROW}T${time}` } : {}),
-    });
-    const failure = reportResult(result, host, t, 'data.notice.sent');
-    if (failure) { setError(failure); setPhase('form'); return; }
-    setError(null);
+    if (!slot || blocked) return;
+    const messageEdits = http ? body.trim().replace(/^\(광고\)\s*/, '')
+      : edited && edited.benefit === benefit && edited.text.trim() !== defaultBody.trim() ? edited.text : undefined;
     setSubmitted({ count: selected.length, benefit: benefitName, when: whenText, slot: slotLabel(f, slot) });
-    startSending();
+    if (http) setPhase('sending');
+    run({
+      type: 'coupon.sendSlot', slotIds: [slot.slotId], recipientIds: selected, benefit, idempotencyKey: key,
+      ...(messageEdits ? { messageEdits } : {}), ...(mode === 'schedule' ? { sendAt: `${http ? tomorrow : TOMORROW}T${time}` } : {}),
+    }, 'data.notice.sent', (failure, receipt) => {
+      if (failure) { setError(failure); setPhase('form'); return; }
+      setError(null);
+      if (receipt) {
+        setSubmitted(current => current && ({ ...current, count: receipt.queued ?? current.count }));
+        setPhase('sent');
+      } else startSending();
+    });
   };
   const reset = () => { setPhase('form'); renewKey(); setEdited(null); setSubmitted(null); setError(null); };
 
@@ -154,7 +175,8 @@ function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: Detai
               value: o.id, name: dt(o.name), recommended: o.recommended, detail: t('widget.slot-coupon.keptLine', { amount: money(o.marginPerCoupon) }),
               diff: o.recommended ? t('widget.slot-coupon.moreKept', { amount: money(model.benefits.differenceVsNext) }) : undefined,
             }))} />
-          <p className="mkt-recommend"><StatusBadge kind="recommended" /> {t('widget.slot-coupon.recommendLine', { name: dt(model.benefits.options.find((o) => o.recommended)?.name) })}</p>
+          {model.benefits.options.length > 0 ? <p className="mkt-recommend"><StatusBadge kind="recommended" /> {t('widget.slot-coupon.recommendLine', { name: dt(model.benefits.options.find((o) => o.recommended)?.name) })}</p>
+            : <p role="status">{t('data.real.partial')}</p>}
         </section>
       </>}
     </div>
@@ -183,7 +205,8 @@ function SlotFlow({ model, notes, host, detailRef }: { readonly detailRef: Detai
           {error ? <p className="mkt-reason" role="alert"><Icon name="error" aria-hidden />{error}</p> : null}
         </> : null}
       </> : <>
-        {phase === 'sent' ? (locale === 'ko' ? <div role="status"><h3>{t('widget.slot-coupon.sentResult', { slot: submitted?.slot ?? '', n: submitted?.count ?? 0 })}</h3></div> : <SentStatus />) : <ConfirmStep count={submitted?.count ?? selected.length} phase={phase === 'confirm' ? 'ask' : phase} onCancel={() => setPhase('form')} onSend={send}
+        {phase === 'sent' ? (http ? <p role="status">{t('data.notices.notice.scheduled')} · {submitted?.when}</p>
+          : locale === 'ko' ? <div role="status"><h3>{t('widget.slot-coupon.sentResult', { slot: submitted?.slot ?? '', n: submitted?.count ?? 0 })}</h3></div> : <SentStatus />) : <ConfirmStep count={submitted?.count ?? selected.length} phase={phase === 'confirm' ? 'ask' : phase} onCancel={() => { setSubmitted(null); setPhase('form'); }} onSend={send}
           summary={[
             { label: t('marketing.recipients'), value: f.count(submitted?.count ?? selected.length, 'person') },
             { label: t('marketing.benefit'), value: submitted?.benefit ?? benefitName },

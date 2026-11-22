@@ -9,15 +9,16 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CellSpan, ContentShape, FeatureId, PreviewSelection } from '../../../contracts';
+import type { CellSpan, ContentShape, FeatureId, Locale, PreviewSelection } from '../../../contracts';
 import { PUBLIC_ISSUE_LIMIT, createWidgetDataStore, selectWidget, type ModelOf, type WidgetDataStore } from '../../../data/widget-data';
 import { createSeedTables } from '../../../data/db/seed';
 import { dispatchOk, makeDone } from '../../../data/marketing/promo-fixtures';
 import { renderWithKit } from '../../../ui/test-utils';
 import { MarketingTodayPanel } from './marketing-today';
 import { mktPromoBundle } from './messages';
+import { promoRealBundle } from './promo-real-copy';
 import { estimateCostText, estimateTimeText, lookupEstimate, roundEstimateSeconds, roundEstimateWon } from './promo-format';
-import { masonryColumns } from './promo-gallery';
+import { masonryColumns } from './promo-gallery-layout';
 import { MAX_NETWORK_ERRORS, promoSession } from './promo-session';
 import { createFakeServer, fakeEstimate, type FakeServer } from './promo-test-server';
 import { PromoVideoDetail, PromoVideoPanel } from './promo-video';
@@ -52,13 +53,13 @@ const flush = async (ms = 0) => { await act(async () => { await vi.advanceTimers
 function panel(store: WidgetDataStore, w: number, h: number, options: { readonly preview?: PreviewSelection; readonly host?: ReturnType<typeof makeHost> } = {}) {
   return renderWithKit(<PromoVideoPanel featureId="promo-video" condition={{ kind: 'default' }} width={w as CellSpan} height={h as CellSpan} shape={shapeOf(w, h)} presetId="A" editing={false} host={options.host ?? makeHost()} />, { store, preview: options.preview });
 }
-function both(store: WidgetDataStore, options: { readonly reducedMotion?: boolean } = {}) {
+function both(store: WidgetDataStore, options: { readonly reducedMotion?: boolean; readonly locale?: Locale } = {}) {
   const host = makeHost();
   return { host, ...renderWithKit(
     <>
       <div data-testid="w"><PromoVideoPanel featureId="promo-video" condition={{ kind: 'default' }} width={2} height={1} shape="W" presetId="A" editing={false} host={host} /></div>
       <div data-testid="win"><PromoVideoDetail featureId="promo-video" condition={{ kind: 'default' }} detailRef={{ featureId: 'promo-video', view: 'create', focus: 'action' }} host={host} /></div>
-    </>, { store, reducedMotion: options.reducedMotion }) };
+    </>, { store, ...options }) };
 }
 function modelOf<F extends FeatureId>(store: WidgetDataStore, id: F): ModelOf<F> {
   const view = selectWidget(store.getSnapshot(), id, { kind: 'default' }, 'normal');
@@ -78,7 +79,7 @@ async function fill(photos = 5, length: 10 | 15 | 30 | null = 15) {
   for (let i = 0; i < photos; i += 1) press(tiles[i]);
   tab(1);
   press(win().getByRole('checkbox', { name: '따뜻한' }));
-  press(win().getByRole('checkbox', { name: '리뷰 모음' }));
+  press(win().getByRole('checkbox', { name: '매장 소개' }));
   tab(2);
   await flush();
   press(win().getByRole('radio', { name: /단톡방 대화 \+ 남은 수량 카운트다운/ }));
@@ -158,7 +159,7 @@ describe('one photo number (AC-324)', () => {
       expect(store.getSnapshot().tables.marketing.promoPhoto).toHaveLength(n);
       if (n >= 5) {
         expect(screen.getByText(`${PM} 준비됨`)).toBeInTheDocument();
-        expect(screen.getByText(`리뷰 사진 ${n}장이 모였어요`, { exact: false })).toBeInTheDocument();
+        expect(screen.getByText(`영상에 쓸 매장 사진 ${n}장이 있어요`, { exact: false })).toBeInTheDocument();
       } else {
         // DATA-FIX item 12 (877f99a): the state follows the photos available (saved drafts no longer bypass the 5-photo threshold),
         // so a synced 4-photo catalog shows the few-photos state with a disabled [영상 만들기]; 오늘 할 홍보 omits its video cell.
@@ -166,7 +167,7 @@ describe('one photo number (AC-324)', () => {
         expect(document.querySelector('[data-widget="promo-video"]')).toHaveAttribute('data-promo-state', 'few-photos');
         expect(screen.getByText('사진이 5장 이상 모이면 영상을 만들 수 있어요', { selector: '.ui-panel-state__message' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '영상 만들기' })).toBeDisabled();
-        expect(document.body.textContent).not.toMatch(/리뷰 사진 \d+장/);
+        expect(document.body.textContent).not.toMatch(/영상에 쓸 매장 사진 \d+장/);
       }
       cleanup();
     }
@@ -176,6 +177,8 @@ describe('one photo number (AC-324)', () => {
     press(win().getByRole('checkbox', { name: chip(PM) }));
     expect(win().getByText(`사진 고르기 · ${PM} 7장`)).toBeInTheDocument();
     expect(win().getAllByRole('checkbox', { name: tilesOf(PM) })).toHaveLength(7);
+    // T-52 (D-381/D-382, W26-F1): step ① says how many store photos the video can use, whatever menu is picked.
+    expect(win().getByText('영상에 쓸 매장 사진 7장')).toBeInTheDocument();
   });
 });
 
@@ -184,7 +187,7 @@ describe('choices (AC-326~332)', () => {
     both(newStore());
     await flush();
     expect(win().getByText(shop.name)).toBeInTheDocument();
-    expect(win().getByText(shop.location.replace(/[ \u00a0]·[ \u00a0]/g, '\u00a0·\u00a0'))).toBeInTheDocument();
+    expect(win().queryByText(/가상 주소/)).not.toBeInTheDocument();
     // the storefront photo the catalog names is shown (the placeholder is for a store without one)
     expect(win().getByRole('img', { name: `${shop.name} 외관 사진` })).toHaveAttribute('src', '/api/promo/photos/cafe-storefront');
     expect(win().queryAllByRole('textbox')).toHaveLength(0);
@@ -262,7 +265,7 @@ describe('choices (AC-326~332)', () => {
     expect(makeButton()).toBeEnabled();
     tab(1);
     press(win().getByRole('checkbox', { name: '활기찬' }));
-    expect(win().getAllByRole('checkbox', { checked: true }).map((c) => c.textContent)).toEqual(['따뜻한', '활기찬', '리뷰 모음']);
+    expect(win().getAllByRole('checkbox', { checked: true }).map((c) => c.textContent)).toEqual(['따뜻한', '활기찬', '매장 소개']);
     press(win().getByRole('checkbox', { name: '따뜻한' }));
     press(win().getByRole('checkbox', { name: '활기찬' }));
     expect(win().getByRole('tab', { name: /2\. 분위기·주제, 비어 있음/ })).toBeInTheDocument();
@@ -284,7 +287,6 @@ describe('choices (AC-326~332)', () => {
     both(newStore());
     tab(2);
     await flush();
-    expect(win().getByText('예시 사진으로 만든 미리보기예요. 실제 영상은 고른 사진으로 만들어져요')).toBeInTheDocument();
     const radios = win().getAllByRole('radio');
     expect(radios).toHaveLength(6);
     expect(document.querySelectorAll('.pv-gallery__col')).toHaveLength(4);
@@ -295,8 +297,8 @@ describe('choices (AC-326~332)', () => {
     expect(videos).toHaveLength(6);
     for (const video of videos) { expect(video.muted).toBe(true); expect(video.loop).toBe(true); expect(video.autoplay).toBe(true); expect(video.playsInline).toBe(true); }
     expect(win().queryAllByRole('radio', { checked: true })).toHaveLength(0);
-    press(win().getByRole('radio', { name: '리뷰 말풍선 모음' }));
-    expect(win().getAllByRole('radio', { checked: true }).map((r) => r.getAttribute('aria-label'))).toEqual(['리뷰 말풍선 모음, 골랐어요']);
+    press(win().getByRole('radio', { name: '디자인 2번' }));
+    expect(win().getByRole('radio', { name: '디자인 2번, 골랐어요', checked: true }).closest('[data-ref]')).toHaveAttribute('data-ref', 'ref-2');
     // pressing another card moves the choice (one at a time); previews keep playing
     press(win().getByRole('radio', { name: '진열대 천천히 훑기' }));
     expect(win().getAllByRole('radio', { checked: true }).map((r) => r.getAttribute('aria-label'))).toEqual(['진열대 천천히 훑기, 골랐어요']);
@@ -305,10 +307,36 @@ describe('choices (AC-326~332)', () => {
     act(() => { fireEvent.error(document.querySelector('[data-ref="ref-2"] .pv-ref__video') as HTMLVideoElement); });
     expect(document.querySelector('[data-ref="ref-2"] .pv-ref__video')).toBeNull();
     expect(document.querySelector('[data-ref="ref-2"] .pv-ref__img')).not.toBeNull();
-    press(win().getByRole('radio', { name: '리뷰 말풍선 모음' }));
-    expect(win().getAllByRole('radio', { checked: true }).map((r) => r.getAttribute('aria-label'))).toEqual(['리뷰 말풍선 모음, 골랐어요']);
+    press(win().getByRole('radio', { name: '디자인 2번' }));
+    expect(win().getAllByRole('radio', { checked: true }).map((r) => r.getAttribute('aria-label'))).toEqual(['디자인 2번, 골랐어요']);
     // the masonry rule: next card into the lowest column
     expect(masonryColumns([520, 312, 390, 520, 390, 312], (h) => h).map((c) => c.length)).toEqual([1, 2, 2, 1]);
+  });
+  it('serves each café design poster and loop without requesting the retired reference media', async () => {
+    both(newStore());
+    tab(2);
+    await flush();
+    for (const tag of ['img', 'video']) {
+      const urls = [...document.querySelectorAll(`.pv-ref__media ${tag}`)].map((media) => media.getAttribute('src'));
+      expect(new Set(urls).size).toBe(6);
+      for (const url of urls) {
+        expect(url).toBeTruthy();
+        expect(url).not.toContain('/api/promo/references/');
+      }
+    }
+  });
+  it.each([
+    ['ko', '디자인', '디자인 2번'],
+    ['en', 'Design', 'Design 2'],
+    ['zh-Hans', '设计', '设计 2'],
+    ['zh-Hant', '設計', '設計 2'],
+  ] as const)('uses approved gallery wording in %s', async (locale, label, secondDesign) => {
+    both(newStore(), { locale });
+    tab(2);
+    await flush();
+    const group = win().getByRole('radiogroup', { name: label });
+    expect(within(group).getByRole('radio', { name: secondDesign })).toBeInTheDocument();
+    expect(win().queryByText(/예시 사진|sample photos|示例照片|範例照片/)).toBeNull();
   });
   it('length is 10 / 15 / 30 with nothing chosen at first (D-87g); the summary lists five chips (memo only when written) that go to their step (AC-332)', async () => {
     both(newStore());
@@ -333,7 +361,7 @@ describe('choices (AC-326~332)', () => {
     expect(win().getByRole('button', { name: `${PM}, 바꾸려면 누르기, ① 메뉴·사진` })).toBeInTheDocument();
     expect(win().getByRole('button', { name: '5장, 바꾸려면 누르기, ① 메뉴·사진' })).toBeInTheDocument();
     expect(win().getByRole('button', { name: '따뜻한, 바꾸려면 누르기, ② 분위기·주제' })).toBeInTheDocument();
-    expect(win().getByRole('button', { name: '리뷰 모음, 바꾸려면 누르기, ② 분위기·주제' })).toBeInTheDocument();
+    expect(win().getByRole('button', { name: '매장 소개, 바꾸려면 누르기, ② 분위기·주제' })).toBeInTheDocument();
     expect(win().getByRole('button', { name: /^단톡방 대화 \+ 남은 수량 카운트다운, 바꾸려면 누르기, ③ 디자인$/ })).toBeInTheDocument();
     press(win().getByRole('button', { name: '따뜻한, 바꾸려면 누르기, ② 분위기·주제' }));
     expect(win().getByRole('tab', { selected: true })).toHaveAccessibleName(/2\. 분위기·주제/);
@@ -364,19 +392,16 @@ describe('window matches SCREENS SCR-51~55 (PROMO-UI, D-326 Q12)', () => {
     expect(memo).not.toBeNull();
     expect(getComputedStyle(memo).maxWidth).not.toBe('720px');
   });
-  it('③ the title and the preview note sit on one line; 어울려요 is the kit StatusBadge (success, with ★) at the bottom-left of the card', async () => {
+  it('③ shows the design instruction and keeps the fit badge at the bottom-left of the card', async () => {
     both(newStore());
     css();
     await flush();
     tab(1);
     press(win().getByRole('checkbox', { name: '따뜻한' }));
-    press(win().getByRole('checkbox', { name: '리뷰 모음' }));
+    press(win().getByRole('checkbox', { name: '매장 소개' }));
     tab(2);
     await flush();
-    const title = win().getByText('마음에 드는 디자인을 눌러 주세요');
-    const note = win().getByText('예시 사진으로 만든 미리보기예요. 실제 영상은 고른 사진으로 만들어져요');
-    expect(title.parentElement).toBe(note.parentElement);
-    expect(title.parentElement).toHaveClass('pv-gallery-head');
+    expect(win().getByRole('heading', { name: '마음에 드는 디자인을 눌러 주세요' })).toBeInTheDocument();
     const badge = document.querySelector('.pv-ref__fit .ui-status-badge') as HTMLElement;
     expect(badge).not.toBeNull();
     expect(badge).toHaveAttribute('data-tone', 'success');
@@ -503,7 +528,7 @@ describe('estimate (AC-333·334)', () => {
     press(win().getByRole('radio', { name: '15초' }));
     expect(screen.getAllByText(t(roundEstimateSeconds(70)))[0]).toBeInTheDocument(); // 15 s, 0 photos
     expect(screen.getAllByText('여러 번 만들어 본 평균으로 계산한 예상 시간이에요')).toHaveLength(1);
-    expect(screen.getAllByText(/예상 비용이에요. 지금은 비용이 들지 않아요/)).toHaveLength(1);
+    expect(screen.getAllByText('예상 비용이에요', { exact: false })).toHaveLength(1);
     tab(0);
     await fill(5);
     const calls = server.calls.length;
@@ -516,7 +541,7 @@ describe('estimate (AC-333·334)', () => {
     press(win().getByRole('radio', { name: '15초' }));
     expect([value(), cost()]).toEqual(at15);
     expect(server.calls.length).toBe(calls);
-    expect(win().getByText(/11월 10일 환율 기준/)).toBeInTheDocument();
+    expect(win().getByText(/11\/10\(화\) 환율 기준/)).toBeInTheDocument();
   });
   it('a failed table says so with 다시 시도 and still lets the video be made', async () => {
     const original = server.fetch;
@@ -796,7 +821,7 @@ describe('step moves [이전]·[다음] (D-84)', () => {
     expect(win().getByText('분위기와 주제를 하나 이상 골라 주세요')).toBeInTheDocument();
     press(win().getByRole('checkbox', { name: '따뜻한' }));
     expect(next()).toBeDisabled();
-    press(win().getByRole('checkbox', { name: '리뷰 모음' }));
+    press(win().getByRole('checkbox', { name: '매장 소개' }));
     expect(next()).toBeEnabled();
     (document.querySelector('.pv-body') as HTMLElement).scrollTop = 80;
     press(next());
@@ -840,7 +865,7 @@ describe('choices survive closing; reduced motion; keys (AC-343·348·349)', () 
     await flush();
     expect(document.querySelectorAll('.pv-ref__video')).toHaveLength(0);
     expect(document.querySelectorAll('.pv-ref__img')).toHaveLength(6);
-    press(win().getByRole('radio', { name: '리뷰 말풍선 모음' }));
+    press(win().getByRole('radio', { name: '디자인 2번' }));
     expect(win().getAllByRole('radio', { checked: true })).toHaveLength(1);
   });
   it('every promo.* and widget.promo-video.* key used in this folder has a Korean value', () => {
@@ -854,8 +879,8 @@ describe('choices survive closing; reduced motion; keys (AC-343·348·349)', () 
     for (const p of ['clip', 'reels', 'shorts']) used.add(`promo.place.${p}`);
     for (let i = 1; i <= 6; i += 1) used.add(`promo.ref.ref-${i}.name`);
     // commands and the widget name (common widget-names bundle) are not this folder's messages
-    for (const k of ['promo.syncCatalog', 'widget.promo-video.title']) used.delete(k);
-    const missing = [...used].filter((k) => !k.endsWith('.') && !mktPromoBundle.ko[k]);
+    for (const k of ['promo.syncCatalog', 'promo.addPhoto', 'promo.saveDraft', 'promo.publishPlaceNews', 'promo.publishClip', 'promo.attestLink', 'widget.promo-video.title']) used.delete(k);
+    const missing = [...used].filter((k) => !k.endsWith('.') && !mktPromoBundle.ko[k] && !promoRealBundle.ko[k]);
     expect(missing).toEqual([]);
   });
 });

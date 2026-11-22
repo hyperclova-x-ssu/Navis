@@ -11,8 +11,18 @@ import { useRef, type ReactNode } from 'react';
 import { koreanLang, usePanelFit } from '../mkt-local/fit';
 import { fitCouponPanel } from './fit';
 import type { ContentShape } from '../../../contracts';
-import { MetricFit, PanelAction, PanelBody } from '../../../ui';
+import { useRealRetry } from '../../../data/react';
+import { ActionButton, MetricFit, PanelAction, PanelBody } from '../../../ui';
 import { keepDots, Live, useMkt, usePanelMode } from './shared';
+import { useRealCoupons } from './panel.actions';
+
+export function CouponSourceNote({ id }: { readonly id: 'slot-coupon' | 'expiry-coupon' | 'coupon-status' }) {
+  const data = useRealCoupons(), retry = useRealRetry('coupons'), { t } = useMkt();
+  if (!data?.missing.includes(id)) return null;
+  return <div className="mkt-actions"><p role="status">{t('data.real.partial')}</p>
+    <ActionButton variant="secondary" onClick={retry}>{t('common.retry')}</ActionButton>
+  </div>;
+}
 
 export interface PanelKpi { readonly value: string; readonly unit: string; /** longest value the widget can show (stable stage) */ readonly longest?: string }
 export interface PanelActionSpec { readonly label: string; readonly widgetName: string; readonly onPress: () => void }

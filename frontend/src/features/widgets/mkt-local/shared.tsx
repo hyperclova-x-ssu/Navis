@@ -77,8 +77,11 @@ export function DetailState({ id, view, host, extra }: { readonly id: FeatureId;
   );
 }
 
-/** Drop order when the panel content does not fit (SCREENS 3.1): supporting line, then the label. */
-const FIT_ORDER: readonly FitPart[] = [{ selector: '.mkt-panel-note' }, { selector: '.mkt-secondary' }, { selector: '.mkt-row__sub' }, { selector: '.mkt-row', last: true }];
+/**
+ * Drop order when the panel content does not fit (SCREENS 3.1): supporting line, then the label.
+ * D-333: rows a large card adds beyond the small-size budget (`data-mkt-extra`) go first, one at a time from the end, so a tight card falls back to the small-size list.
+ */
+const FIT_ORDER: readonly FitPart[] = [{ selector: '[data-mkt-extra]', last: true }, { selector: '.mkt-panel-note' }, { selector: '.mkt-secondary' }, { selector: '.mkt-row__sub' }, { selector: '.mkt-row', last: true }];
 
 /** Label, key number (MetricFit, never shrunk) and an optional supporting line. The line is the first thing to go at 125% text in Q. */
 export function PrimaryMetric({ id, label, value, unit, longest, secondary, shape, note }: { readonly id: FeatureId; readonly label: string; readonly value: string; readonly unit: string; readonly longest?: string; readonly secondary?: string | null; readonly shape: ContentShape; /** DS 19.3: the 1×1 shows number + label only; this supporting phrase stays in the reading order for assistive technology. */ readonly note?: string }) {

@@ -126,3 +126,6 @@
 
 /* 125% text: the 1×1 title "메시지·리뷰 응대" wraps to two lines; keep the key number clear of the second line (G3). */
 .ui-root[data-text-scale="125"] .ui-feature-panel[data-feature-id="ai-response"] .ui-panel-body[data-shape="Q"] .mkt-primary { padding-top: var(--space-4); }
+
+/* T-33 (G1): a text link keeps its look and its place in the line; only its box grows to the 44 px touch target (the extra height is taken back by the margin). */
+.mkt-touch-link { display: inline-flex; align-items: center; min-height: var(--target-min); min-width: var(--target-min); margin-block: calc((1lh - var(--target-min)) / 2); }

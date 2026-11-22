@@ -50,7 +50,7 @@ function mockRoutes({ mode = 'fake', targets = aliases, draftResponse, sendRespo
   return { sends, transport };
 }
 
-const draft = (sampleId: string) => sampleId === 'th-empty' ? Response.json({ status: 'empty' }) : Response.json({
+const draft = (sampleId: string) => Response.json({
   draftId: sampleId, kind: 'reply', content: { body: sampleId === firstReview.threadId ? reviewDraft : messageDraft }, sourceLabels: ['예시 원문'],
 });
 
@@ -67,6 +67,8 @@ it('generates the message and review variants, suppresses repeat generation, and
   const first = new Promise<Response>(resolve => { resolveDraft = resolve; });
   const draftResponse = vi.fn().mockReturnValueOnce(first)
     .mockResolvedValueOnce(Response.json({ code: 'TIMEOUT' }, { status: 504 }))
+    .mockImplementationOnce(async id => draft(id))
+    .mockResolvedValueOnce(Response.json({ status: 'empty' }))
     .mockImplementation(async id => draft(id));
   mockRoutes({ draftResponse });
   renderReply('message');
@@ -84,10 +86,9 @@ it('generates the message and review variants, suppresses repeat generation, and
   expect(editor).toHaveValue('말씀해 주신 내용을 확인하겠습니다.');
   fireEvent.click(within(alert).getByRole('button', { name: '다시 시도하기' }));
   await waitFor(() => expect(editor).toHaveValue(messageDraft));
-  click('자료가 없는 예시');
   click('답변 초안 만들기');
   expect(await screen.findByText('초안을 만들 예시 자료가 없어요')).toBeVisible();
-  expect(screen.getByRole('button', { name: '보낼 내용 확인하기' })).toBeDisabled();
+  expect(editor).toHaveValue(messageDraft);
   fireEvent.click(screen.getByRole('tab', { name: '리뷰' }));
   expect(await generateReply()).toHaveValue(reviewDraft);
 });
@@ -116,7 +117,7 @@ it('cancels with no request and requires a new preview after text, target or dra
   const confirm = send();
   fireEvent.click(confirm);
   fireEvent.click(confirm);
-  expect(await screen.findByText('보냈어요(예시)')).toBeVisible();
+  expect(await screen.findByText('답변함', { selector: '[role=status]' })).toBeVisible();
   expect(sends).toHaveBeenCalledExactlyOnceWith({ draftId: firstReview.threadId, targetId: 'alias-2', body: reviewDraft, confirmed: true }, expect.any(String));
   expect(screen.getByText(`답변 대기 ${ai.waitingCount - 1}건 · 메시지 ${ai.byType.message} · 리뷰 ${ai.byType.review - 1}`)).toBeVisible();
 });

@@ -8,7 +8,7 @@ import { FitProbe, PROMO_FIT } from './fit';
 import type { DetailRef, FeatureId, QueryCondition, WidgetModule, WidgetPanelProps } from '../../../contracts';
 import type { Translator } from '../../../i18n';
 import type { TodayCell } from '../../../data/widget-data';
-import { useWidgetView } from '../../../data/react';
+import { useDomainState, useRealRetry, useWidgetView } from '../../../data/react';
 import { PanelAction, PanelState } from '../../../ui';
 import { NoteLine, useFit, useT } from './shared';
 import { usePromoCatalogSync } from './promo-hooks';
@@ -34,9 +34,11 @@ export function cellText(t: Translator<string>, cell: TodayCell, compact = false
       };
     }
     case 'expiry':
-      return { first: t.t('widget.marketing-today.expiry.s1', { item: t.t(cell.itemNameKey), n: cell.params.count }), second: null, long: t.t('marketing.createCoupon'), short: t.t('marketing.createCoupon') };
+      // HTTP: the lot's own item name (`itemNameKey` is empty then).
+      return { first: t.t('widget.marketing-today.expiry.s1', { item: cell.itemName ?? t.t(cell.itemNameKey), n: cell.params.count }), second: null, long: t.t('marketing.createCoupon'), short: t.t('marketing.createCoupon') };
     case 'replies':
-      return { first: t.t('widget.marketing-today.replies.s1', { n: cell.params.count }), second: t.t('widget.marketing-today.replies.s2'), long: t.t('marketing.checkReplies'), short: t.t('marketing.checkReplies') };
+      // HTTP: "drafts are ready" only when real drafts were saved (`drafted` is absent in fixture mode, which keeps the sentence).
+      return { first: t.t('widget.marketing-today.replies.s1', { n: cell.params.count }), second: cell.params.drafted === 0 ? null : t.t('widget.marketing-today.replies.s2'), long: t.t('marketing.checkReplies'), short: t.t('marketing.checkReplies') };
     case 'video':
       return { first: t.t('widget.marketing-today.video.photos', { n: cell.params.photos }), second: t.t('widget.marketing-today.video.s2'), long: t.t('marketing.makePromoVideo'), short: t.t('marketing.makeVideo') };
   }
@@ -64,10 +66,13 @@ export function slotFit(args: { readonly width: number; readonly height: number;
   };
 }
 
-export function MarketingTodayPanel({ featureId, condition, width, height, shape, host }: WidgetPanelProps) {
+export function MarketingTodayPanel({ featureId, condition, width, height, shape, host: shellHost }: WidgetPanelProps) {
   const t = useT();
   usePromoCatalogSync();
   const view = useWidgetView(FEATURE_ID, condition);
+  // HTTP groups domain: the error state's retry re-reads the service instead of resetting a sample state.
+  const retry = useRealRetry('groups');
+  const host = useDomainState('groups').mode === 'http' ? { ...shellHost, resetPreview: retry } : shellHost;
   const fit = useFit();
   const name = t.t('widget.marketing-today.title');
   const rule = slotFit({ width, height, locale: fit.locale, large: fit.large, presetId: fit.presetId });
@@ -78,7 +83,7 @@ export function MarketingTodayPanel({ featureId, condition, width, height, shape
     return <div className="mp-root" data-widget={featureId} data-shape={shape} data-state="error"><PanelState tone="error" shape={shape} message={t.locale === 'ko' && (shape === 'Q' || (shape === 'W' && width <= 2)) ? t.t('widget.marketing-today.state.error.short') : t.t(view.messageKey)} shortMessage={t.t('widget.marketing-today.state.error.short')} action={{ label: t.t('common.retry'), widgetName: name, onPress: () => host.resetPreview() }} /></div>;
   }
   if (view.status === 'empty') {
-    const action = view.actionKey ? { label: t.t(view.actionKey), widgetName: name, onPress: () => host.openDetail(t.locale === 'ko' ? ACTIVE_COUPONS_REF : { featureId: 'coupon-status' }) } : undefined;
+    const action = view.actionKey ? { label: t.t(view.actionKey), widgetName: name, onPress: () => host.openDetail(ACTIVE_COUPONS_REF) } : undefined;
     return <div className="mp-root" data-widget={featureId} data-shape={shape} data-state="empty" data-slot="marketing-today.empty"><PanelState tone="info" shape={shape} message={t.t(view.messageKey)} shortMessage={view.messageKey === 'data.state.marketing-today.none' ? t.t('widget.marketing-today.state.none.short') : undefined} action={action} /></div>;
   }
   const notes = view.notes ?? [];

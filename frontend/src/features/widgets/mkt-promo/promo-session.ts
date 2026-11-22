@@ -8,6 +8,10 @@
 import type {
   DataCommandResult, PromoFailReason, PromoStage, PromoReferenceId, PromoVideo, PromoVideoInput, PromoLocale, VideoConcept, VideoMood, VideoPostRoute, WidgetDataStore,
 } from '../../../data/widget-data';
+import { failure, type CommandReceipt } from '../../../data/reality/00';
+import type { CommandOf } from '../../../data/reality/00';
+import { executePromo, saveDraftCommand } from '../../../data/reality/16/commands';
+import { jobPath, openDraft, sameInput, type PromoDraftDto } from '../../../data/reality/16/dto';
 import {
   downloadUrl, getCatalog, getEstimateModel, getJob, getReferences, newPromoKey, PromoHttpError, retryJob, startJob,
   type EstimateModel, type PromoJob, type ReferenceList,
@@ -51,6 +55,7 @@ export interface PromoSessionState {
   readonly saved: Readonly<Record<string, SaveStatus>>;
   /** The file name the browser saved (the server's `filename*`, API-25), for the caption next to 저장했어요. */
   readonly savedName: Readonly<Record<string, string>>;
+  readonly writing?: 'draft' | 'generate' | 'retry';
 }
 
 export interface PromoSession {
@@ -64,13 +69,29 @@ export interface PromoSession {
   loadEstimate(force?: boolean): Promise<void>;
   loadReferences(force?: boolean): Promise<void>;
   /** [영상 만들기] (API-26 step 1). A second press while one is pending or making gives the data layer's BUSY / the same row. */
-  make(input: PromoVideoInput, estimateSeconds: number | null): Promise<DataCommandResult>;
+  make(input: PromoVideoInput, estimateSeconds: number | null, transport?: typeof startJob): DataCommandResult;
   /** [다시 만들기] (API-26 step 3): same input, a new server job. */
-  retry(videoId: string): Promise<DataCommandResult>;
+  retry(videoId: string, transport?: PromoRetryTransport): DataCommandResult;
+  saveDraft(locale: PromoLocale): Promise<DataCommandResult>;
+  makeConfirmed(input: PromoVideoInput, estimateSeconds: number | null): Promise<DataCommandResult>;
+  retryConfirmed(videoId: string): Promise<DataCommandResult>;
   /** [저장하기] (API-25 + `video.save`). */
   save(videoId: string, fileName: string): Promise<SaveStatus>;
   /** Stops the poll timer (tests). */
   dispose(): void;
+}
+
+type PromoRetryTransport = { startJob: typeof startJob; retryJob: typeof retryJob };
+const httpJobs: PromoRetryTransport = { startJob, retryJob };
+
+/** Fixture Navis exercises job start and attachment without making a media request. */
+export const offlinePromoRetry: PromoRetryTransport = {
+  startJob: key => offlineJob(key),
+  retryJob: (_jobId, key) => offlineJob(key),
+};
+async function offlineJob(key: string): Promise<PromoJob> {
+  const suffix = key.slice(-12).replace(/[^0-9a-f]/gu, '0').padStart(12, '0');
+  return { jobId: `pj-${suffix}`, status: 'failed', stage: 'look', stageState: 'failed', failReason: 'AI_UNAVAILABLE' };
 }
 
 const sessions = new WeakMap<WidgetDataStore, PromoSession>();
@@ -95,6 +116,19 @@ export function peekPromoSession(runId: string): PromoSession | undefined {
 
 const rowsOf = (store: WidgetDataStore): readonly PromoVideo[] => store.getSnapshot().tables.marketing.promoVideo;
 const isReason = (value: unknown): value is PromoFailReason => typeof value === 'string' && (FAIL_REASONS as readonly string[]).includes(value);
+const realPort = (store: WidgetDataStore) => store.real?.mode('promo') === 'http' ? store.real : undefined;
+const sessionEnded = () => failure('CONFLICT', 'SESSION_ENDED', 'data.real.error.SESSION_ENDED');
+const draftRequired = () => failure('VALIDATION', 'DRAFT_REQUIRED', 'promo.real.draftRequired');
+const writeBusy = () => failure('CONFLICT', 'TRANSACTION_BUSY', 'data.marketing.error.busy');
+
+function generated(result: DataCommandResult): DataCommandResult {
+  return result.ok ? { ...result, params: { videoId: (result.value as CommandReceipt).resourceId } } : result;
+}
+
+function draftInput(draft: PromoDraft, locale: PromoLocale): Partial<PromoVideoInput> {
+  return { menuIds: draft.menuIds, photoIds: draft.photoIds, moods: draft.moods, concepts: draft.concepts, memo: draft.memo, locale,
+    ...(draft.referenceId ? { referenceId: draft.referenceId } : {}), ...(draft.lengthSec ? { lengthSec: draft.lengthSec } : {}) };
+}
 /** API-26 step 1: 409 is BUSY, a missing tool is TOOL_MISSING, a network or other server error is AI_UNAVAILABLE. */
 function reasonOfStartError(error: unknown): PromoFailReason {
   if (error instanceof PromoHttpError) {
@@ -114,6 +148,31 @@ function createSession(store: WidgetDataStore): PromoSession {
   const starting = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
+  let scope = 0;
+  let hadReadModel = false;
+  let edited = false;
+  let draftBase: PromoDraftDto | undefined;
+  let unresolvedGeneration: CommandOf<'video.make' | 'video.retry'> | undefined;
+  const readModel = () => store.getSnapshot().tables.realPromo;
+
+  function syncDraft() {
+    const model = readModel();
+    if (!model && hadReadModel) {
+      scope += 1;
+      draftBase = undefined;
+      unresolvedGeneration = undefined;
+      edited = false;
+      set({ draft: EMPTY_DRAFT, writing: undefined, startedAt: {}, estimateAtStart: {}, saved: {}, savedName: {} });
+    }
+    hadReadModel = model !== undefined;
+    const next = openDraft(model);
+    if (next?.draftId === draftBase?.draftId && next?.revision === draftBase?.revision) return;
+    if (edited) return;
+    const previous = draftBase;
+    draftBase = next;
+    if (next) set({ draft: { ...EMPTY_DRAFT, tab: state.draft.tab, ...next.input, composing: true } });
+    if (!next && previous) set({ draft: { ...state.draft, composing: false, place: null } });
+  }
 
   const settleFailed = (videoId: string, reason: PromoFailReason) => { store.dispatch({ type: 'video.settle', videoId, outcome: { kind: 'failed', reason } }); };
 
@@ -156,6 +215,11 @@ function createSession(store: WidgetDataStore): PromoSession {
   function tick(): void {
     timer = null;
     if (disposed) return;
+    const port = realPort(store);
+    if (port) {
+      void port.load('promo', { force: true }).finally(schedule);
+      return;
+    }
     for (const row of rowsOf(store)) if (row.status === 'making' && row.jobId && !inFlight.has(row.videoId) && !starting.has(row.videoId)) void poll(row);
     schedule();
   }
@@ -165,13 +229,57 @@ function createSession(store: WidgetDataStore): PromoSession {
     timer = setTimeout(tick, POLL_MS);
   }
   // The watcher lives with the store: any new `making` row (from any surface) starts the 1000 ms loop.
-  const unsubscribe = store.subscribe(schedule);
+  const unsubscribe = store.subscribe(() => {
+    if (realPort(store)) syncDraft();
+    schedule();
+  });
+  if (realPort(store)) { syncDraft(); schedule(); }
+
+  async function persistDraft(input: Partial<PromoVideoInput>, base: PromoDraftDto | undefined): Promise<DataCommandResult> {
+    if (!readModel()) return sessionEnded();
+    if (base && sameInput(input, base.input)) return { ok: true, revision: store.getSnapshot().revision };
+    const started = scope;
+    const wasEdited = edited;
+    edited = false;
+    const result = await executePromo(store, saveDraftCommand(input, base));
+    if (started !== scope) return sessionEnded();
+    if (!result.ok) {
+      if (result.reason === 'STALE_REVISION' && !edited) syncDraft();
+      else edited ||= wasEdited;
+    }
+    return result;
+  }
+
+  async function write(kind: NonNullable<PromoSessionState['writing']>, action: () => Promise<DataCommandResult>) {
+    if (state.writing) return writeBusy();
+    const started = scope;
+    set({ writing: kind });
+    try { return await action(); }
+    finally { if (started === scope) set({ writing: undefined }); }
+  }
+
+  async function requestGeneration(command: CommandOf<'video.make' | 'video.retry'>, estimateSeconds: number | null) {
+    const started = scope;
+    const result = await store.execute(command);
+    if (started !== scope) return sessionEnded();
+    unresolvedGeneration = !result.ok && result.outcomeUnknown ? command : undefined;
+    if (result.ok) {
+      const { resourceId } = result.value as CommandReceipt;
+      set({ draft: { ...state.draft, composing: false, place: null },
+        startedAt: { ...state.startedAt, [resourceId]: Date.now() }, estimateAtStart: { ...state.estimateAtStart, [resourceId]: estimateSeconds } });
+    }
+    return generated(result);
+  }
 
   async function attach(videoId: string, request: Promise<PromoJob>): Promise<void> {
     starting.add(videoId);
     try {
       const job = await request;
-      store.dispatch({ type: 'video.attachJob', videoId, jobId: job.jobId });
+      const attached = store.dispatch({ type: 'video.attachJob', videoId, jobId: job.jobId });
+      if (!attached.ok) {
+        settleFailed(videoId, 'AI_BAD_OUTPUT');
+        return;
+      }
       if (!state.startedAt[videoId] && job.startedAt) set({ startedAt: { ...state.startedAt, [videoId]: Date.parse(job.startedAt) || Date.now() } });
       applyJob(videoId, job);
     } catch (error) {
@@ -198,11 +306,23 @@ function createSession(store: WidgetDataStore): PromoSession {
     store,
     getState: () => state,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    setDraft(patch) { set({ draft: { ...state.draft, ...patch } }); },
-    startNew() { set({ draft: { ...EMPTY_DRAFT, composing: true } }); },
+    setDraft(patch) {
+      if (realPort(store) && Object.keys(patch).some(key => key !== 'tab' && key !== 'composing' && key !== 'place')) edited = true;
+      set({ draft: { ...state.draft, ...patch } });
+    },
+    startNew() {
+      const saved = realPort(store) ? openDraft(readModel())?.input : undefined;
+      set({ draft: { ...EMPTY_DRAFT, ...saved, composing: true } });
+    },
     async syncCatalog() {
       if (state.catalog === 'loading' || state.catalog === 'ready') return;
       set({ catalog: 'loading' });
+      const port = realPort(store);
+      if (port) {
+        const outcome = await port.load('promo');
+        set({ catalog: outcome.status === 'ready' || outcome.status === 'stale' ? 'ready' : 'error' });
+        return;
+      }
       try {
         const catalog = await getCatalog();
         const result = store.dispatch({ type: 'promo.syncCatalog', catalog });
@@ -213,30 +333,66 @@ function createSession(store: WidgetDataStore): PromoSession {
     },
     loadEstimate: (force = false) => load('estimate', getEstimateModel, force),
     loadReferences: (force = false) => load('references', getReferences, force),
-    async make(input, estimateSeconds) {
+    saveDraft(locale) {
+      return write('draft', () => persistDraft(draftInput(state.draft, locale), draftBase));
+    },
+    makeConfirmed(input, estimateSeconds) {
+      return write('generate', async () => {
+        if (unresolvedGeneration) {
+          return unresolvedGeneration.type === 'video.make' && sameInput(input, unresolvedGeneration.input)
+            ? requestGeneration(unresolvedGeneration, estimateSeconds) : writeBusy();
+        }
+        const base = draftBase;
+        const saved = await persistDraft(input, base);
+        if (!saved.ok) return saved;
+        const draft = openDraft(readModel());
+        if (!draft || !sameInput(input, draft.input)) return draftRequired();
+        return requestGeneration({ type: 'video.make', input, idempotencyKey: `generate-${draft.draftId}-${draft.revision}` }, estimateSeconds);
+      });
+    },
+    retryConfirmed(videoId) {
+      return write('retry', async () => {
+        if (unresolvedGeneration) {
+          return unresolvedGeneration.type === 'video.retry' && unresolvedGeneration.videoId === videoId
+            ? requestGeneration(unresolvedGeneration, null) : writeBusy();
+        }
+        const failed = rowsOf(store).find(row => row.videoId === videoId && row.status === 'failed');
+        if (!failed) return draftRequired();
+        const previous = openDraft(readModel());
+        if (previous && !sameInput(failed.input, previous.input)) return draftRequired();
+        const saved = await persistDraft(failed.input, previous);
+        if (!saved.ok) return saved;
+        const draft = openDraft(readModel());
+        if (!draft) return draftRequired();
+        return requestGeneration({ type: 'video.retry', videoId, idempotencyKey: `retry-${draft.draftId}-${draft.revision}` }, null);
+      });
+    },
+    make(input, estimateSeconds, transport = startJob) {
+      if (realPort(store)) return failure('VALIDATION', 'ASYNC_REQUIRED', 'data.real.error.ASYNC_REQUIRED');
       const key = newPromoKey('make');
       const result = store.dispatch({ type: 'video.make', input, idempotencyKey: key });
       if (!result.ok || result.duplicate) return result;
       const videoId = (result.value as { videoId: string }).videoId;
       set({ draft: { ...state.draft, composing: false, place: null }, startedAt: { ...state.startedAt, [videoId]: Date.now() }, estimateAtStart: { ...state.estimateAtStart, [videoId]: estimateSeconds } });
-      await attach(videoId, startJob(key, input));
+      void attach(videoId, transport(key, input));
       return result;
     },
-    async retry(videoId) {
+    retry(videoId, transport = httpJobs) {
+      if (realPort(store)) return failure('VALIDATION', 'ASYNC_REQUIRED', 'data.real.error.ASYNC_REQUIRED');
       const before = rowsOf(store).find((v) => v.videoId === videoId);
       const key = newPromoKey('retry');
       const result = store.dispatch({ type: 'video.retry', videoId, idempotencyKey: key });
-      if (!result.ok || result.duplicate || !before) return result;
-      set({ startedAt: { ...state.startedAt, [videoId]: Date.now() } });
+      if (!result.ok || result.duplicate || !result.value || !before) return result;
+      set({ draft: { ...state.draft, composing: false }, startedAt: { ...state.startedAt, [videoId]: Date.now() } });
       // A job the server still knows is retried with its saved input (API-24); otherwise (never attached, or the
       // server restarted and forgot it) the same input starts a new job (API-22).
       const request = before.jobId
-        ? retryJob(before.jobId, key).catch((error: unknown) => {
-          if (error instanceof PromoHttpError && (error.status === 404 || error.status === 400)) return startJob(newPromoKey('make'), before.input);
+        ? transport.retryJob(before.jobId, key).catch((error: unknown) => {
+          if (error instanceof PromoHttpError && (error.status === 404 || error.status === 400)) return transport.startJob(newPromoKey('make'), before.input);
           throw error;
         })
-        : startJob(newPromoKey('make'), before.input);
-      await attach(videoId, request);
+        : transport.startJob(newPromoKey('make'), before.input);
+      void attach(videoId, request);
       return result;
     },
     async save(videoId, fileName) {
@@ -244,18 +400,26 @@ function createSession(store: WidgetDataStore): PromoSession {
       const fileUrl = row?.result?.fileUrl;
       let status: SaveStatus = 'failed';
       let name = fileName;
+      const port = realPort(store);
+      if (port && row?.jobId && fileUrl) {
+        const started = scope;
+        try {
+          const content = await port.transport.request<Blob>({ method: 'GET', path: `${jobPath(row.jobId)}/video.mp4`, query: { download: 1 }, responseAs: 'blob' });
+          if (started !== scope) return 'failed';
+          const url = URL.createObjectURL(content);
+          downloadFile(url, fileName);
+          setTimeout(() => URL.revokeObjectURL(url), 1_000);
+          status = 'saved';
+        } catch { if (started !== scope) return 'failed'; }
+        set({ saved: { ...state.saved, [videoId]: status }, savedName: { ...state.savedName, [videoId]: name } });
+        return status;
+      }
       if (fileUrl) {
         try {
           const head = await globalThis.fetch(downloadUrl(fileUrl), { method: 'HEAD', cache: 'no-store' });
           if (head.ok) {
             name = fileNameOf(head.headers.get('Content-Disposition')) ?? fileName;
-            const a = document.createElement('a');
-            a.href = downloadUrl(fileUrl);
-            a.download = name;
-            a.rel = 'noopener';
-            document.body.append(a);
-            a.click();
-            a.remove();
+            downloadFile(downloadUrl(fileUrl), name);
             status = store.dispatch({ type: 'video.save', videoId }).ok ? 'saved' : 'failed';
           }
         } catch {
@@ -267,6 +431,16 @@ function createSession(store: WidgetDataStore): PromoSession {
     },
     dispose() { disposed = true; if (timer !== null) clearTimeout(timer); timer = null; unsubscribe(); },
   };
+}
+
+function downloadFile(url: string, name: string) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.rel = 'noopener';
+  document.body.append(link);
+  link.click();
+  link.remove();
 }
 
 /** `filename*=UTF-8''…` (else `filename="…"`) of a Content-Disposition header. */

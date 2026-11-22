@@ -1,32 +1,19 @@
 /**
- * ③ 디자인 레퍼런스 갤러리 (T-083d, SCR-54 with D-85). Four-column staggered cards (next card into the lowest column),
- * poster from API-27 `posterUrl`. Cards on screen play `previewUrl` silently on a loop, several at once (muted,
+ * ③ 디자인 갤러리 (SCR-54, D-85, D-347). The reference list supplies the numbered designs and matching tags.
+ * Cards on screen play the bundled café previews silently on a loop, several at once (muted,
  * playsInline, loop); cards scrolled out of view, a hidden page or a reduced-motion setting leave only the poster.
  * Pressing a card chooses it (one at a time, no separate button); a video that cannot load keeps the poster and the
  * card still chooses.
  */
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { ActionButton, Icon, StatusBadge, useUi } from '../../../ui';
 import type { PromoReference } from './promo-api';
+import { masonryColumns, POSTER_HEIGHT } from './promo-gallery-layout';
 import type { PromoSession, PromoSessionState } from './promo-session';
 import { useT } from './shared';
 
-export const POSTER_HEIGHT: Readonly<Record<string, number>> = { '9:16': 520, '3:5': 520, '4:5': 390, '1:1': 312 };
 /** Card height for the column choice: poster + name (2 lines at most) + gap. */
 const CARD_EXTRA = 56;
-
-/** PROMO_TEMPLATES 1: card i goes into the lowest column (leftmost on ties). */
-export function masonryColumns<T>(items: readonly T[], height: (item: T) => number, columns = 4): T[][] {
-  const out: T[][] = Array.from({ length: columns }, () => []);
-  const heights = new Array<number>(columns).fill(0);
-  for (const item of items) {
-    let target = 0;
-    for (let c = 1; c < columns; c += 1) if (heights[c] < heights[target]) target = c;
-    out[target].push(item);
-    heights[target] += height(item) + 16;
-  }
-  return out;
-}
 
 export function ReferenceGallery({ session, state, headingRef }: { readonly session: PromoSession; readonly state: PromoSessionState; readonly headingRef: RefObject<HTMLHeadingElement | null> }) {
   const t = useT();
@@ -46,7 +33,7 @@ export function ReferenceGallery({ session, state, headingRef }: { readonly sess
 
   const fits = (ref: PromoReference) => draft.moods.some((m) => ref.moods.includes(m)) || draft.concepts.some((c) => ref.concepts.includes(c));
   const ordered = list ?? [];
-  const columns = useMemo(() => masonryColumns(ordered.map((ref, index) => ({ ref, index })), ({ ref }) => (POSTER_HEIGHT[ref.cardAspect] ?? 520) + CARD_EXTRA), [ordered]);
+  const columns = masonryColumns(ordered.map((ref, index) => ({ ref, index })), ({ ref }) => (POSTER_HEIGHT[ref.cardAspect] ?? 520) + CARD_EXTRA);
 
   const moveFocus = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
@@ -58,12 +45,7 @@ export function ReferenceGallery({ session, state, headingRef }: { readonly sess
 
   return (
     <section className="pv-step pv-gallery-step" aria-labelledby="pv-ref-title">
-      {/* SCR-54: the title (bold) and the preview note follow each other on one line. */}
-      <div className="pv-gallery-head">
-        <h3 className="pv-label pv-h" id="pv-ref-title" ref={headingRef} tabIndex={-1}>{t.t('promo.ref.title')}</h3>
-        <span className="pv-gallery-head__dot" aria-hidden="true">·</span>
-        <p className="pv-caption" data-slot="promo-video.ref-note">{t.t('promo.ref.note')}</p>
-      </div>
+      <h3 className="pv-label pv-h" id="pv-ref-title" ref={headingRef} tabIndex={-1}>{t.t('promo.ref.title')}</h3>
       {state.references.status === 'error' && !list ? (
         <p className="pv-inline-error" role="alert"><Icon name="error" aria-hidden /> {t.t('promo.ref.error')} <ActionButton variant="link" onClick={() => { void session.loadReferences(true); }}>{t.t('promo.retry')}</ActionButton></p>
       ) : null}
@@ -109,9 +91,9 @@ function ReferenceCard({ reference, index, chosen, fit, autoplay, onChoose, card
   const suffix = fit ? t.t('promo.ref.fitSuffix') : '';
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [visible, setVisible] = useState(typeof IntersectionObserver === 'undefined');
-  const [playing, setPlaying] = useState(false);
   const [failed, setFailed] = useState(false);
   const height = POSTER_HEIGHT[reference.cardAspect] ?? 520;
+  const poster = new URL(`./gallery-media/${reference.id}.jpg`, import.meta.url).href;
 
   // Only cards at least a quarter on screen play; the video is dropped when the card leaves the view.
   useEffect(() => {
@@ -124,9 +106,6 @@ function ReferenceCard({ reference, index, chosen, fit, autoplay, onChoose, card
     return () => observer.disconnect();
   }, []);
 
-  const showVideo = autoplay && visible && !failed;
-  useEffect(() => { if (!showVideo) setPlaying(false); }, [showVideo]);
-
   return (
     <div className="pv-ref" data-ref={reference.id} data-chosen={chosen ? 'true' : 'false'}>
       <button
@@ -136,14 +115,9 @@ function ReferenceCard({ reference, index, chosen, fit, autoplay, onChoose, card
         onClick={onChoose} onKeyDown={(event) => onArrow(event, index)}
       >
         <span className="pv-ref__media" style={{ height }}>
-          <img className="pv-ref__img" src={reference.posterUrl} alt="" draggable={false} />
-          {showVideo ? (
-            <video
-              className="pv-ref__video" src={reference.previewUrl} muted playsInline autoPlay loop preload="auto" aria-hidden="true" tabIndex={-1}
-              data-shown={playing ? 'true' : 'false'}
-              onPlaying={() => setPlaying(true)}
-              onError={() => setFailed(true)}
-            />
+          <img className="pv-ref__img" src={poster} alt="" draggable={false} />
+          {autoplay && visible && !failed ? (
+            <GalleryPreview referenceId={reference.id} onError={() => setFailed(true)} />
           ) : null}
           {fit ? <span className="pv-ref__fit"><StatusBadge semantic="recommend" label={t.t('promo.ref.fit')} /></span> : null}
           {chosen ? <span className="pv-ref__check" aria-hidden="true"><Icon name="check" /></span> : null}
@@ -151,5 +125,16 @@ function ReferenceCard({ reference, index, chosen, fit, autoplay, onChoose, card
         <span className="pv-ref__name" data-chosen={chosen ? 'true' : undefined}>{name}</span>
       </button>
     </div>
+  );
+}
+
+function GalleryPreview({ referenceId, onError }: { readonly referenceId: PromoReference['id']; readonly onError: () => void }) {
+  const [playing, setPlaying] = useState(false);
+  const source = new URL(`./gallery-media/${referenceId}.mp4`, import.meta.url).href;
+  return (
+    <video
+      className="pv-ref__video" src={source} muted playsInline autoPlay loop preload="auto" aria-hidden="true" tabIndex={-1}
+      data-shown={playing ? 'true' : 'false'} onPlaying={() => setPlaying(true)} onError={onError}
+    />
   );
 }

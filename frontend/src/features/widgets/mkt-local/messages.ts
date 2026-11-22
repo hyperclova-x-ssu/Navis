@@ -49,6 +49,8 @@ const rows = {
   'widget.local-trends.noComparison': ['비교 자료 없음', 'No comparison data', '暂无对比数据', '暫無比較資料'],
   'widget.local-trends.definition': ['관심 지표는 이 지역 게시글·리뷰에서 키워드가 언급된 횟수예요', 'The interest metric is how many times the keyword is mentioned in posts and reviews in this area.', '关注指标是该关键词在本区域帖子和评论中被提及的次数。', '關注指標是該關鍵字在本區域貼文與評論中被提及的次數。'],
   'widget.local-trends.comparePeriod': ['{current} · 지난주({previous})와 비교했어요', '{current} vs. {previous}', '{current}（对比 {previous}）', '{current}（比較 {previous}）'],
+  /** The widget's line: both periods carry weekdays, so the last week is not put in a second pair of brackets (the chat keeps `comparePeriod`). */
+  'widget.local-trends.comparePeriodDays': ['{current} · 지난주 {previous}와 비교했어요', '{current} vs. {previous}', '{current}（对比 {previous}）', '{current}（比較 {previous}）'],
   'widget.local-trends.category': ['연관 카테고리: {category}', 'Related category: {category}', '相关类别：{category}', '相關類別：{category}'],
   'widget.local-trends.periodNote': ['최근 7일 · 이전 7일 대비', 'Last 7 days vs. the 7 days before', '最近 7 天 · 对比此前 7 天', '最近 7 天 · 比較此前 7 天'],
   'widget.local-trends.region': ['지역: {region}', 'Area: {region}', '区域：{region}', '區域：{region}'],
@@ -74,7 +76,7 @@ const rows = {
   'widget.ai-response.private': ['비공개 메시지', 'Private message', '私信', '私訊'],
   'widget.ai-response.statusDraft': ['초안 준비됨', 'Draft ready', '草稿已备好', '草稿已備妥'],
   'widget.ai-response.statusDone': ['답변함', 'Replied', '已回复', '已回覆'],
-  'widget.ai-response.needsPerson': ['사람이 직접 확인해 주세요({reason})', 'Please check this yourself ({reason})', '请您亲自确认（{reason}）', '請您親自確認（{reason}）'],
+  'widget.ai-response.needsPerson': ['직접 확인해 주세요 · {reason}', 'Please check · {reason}', '请确认 · {reason}', '請確認 · {reason}'],
   'widget.ai-response.writeReply': ['확인한 뒤 답변을 적어 주세요', 'Check it, then write your reply', '确认后请填写回复', '確認後請填寫回覆'],
   'widget.ai-response.original': ['원문', 'Original', '原文', '原文'],
   'widget.ai-response.groundTitle': ['초안에 쓴 매장 안내', 'Shop info used in the draft', '草稿使用的店铺信息', '草稿使用的店鋪資訊'],
@@ -109,7 +111,7 @@ const rows = {
   'widget.community.respondBy': ['{at}까지 응답', 'Reply by {at}', '请于 {at} 前回复', '請於 {at} 前回覆'],
   'widget.community.contact': ['연락 수단: {contact}', 'Contact: {contact}', '联系方式：{contact}', '聯絡方式：{contact}'],
   'widget.community.directHint': ['직접 받은 제안이에요. 수락하거나 거절해 주세요', 'This offer was sent to you. Accept or decline it', '这是直接发给您的提议，请接受或拒绝', '這是直接寄給您的提案，請接受或拒絕'],
-  'widget.community.publicHint': ['공개 제안이에요. 관심을 보내면 상대 가게에 알려요', 'This is a public offer. Showing interest lets the shop know (sample)', '这是公开提议，表示关注后对方店铺会收到通知（示例）', '這是公開提案，表示關注後對方店鋪會收到通知（範例）'],
+  'widget.community.publicHint': ['공개 제안이에요. 관심을 보내면 상대 가게에 알려요', 'This is a public offer. Showing interest lets the shop know', '这是公开提议，表示关注后对方店铺会收到通知', '這是公開提案，表示關注後對方店鋪會收到通知'],
   'widget.community.noPublic': ['둘러볼 공개 제안이 없어요', 'No public offers to browse', '暂无可浏览的公开提议', '暫無可瀏覽的公開提案'],
   'widget.community.pickItem': ['목록에서 제안을 골라 주세요', 'Pick an offer from the list', '请从列表中选择一项提议', '請從列表中選擇一項提案'],
   'widget.community.noReceived': ['받은 제안이 없어요', 'No offers received', '暂无收到的提议', '暫無收到的提案'],
@@ -127,8 +129,10 @@ const rows = {
   'widget.ai-response.sendUnknown': ['발송 결과를 확인해 주세요', 'Check the send result', '请确认发送结果', '請確認發送結果'],
   'widget.ai-response.sentHeading': ['보낸 답변', 'Sent reply', '已发回复', '已發回覆'],
   'widget.ai-response.invalidReply': ['허용된 문장을 두 문장까지, 80바이트 이하로 적어 주세요', 'Use up to two approved sentences within 80 bytes', '请使用允许的回复，最多两条，80 字节以内', '請使用允許的回覆，最多兩條，80 位元組以內'],
+  /** W21-F9: said with the service's author-notification sentence before a review reply is posted. */
+  'widget.ai-response.noPersonalInfo': ['개인정보는 적지 않아요', "Don't include personal information", '请勿填写个人信息', '請勿填寫個人資訊'],
   'widget.ai-response.replyLimit': ['허용된 문장 두 문장 이하 · 80바이트 이하', 'Up to two approved sentences · 80 bytes max', '最多两条允许的回复 · 80 字节以内', '最多兩條允許的回覆 · 80 位元組以內'],
-  'widget.ai-response.sendConflict': ['이 예시는 이미 보냈거나 발송을 확인하는 중이에요', 'This sample was already sent or is being checked', '此示例已发送或正在确认', '此範例已發送或正在確認'],
+  'widget.ai-response.sendConflict': ['이미 보냈거나 보내는 중이에요', 'Already sent or being sent', '已经发送或正在发送', '已經傳送或正在傳送'],
   'widget.ai-response.draftExpired': ['초안 시간이 지났어요. 새 초안을 만들어 주세요', 'The draft expired. Create a new draft.', '草稿已过期，请生成新草稿', '草稿已過期，請產生新草稿'],
   'widget.ai-response.confirmOnly': ['자동 발송 없음 · 항상 미리보기 확인 후 테스트 발송', 'Automatic sending is off · Always review before a test send', '自动发送已关闭 · 测试发送前请确认内容', '自動發送已關閉 · 測試發送前請確認內容'],
 } as const satisfies Readonly<Record<string, Row>>;

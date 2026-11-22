@@ -3,11 +3,12 @@
  * the send phase machine (confirm -> sending 600 ms -> sent), idempotency keys and the focus-on-action helper.
  * No RunStore here: widgets talk to the data store through the hooks and to the shell through the host.
  */
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react';
 import type { DetailRef, MessageParams, WidgetHost } from '../../../contracts';
+import { useAccountController } from '../../../app/account-context-value';
 import { koreanScreenText, useBundle } from '../../../i18n';
 import type { Formatters, Translator } from '../../../i18n';
-import { useWidgetDataStore } from '../../../data/react';
+import { useOptionalWidgetDataStore, useWidgetDataStore } from '../../../data/react';
 import { dataBundle, resolveDataText, type DataCommandResult, type DataText } from '../../../data/widget-data';
 import type { WidgetView } from '../../../data/widget-data';
 import { ActionButton, Icon, PanelState, StatusBadge, maskName, motionTokens, useKitT, useUi } from '../../../ui';
@@ -40,6 +41,16 @@ export function useMkt(): Mkt {
     };
   }, [tr]);
 }
+
+/**
+ * D-333: how many real list rows a coupon panel may build. 2-high cards keep the budget they always had (`base`); 3-high cards list twice as many; 4-high cards
+ * list every row the data holds (the extra ones are marked `data-mkt-extra`, and the fit guard drops them first when the card is tight).
+ */
+export function listRows(shape: string, height: number, base = 3, cap = Number.POSITIVE_INFINITY): number {
+  if (shape !== 'S' && shape !== 'L') return base;
+  return Math.min(cap, height >= 4 ? Number.POSITIVE_INFINITY : height === 3 ? base * 2 : base);
+}
+export const extraRow = (index: number, base = 3): { readonly 'data-mkt-extra'?: '' } => (index >= base ? { 'data-mkt-extra': '' } : {});
 
 /** Large text (125%) shape facts shared by the four panels. */
 export function usePanelMode(shape: string, editing: boolean) {
@@ -139,7 +150,7 @@ export function NoteLine({ notes, compact = false }: { readonly notes: readonly 
 
 export function SentStatus() {
   const { t } = useMkt();
-  return <p className="ui-confirm-step__status" role="status"><Icon name="check" aria-hidden />{t('common.sentSample')}</p>;
+  return <p className="ui-confirm-step__status" role="status"><Icon name="check" aria-hidden />{t('data.notices.notice.scheduled')}</p>;
 }
 
 export type Phase = 'form' | 'confirm' | 'sending' | 'sent';
@@ -179,19 +190,31 @@ export function useActionFocus(ref: RefObject<HTMLElement | null>, detailRef: De
   return wanted;
 }
 
-function CouponSmsFixedLine({ part, descriptionId }: { readonly part: 'ad' | 'optout'; readonly descriptionId?: string }) {
+function CouponSmsFixedLine({ part, storeName, descriptionId }: { readonly part: 'ad' | 'optout'; readonly storeName?: string; readonly descriptionId?: string }) {
   const { t } = useMkt();
   const ad = part === 'ad';
   return <p className={`ui-sms-preview__fixed ui-sms-preview__${part}`} data-fixed={part}>
-    <strong>{t(ad ? 'marketing.adMark' : 'marketing.optOut')}</strong>
+    <span lang="ko"><strong>{ad ? '(광고)' : '무료수신거부'}</strong>{ad && storeName ? ` ${storeName}` : null}</span>
     <span id={descriptionId} aria-hidden={descriptionId ? true : undefined} className="mkt-sms-help">
       {t(ad ? 'widget.slot-coupon.adHelp' : 'widget.slot-coupon.optOutHelp')}
     </span>
   </p>;
 }
 
+function useCouponStoreName() {
+  const account = useAccountController();
+  const store = useOptionalWidgetDataStore();
+  const fixture = account === null && !(store?.real && (['coupons', 'groups', 'inbox'] as const).some(domain => store.real?.mode(domain) === 'http'));
+  const fixtureName = () => fixture ? store?.getSnapshot().tables.marketing.promoStore[0]?.name : undefined;
+  const name = useSyncExternalStore(store?.subscribe ?? noStoreSubscription, fixtureName, fixtureName);
+  return account?.storeName ?? name;
+}
+
+const noStoreSubscription = () => () => undefined;
+
 export function EditableSmsPreview({ body, onBodyChange, recipientCount }: { readonly body: string; readonly onBodyChange: (value: string) => void; readonly recipientCount: number }) {
   const kit = useKitT();
+  const storeName = useCouponStoreName();
   const id = useId();
   const adHelp = `${id}-ad`;
   const optOutHelp = `${id}-optout`;
@@ -199,7 +222,7 @@ export function EditableSmsPreview({ body, onBodyChange, recipientCount }: { rea
   // Assistive technology receives the two visible notes through the editor's description.
   return <div className="mkt-sms-preview">
     <div className="ui-sms-preview" role="group" aria-label={kit.t('marketing.messagePreview')}>
-      <CouponSmsFixedLine part="ad" descriptionId={adHelp} />
+      <CouponSmsFixedLine part="ad" storeName={storeName} descriptionId={adHelp} />
       <div className="ui-field ui-sms-preview__body">
         <label className="ui-field__label" htmlFor={id}>{kit.t('ui.sms.bodyLabel')}</label>
         <div className="ui-field__control">
@@ -214,13 +237,14 @@ export function EditableSmsPreview({ body, onBodyChange, recipientCount }: { rea
 }
 
 /** Read-only preview for expiry coupons and ending-soon reminders. */
-export function FixedSmsPreview({ body, recipientCount, showInsertionNotes = false }: { readonly body: string; readonly recipientCount: number; readonly showInsertionNotes?: boolean }) {
+export function FixedSmsPreview({ body, recipientCount }: { readonly body: string; readonly recipientCount: number }) {
   const { t, locale } = useMkt();
   const kit = useKitT();
+  const storeName = useCouponStoreName();
   return <div className="ui-sms-preview mkt-sms-fixed" role="group" aria-label={t('marketing.messagePreview')}>
-    {showInsertionNotes ? <CouponSmsFixedLine part="ad" /> : <p className="ui-sms-preview__fixed ui-sms-preview__ad" data-fixed="ad"><strong>{t('marketing.adMark')}</strong></p>}
+    <CouponSmsFixedLine part="ad" storeName={storeName} />
     <p className="mkt-sms-fixed__body">{body}</p>
-    {showInsertionNotes ? <CouponSmsFixedLine part="optout" /> : <p className="ui-sms-preview__fixed ui-sms-preview__optout" data-fixed="optout"><strong>{t('marketing.optOut')}</strong> <span>{kit.t('ui.sms.autoFooter')}</span></p>}
+    <CouponSmsFixedLine part="optout" />
     {locale !== 'ko' ? <p className="ui-sms-preview__line">{kit.t('ui.sms.line', { n: recipientCount })}</p> : null}
   </div>;
 }

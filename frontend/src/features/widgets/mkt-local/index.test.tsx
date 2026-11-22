@@ -14,6 +14,8 @@ import { renderWithKit } from '../../../ui/test-utils';
 import { mktLocalBundle, mktLocalReviewKeys } from './messages';
 import { widgets } from './index';
 import { readFileSync } from 'node:fs';
+import { createTranslator } from '../../../i18n';
+import { dateRangeWithWeekdays } from '../date-range';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -48,10 +50,7 @@ const model = <F extends LocalId>(id: F, store = createWidgetDataStore()) => rea
 const seedText = (key: string): string => key.replace(/^seed:/, '');
 const dataLabel = (locale: Locale, key: string): string => (dataBundle as unknown as Record<string, Record<string, string>>)[locale][key];
 const escapeRe = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const koRange = (start: string, end: string): string => {
-  const [, m1, d1] = start.split('-').map(Number); const [, m2, d2] = end.split('-').map(Number);
-  return m1 === m2 ? `${m1}월 ${d1}일~${d2}일` : `${m1}월 ${d1}일~${m2}월 ${d2}일`;
-};
+const koRange = (start: string, end: string): string => dateRangeWithWeekdays(createTranslator('ko'), start, end);
 const bodyOf = (th: { readonly body: unknown }): string => seedText((th.body as { readonly key: string }).key);
 const rowFor = (body: string) => screen.getByRole('button', { name: new RegExp(escapeRe(body.slice(0, 16))) });
 
@@ -245,7 +244,7 @@ describe('동네 변화 detail', () => {
     expect(screen.getByText(summary(lc.openChanges.length))).toBeInTheDocument();
     expect(screen.queryAllByText('같은 업종')).toHaveLength(lc.changes.filter((c) => c.sameCategory).length);
     expect(screen.getByText(`매장에서 ${first.distanceM}m`)).toBeInTheDocument();
-    expect(screen.getAllByText(/출처: 예시 자료/)).toHaveLength(lc.openChanges.length);
+    expect(screen.queryByText(/출처: 예시 자료/)).not.toBeInTheDocument();
     expect(screen.getAllByText(new RegExp(`오늘 ${first.updatedAt.slice(11, 16)} 갱신`))).toHaveLength(updatedLike);
     expect(screen.queryByText('손님예측에 반영했어요')).toBeNull();
     expect(document.body.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
@@ -346,7 +345,7 @@ describe('로컬 트렌드 detail', () => {
     expect(card).toHaveTextContent(`언급 ${first.mentions}회(이전 ${first.previous}회)`);
     expect(card).not.toHaveTextContent(/회 \(이전/);
     expect(card).toHaveTextContent('이전');
-    expect(card).toHaveTextContent('출처: 예시 자료');
+    expect(card).not.toHaveTextContent('출처: 예시 자료');
     expect(card).toHaveTextContent('갱신');
   });
 
@@ -412,7 +411,7 @@ describe('메시지·리뷰 응대 detail', () => {
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     const first = screen.getAllByRole('button').find((b) => b.getAttribute('aria-current') === 'true')!;
     expect(first).toHaveTextContent(bodyOf(flagged));
-    expect(screen.getByText(/사람이 직접 확인해 주세요\(환불\)/)).toBeInTheDocument();
+    expect(screen.getByText(/직접 확인해 주세요 · 환불/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '보낼 내용 확인하기' })).toBeDisabled();
     fireEvent.click(rowFor(bodyOf(next)));
     expect(next.groundKeys).toEqual([]);
@@ -422,7 +421,7 @@ describe('메시지·리뷰 응대 detail', () => {
     const send = await previewReply();
     fireEvent.click(send);
     fireEvent.click(send);
-    expect(await screen.findByText('보냈어요(예시)')).toBeInTheDocument();
+    expect(await screen.findByText('답변함', { selector: '[role=status]' })).toBeInTheDocument();
     expect(screen.getByText(`답변 대기 ${ai.waitingCount - 1}건 · 메시지 ${ai.byType.message - 1} · 리뷰 ${ai.byType.review}`)).toBeInTheDocument();
     expect(transport.mock.calls.filter(([path]) => path === '/api/navis/reply-test-send')).toHaveLength(1);
   });
@@ -456,7 +455,7 @@ describe('메시지·리뷰 응대 detail', () => {
     fireEvent.click(screen.getByRole('button', { name: '답글 초안 만들기' }));
     expect(await screen.findByRole('textbox', { name: '답글 초안' })).toBeInTheDocument();
     fireEvent.click(await previewReply());
-    expect(await screen.findByText('보냈어요(예시)')).toBeInTheDocument();
+    expect(await screen.findByText('답변함', { selector: '[role=status]' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: chipName })).toBeInTheDocument();
     expect(screen.getByText(`답변 대기 ${ai.waitingCount - 1}건 · 메시지 ${ai.byType.message} · 리뷰 ${ai.byType.review - 1}`)).toBeInTheDocument();
   });
@@ -481,7 +480,7 @@ describe('메시지·리뷰 응대 detail', () => {
     fireEvent.click(await previewReply());
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('보내지 못했어요');
-    expect(alert).toHaveTextContent('채널이 응답하지 않아요(예시)');
+    expect(alert).toHaveTextContent('채널이 응답하지 않아요');
     expect(screen.getByText(`답변 대기 ${ai.waitingCount}건 · 메시지 ${ai.byType.message} · 리뷰 ${ai.byType.review}`)).toBeInTheDocument();
     expect(host.calls.notify).toHaveLength(0);
     expect(transport.mock.calls.filter(([path]) => path === '/api/navis/reply-test-send')).toHaveLength(0);
@@ -494,8 +493,8 @@ describe('메시지·리뷰 응대 detail', () => {
     const disconnected = detail('ai-response', { preview: { family: 'normal', overrides: { 'ai-response': 'channel-disconnected' } } });
     expect(screen.getByText('연결된 채널이 없어요')).toBeInTheDocument();
     expect(screen.queryByText('연결이 필요해요')).toBeNull();
-    expect(screen.getByRole('button', { name: '연결하기(예시)' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '연결하기(예시)' }));
+    expect(screen.getByRole('button', { name: '연결하기' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '연결하기' }));
     expect(disconnected.host.calls.resetPreview).toBe(1);
     cleanup();
     detail('ai-response', { preview: { family: 'normal', overrides: { 'ai-response': 'none' } } });
@@ -511,10 +510,12 @@ describe('메시지·리뷰 응대 detail', () => {
 
   it('shop guidance lines carry no empty separators and no ISO dates', () => {
     detail('ai-response');
+    expect(screen.queryByText(/채널 연결됨\(예시\)|자료가 없는 예시/)).not.toBeInTheDocument();
     const section = screen.getByRole('region', { name: '매장 안내' });
     const lines = [...section.querySelectorAll('p')].map((el) => el.textContent ?? '');
     for (const line of lines) expect(line).not.toMatch(/^[\s·]*$/);
     expect(section.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(section.textContent).not.toContain('가상 주소');
   });
 
   it('works in English and Traditional Chinese (no key strings)', () => {
@@ -546,7 +547,7 @@ describe('커뮤니티 detail', () => {
     expect(screen.getByText(`답할 제안 ${co.pendingCount}건`)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '수락하기' }));
     expect(screen.getByText(`답할 제안 ${co.pendingCount - 1}건`)).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('연락 수단: 가게 전화로 연락해요(예시)');
+    expect(screen.getByRole('status')).toHaveTextContent('연락 수단: 가게 전화로 연락해요');
     expect(screen.getAllByText('진행 중').length).toBeGreaterThan(0);
     expect(host.calls.notify[0]).toMatchObject({ messageKey: 'data.notice.offerAccepted' });
   });
@@ -559,7 +560,7 @@ describe('커뮤니티 detail', () => {
     fireEvent.click(screen.getByRole('tab', { name: '동네 둘러보기' }));
     expect(screen.queryByRole('button', { name: '수락하기' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '관심 보내기' }));
-    expect(screen.getByRole('status')).toHaveTextContent('관심을 보냈어요(예시)');
+    expect(screen.getByRole('status')).toHaveTextContent('관심을 보냈어요');
     expect(screen.queryByRole('button', { name: '관심 보내기' })).not.toBeInTheDocument();
   });
   it('the cafe sample (one direct offer, three browse-only public offers) fills the browse tab instead of an empty page', () => {
@@ -568,6 +569,8 @@ describe('커뮤니티 detail', () => {
     expect(co.pendingCount).toBe(1);
     expect(co.publicOffers).toHaveLength(3);
     detail('community', { ref: { view: 'browse' } });
+    expect(screen.queryByText('응답 대기')).not.toBeInTheDocument();
+    expect(screen.queryByText(/까지 응답/)).not.toBeInTheDocument();
     for (const title of ['시험기간 공부 공간과 음료 제휴', '연말 꽃다발과 카페 방문 공동 행사', '주말 공방 체험과 디저트 산책']) {
       expect(screen.getAllByText(title).length).toBeGreaterThan(0);
     }
@@ -652,7 +655,7 @@ it('uses the correct comparison particle and accounts for hidden waiting channel
   const lt = model('local-trends');
   const ai = model('ai-response');
   detail('local-trends');
-  expect(document.body.textContent).toContain(`${koRange(lt.previousPeriod.start, lt.previousPeriod.end)})와 비교했어요`);
+  expect(document.body.textContent).toContain(`${koRange(lt.previousPeriod.start, lt.previousPeriod.end)}와 비교했어요`);
   cleanup();
   panel('ai-response', 2, 1);
   const hidden = ai.byChannel.slice(2).reduce((sum, channel) => sum + channel.count, 0);
@@ -663,7 +666,7 @@ it('uses the correct comparison particle and accounts for hidden waiting channel
 it('D231 presents a concise trend comparison and one auto-reply summary', () => {
   const lt = model('local-trends');
   detail('local-trends');
-  expect(document.body.textContent).toContain(`${koRange(lt.period.start, lt.period.end)} · 지난주(${koRange(lt.previousPeriod.start, lt.previousPeriod.end)})와 비교했어요`);
+  expect(document.body.textContent).toContain(`${koRange(lt.period.start, lt.period.end)} · 지난주 ${koRange(lt.previousPeriod.start, lt.previousPeriod.end)}와 비교했어요`);
   cleanup();
   detail('ai-response');
   expect(screen.getByText('자동 발송 없음 · 항상 미리보기 확인 후 테스트 발송')).toBeInTheDocument();

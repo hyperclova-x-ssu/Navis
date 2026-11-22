@@ -3,20 +3,28 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } f
 import type { WidgetDetailProps, WidgetModule, WidgetPanelProps } from '../../../contracts';
 import { useDataDispatch, useWidgetView } from '../../../data/react';
 import { managementBundle } from '../../../data/messages/management';
-import type { ThreadRow } from '../../../data/models/types';
+import type { ImportRow, ThreadRow } from '../../../data/models/types';
 import { ActionButton, ChipChoice, DetailTabs, Icon, InlineEmpty, InlineError, IntegrationBadge, MasterDetail, PanelBody, PinnedColumn, StatusBadge, Textarea, useUi } from '../../../ui';
 import { DetailState, FitList, MetaLine, PanelStateView, PrimaryMetric, dateTime, rowCapacity, text, useT, type Translator } from './shared';
-import { koreanLang } from './fit';
+import { isLargeCard, koreanLang } from './fit';
 import { useBundle } from '../../../i18n';
 import { registerGridLayer } from '../../../ui/grid-interactions';
 import { naverDraftErrorText, naverDrafts, setDraftInputLanguage, useNaverDraft, useNaverDraftCopy, type DraftError, type SendResult, type TargetResult, type TestTarget } from '../naver-drafts';
 import type { StoreClosure } from '../../../data/iteration7/notices';
 import { isIsoDate } from '../../../data/db/time';
-import { replyPrefill } from '../../assistant/domains/replies';
+import { replyPrefill } from './reply-prefill';
+import { AddInquiry, ImportPane, InboxReplyControls, InboxThreadSource, ReplyDone, ReplyLayout, ReviewStats, inboxText } from './ai-response.actions';
+import { answeredReviewImports, shownAverage, type AnsweredReviewImport, type ReviewStatsUnit } from '../../../data/reality/15/dto';
+import { useInbox, useInboxHttp, useReviewInsights } from '../../../data/reality/15/hooks';
+import { useReadHost } from './local-changes.http';
+import { useKept } from '../mkt-coupon/shared';
+import { dateRangeWithWeekdays } from '../date-range';
 
 const ID = 'ai-response';
-type Tab = 'message' | 'review';
-const EMPTY_REPLY = 'th-empty';
+type Tab = 'message' | 'review' | 'stats';
+/** Waiting items a wide card lists under the channel rows; the 4-high card lists up to six (D-333). */
+const SMALL_PRIORITY_ROWS = 3;
+const LARGE_PRIORITY_ROWS = 6;
 type ReplyCompletion = { readonly status: 'simulated' | 'accepted'; readonly body: string };
 const guidanceBundle = { id: 'widget.reply-guidance', ko: {
   'replyGuidance.title': '매장 안내', 'replyGuidance.regular': '정기 휴무', 'replyGuidance.temporary': '임시 휴무',
@@ -38,6 +46,7 @@ export function closureForQuestion(question: string, closures: readonly StoreClo
 
 /** Reviewer name as masked by the data layer (AC-318); the full name never reaches the screen. */
 const authorOf = (th: ThreadRow): string | null => th.authorMasked ?? null;
+const importExcerpt = (t: Translator, row: ImportRow) => row.text ?? t.t(inboxText('consultation'), { ref: row.providerRef });
 
 function SentimentBadge({ t, sentiment }: { readonly t: Translator; readonly sentiment: ThreadRow['sentiment'] }) {
   if (sentiment === 'positive') return <StatusBadge semantic="positive" label={t.t('widget.ai-response.positive')} />;
@@ -46,15 +55,17 @@ function SentimentBadge({ t, sentiment }: { readonly t: Translator; readonly sen
   return null;
 }
 
-function Panel({ condition, width, height, shape, editing, host }: WidgetPanelProps) {
+function Panel({ condition, width, height, shape, editing, host: shellHost }: WidgetPanelProps) {
   const t = useT();
+  const host = useReadHost(shellHost, 'inbox');
   const { textScale } = useUi();
   const view = useWidgetView(ID, condition);
+  const http = useInboxHttp();
   if (view.status !== 'ready') return <PanelStateView id={ID} view={view} shape={shape} width={width} host={host} />;
   const m = view.model;
   const primary = (
     <PrimaryMetric id={ID} shape={shape} label={t.t('widget.ai-response.waiting')} value={t.format.number(m.waitingCount)} unit={t.t('widget.ai-response.unit', { n: m.waitingCount })}
-      secondary={shape==='W'?undefined:t.t('widget.ai-response.byType', { m: m.byType.message, r: m.byType.review })} />
+      secondary={shape === 'W' ? undefined : t.t('widget.ai-response.byType', { m: m.byType.message, r: m.byType.review })} />
   );
   const capacity = shape === 'W' ? (textScale === 125 ? 1 : 2) : rowCapacity(shape, height, textScale);
   const channelRows = m.byChannel.slice(0, capacity);
@@ -66,56 +77,86 @@ function Panel({ condition, width, height, shape, editing, host }: WidgetPanelPr
       <span className="mkt-row__value">{t.t('widget.ai-response.countText', { n: c.count })}{t.locale === 'ko' && index === channelRows.length - 1 && hiddenWaiting > 0 ? `\u00a0·\u00a0외 ${t.format.number(hiddenWaiting)}건` : ''}</span>
     </li>
   ));
-  const priorityItems = priorityRows.map((th) => (
-    <li key={th.threadId} className="mkt-row" data-slot={`${ID}.list.row`}>
-      <span className="mkt-row__text"><span className="mkt-row__title" lang={koreanLang(text(t, th.body))}>{text(t, th.body)}</span><span className="mkt-row__sub">{t.t(th.channelKey)}</span></span>
-      {th.needsPersonReason ? <StatusBadge kind="needsReview" /> : null}
+  /** D-333: the large card keeps the small-size rows and adds the next waiting items; each row also says when it was received and why it needs a person (the data the thread holds). */
+  const large = isLargeCard(shape, height);
+  const priorityItems = (large ? m.priority.slice(0, LARGE_PRIORITY_ROWS) : priorityRows).map((th, index) => (
+    <li key={th.threadId} className="mkt-row" data-slot={`${ID}.list.row`} data-mkt-extra={large && index >= SMALL_PRIORITY_ROWS ? '' : undefined}>
+      <span className="mkt-row__text"><span className="mkt-row__title" lang={koreanLang(text(t, th.body))}>{text(t, th.body)}</span><span className="mkt-row__sub">{large ? `${t.t(th.channelKey)} · ${t.t('widget.ai-response.receivedAt', dateTime(t, th.receivedAt))}` : t.t(th.channelKey)}</span></span>
+      {th.needsPersonReason ? <StatusBadge kind="needsReview" label={large && th.needsPersonKey ? `${t.t('common.badge.needsReview')} · ${t.t(th.needsPersonKey)}` : undefined} /> : null}
     </li>
   ));
+  // HTTP: the NAVER items that wait for a reply are counted above, so they list after the queue's own waiting items (same row shape).
+  const room = Math.max(0, (large ? LARGE_PRIORITY_ROWS : capacity) - priorityItems.length);
+  priorityItems.push(...(m.imports ?? []).slice(0, room).map((row, index) => {
+    const excerpt = importExcerpt(t, row);
+    return <li key={row.importId} className="mkt-row" data-slot={`${ID}.list.row`} data-mkt-extra={large && priorityItems.length + index >= SMALL_PRIORITY_ROWS ? '' : undefined}>
+      <span className="mkt-row__text"><span className="mkt-row__title" lang={koreanLang(excerpt)}>{excerpt}</span><span className="mkt-row__sub">{t.t(row.channelKey)}</span></span>
+    </li>;
+  }));
   const fit = (items: readonly ReactNode[], label: string) => <FitList slot={`${ID}.list`} label={label} items={items} resetKey={`${t.locale}|${width}x${height}|${textScale}|${items.length}`} />;
   const byChannel = fit(channelItems, t.t('widget.ai-response.waiting'));
   const first = fit(priorityItems, t.t('widget.ai-response.recent'));
   const note = view.notes?.[0];
-  const praiseLine = shape !== 'Q' && !(shape === 'T' && textScale === 125) ? (
+  const praiseLine = !http && shape !== 'Q' && !(shape === 'T' && textScale === 125) ? (
     <>
       <p className="mkt-secondary" data-slot={`${ID}.metric.secondary`}>{t.t('widget.ai-response.praise', { n: m.praiseCount })}</p>
       {note ? <p className="mkt-panel-note">{editing ? <StatusBadge kind="needsReview" /> : <Icon name="warning" aria-hidden />}<span className={editing ? 'ui-sr-only' : undefined} lang={koreanLang(t.t(note.messageKey))}>{t.t(note.messageKey)}</span></p> : null}
     </>
   ) : null;
-  const list = m.waitingCount === 0 ? null : shape === 'T' ? first : shape === 'S' ? byChannel : shape === 'L' ? fit([...channelItems, ...priorityItems.slice(0, 3)], t.t('widget.ai-response.waiting')) : byChannel;
+  const list = m.waitingCount === 0 ? null : shape === 'T' ? first : shape === 'S' ? byChannel : shape === 'L' ? fit([...channelItems, ...priorityItems.slice(0, large ? LARGE_PRIORITY_ROWS : SMALL_PRIORITY_ROWS)], t.t('widget.ai-response.waiting')) : byChannel;
   return <PanelBody width={width} height={height} primary={primary} list={shape==='W'?<>{list}{praiseLine}</>:list} secondary={shape==='W'?undefined:praiseLine} />;
 }
 
-function Detail({ condition, detailRef, host }: WidgetDetailProps) {
+function Detail({ condition, detailRef, host: shellHost }: WidgetDetailProps) {
   const t = useT();
+  const host = useReadHost(shellHost, 'inbox');
   const guidance = useBundle(guidanceBundle, managementBundle) as unknown as Translator;
   const view = useWidgetView(ID, condition);
   const dispatch = useDataDispatch();
-  const [tab, setTab] = useState<Tab>(detailRef.view === 'review' ? 'review' : 'message');
+  const http = useInboxHttp();
+  const data = useInbox();
+  // T-18 (H5): without a requested view the tab and the stats unit the owner left come back (kept per data store); a Navis card's view still wins.
+  const requested = detailRef.view !== undefined || detailRef.itemId !== undefined;
+  const [keptTab, keepTab] = useKept<Tab>('ai-response.tab', 'message');
+  const [keptUnit, keepUnit] = useKept<ReviewStatsUnit>('ai-response.unit', 'week');
+  const [tab, setTabState] = useState<Tab>(detailRef.view === 'review' || http && detailRef.view === 'stats' ? detailRef.view : !requested && (keptTab !== 'stats' || http) ? keptTab : 'message');
+  const setTab = (next: Tab) => { setTabState(next); keepTab(next); };
+  const [adding, setAdding] = useState(false);
+  const [unit, setUnitState] = useState<ReviewStatsUnit>(requested ? 'week' : keptUnit);
+  const setUnit = (next: ReviewStatsUnit) => { setUnitState(next); keepUnit(next); };
+  const insights = useReviewInsights(!http || tab === 'message' ? null : tab === 'review' ? 'week' : unit);
   const [praiseOnly, setPraiseOnly] = useState(detailRef.filter === 'praise');
   const [pickedId, setPickedId] = useState<string | null>(detailRef.itemId ?? null);
   const [sent, setSent] = useState<Readonly<Record<string, ReplyCompletion>>>({});
-  const draftCopy = useNaverDraftCopy();
   if (view.status !== 'ready') {
     const disconnected = view.variant === 'channel-disconnected';
     return <DetailState id={ID} view={view} host={host} extra={disconnected && t.locale !== 'ko' ? <IntegrationBadge state="needed" label={t.t('common.connectNeeded')} /> : null} />;
   }
   const m = view.model;
   const done = m.threads.filter((th) => !th.waiting).sort((a, b) => b.receivedAt.localeCompare(a.receivedAt) || a.threadId.localeCompare(b.threadId));
-  const ordered = [...m.priority, ...done];
-  const inTab = ordered.filter((th) => (tab === 'review' ? th.type === 'review' : th.type !== 'review'));
-  const list = tab === 'review' && praiseOnly ? inTab.filter((th) => th.sentiment === 'positive') : inTab;
-  const emptySample = tab === 'message' && pickedId === EMPTY_REPLY;
-  const selected = emptySample ? null : list.find(th => th.threadId === pickedId) ?? list[0] ?? null;
+  const matchesTab = (row: Pick<ThreadRow, 'type' | 'sentiment'>) => (tab === 'review') === (row.type === 'review')
+    && (http || tab !== 'review' || !praiseOnly || row.sentiment === 'positive');
+  const waitingImports = (m.imports ?? []).filter(row => (tab === 'review') === (row.type === 'review'));
+  const answeredImports = data && tab === 'review' ? answeredReviewImports(data) : [];
+  const rows = [...m.priority.filter(matchesTab), ...waitingImports, ...done.filter(matchesTab), ...answeredImports];
+  const importedId = pickedId?.startsWith('import:') ? data?.inquiries.find(row => `import:${row.source}:${row.providerRef}` === pickedId)?.id : undefined;
+  const active = rows.find(row => ('importId' in row ? row.importId : row.threadId) === (importedId ?? pickedId)) ?? rows[0];
+  const selectedImport = active && 'importId' in active ? active : undefined;
+  const selected = active && 'threadId' in active ? active : undefined;
+  const raw = new Map(data?.inquiries.map(row => [row.id, row]));
+  const average = tab === 'review' ? shownAverage(insights.data) : undefined;
 
   const markSent = (thread: ThreadRow, completion: ReplyCompletion) => {
     setSent(previous => ({ ...previous, [thread.threadId]: completion }));
+    setPickedId(previous => previous ?? thread.threadId);
     // These commands update only the local queue. API-312 is the only test transport.
     dispatch({ type: thread.type === 'review' ? 'inquiry.post' : 'inquiry.send', threadId: thread.threadId, idempotencyKey: `${ID}:${thread.threadId}` });
   };
 
-  const row = (th: ThreadRow) => {
+  const threadRow = (th: ThreadRow) => {
     const at = dateTime(t, th.receivedAt);
+    const title = raw.get(th.threadId)?.title;
+    const body = text(t, th.body);
     return (
       <li key={th.threadId} data-slot={`${ID}.list.row`}>
         <button type="button" className="mkt-pick" aria-current={selected?.threadId === th.threadId} onClick={() => setPickedId(th.threadId)}>
@@ -123,7 +164,7 @@ function Detail({ condition, detailRef, host }: WidgetDetailProps) {
             <span className="mkt-pick__title">{t.t(th.channelKey)}{authorOf(th) ? `\u00A0·\u00A0${authorOf(th)}` : ''}</span>
             <span className="mkt-pick__sub">{t.t('widget.ai-response.receivedAt', at)}</span>
           </span>
-          <span className="mkt-pick__excerpt">{text(t, th.body)}</span>
+          <span className="mkt-pick__excerpt">{title && title !== body ? `${title} · ${body}` : body}</span>
           <span className="mkt-pick__badges">
             {th.isPublic || t.locale !== 'ko' ? <StatusBadge semantic="none" label={th.isPublic ? t.t('widget.ai-response.public') : t.t('widget.ai-response.private')} /> : null}
             {th.type === 'review' ? <SentimentBadge t={t} sentiment={th.sentiment} /> : null}
@@ -136,12 +177,22 @@ function Detail({ condition, detailRef, host }: WidgetDetailProps) {
     );
   };
 
+  const importRow = (row: ImportRow | AnsweredReviewImport) => (
+    <li key={row.importId} data-slot={`${ID}.list.row`}>
+      <button type="button" className="mkt-pick" aria-current={selectedImport?.importId === row.importId} onClick={() => setPickedId(row.importId)}>
+        <span className="mkt-pick__top"><span className="mkt-pick__title">{t.t(row.channelKey)}</span></span>
+        <span className="mkt-pick__excerpt">{importExcerpt(t, row)}</span>
+        <span className="mkt-pick__badges">
+          {row.type === 'review' ? <StatusBadge semantic="none" label={t.t('widget.ai-response.public')} /> : null}
+          {row.type === 'review' ? row.stars === null ? <StatusBadge semantic="none" label={t.t(inboxText('noStars'))} /> : <StatusBadge semantic="rating" label={t.t('widget.ai-response.rating', { n: row.stars })} /> : null}
+          {'reply' in row ? <StatusBadge kind="checked" label={t.t(inboxText('hasReply'))} /> : <StatusBadge semantic="waiting" label={t.t('widget.ai-response.waiting')} />}
+        </span>
+      </button>
+    </li>
+  );
+
   const pane = () => {
-    if (emptySample) return (
-      <ReplyEditor key={EMPTY_REPLY} sampleId={EMPTY_REPLY} review={false} onSent={() => {}}>
-        <h3 className="mkt-section">{draftCopy.t('widget.grants.draft.emptySample')}</h3>
-      </ReplyEditor>
-    );
+    if (selectedImport) return <ImportPane key={selectedImport.importId} row={selectedImport} host={host} />;
     if (!selected) return <p className="mkt-meta">{t.t('widget.ai-response.pickItem')}</p>;
     const th = selected;
     const review = th.type === 'review';
@@ -149,30 +200,28 @@ function Detail({ condition, detailRef, host }: WidgetDetailProps) {
     const prefill = th.threadId === detailRef.itemId ? replyPrefill(detailRef) : undefined;
     const saved = th.draft && 'raw' in th.draft ? th.draft.raw : undefined;
     const entryBody = prefill ?? saved;
+    const inquiry = raw.get(th.threadId);
     const original = (
       <>
         <div className="mkt-card__badges">
           {th.isPublic || t.locale !== 'ko' ? <StatusBadge semantic="none" label={th.isPublic ? t.t('widget.ai-response.public') : t.t('widget.ai-response.private')} /> : null}
           {review ? <SentimentBadge t={t} sentiment={th.sentiment} /> : null}
-          {th.rating ? <StatusBadge semantic="rating" label={t.t('widget.ai-response.rating', { n: th.rating })} /> : null}
+          {th.rating !== null ? <StatusBadge semantic="rating" label={t.t('widget.ai-response.rating', { n: th.rating })} />
+            : inquiry?.source === 'review' ? <StatusBadge semantic="none" label={t.t(inboxText('noStars'))} /> : null}
         </div>
         <MetaLine>{t.t(th.channelKey)}{authorOf(th) ? `\u00A0·\u00A0${authorOf(th)}` : ''}{'\u00A0·\u00A0'}{t.t('widget.ai-response.receivedAt', dateTime(t, th.receivedAt))}</MetaLine>
         <h4 className="mkt-section">{t.t('widget.ai-response.original')}</h4>
+        {inquiry?.title && inquiry.title !== text(t, th.body) && <p className="mkt-card__title">{inquiry.title}</p>}
         <p className="mkt-quote">{text(t, th.body)}</p>
+        {inquiry && data && <InboxThreadSource row={inquiry} data={data} />}
         {th.needsPersonReason && <div className="mkt-alert" role="note"><p className="mkt-alert__title"><Icon name="warning" aria-hidden />{t.t('common.badge.needsReview')}</p><p>{t.t('widget.ai-response.needsPerson', { reason: t.t(th.needsPersonKey ?? '') })}</p></div>}
       </>
     );
-    if (completion || !th.waiting) return (
-      <div className="mkt-detail" data-slot={`${ID}.card`}>
-        {original}
-        <h4 className="mkt-section">{t.t('widget.ai-response.sentHeading')}</h4>
-        <p className="mkt-quote mkt-reply-text" lang={completion ? 'ko' : undefined}>{completion?.body ?? text(t, th.draft)}</p>
-        <p className="mkt-ok" role="status"><Icon name="check" aria-hidden />{
-          completion?.status === 'accepted' ? t.t('widget.ai-response.accepted')
-            : completion ? t.t('common.sentSample') : t.t('widget.ai-response.statusDone')
-        }</p>
-      </div>
-    );
+    if (data && inquiry) return <InboxReplyControls key={`${data.storeId}:${inquiry.id}:${inquiry.revision}`} row={inquiry} data={data} host={host} prefill={prefill}
+      focusOnEntry={detailRef.focus === 'action' && th.threadId === detailRef.itemId} keep={() => setPickedId(th.threadId)}>{original}</InboxReplyControls>;
+    if (http) return null;
+    if (completion || !th.waiting) return <ReplyDone original={original} body={completion?.body ?? text(t, th.draft)}
+      lang={completion ? 'ko' : undefined} status={t.t(completion?.status === 'accepted' ? 'widget.ai-response.accepted' : 'widget.ai-response.statusDone')} />;
     return (
       <ReplyEditor key={JSON.stringify([th.threadId, saved, prefill])} sampleId={th.threadId} review={review}
         initialBody={entryBody} focusOnEntry={detailRef.focus === 'action' && pickedId === (detailRef.itemId ?? null)}
@@ -188,35 +237,35 @@ function Detail({ condition, detailRef, host }: WidgetDetailProps) {
     );
   };
 
-  const tabs = [{ value: 'message' as const, label: t.t('widget.ai-response.tabMessages') }, { value: 'review' as const, label: t.t('widget.ai-response.tabReviews') }];
+  const tabs = [{ value: 'message' as const, label: t.t('widget.ai-response.tabMessages') }, { value: 'review' as const, label: t.t('widget.ai-response.tabReviews') },
+    ...(data ? [{ value: 'stats' as const, label: t.t(inboxText('tabStats')) }] : [])];
   return (
     <div className="mkt-detail mkt-reply-detail">
       <div className="mkt-toolbar">
-        <IntegrationBadge label={t.t('widget.ai-response.channelConnected')} />
         <MetaLine>{t.t('widget.ai-response.summary', { n: m.waitingCount })}{'\u00A0·\u00A0'}{t.t('widget.ai-response.byType', { m: m.byType.message, r: m.byType.review })}</MetaLine>
+        {average !== undefined && <MetaLine>{t.t(inboxText('average'), { x: average.toFixed(1) })}</MetaLine>}
+        {data && <ActionButton variant="secondary" disabled={adding} onClick={() => setAdding(true)}>{t.t(inboxText('addInquiry'))}</ActionButton>}
       </div>
+      {data && adding && <AddInquiry host={host} close={() => setAdding(false)} onCreated={(id, kind) => { setTab(kind); setPickedId(id); }} />}
       {view.notes?.[0] ? <p className="mkt-panel-note"><Icon name="warning" aria-hidden />{t.t(view.notes[0].messageKey)}</p> : null}
       <DetailTabs value={tab} onValueChange={(v) => { setTab(v); setPickedId(null); }} tabs={tabs} label={t.t('widget.ai-response.tabLabel')} />
-      {tab === 'review' ? (
+      {tab === 'review' && !http ? (
         <div className="ui-chip-choice">
           <button type="button" role="checkbox" aria-checked={praiseOnly} className="ui-choice-chip" data-slot={`${ID}.praise`} onClick={() => setPraiseOnly(!praiseOnly)}>{t.t('widget.ai-response.praise', { n: m.praiseCount })}</button>
         </div>
       ) : null}
-      <MasterDetail
-        list={list.length === 0 ? <p className="mkt-meta">{t.t('widget.ai-response.noItems')}</p> : (
+      {tab === 'stats' ? <ReviewStats read={insights} unit={unit} onUnit={setUnit} /> : <MasterDetail
+        list={rows.length === 0 ? <p className="mkt-meta">{t.t('widget.ai-response.noItems')}</p> : (
           <ul className="mkt-list" data-slot={`${ID}.list`}>
-            {list.map(row)}
-            {tab === 'message' && <li><button type="button" className="mkt-pick" aria-current={emptySample} onClick={() => setPickedId(EMPTY_REPLY)}>
-              {draftCopy.t('widget.grants.draft.emptySample')}
-            </button></li>}
+            {rows.map(row => 'importId' in row ? importRow(row) : threadRow(row))}
           </ul>
         )}
         detail={pane()}
-      />
+      />}
       <section aria-label={guidance.t('replyGuidance.title')} lang="ko"><h4 className="mkt-section">{guidance.t('replyGuidance.title')}</h4>
-        {m.shopGuidance.closures.map(closure => <p className="mkt-meta mkt-meta--lines" key={closure.eventId}>{[closure.endDate !== closure.startDate ? t.format.dateRange(closure.startDate, closure.endDate) : t.format.date(closure.startDate, 'short'), closure.title, closure.body].filter(Boolean).join(' · ')}</p>)}
+        {m.shopGuidance.closures.map(closure => <p className="mkt-meta mkt-meta--lines" key={closure.eventId}>{[closure.endDate !== closure.startDate ? dateRangeWithWeekdays(t, closure.startDate, closure.endDate) : t.format.date(closure.startDate, 'short'), closure.title, closure.body].filter(Boolean).join(' · ')}</p>)}
         {m.shopGuidance.manuals.map((manual, index) => {
-          const parts = [text(guidance, manual.title), text(guidance, manual.body)].filter(Boolean);
+          const parts = [text(guidance, manual.title), ...text(guidance, manual.body).split('\n').filter(line => !line.includes('가상 주소'))].filter(Boolean);
           return parts.length === 0 ? null : <p className="mkt-meta mkt-meta--lines" key={index}>{parts.join(' · ')}</p>;
         })}
       </section>
@@ -269,7 +318,10 @@ function ReplyEditor({ sampleId, review, initialBody, focusOnEntry, recoverPrevi
   }, [loaded, targetRevision]);
 
   useLayoutEffect(() => {
-    if (focusOnEntry) (draftField.current ?? generateButton.current)?.focus({ preventScroll: true });
+    if (!focusOnEntry) return;
+    // The detail dialog attaches the widget portal after the editor mounts.
+    const frame = requestAnimationFrame(() => (draftField.current ?? generateButton.current)?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
   }, [focusOnEntry]);
 
   useLayoutEffect(() => {
@@ -350,12 +402,7 @@ function ReplyEditor({ sampleId, review, initialBody, focusOnEntry, recoverPrevi
           : t.t(recoverPreview ? 'data.error.sendFailed' : 'widget.ai-response.sendFailed')
   ) : '';
   return (
-    <PinnedColumn footer={
-      <div className="mkt-reply-footer">
-        <ActionButton ref={previewButton} size="primary" disabled={!canPreview} onClick={openPreview}>{previewLabel}</ActionButton>
-      </div>
-    }>
-      <div className="mkt-detail mkt-reply-editor" data-slot={`${ID}.card`}>
+    <ReplyLayout footer={<ActionButton ref={previewButton} size="primary" disabled={!canPreview} onClick={openPreview}>{previewLabel}</ActionButton>}>
         {children}
         <div className="mkt-toolbar">
           {generation.status === 'error'
@@ -387,8 +434,7 @@ function ReplyEditor({ sampleId, review, initialBody, focusOnEntry, recoverPrevi
           </>
         )}
         <p className="mkt-meta">{t.t('widget.ai-response.confirmOnly')}</p>
-      </div>
-    </PinnedColumn>
+    </ReplyLayout>
   );
 }
 
@@ -467,4 +513,5 @@ function useSummary({ condition }: { readonly condition: WidgetPanelProps['condi
   return t.t(view.variant === 'channel-disconnected' ? 'widget.ai-response.state.disconnected.short' : view.messageKey);
 }
 
+/** HTTP builds (F15) read and write the service's inquiry records; the fixture keeps the sample flow. */
 export const aiResponseModule: WidgetModule = { id: ID, Panel, Detail, useSummary };

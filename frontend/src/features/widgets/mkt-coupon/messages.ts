@@ -37,7 +37,7 @@ const sourcedRows = {
 
 const writtenRows = {
   // T-063: the empty-state button of the 1x1 panel at 125 % text must fit one line, so the panel uses this short name (the detail keeps data.marketing.action.viewTodayPromotions)
-  'widget.coupon-status.emptyAction': ['빈 시간 단골 쿠폰 열기', "Today's promotions", '查看今日推广', '查看今日推廣'],
+  'widget.coupon-status.emptyAction': ['빈 시간 단골 쿠폰 열기', 'Open quiet-hour coupons', '打开闲时优惠券', '開啟離峰時段優惠券'],
   // ───── 빈 시간 단골 쿠폰
   'widget.slot-coupon.unitName': ['개', '{n, plural, one {slot} other {slots}}', '个时段', '個時段'],
   'widget.slot-coupon.summary': ['내일부터 7일 빈 시간 {n}개, 맞춤 단골 {m}명', '{n} quiet slots in the next 7 days, {m} matching regulars', '未来 7 天有 {n} 个空闲时段，匹配熟客 {m} 位', '未來 7 天有 {n} 個空閒時段，符合熟客 {m} 位'],
@@ -45,11 +45,15 @@ const writtenRows = {
   'widget.slot-coupon.windowRange': ['{start}~{end}', '{start} – {end}', '{start}~{end}', '{start}~{end}'],
   'widget.slot-coupon.allSent': ['모든 빈 시간에 쿠폰을 보냈어요', 'Coupons sent for every quiet slot', '所有空闲时段都已发送优惠券', '所有空閒時段都已發送優惠券'],
   'widget.slot-coupon.slotLine': ['{slot}\u00A0· 평소의 {percent}%', '{slot}\u00A0· {percent}% of usual', '{slot}\u00A0· 平时的 {percent}%', '{slot}\u00A0· 平時的 {percent}%'],
+  /** D-333: the regulars matching one quiet slot (large card only). */
+  'widget.slot-coupon.slotRegulars': ['단골 {n}명', '{n, plural, one {# regular} other {# regulars}}', '熟客 {n} 位', '熟客 {n} 位'],
   'widget.slot-coupon.slotsLabel': ['빈 시간 고르기', 'Choose quiet hours', '选择空闲时段', '選擇空閒時段'],
   'widget.slot-coupon.recommendLine': ['{name} — 할인보다 남는 돈이 많아요', '{name} — you keep more than with a discount', '{name} — 比打折剩余利润更多', '{name} — 比折扣剩餘利潤更多'],
   'widget.slot-coupon.recipientMeta': ['{slot}\u00A0· 마지막 방문 {date}', '{slot}\u00A0· last visit {date}', '{slot}\u00A0· 最近到店 {date}', '{slot}\u00A0· 最近到店 {date}'],
-  'widget.slot-coupon.adHelp': ['문구 맨 앞에 자동으로 들어가요', 'Automatically added at the start of the message.', '会自动加在短信开头', '會自動加在簡訊開頭'],
-  'widget.slot-coupon.optOutHelp': ['수신 거부 방법이 문구 맨 끝에 함께 들어가요(예시)', 'Opt-out instructions are added automatically at the end of the message (sample).', '退订方法会自动加在短信最后（示例）', '退訂方法會自動加在簡訊最後（範例）'],
+  'widget.slot-coupon.adHelp': ['문자를 보내려면 발신 번호를 먼저 등록해 주세요', 'Register a sender number before sending texts', '发送短信前请登记发件号码', '傳送簡訊前請登記發件號碼'],
+  'widget.slot-coupon.optOutHelp': ['무료 수신 거부 번호도 등록해 주세요', 'Register a free opt-out number too', '还请登记免费的退订号码', '也請登記免費的退訂號碼'],
+  'widget.slot-coupon.tomorrowAtEight': ['내일 8시', '8 AM tomorrow', '明早 8 点', '明早 8 點'],
+  'widget.slot-coupon.nightBlocked': ['밤 9시부터 아침 8시 전에는 문자를 보낼 수 없어요', 'Texts can only be sent between 8 AM and 9 PM.', '只能在早上 8 点至晚上 9 点前发送短信', '只能在早上 8 點至晚上 9 點前傳送簡訊'],
   'widget.slot-coupon.summaryTitle': ['보내기 전 요약', 'Before you send', '发送前摘要', '發送前摘要'],
   'widget.slot-coupon.send': ['{n}명에게 쿠폰 보내기', 'Send coupon ({n, plural, one {# recipient} other {# recipients}})', '发送优惠券（收件人 {n} 位）', '發送優惠券（收件人 {n} 位）'],
   'widget.slot-coupon.sentTitle': ['보낸 쿠폰', 'Sent coupons', '已发送的优惠券', '已發送的優惠券'],
@@ -88,7 +92,7 @@ const writtenRows = {
   'widget.expiry-coupon.limitAmount': ['{amount}까지 깎아도 버리는 것보다 이득이에요', 'Up to {amount} off still beats throwing it away', '减免 {amount} 以内也比丢弃划算', '減免 {amount} 以內也比丟棄划算'],
   'widget.expiry-coupon.limitSetPrice': ['{price} 이상이면 버리는 것보다 이득이에요', 'A set price of {price} or more still beats throwing it away', '套餐价不低于 {price} 也比丢弃划算', '套餐價不低於 {price} 也比丟棄划算'],
   'widget.expiry-coupon.placeHint': ['쿠폰을 만들면 게시 문구와 쿠폰 코드가 함께 만들어져요', 'Creating the coupon also makes the post text and the coupon code', '创建优惠券后会同时生成发布文案和优惠码', '建立優惠券後會同時產生發布文案和優惠碼'],
-  'widget.expiry-coupon.postedDone': ['올렸어요! 쿠폰 코드를 세기 시작했어요', 'Posted! We started counting the coupon code', '已发布！已开始统计优惠码', '已發布！已開始統計優惠碼'],
+  'widget.expiry-coupon.postedDone': ['올렸다고 표시했어요. 이제 쿠폰 코드 사용을 집계해요', 'Marked as posted. Coupon code use is now counted', '已发布！已开始统计优惠码', '已發布！已開始統計優惠碼'],
   // ───── 진행 중인 쿠폰
   'widget.coupon-status.unitName': ['장', 'coupons', '张', '張'],
   'widget.coupon-status.endingLine': ['곧 끝나는 쿠폰 {m}장', '{m} ending soon', '即将到期 {m} 张', '即將到期 {m} 張'],
@@ -103,7 +107,7 @@ const writtenRows = {
   'widget.coupon-status.colLeft': ['남은 기간', 'Time left', '剩余时间', '剩餘時間'],
   'widget.coupon-status.colActions': ['관리', 'Actions', '操作', '操作'],
   'widget.coupon-status.tableLabel': ['진행 중인 쿠폰 목록', 'Active coupons list', '进行中的优惠券列表', '進行中的優惠券列表'],
-  'widget.coupon-status.resume': ['다시 시작', 'Resume', '恢复', '恢復'],
+  'widget.coupon-status.resume': ['다시 시작하기', 'Resume', '恢复', '恢復'],
   'widget.coupon-status.endedTitle': ['이번 달 끝난 쿠폰 {n}장', 'Coupons ended this month: {n}', '本月已结束的优惠券 {n}', '本月已結束的優惠券 {n}'],
   'widget.coupon-status.endedLine': ['{name}\u00A0· 사용 {used}/{issued}\u00A0· {date} 종료', '{name}\u00A0· used {used}/{issued}\u00A0· ended {date}', '{name}\u00A0· 已使用 {used}/{issued}\u00A0· {date} 结束', '{name}\u00A0· 已使用 {used}/{issued}\u00A0· {date} 結束'],
   'widget.coupon-status.noUsage': ['사용 기록 없음', 'No usage data', '没有使用记录', '沒有使用紀錄'],
@@ -113,12 +117,13 @@ const writtenRows = {
   'widget.coupon-status.notifySend': ['알림 보내기(받는 사람 {n}명)', 'Send reminder ({n, plural, one {# recipient} other {# recipients}})', '发送提醒（收件人 {n} 位）', '發送提醒（收件人 {n} 位）'],
   'widget.coupon-status.monthLine': ['이번 달 사용 {n}장', 'Used this month: {n}', '本月已使用 {n} 张', '本月已使用 {n} 張'],
   'widget.coupon-status.pauseName': ['{name} 일시 중지하기', 'Pause {name}', '暂停 {name}', '暫停 {name}'],
-  'widget.coupon-status.resumeName': ['{name} 다시 시작', 'Resume {name}', '恢复 {name}', '恢復 {name}'],
+  'widget.coupon-status.resumeName': ['{name} 다시 시작하기', 'Resume {name}', '恢复 {name}', '恢復 {name}'],
   'widget.coupon-status.extendName': ['{name} 7일 늘리기', 'Extend {name} by 7 days', '将 {name} 延期 7 天', '將 {name} 延長 7 天'],
   // ───── 손님 그룹
   'widget.customer-groups.unitName': ['명', 'customers', '位', '位'],
   'widget.customer-groups.summary': ['떠날 수 있는 손님 {n}명, 첫 방문 {a}명, 최근 방문 기준 단골 {b}명', '{n} customers who may leave, {a} first-time, {b} regulars by recent visits', '可能流失的顾客 {n} 位，首次到店 {a} 位，按近期到店统计的熟客 {b} 位', '可能流失的顧客 {n} 位，首次到店 {a} 位，按近期到店統計的熟客 {b} 位'],
   // GD-3 (U-07): this count follows card visits; the 회원 grade is a separate count (and can be set by hand), so the answer names its basis.
+  'widget.customer-groups.recipientsTitle': ['쿠폰을 보낼 손님', 'Customers to send a coupon to', '接收优惠券的顾客', '接收優惠券的顧客'],
   'widget.customer-groups.regularAnswer': ['최근 방문 기준 단골은 {n}명이에요', 'By recent visits, you have {n} regulars', '按近期到店统计，熟客有 {n} 位', '按近期到店統計，熟客有 {n} 位'],
   'widget.customer-groups.groupLine': ['{group} {n}', '{group} {n}', '{group} {n}', '{group} {n}'],
   'widget.customer-groups.basis.churn-risk': ['평소 방문 주기보다 {days}일 넘게 안 온 손님이에요', "Customers who haven't come for over {days} days beyond their usual interval", '超过平常到店间隔 {days} 天仍未到店的顾客', '超過平常到店間隔 {days} 天仍未到店的顧客'],
@@ -145,7 +150,7 @@ const allRows: Readonly<Record<string, Row>> = { ...sourcedRows, ...writtenRows 
 /** LOCALES 11.13 / D-209: new copy has ko keys only; other languages use the normal fallback. */
 const koOnly = {
   'widget.expiry-coupon.moneySummary': '할인가 {price} · 개당 남는 돈 {profit} · 모두 팔면 남는 돈 {total}',
-  'widget.slot-coupon.sentResult': '{slot} 단골 {n}명에게 보냈어요(예시)',
+  'widget.slot-coupon.sentResult': '{slot} 단골 {n}명에게 발송을 예약했어요',
   'widget.slot-coupon.label': '내일부터 7일 빈 시간',
   'widget.coupon-status.label': '진행 중',
   'widget.coupon.state.error.short': '불러오지 못했어요',

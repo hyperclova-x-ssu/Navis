@@ -43,19 +43,18 @@ function panel(width: number, height: number, host: WidgetHost = makeHost(), opt
 }
 
 describe('mkt-promo module shape (API-13 v4.1)', () => {
-  it('exports the three widgets, Detail = null only for marketing-today, and a complete 4-language bundle', () => {
-    expect(widgets.map((m) => m.id)).toEqual(['marketing-today', 'promo-video', 'marketing-performance']);
-    const [today, video, perf] = widgets;
+  it('exports the two widgets (마케팅 성과 is gone, D-365), Detail = null only for marketing-today, and a complete 4-language bundle', () => {
+    expect(widgets.map((m) => m.id)).toEqual(['marketing-today', 'promo-video']);
+    const [today, video] = widgets;
     expect(today.Detail).toBeNull();
     expect(today.useTapTarget).toBeTypeOf('function');
     expect(video.Detail).toBeTypeOf('function');
-    expect(perf.Detail).toBeTypeOf('function');
     expect(bundles).toEqual([mktPromoBundle]);
     const keys = Object.keys(mktPromoBundle.ko);
     // D-83: the Korean-only F-50 keys have no en/zh values yet; every other key is in all four languages.
     const translated = keys.filter((key) => !MKT_PROMO_KO_ONLY_KEYS.includes(key));
     for (const locale of ['en', 'zh-Hans', 'zh-Hant'] as const) expect(Object.keys(mktPromoBundle[locale]).sort()).toEqual([...translated].sort());
-    expect(keys.every((key) => /^(widget\.(marketing-today|promo-video|marketing-performance)\.|promo\.)/.test(key))).toBe(true);
+    expect(keys.every((key) => /^(widget\.(marketing-today|promo-video)\.|promo\.)/.test(key))).toBe(true);
     expect(mktPromoR2Review.strings).toBe(mktPromoR2Review.writtenRows * 3);
   });
   it('owns its prefix only: no key is also defined in the common, data or kit bundles, and no Korean gap', () => {
@@ -78,7 +77,7 @@ describe('오늘 할 홍보 sizes (AC-285)', () => {
     expect(screen.queryByText(/그 시간에 자주 오던 단골이/)).toBeNull();
     expect(screen.getByText(text.repliesKo)).toBeInTheDocument();
     expect(screen.queryByText(/답변 초안을 써 뒀어요/)).toBeNull();
-    expect(screen.getByText(`리뷰 사진 ${text.photos}장이 모였어요`)).toBeInTheDocument();
+    expect(screen.getByText(`영상에 쓸 매장 사진 ${text.photos}장이 있어요`)).toBeInTheDocument();
     expect(screen.queryByText(/짧은 영상으로 만들어 볼까요\?/)).toBeNull();
     expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual([
       '단골에게 쿠폰 보내기, 오늘 할 홍보', '답변 확인하기, 오늘 할 홍보', '홍보 영상 만들기, 오늘 할 홍보',
@@ -102,7 +101,7 @@ describe('오늘 할 홍보 sizes (AC-285)', () => {
     cleanup();
     panel(2, 1, makeHost(), { store });
     expect(screen.getAllByRole('button')).toHaveLength(2);
-    expect(screen.queryByText(/리뷰 사진 \d+장이/)).toBeNull();
+    expect(screen.queryByText(/영상에 쓸 매장 사진 \d+장이/)).toBeNull();
     cleanup();
     panel(2, 2, makeHost(), { store });
     expect(screen.getAllByRole('button')).toHaveLength(3);

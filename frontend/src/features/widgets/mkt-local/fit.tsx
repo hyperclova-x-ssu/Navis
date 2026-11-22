@@ -1,9 +1,12 @@
 /** One fit transaction per marketing panel. Every measurement starts with the complete content. */
 import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { runFit, type FitPart } from '../mgmt-money/fit';
+import type { CellSpan, ContentShape } from '../../../contracts';
 
 export type { FitPart };
 export const keepKoreanDots = (value: string): string => value.replace(/[ \u00a0]·[ \u00a0]/g, '\u00a0·\u00a0');
+/** D-333: the 4-high wide/tall cards (2×4 … 4×4) list the real rows beyond the small-size budget and re-show the columns the small sizes drop. */
+export const isLargeCard = (shape: ContentShape, height: CellSpan | number): boolean => shape === 'L' && height >= 4;
 export const koreanLang = (value: string): 'ko' | undefined => /\p{Script=Hangul}/u.test(value) ? 'ko' : undefined;
 
 /** Observe the metric as well as its fixed-size frame: MetricFit and web fonts can settle after the parent effect. */

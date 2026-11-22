@@ -14,6 +14,8 @@
 .pv-panel__catalog p, .pv-panel__catalog ul { margin: 0; }
 .pv-panel__catalog ul { padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--type-caption); }
 .pv-panel__more { color: var(--muted-foreground); }
+/* D-333: when the fit guard dropped some of the rows a large card adds, `외 n개` would undercount, so it goes too. */
+.pv-panel__catalog ul:has(> .mp-extra[data-fit-hidden]) > .pv-panel__more { display: none; }
 .pv-panel__catalog-count { font-size: var(--type-control); font-weight: var(--weight-semibold); }
 .pv-panel[data-shape="Q"] .pv-panel__materials, .pv-panel[data-shape="W"] .pv-panel__materials { flex-direction: column; align-items: flex-start; gap: 0; }
 .pv-panel__materials { display: flex; width: 100%; align-items: baseline; gap: var(--space-2); }
@@ -78,9 +80,6 @@
 .pv-step--photos > .pv-chips-wrap > .pv-chips > .pv-chip { flex: none; }
 .pv-step--photos > .pv-photo-area { min-height: calc(var(--space-16) * 5 + var(--space-8)); }
 .pv-gallery-step { padding: var(--space-4) 0; gap: var(--space-4); }
-.pv-gallery-head { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-2); }
-.pv-gallery-head .pv-label, .pv-gallery-head .pv-caption { min-width: 0; }
-.pv-gallery-head__dot { color: var(--muted-foreground); }
 .pv-h:focus { outline: none; }
 .pv-label { margin: 0; font-size: var(--type-control); line-height: var(--leading-control); font-weight: var(--weight-semibold); }
 .pv-caption { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
@@ -113,6 +112,13 @@
 @keyframes pv-section-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 .pv-win[data-reduced="true"] .pv-section { animation: pv-fade-in var(--motion-duration-reduced) linear; }
 .pv-section__title { margin: 0; font-weight: var(--weight-semibold); }
+.pv-real-fields { display: grid; gap: var(--space-2); padding-block: var(--space-2); min-width: 0; }
+.pv-real-fields input, .pv-real-fields select { max-width: 100%; }
+.pv-real-fields select { display: block; }
+/* T-33 (G1): the photo file input and its button are a full touch target high. */
+.pv-real-fields input[type="file"] { min-height: var(--target-min); }
+.pv-real-fields input[type="file"]::file-selector-button { min-height: var(--target-min); }
+.pv-real-buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .pv-grid { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: calc((100% - var(--space-4)) / 2); align-content: start; gap: var(--space-4); touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .pv-grid[data-scroll="true"] { overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
 .pv-tile { position: relative; min-height: 0; padding: 0; touch-action: none; -webkit-tap-highlight-color: transparent; border: 0; border-radius: var(--radius-md); overflow: hidden; background: var(--muted); cursor: pointer; transition: transform var(--motion-duration-press) var(--motion-ease-out); }

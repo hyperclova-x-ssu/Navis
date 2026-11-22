@@ -38,7 +38,8 @@
 .mp-slot__text { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
 .mp-today[data-slots="1"][data-w="1"][data-h="1"] .mp-slot:has(> .mp-slot__big:not([data-fit-hidden])) .mp-slot__text { font-size: var(--type-section); line-height: var(--leading-section); font-weight: var(--weight-heading); letter-spacing: var(--tracking-section); }
 .mp-slot .ui-panel-action-slot { margin-top: auto; align-self: flex-start; }
-.mp-today[data-layout="rows"] .mp-slot { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "tag action" "text action"; column-gap: var(--space-4); align-items: center; padding-block: var(--space-2); border-block-start: var(--stroke-hairline) solid var(--border); }
+/* D-333: on a tall card the slots outgrow their content; the tag and its sentence stay together (centred in the slot) instead of the rows stretching apart. The data holds no more to show here. */
+.mp-today[data-layout="rows"] .mp-slot { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "tag action" "text action"; column-gap: var(--space-4); align-items: center; align-content: center; padding-block: var(--space-2); border-block-start: var(--stroke-hairline) solid var(--border); }
 .mp-today[data-layout="rows"] .mp-slot[data-first="true"] { border-block-start: 0; padding-block-start: 0; }
 .mp-today[data-layout="rows"] .mp-slot__tag { grid-area: tag; }
 .mp-today[data-layout="rows"] .mp-slot__text { grid-area: text; }
@@ -59,6 +60,7 @@
 .mp-block__inner { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .mp-block__label { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
 .mp-block__value { display: block; min-width: 0; }
+.mp-block__unavailable { display: block; font-size: var(--type-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
 .mp-block__delta, .mp-block__note, .mp-block__sub { font-size: var(--type-caption); line-height: var(--leading-caption); }
 .mp-block__note, .mp-block__sub { color: var(--muted-foreground); }
 .mp-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 200fr)) minmax(0, 269fr); column-gap: var(--space-4); align-items: start; }
@@ -80,6 +82,10 @@
 .mp-routes { margin: 0; padding: var(--space-2) 0 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-1); border-block-start: var(--stroke-hairline) solid var(--border); }
 .mp-routes li { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--type-caption); line-height: var(--leading-caption); }
 .mp-routes__num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* D-333: the large card's column heading row and coupon list; a heading never stands without rows. */
+.mp-routes__head { color: var(--muted-foreground); }
+.mp-routes--coupons { margin-block-start: var(--space-2); }
+.mp-routes--coupons:not(:has(> li:not(.mp-routes__head):not([data-fit-hidden]))) { display: none; }
 .mp-best-line { margin: 0; font-size: var(--type-body); line-height: var(--leading-body); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
 
 /* ───── details ───── */
@@ -89,10 +95,12 @@
 .mp-perf__kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-4); }
 .mp-perf .ui-table tbody > tr { height: var(--table-row-min); }
 .mp-tablewrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); align-items: start; }
-.mp-tablewrap__main { min-width: 0; max-width: 72rem; }
-/* DS 12.2 flow layout: the side panel is the second column of the route tab, 560 wide (large text too), and scrolls only its own body. */
-.mp-tablewrap:has(> .ui-detail-side-panel) { grid-template-columns: minmax(0, 1fr) var(--sidepanel-width); }
-.mp-tablewrap > .ui-detail-side-panel { position: relative; inset: auto; width: 100%; max-width: 100%; z-index: auto; }
+.mp-tablewrap__main { min-width: 0; }
+/* DS 12.2: keep the overview beside the dialog's shared side panel. */
+.mp-perf:has(> .ui-detail-side-panel[data-layout="overlay"]) > :not(.ui-detail-side-panel) {
+  max-width: calc(100% - var(--sidepanel-width) - var(--space-6));
+}
+.mp-perf:has(> .ui-detail-side-panel[data-layout="overlay"]) .mp-tablewrap__main { overflow-x: auto; }
 .mp-perf .ui-table col.mp-col--num { width: 9rem; }
 .mp-perf .ui-table col.mp-col--rate { width: 15rem; }
 .mp-perf .ui-table td[data-numeric="true"], .mp-perf .ui-table th[data-numeric="true"] { text-align: end; }
@@ -205,10 +213,17 @@ tr[data-selected="true"] { background: var(--selection); }
 .dashboard-screen .mp-q .mp-block__label { grid-column:1 / -1; grid-row:2; }
 .dashboard-screen .mp-q>.ui-panel-action-slot { grid-column:2; grid-row:1; align-self:center; margin:0; }
 .dashboard-screen .mp-today[data-h="1"] .mp-slot__second { display:none; }
-.dashboard-screen .mp-today[data-h="1"][data-w="4"] .mp-slot { gap:var(--space-1); }
-.dashboard-screen .mp-today[data-h="1"][data-w="4"] .mp-slot>.ui-panel-action-slot { margin-top:var(--space-2); }
+.dashboard-screen .mp-today[data-h="1"][data-w="4"] .mp-slot { gap:calc(var(--space-1) / 2); }
+.dashboard-screen .mp-today[data-h="1"][data-w="4"] .mp-slot>.ui-panel-action-slot { margin-top:calc(var(--space-1) / 2); }
 
-/* 오늘 할 홍보, one row (DS 12.15·19.3 "제목 아래 16"): the slots start 16 under the title instead of 40, so tag + sentence + button stay inside the card
-   at 100 % (title ends 56, slots start 72, the 48px help button ends 68) and at 125 % (title ends 63, slots start 71). Edit mode keeps the kit's own origin. */
-.dashboard-screen .ui-feature-panel:not([data-editing="true"]) .mp-today[data-h="1"] { margin-block-start: calc(var(--space-6) * -1); height: calc(100% + var(--space-6)); }
-.ui-root[data-text-scale="125"] .dashboard-screen .ui-feature-panel:not([data-editing="true"]) .mp-today[data-h="1"] { margin-block-start: calc(var(--space-4) * -1); height: calc(100% + var(--space-4)); }
+/* 채널별 지표 (F19, PN12 · AC-1592): one card per channel with its own period and source; never summed across channels. */
+.mp-channels { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4); }
+.mp-channel { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.mp-channel__meta { margin: 0; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.mp-channel__cards { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-2); }
+.mp-channel__cards li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); min-height: 48px; }
+.mp-channel__label { font-size: var(--type-body); line-height: var(--leading-body); }
+.mp-channel__value { font-size: var(--type-panel-title); line-height: var(--leading-panel-title); font-weight: var(--weight-bold); }
+.mp-channel__period { font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--muted-foreground); }
+.mp-channel__source { align-self: flex-start; font-size: var(--type-caption); line-height: var(--leading-caption); color: var(--selection-foreground); }
+.mp-reasons { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--space-1); }

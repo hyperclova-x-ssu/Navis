@@ -23,8 +23,10 @@ export function fitCouponPanel(content: HTMLElement) {
   // A note spilling into the list, or touching a handle, is not fixed by dropping unrelated rows.
   if (note && ((secondary && secondary.scrollHeight > secondary.clientHeight + 1) || editClashElements(content).some(el => note.contains(el)))) notePart?.setAttribute('data-fit-hidden', '');
   let index = 0;
-  let shown = rows.length;
-  while (fitScore(content) > 0 && shown > 1) rows[--shown]!.setAttribute('data-fit-hidden', '');
+  // D-333: the rows a large card adds (`data-mkt-extra`) go first, from the end; then the small-size rows, also from the end.
+  const dropOrder = [...rows.filter((row) => row.hasAttribute('data-mkt-extra')).reverse(), ...rows.filter((row) => !row.hasAttribute('data-mkt-extra')).reverse()];
+  let dropped = 0;
+  while (fitScore(content) > 0 && dropped < dropOrder.length - 1) dropOrder[dropped++]!.setAttribute('data-fit-hidden', '');
   while (fitScore(content) > 0 && index < candidates.length) selectDesc(++index);
   if (fitScore(content) > 0 && note) notePart?.setAttribute('data-fit-hidden', '');
   const best = fitScore(content);
@@ -34,9 +36,9 @@ export function fitCouponPanel(content: HTMLElement) {
     return;
   }
   // Restore every part that did not help, in priority order: rows, note, description.
-  for (let i = shown; i < rows.length; i++) {
-    rows[i]!.removeAttribute('data-fit-hidden');
-    if (fitScore(content) > best) rows[i]!.setAttribute('data-fit-hidden', '');
+  for (let i = dropped - 1; i >= 0; i--) {
+    dropOrder[i]!.removeAttribute('data-fit-hidden');
+    if (fitScore(content) > best) dropOrder[i]!.setAttribute('data-fit-hidden', '');
   }
   const singleSlotRow = root.dataset.widget === 'slot-coupon' && rows.filter(row => !row.hasAttribute('data-fit-hidden')).length === 1;
   if (note && !singleSlotRow) {

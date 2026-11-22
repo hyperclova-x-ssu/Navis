@@ -4,7 +4,7 @@
  * [저장하기] (`<a download>` + `video.save`), 올릴 곳 and [올렸어요]. Failure shows the reason and [다시 만들기] (same input).
  * The draft lives in the run's promo session, so closing the window keeps the choices (AC-343).
  */
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { WidgetDetailProps } from '../../../contracts';
 import type { PromoLocale, PromoMenuModel, PromoVideoModel, PromoVideoRowModel, VideoConcept, VideoMood, VideoPostRoute } from '../../../data/widget-data';
 import { useDataDispatch } from '../../../data/react';
@@ -14,8 +14,12 @@ import { useNow, usePromoSession } from './promo-hooks';
 import { estimateCostText, estimateTimeText, groupNumber, durationText, lookupEstimate, roundEstimateSeconds } from './promo-format';
 import { inputOfDraft, MEMO_MAX, STAGES, type PromoDraft, type PromoSession, type PromoSessionState, type PromoTab } from './promo-session';
 import { PromoPlayer } from './promo-player';
+import { usePromoMedia } from './promo-media';
+import { PromoPhotoUpload, PromoPlaceChoices, PromoPublishActions } from './promo-real-actions';
+import { usePromoRealText } from './promo-real-copy';
 import { ReferenceGallery } from './promo-gallery';
 import { text, useT } from './shared';
+import { widgetFailureKey } from '../failure-line';
 
 const MIN_PHOTOS = 5;
 const TABS: readonly PromoTab[] = [0, 1, 2, 3];
@@ -31,23 +35,32 @@ function closeWindow(from: HTMLElement | null) {
 const toggle = <V extends string>(list: readonly V[], value: V, on: boolean): V[] => (on ? (list.includes(value) ? [...list] : [...list, value]) : list.filter((x) => x !== value));
 const codePoints = (value: string) => Array.from(value).length;
 
-export function PromoWindow({ model, host }: { readonly model: PromoVideoModel; readonly host: WidgetDetailProps['host'] }) {
+export function PromoWindow({ model, host, domainNote }: { readonly model: PromoVideoModel; readonly host: WidgetDetailProps['host']; readonly domainNote?: ReactNode }) {
   const t = useT();
   const ui = useUi();
   const [session, state] = usePromoSession();
+  const real = session.store.real?.mode('promo') === 'http';
+  const storeId = session.store.getSnapshot().tables.realPromo?.storeId;
+  const [retryMessage, setRetryMessage] = useState<string>();
   const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => { void session.loadEstimate(); void session.loadReferences(); }, [session]);
   const current = model.videos[model.videos.length - 1] ?? null;
   const phase = current?.status === 'making' ? 'making' : current?.status === 'failed' && !state.draft.composing ? 'failed' : current && !state.draft.composing ? 'done' : 'setup';
   const phaseRef = useRef(phase);
-  phaseRef.current = phase;
+  useLayoutEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => () => { if (phaseRef.current === 'failed') session.setDraft({ composing: true }); }, [session]);
   return (
     <div ref={rootRef} className="mp-detail pv-win" data-widget="promo-video" data-state="ready" data-phase={phase} data-reduced={ui.reducedMotion ? 'true' : undefined}>
-      <ShopBar model={model} />
+      <ShopBar model={model} storeId={storeId} />
+      {domainNote}
       {phase === 'setup' ? <Setup model={model} session={session} state={state} /> : null}
       {phase === 'making' && current ? <Progress key={`${current.videoId}-${current.retryCount}`} video={current} state={state} onClose={() => closeWindow(rootRef.current)} /> : null}
-      {phase === 'failed' && current ? <Failure video={current} onRetry={() => { void session.retry(current.videoId); }} onChange={() => session.setDraft({ composing: true, tab: 0 })} onClose={() => { session.setDraft({ composing: true }); closeWindow(rootRef.current); }} /> : null}
+      {phase === 'failed' && current ? <><Failure video={current} pending={state.writing === 'retry'} onRetry={() => {
+        if (!real) { session.retry(current.videoId); return; }
+        setRetryMessage(undefined);
+        void session.retryConfirmed(current.videoId).then(result => { if (!result.ok) setRetryMessage(widgetFailureKey(result.messageKey)); });
+      }} onChange={() => session.setDraft({ composing: true, tab: 0 })} onClose={() => { session.setDraft({ composing: true }); closeWindow(rootRef.current); }} />
+        {retryMessage ? <p role="alert">{t.t(retryMessage)}</p> : null}</> : null}
       {phase === 'done' && current ? <Done key={current.videoId} model={model} video={current} session={session} state={state} host={host} onClose={() => closeWindow(rootRef.current)} /> : null}
       <span className="ui-sr-only" aria-live="polite" data-slot="promo-video.live">{phase === 'done' && current?.status === 'done' ? t.t('promo.done.title') : ''}</span>
     </div>
@@ -56,13 +69,14 @@ export function PromoWindow({ model, host }: { readonly model: PromoVideoModel; 
 
 /* ───────────── shop bar (SCR-51, AC-326) ───────────── */
 
-function ShopBar({ model }: { readonly model: PromoVideoModel }) {
+function ShopBar({ model, storeId }: { readonly model: PromoVideoModel; readonly storeId?: string }) {
   const t = useT();
   const store = model.store;
+  const { src: resolved } = usePromoMedia(store?.exteriorUrl, storeId);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   if (!store) return null;
   // A store with no photo address (a new cafe) or one that does not load shows the kit placeholder, never a broken image.
-  const photoUrl = store.exteriorUrl && store.exteriorUrl !== failedUrl ? store.exteriorUrl : null;
+  const photoUrl = resolved && resolved !== failedUrl ? resolved : null;
   return (
     <section className="pv-shop" data-slot="promo-video.shop">
       {photoUrl
@@ -70,7 +84,7 @@ function ShopBar({ model }: { readonly model: PromoVideoModel }) {
         : <span className="pv-shop__photo pv-shop__photo--empty" data-slot="promo-video.shop.placeholder" role="img" aria-label={t.t('promo.shop.photoNone', { name: store.name })}><MenuPhoto photoKey={null} name={store.name} size="thumbnail" /></span>}
       <div className="pv-shop__text">
         <p className="pv-shop__name">{store.name}</p>
-        <p className="pv-shop__location">{store.location.replace(/[ \u00a0]·[ \u00a0]/g, '\u00a0·\u00a0')}</p>
+        {store.location && !store.location.includes('가상 주소') ? <p className="pv-shop__location">{store.location.replace(/[ \u00a0]·[ \u00a0]/g, '\u00a0·\u00a0')}</p> : null}
       </div>
       <p className="pv-shop__caption">{t.t('promo.shop.caption')}</p>
     </section>
@@ -87,15 +101,21 @@ const filled = (r: Ready, tab: PromoTab) => (tab === 0 ? r.menus && r.photos : t
 
 function Setup({ model, session, state }: { readonly model: PromoVideoModel; readonly session: PromoSession; readonly state: PromoSessionState }) {
   const { locale } = useI18n();
+  const t = useT();
+  const realText = usePromoRealText();
+  const real = session.store.real?.mode('promo') === 'http';
   const draft = state.draft;
   const ready = readiness(draft);
   const [direction, setDirection] = useState<'next' | 'previous'>('next');
   const [photoTouched, setPhotoTouched] = useState(false);
+  const [confirmation, setConfirmation] = useState<string>();
+  const [message, setMessage] = useState<string>();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const countId = useId();
   const moved = useRef(false);
   const goTab = (tab: PromoTab) => {
     if (tab === draft.tab) return;
+    setConfirmation(undefined);
     if (draft.tab === 0) setPhotoTouched(true);
     setDirection(tab > draft.tab ? 'next' : 'previous');
     moved.current = true;
@@ -106,21 +126,31 @@ function Setup({ model, session, state }: { readonly model: PromoVideoModel; rea
   const photoOrder = useMemo(() => model.menus.flatMap((m) => m.photos.map((p) => p.photoId)), [model.menus]);
   const all = ready.menus && ready.photos && ready.moods && ready.concepts && ready.reference && ready.length;
   const estimate = lookupEstimate(state.estimate.value, draft.lengthSec, draft.photoIds.length);
+  const input = inputOfDraft(draft, photoOrder, locale as PromoLocale);
+  const fingerprint = input && JSON.stringify(input);
+  const confirming = real && !!fingerprint && confirmation === fingerprint;
   const make = () => {
-    const input = inputOfDraft(draft, photoOrder, locale as PromoLocale);
     if (!all || !input) return;
-    void session.make(input, estimate ? roundEstimateSeconds(estimate.seconds) : null);
+    const seconds = estimate ? roundEstimateSeconds(estimate.seconds) : null;
+    if (!real) { session.make(input, seconds); return; }
+    if (!confirming) { setConfirmation(fingerprint ?? undefined); return; }
+    setMessage(undefined);
+    void session.makeConfirmed(input, seconds).then(result => { if (!result.ok) setMessage(widgetFailureKey(result.messageKey)); });
   };
   return (
     <>
       <StepTabs tab={draft.tab} ready={ready} onTab={goTab} />
       <div className="pv-body" key={draft.tab} ref={bodyRef} data-direction={direction} data-slot={`promo-video.step.${draft.tab}`}>
+        {real && model.current?.status === 'done' ? <p className="pv-caption">{realText.t('promo.real.oldVideo')} <ActionButton variant="link" onClick={() => session.setDraft({ composing: false })}>{t.t('promo.btn.view')}</ActionButton></p> : null}
         {draft.tab === 0 ? <MenuPhotoStep model={model} session={session} draft={draft} headingRef={headingRef} catalog={state.catalog} photoTouched={photoTouched} onPhotoTouched={() => setPhotoTouched(true)} countId={countId} /> : null}
         {draft.tab === 1 ? <MoodStep model={model} session={session} draft={draft} headingRef={headingRef} /> : null}
         {draft.tab === 2 ? <ReferenceGallery session={session} state={state} headingRef={headingRef} /> : null}
         {draft.tab === 3 ? <LengthStep model={model} session={session} state={state} headingRef={headingRef} onTab={goTab} /> : null}
       </div>
-      <Footer state={state} ready={ready} tab={draft.tab} onTab={goTab} canMake={all && model.current?.status !== 'making'} onMake={make} countId={countId} />
+      {real && message ? <p className="pv-caption" role="status">{message.startsWith('promo.real.') ? realText.t(message) : t.t(message)}</p> : null}
+      <Footer state={state} ready={ready} tab={draft.tab} onTab={goTab} canMake={all && model.current?.status !== 'making'} onMake={make} countId={countId}
+        confirmLabel={confirming ? realText.t('promo.real.generate') : undefined} saveLabel={real ? realText.t('promo.real.saveDraft') : undefined}
+        onSave={real ? () => { setMessage(undefined); void session.saveDraft(locale).then(result => setMessage(result.ok ? 'promo.real.draftSaved' : widgetFailureKey(result.messageKey))); } : undefined} />
     </>
   );
 }
@@ -189,6 +219,7 @@ function MenuPhotoStep({ model, session, draft, headingRef, catalog, photoTouche
     session.setDraft({ menuIds: toggle(draft.menuIds, menuId, on), photoIds: on ? draft.photoIds : draft.photoIds.filter((id) => !own.has(id)) });
   };
   const count = draft.photoIds.length;
+  const storeId = session.store.getSnapshot().tables.realPromo?.storeId;
   // Menus that have photos come first, so the owner does not scroll past many photo-less menus to reach them (display order only).
   const menusWithPhotosFirst = useMemo(() => [...model.menus].sort((a, b) => Number(b.hasPhotos) - Number(a.hasPhotos)), [model.menus]);
   const anyPhotos = model.menus.some((m) => m.hasPhotos);
@@ -197,8 +228,10 @@ function MenuPhotoStep({ model, session, draft, headingRef, catalog, photoTouche
       <h3 className="pv-h ui-sr-only" id={`${fewId}-h`} ref={headingRef} tabIndex={-1}>{t.t('promo.tab.0')}</h3>
       <MultiChips label={t.t('promo.menu.title')} values={draft.menuIds} onChange={setMenu}
         options={menusWithPhotosFirst.map((m) => ({ value: m.menuId, label: text(t, m.name), extra: m.hasPhotos ? t.t('promo.menu.photos', { n: m.photos.length }) : t.t('promo.menu.noPhotos') }))} />
+      {storeId ? <PromoPhotoUpload menus={menusWithPhotosFirst} session={session} /> : null}
       <div className="pv-photos-head">
         <p className="pv-label">{chosen.length ? t.t('promo.photo.headline', { menu: chosen.map((m) => text(t, m.name)).join(', '), n: chosen.reduce((sum, m) => sum + m.photos.length, 0) }) : t.t('promo.photo.headNone')}</p>
+        <p className="pv-caption" data-slot="promo-video.store-photos">{t.t('common.linked.promo.photos', { n: model.photoCount })}</p>
         <p className="pv-caption">{t.t('promo.photo.why')}</p>
         <p className="pv-count" id={countId} data-slot="promo-video.photo-count" data-enough={count >= MIN_PHOTOS ? 'true' : count === 0 && !photoTouched ? 'neutral' : 'false'}>{count > 0 || photoTouched ? <Icon name={count >= MIN_PHOTOS ? 'check' : 'warning'} aria-hidden /> : null}{t.t('promo.photo.count', { n: count })}</p>
       </div>
@@ -210,7 +243,7 @@ function MenuPhotoStep({ model, session, draft, headingRef, catalog, photoTouche
         {chosen.map((menu) => (
           <div className={`pv-section${menu.photos.length === 0 ? ' pv-section--empty' : ''}`} key={menu.menuId} data-menu={menu.menuId}>
             {menu.photos.length === 0 ? <p className="pv-hint" data-slot="promo-video.no-photos"><Icon name="info" aria-hidden /> {t.t(anyPhotos ? 'promo.photo.none' : 'promo.photo.noneAny')}</p> : (
-              <PhotoGrid menu={menu} selected={draft.photoIds} onChange={(photoIds) => { onPhotoTouched(); session.setDraft({ photoIds }); }} />
+              <PhotoGrid menu={menu} storeId={storeId} selected={draft.photoIds} onChange={(photoIds) => { onPhotoTouched(); session.setDraft({ photoIds }); }} />
             )}
           </div>
         ))}
@@ -221,7 +254,12 @@ function MenuPhotoStep({ model, session, draft, headingRef, catalog, photoTouche
 
 /** D-87 (SCR-52, M-54): whole tile is the target; a finger (or mouse) swept over tiles sets them all to the first tile's new state, the line between two samples included.
  *  A plain press toggles one photo; Shift+arrow does the same sweep from the keyboard. Only the first pointer counts. */
-function PhotoGrid({ menu, selected, onChange }: { readonly menu: PromoMenuModel; readonly selected: readonly string[]; readonly onChange: (photoIds: string[]) => void }) {
+function PhotoTileImage({ url, storeId }: { readonly url: string; readonly storeId?: string }) {
+  const { src } = usePromoMedia(url, storeId);
+  return src ? <img src={src} alt="" loading="lazy" draggable={false} /> : null;
+}
+
+function PhotoGrid({ menu, storeId, selected, onChange }: { readonly menu: PromoMenuModel; readonly storeId?: string; readonly selected: readonly string[]; readonly onChange: (photoIds: string[]) => void }) {
   const t = useT();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const live = useRef<readonly string[]>(selected);
@@ -323,7 +361,7 @@ function PhotoGrid({ menu, selected, onChange }: { readonly menu: PromoMenuModel
             onClick={() => { if (skipClick.current) { skipClick.current = false; return; } apply(photo.photoId, !live.current.includes(photo.photoId)); }}
             onKeyDown={(event) => onKey(event, index)} onKeyUp={(event) => { if (event.key === 'Shift') shiftTarget.current = null; }}
           >
-            <img src={photo.url} alt="" loading="lazy" draggable={false} />
+            <PhotoTileImage url={photo.url} storeId={storeId} />
             <span className="pv-tile__badge" aria-hidden="true"><Icon name="check" /></span>
           </button>
         );
@@ -398,7 +436,7 @@ function EstimateBlock({ state, large = false, brief = false }: { readonly state
       </div>
       <div className="pv-estimate__col">
         <p className="pv-estimate__value" data-slot="promo-video.estimate.cost"><FlashValue value={cost} /></p>
-        {brief ? null : <p className="pv-caption">{t.t('promo.est.costNote')}{model && large ? `\u00a0·\u00a0${t.t('promo.est.fx', { r: groupNumber(model.fx.krwPerUsd), d: t.format.date(model.fx.checkedOn, 'monthDay') })}` : ''}</p>}
+        {brief ? null : <p className="pv-caption">{t.t('promo.est.costNote')}{model && large ? `\u00a0·\u00a0${t.t('promo.est.fx', { r: groupNumber(model.fx.krwPerUsd), d: t.format.date(model.fx.checkedOn, 'short') })}` : ''}</p>}
       </div>
     </div>
   );
@@ -418,7 +456,7 @@ function FlashValue({ value }: { readonly value: string }) {
   return <span className="pv-flash" data-flash={on ? 'true' : undefined}>{value}</span>;
 }
 
-function Footer({ state, ready, tab, onTab, canMake, onMake, countId }: { readonly state: PromoSessionState; readonly ready: Ready; readonly tab: PromoTab; readonly onTab: (tab: PromoTab) => void; readonly canMake: boolean; readonly onMake: () => void; readonly countId: string }) {
+function Footer({ state, ready, tab, onTab, canMake, onMake, countId, confirmLabel, saveLabel, onSave }: { readonly state: PromoSessionState; readonly ready: Ready; readonly tab: PromoTab; readonly onTab: (tab: PromoTab) => void; readonly canMake: boolean; readonly onMake: () => void; readonly countId: string; readonly confirmLabel?: string; readonly saveLabel?: string; readonly onSave?: () => void }) {
   const t = useT();
   const reasonId = useId();
   const last = tab === 3;
@@ -436,9 +474,10 @@ function Footer({ state, ready, tab, onTab, canMake, onMake, countId }: { readon
       <div className="pv-footbar" data-slot="promo-video.footer">
         <p className="pv-footer__reason" id={reasonId} data-slot="promo-video.reason" title={reason ?? undefined}>{reason}</p>
         <div className="pv-footer__buttons">
+          {onSave ? <ActionButton variant="secondary" disabled={!!state.writing} aria-busy={state.writing === 'draft' || undefined} onClick={onSave}>{saveLabel}</ActionButton> : null}
           {tab !== 0 ? <ActionButton variant="secondary" size="primary" className="pv-prev" onClick={() => onTab(Math.max(0, tab - 1) as PromoTab)}>{t.t('promo.prev')}</ActionButton> : null}
           {last ? (
-            <ActionButton size="primary" className="pv-make" disabled={!enabled} aria-disabled={!enabled} aria-describedby={describedBy} onClick={onMake}>{t.t('marketing.makeVideo')}</ActionButton>
+            <ActionButton size="primary" className="pv-make" disabled={!enabled || !!state.writing} aria-busy={state.writing === 'generate' || undefined} aria-describedby={describedBy} onClick={onMake}>{confirmLabel ?? t.t('marketing.makeVideo')}</ActionButton>
           ) : (
             <ActionButton size="primary" className="pv-make pv-next" disabled={!enabled} aria-disabled={!enabled} aria-describedby={describedBy} onClick={() => onTab((tab + 1) as PromoTab)}>{t.t('promo.next')}</ActionButton>
           )}
@@ -518,7 +557,7 @@ function Progress({ video, state, onClose }: { readonly video: PromoVideoRowMode
       </ol>
       <p className="pv-elapsed" aria-hidden="true">
         <span className="pv-tabular">{t.t('promo.prog.elapsed', { t: durationText(t, elapsed) })}</span>
-        {expected !== null ? <span>{` · ${t.t('promo.est.time', { t: durationText(t, expected) })}`}</span> : null}
+        {expected !== null ? <span>{`\u00a0·\u00a0${t.t('promo.est.time', { t: durationText(t, expected) })}`}</span> : null}
       </p>
       {expected !== null && elapsed > expected ? <p className="pv-caption" data-slot="promo-video.slow">{t.t('promo.prog.slow')}</p> : null}
       <span className="ui-sr-only" aria-live="polite">{t.t('promo.prog.now', { step: stepName })}</span>
@@ -535,7 +574,7 @@ function Progress({ video, state, onClose }: { readonly video: PromoVideoRowMode
 
 /* ───────────── failure (SCR-58) ───────────── */
 
-function Failure({ video, onRetry, onChange, onClose }: { readonly video: PromoVideoRowModel; readonly onRetry: () => void; readonly onChange: () => void; readonly onClose: () => void }) {
+function Failure({ video, pending, onRetry, onChange, onClose }: { readonly video: PromoVideoRowModel; readonly pending?: boolean; readonly onRetry: () => void; readonly onChange: () => void; readonly onClose: () => void }) {
   const t = useT();
   const retryRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { retryRef.current?.focus(); }, []);
@@ -548,7 +587,7 @@ function Failure({ video, onRetry, onChange, onClose }: { readonly video: PromoV
       <DetailFooterContent>
         <div className="pv-footbar pv-footbar--failure" data-slot="promo-video.footer">
           <span aria-hidden="true" />
-          <div className="pv-footer__buttons"><ActionButton ref={retryRef} size="primary" className="pv-make" onClick={onRetry}>{t.t('promo.btn.retry')}</ActionButton><ActionButton variant="secondary" size="primary" onClick={onChange}>{t.t('promo.btn.change')}</ActionButton><ActionButton variant="secondary" size="primary" onClick={onClose}>{t.t('promo.btn.close')}</ActionButton></div>
+          <div className="pv-footer__buttons"><ActionButton ref={retryRef} size="primary" className="pv-make" disabled={pending} aria-busy={pending || undefined} onClick={onRetry}>{t.t('promo.btn.retry')}</ActionButton><ActionButton variant="secondary" size="primary" onClick={onChange}>{t.t('promo.btn.change')}</ActionButton><ActionButton variant="secondary" size="primary" onClick={onClose}>{t.t('promo.btn.close')}</ActionButton></div>
           <span aria-hidden="true" />
         </div>
       </DetailFooterContent>
@@ -560,10 +599,12 @@ function Failure({ video, onRetry, onChange, onClose }: { readonly video: PromoV
 
 function Done({ model, video, session, state, host, onClose }: { readonly model: PromoVideoModel; readonly video: PromoVideoRowModel; readonly session: PromoSession; readonly state: PromoSessionState; readonly host: WidgetDetailProps['host']; readonly onClose: () => void }) {
   const t = useT();
+  const realText = usePromoRealText();
   const dispatch = useDataDispatch();
-  const placeLabel = useId();
   const needId = useId();
   const result = video.result;
+  const storeId = session.store.getSnapshot().tables.realPromo?.storeId;
+  const media = usePromoMedia(result?.fileUrl, storeId);
   const place = state.draft.place;
   const posted = video.status === 'posted';
   const saved = state.saved[video.videoId] ?? 'idle';
@@ -590,31 +631,27 @@ function Done({ model, video, session, state, host, onClose }: { readonly model:
   const postedLine = `${t.t('promo.posted.line', { n: model.postedCount, place: t.t(`promo.place.${postedRoute ?? 'clip'}`) })}${postedRoute === 'clip' ? t.t('widget.promo-video.counting') : ''}`;
   return (
     <section className="pv-done" data-slot="promo-video.done" data-posted={posted ? 'true' : undefined}>
-      <PromoPlayer src={result.fileUrl} name={t.t('promo.player.name', { s: seconds })} />
+      {media.src ? <PromoPlayer src={media.src} name={t.t('promo.player.name', { s: seconds })} /> : <div role="status" className="pv-caption">
+        {t.t(media.failed ? 'data.real.error' : 'data.real.loading')}
+        {media.failed ? <ActionButton variant="link" onClick={media.retry}>{t.t('common.retry')}</ActionButton> : null}
+      </div>}
       <div className="pv-done__side">
         <h3 className="pv-done__title" ref={titleRef} tabIndex={-1}><span className="pv-done__check" aria-hidden="true"><Icon name="check" /></span>{t.t('promo.done.title')}</h3>
         <p className="pv-done__meta">{t.t('promo.done.meta', { s: seconds, n: video.photoCount })}</p>
-        <p className="pv-done__music" data-slot="promo-video.music">{t.t('promo.done.music', { name: result.music.title })}</p>
+        {result.music.title ? <p className="pv-done__music" data-slot="promo-video.music">{t.t('promo.done.music', { name: result.music.title })}</p> : null}
         <div className="pv-save">
-          <ActionButton size="primary" onClick={() => { void save(); }} aria-busy={saving || undefined}>{saved === 'failed' ? t.t('promo.save.again') : t.t('promo.btn.save')}</ActionButton>
+          <ActionButton size="primary" onClick={() => { void save(); }} disabled={saving} aria-busy={saving || undefined}>{saved === 'failed' ? t.t('promo.save.again') : storeId ? realText.t('promo.real.download') : t.t('promo.btn.save')}</ActionButton>
           {saved === 'saved' ? <p className="pv-save__ok" role="status"><span className="pv-pop"><Icon name="check" aria-hidden /></span> {t.t('promo.save.ok')} <span className="pv-caption">{state.savedName[video.videoId] ?? fileName}</span></p> : null}
           {saved === 'failed' ? <p className="pv-save__fail" role="alert"><Icon name="error" aria-hidden /> {t.t('promo.save.fail')}</p> : null}
         </div>
-        {posted ? (
+        {storeId ? <PromoPublishActions video={video} session={session} /> : posted ? (
           <div className="pv-posted" data-slot="promo-video.posted-done">
             <p className="pv-posted__line" role="status"><Icon name="check" aria-hidden /> {postedLine}</p>
           </div>
         ) : (
           <div className="pv-place">
-            <p className="pv-label" id={placeLabel}>{t.t('promo.place.title')}</p>
-            <div className="pv-places" role="radiogroup" aria-labelledby={placeLabel}>
-              {PLACES.map((route) => (
-                <button key={route} type="button" role="radio" aria-checked={place === route} className="pv-place-card" data-on={place === route ? 'true' : 'false'}
-                  onClick={() => session.setDraft({ place: route })}>
-                  {place === route ? <Icon name="check" aria-hidden /> : null}<span>{t.t(`promo.place.${route}`)}</span>
-                </button>
-              ))}
-            </div>
+            <PromoPlaceChoices places={PLACES} selected={place} label={t.t('promo.place.title')}
+              placeLabel={route => t.t(`promo.place.${route}`)} onSelect={route => session.setDraft({ place: route })} />
             <p className="pv-caption">{t.t('promo.place.note')}</p>
             <ActionButton size="primary" className="pv-posted-button" disabled={!place} aria-disabled={!place} aria-describedby={place ? undefined : needId} onClick={markPosted}>{t.t('promo.btn.posted')}</ActionButton>
             {place ? null : <p className="pv-hint" id={needId}>{t.t('promo.place.need')}</p>}
@@ -624,8 +661,8 @@ function Done({ model, video, session, state, host, onClose }: { readonly model:
       <DetailFooterContent>
         <div className="pv-footbar pv-footbar--done" data-slot="promo-video.footer">
           <span aria-hidden="true" />
-          {posted
-            ? <ActionButton size="primary" className="pv-make" onClick={() => session.startNew()}>{t.t('promo.btn.newLong')}</ActionButton>
+          {posted || storeId
+            ? <ActionButton variant="secondary" size="primary" className="pv-make" onClick={() => session.startNew()}>{t.t('promo.btn.newLong')}</ActionButton>
             : <ActionButton variant="secondary" size="primary" className="pv-make" onClick={onClose}>{t.t('promo.btn.closeWindow')}</ActionButton>}
           <span aria-hidden="true" />
         </div>
