@@ -11,6 +11,24 @@ const content = JSON.parse(await readFile(new URL('./fixtures/content.sample.jso
 const options = { end: '2026-11-17', days: 7, seed: 42 };
 const sum = (rows, field) => rows.reduce((n, row) => n + row[field], 0);
 
+test('the café has five clearly labeled test supplier contacts', async () => {
+  const cafe = JSON.parse(await readFile(new URL('./content.json', import.meta.url), 'utf8'));
+  const rows = generate(cafe, options).rows.supplier;
+  assert.equal(rows.length, 5);
+  assert.deepEqual(rows.map(row => row.contact_name), [1, 2, 3, 4, 5].map(n => `supplier${n}@example.com`));
+  assert.ok(rows.every(row => row.memo.startsWith('테스트 담당')));
+});
+
+test('the café spreads inbox arrivals across days and times without changing thread IDs', async () => {
+  const cafe = JSON.parse(await readFile(new URL('./content.json', import.meta.url), 'utf8'));
+  const manual = input => generate(input, { ...options, days: 14 }).rows.inquiry_thread.filter(row => !row.is_public);
+  const rows = manual(cafe);
+  const legacy = manual({ ...cafe, inquiries: cafe.inquiries.map(({ received_time, ...inquiry }) => inquiry) });
+  assert.deepEqual(rows.map(row => row.thread_id).sort(), legacy.map(row => row.thread_id).sort());
+  assert.ok(new Set(rows.map(row => row.received_at.slice(11, 16))).size >= 10);
+  assert.ok(new Set(rows.map(row => row.received_at.slice(0, 10))).size >= 10);
+});
+
 // Catches clock/random/path dependent artifacts and ignored seed arguments.
 test('same content/options/seed produce byte-identical artifacts', () => {
   const first = generate(content, options);

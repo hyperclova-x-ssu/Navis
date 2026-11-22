@@ -289,7 +289,11 @@ function validateContent(c) {
   for (const p of c.coupons) { text(p.name, 'coupon name'); ensure(['percent', 'amount'].includes(p.type), 'coupon.type: percent or amount required'); money(p.value, 'coupon.value'); ensure(p.type !== 'percent' || p.value <= 100, 'coupon percent exceeds 100'); dateOnly(p.start, 'coupon.start'); dateOnly(p.end, 'coupon.end'); ensure(p.start <= p.end, 'coupon start exceeds end'); }
   for (const e of c.expenses) { money(e.amount, 'expense.amount'); ensure(/^monthly:(?:[1-9]|[12]\d|3[01])$/.test(e.schedule), 'expense.schedule: monthly:1..31 required'); }
   for (const r of c.reviews) { integer(r.rating, 'review.rating', 1); ensure(r.rating <= 5, 'review.rating exceeds 5'); integer(r.days_ago, 'review.days_ago'); text(r.text, 'review.text'); }
-  for (const i of c.inquiries) { ensure(['waiting', 'draft-ready', 'send-failed', 'done'].includes(i.status), 'inquiry.status invalid'); text(i.text, 'inquiry.text'); }
+  for (const i of c.inquiries) {
+    ensure(['waiting', 'draft-ready', 'send-failed', 'done'].includes(i.status), 'inquiry.status invalid');
+    if (i.received_time != null) ensure(/^([01]\d|2[0-3]):[0-5]\d$/.test(i.received_time), 'inquiry.received_time invalid');
+    text(i.text, 'inquiry.text');
+  }
   for (const item of [...c.reviews, ...c.inquiries]) if (item.sentiment != null) ensure(['positive', 'negative', 'neutral'].includes(item.sentiment), 'sentiment invalid');
   for (const item of [...c.menu, ...c.expenses]) if (item.memo != null) text(item.memo, 'memo');
   for (const m of c.manuals) { text(m.title, 'manual.title'); ensure(Array.isArray(m.steps) && m.steps.length > 0, 'manual.steps required'); m.steps.forEach(s => text(s, 'manual step')); }
@@ -347,7 +351,13 @@ export function generate(content, supplied = {}) {
   c.store.tables.forEach((t, i) => add('store_table', { table_id: id(`table:${t.number}`), layout_id: id('layout'), number: t.number, seats: t.seats, grid_col: (i % 7) + 1, grid_row: Math.floor(i / 7) * 2 + 1 }));
   const supplierBySlug = new Map(c.suppliers.map(s => [s.id, s]));
   const ingredientBySlug = new Map(c.ingredients.map(i => [i.id, i]));
-  for (const [n, s] of c.suppliers.entries()) add('supplier', { supplier_id: id(`supplier:${s.id}`), name: s.name, contact_name: `가상 담당자 ${n + 1}`, phone_enc: encrypt(`02-0000-${String(n).padStart(4, '0')}`, `supplier:${s.id}`), memo: '가상 거래처; 실제 연락/발주 금지' });
+  for (const [n, s] of c.suppliers.entries()) {
+    const contact = s.test_contact;
+    add('supplier', { supplier_id: id(`supplier:${s.id}`), name: s.name,
+      contact_name: contact?.email ?? `가상 담당자 ${n + 1}`,
+      phone_enc: encrypt(contact?.phone ?? `02-0000-${String(n).padStart(4, '0')}`, `supplier:${s.id}`),
+      memo: contact ? `${contact.name} · 시험용 연락처` : '가상 거래처; 실제 연락/발주 금지' });
+  }
   for (const [n, i] of c.ingredients.entries()) {
     const terms = purchaseTerms(i);
     add('inventory_item', { item_id: id(`item:${i.id}`), sku: `RM-${String(n + 1).padStart(3, '0')}`, name: i.name, kind: 'ingredient', base_unit: i.base_unit, display_unit: ['g', 'kg', 'mL', 'L', 'pcs'].includes(i.purchase_unit) ? i.purchase_unit : i.base_unit, track_restock: i.track, restock_threshold: i.reorder_threshold_base, low_stock_per_channel: null, track_expiry: false });
@@ -569,7 +579,8 @@ export function generate(content, supplied = {}) {
   }
   for (const [n, inquiry] of c.inquiries.entries()) {
     const date = shiftDate(config.end, -(n % Math.min(config.days, 14)));
-    add('inquiry_thread', { thread_id: id(`inquiry:${n}`), type: inquiry.channel === '전화' ? 'call' : 'message', channel: inquiry.channel, external_id: `FICTIONAL-INQUIRY-${n}`, is_public: false, received_at: localInstant(date, 14 * 60, c.store.timezone), status: inquiry.status, body_enc: encrypt(inquiry.text, `inquiry-body:${n}`), rating: null, sentiment: inquiry.sentiment ?? null, customer_id: customers.length ? customers[n % customers.length].customerId : null }, localInstant(date, 14 * 60, c.store.timezone));
+    const receivedAt = localInstant(date, minutes(inquiry.received_time ?? '14:00'), c.store.timezone);
+    add('inquiry_thread', { thread_id: id(`inquiry:${n}`), type: inquiry.channel === '전화' ? 'call' : 'message', channel: inquiry.channel, external_id: `FICTIONAL-INQUIRY-${n}`, is_public: false, received_at: receivedAt, status: inquiry.status, body_enc: encrypt(inquiry.text, `inquiry-body:${n}`), rating: null, sentiment: inquiry.sentiment ?? null, customer_id: customers.length ? customers[n % customers.length].customerId : null }, receivedAt);
   }
   for (const [n, manual] of c.manuals.entries()) {
     const manualId = id(`manual:${n}`);

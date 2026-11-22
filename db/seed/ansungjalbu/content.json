@@ -33,6 +33,7 @@
     {
       "id": "s-roaster",
       "name": "상도브루 로스터리",
+      "test_contact": { "name": "테스트 담당", "phone": "010-0000-0001", "email": "supplier1@example.com" },
       "lead_days": 2,
       "order_weekdays": ["mon", "thu"],
       "min_order_krw": 60000
@@ -40,6 +41,7 @@
     {
       "id": "s-dairy",
       "name": "한강목장 유업유통",
+      "test_contact": { "name": "테스트 담당", "phone": "010-0000-0002", "email": "supplier2@example.com" },
       "lead_days": 1,
       "order_weekdays": ["mon", "wed", "fri"],
       "min_order_krw": 45000
@@ -47,6 +49,7 @@
     {
       "id": "s-bakery",
       "name": "동작아티잔 베이커리공방",
+      "test_contact": { "name": "테스트 담당", "phone": "010-0000-0003", "email": "supplier3@example.com" },
       "lead_days": 2,
       "order_weekdays": ["tue", "fri"],
       "min_order_krw": 50000
@@ -54,6 +57,7 @@
     {
       "id": "s-beverage",
       "name": "베버리지랩 식자재",
+      "test_contact": { "name": "테스트 담당", "phone": "010-0000-0004", "email": "supplier4@example.com" },
       "lead_days": 2,
       "order_weekdays": ["tue", "thu"],
       "min_order_krw": 70000
@@ -61,6 +65,7 @@
     {
       "id": "s-package",
       "name": "푸른패키징 상사",
+      "test_contact": { "name": "테스트 담당", "phone": "010-0000-0005", "email": "supplier5@example.com" },
       "lead_days": 3,
       "order_weekdays": ["wed"],
       "min_order_krw": 80000
@@ -309,15 +314,15 @@
     },
     {
       "id": "i-saltbread",
-      "name": "버터 소금빵(생지·완제품)",
+      "name": "겉바속촉 버터 소금빵 완제품",
       "base_unit": "pcs",
       "purchase_unit": "박스(20입)",
       "purchase_qty_base": 20,
       "unit_price_krw_per_purchase_unit": 28000,
       "supplier": "s-bakery",
-      "reorder_threshold_base": 20,
+      "reorder_threshold_base": 2,
       "track": true,
-      "opening_qty_base": 45
+      "opening_qty_base": 60
     },
     {
       "id": "i-basque-cake",
@@ -339,9 +344,9 @@
       "purchase_qty_base": 20,
       "unit_price_krw_per_purchase_unit": 26000,
       "supplier": "s-bakery",
-      "reorder_threshold_base": 15,
+      "reorder_threshold_base": 2,
       "track": true,
-      "opening_qty_base": 40
+      "opening_qty_base": 45
     },
     {
       "id": "i-bagel-plain",
@@ -351,9 +356,9 @@
       "purchase_qty_base": 24,
       "unit_price_krw_per_purchase_unit": 28800,
       "supplier": "s-bakery",
-      "reorder_threshold_base": 20,
+      "reorder_threshold_base": 2,
       "track": true,
-      "opening_qty_base": 48
+      "opening_qty_base": 62
     },
     {
       "id": "i-cup-takeout",
@@ -378,6 +383,54 @@
       "reorder_threshold_base": 500,
       "track": false,
       "opening_qty_base": 2000
+    },
+    {
+      "id": "i-strawberry",
+      "name": "딸기",
+      "base_unit": "g",
+      "purchase_unit": "kg",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 20000,
+      "supplier": "s-bakery",
+      "reorder_threshold_base": 100,
+      "track": true,
+      "opening_qty_base": 300
+    },
+    {
+      "id": "i-fresh-cream",
+      "name": "생크림",
+      "base_unit": "mL",
+      "purchase_unit": "L",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 14000,
+      "supplier": "s-dairy",
+      "reorder_threshold_base": 100,
+      "track": true,
+      "opening_qty_base": 300
+    },
+    {
+      "id": "i-cake-sponge",
+      "name": "케이크 시트",
+      "base_unit": "g",
+      "purchase_unit": "kg",
+      "purchase_qty_base": 1000,
+      "unit_price_krw_per_purchase_unit": 16000,
+      "supplier": "s-bakery",
+      "reorder_threshold_base": 90,
+      "track": true,
+      "opening_qty_base": 270
+    },
+    {
+      "id": "i-strawberry-cake-slice",
+      "name": "딸기 케이크 완제품",
+      "base_unit": "pcs",
+      "purchase_unit": "pcs",
+      "purchase_qty_base": 1,
+      "unit_price_krw_per_purchase_unit": 0,
+      "supplier": "s-bakery",
+      "reorder_threshold_base": 2,
+      "track": true,
+      "opening_qty_base": 6
     }
   ],
   "menu": [
@@ -1017,6 +1070,23 @@
       "popularity": 0.01,
       "active_from": "2026-10-01",
       "seasonal": "autumn"
+    },
+    {
+      "id": "m-strawberry-cake",
+      "name": "딸기 케이크",
+      "category": "디저트",
+      "price": 6500,
+      "options": [],
+      "recipe": [
+        {"ingredient": "i-strawberry", "qty_base": 50},
+        {"ingredient": "i-fresh-cream", "qty_base": 50},
+        {"ingredient": "i-cake-sponge", "qty_base": 45},
+        {"ingredient": "i-strawberry-cake-slice", "qty_base": 1}
+      ],
+      "popularity": 0,
+      "active_from": null,
+      "seasonal": null,
+      "memo": "한 조각"
     }
   ],
   "demand": {
@@ -1225,21 +1295,21 @@
     {"rating": 5, "text": "방학 때 문 연 카페 찾기 어려웠는데 꾸준히 영업해 주셔서 논문 쓰면서 큰 도움 받았습니다.", "topic": "응대", "days_ago": 87}
   ],
   "inquiries": [
-    {"channel": "플레이스", "text": "혹시 11번 6인 테이블 이번 주 목요일 오후 3시에 동아리 회의용으로 미리 예약할 수 있을까요?", "status": "waiting"},
-    {"channel": "카카오톡", "text": "아메리카노 10잔 정기권 구매하면 디카페인 아메리카노로도 차감 사용이 가능한가요?", "status": "waiting"},
-    {"channel": "인스타DM", "text": "내일 학과 세미나 때문에 아메리카노 15잔, 라떼 5잔 단체 주문하려는데 오전 9시 30분까지 픽업 가능할까요? 연락처 010-0000-1842입니다.", "status": "draft-ready"},
-    {"channel": "전화", "text": "방금 매장 4번 테이블에 아이패드 펜슬을 두고 나온 것 같은데 혹시 보관 중인지 확인 부탁드립니다.", "status": "done"},
-    {"channel": "플레이스", "text": "개인 텀블러 지참 시 할인 혜택이 따로 있나요? 벤티 사이즈 텀블러도 들어가나요?", "status": "done"},
-    {"channel": "카카오톡", "text": "바스크 치즈케이크 홀케이크로도 사전 주문 판매하시나요? 다음 주 금요일에 필요해서요.", "status": "waiting"},
-    {"channel": "매장", "text": "소금빵이랑 베이글 알레르기 성분표(견과류 포함 여부) 확인해 주실 수 있나요?", "status": "done"},
-    {"channel": "인스타DM", "text": "공주 보늬밤 라떼 시즌 메뉴는 언제까지 판매하나요? 12월에도 마실 수 있는지 궁금합니다.", "status": "draft-ready"},
-    {"channel": "플레이스", "text": "주말 오픈 시간이 9시 30분으로 되어 있는데 혹시 시험기간에는 더 일찍 여시나요?", "status": "done"},
-    {"channel": "전화", "text": "오전 알바 구인 공고 보고 연락드렸습니다. 평일 오전 8시~12시 타임 아직 지원 가능할까요? (010-0000-3920)", "status": "waiting"},
-    {"channel": "카카오톡", "text": "어제 오후 2시쯤 결제한 영수증(카드 끝자리 4821) 지출증빙용으로 재발행 받을 수 있을까요?", "status": "draft-ready"},
-    {"channel": "플레이스", "text": "매장 앞 자전거 거치대나 근처 공영주차장 지원이 되는지 문의드립니다.", "status": "done"},
-    {"channel": "인스타DM", "text": "어제 먹었던 솔티드 카라멜 마끼아또에 들어가는 소스가 저당 제품인지 궁금합니다.", "status": "done"},
-    {"channel": "카카오톡", "text": "회원권 남은 횟수가 2잔인데 유효기간 만료 전에 연장 신청이 가능한가요?", "status": "waiting"},
-    {"channel": "매장", "text": "와이파이 비밀번호가 바뀌었는지 연결이 안 돼서 확인 요청드립니다.", "status": "done"}
+    {"channel": "플레이스", "received_time": "11:24", "text": "혹시 11번 6인 테이블 이번 주 목요일 오후 3시에 동아리 회의용으로 미리 예약할 수 있을까요?", "status": "waiting"},
+    {"channel": "카카오톡", "received_time": "17:41", "text": "아메리카노 10잔 정기권 구매하면 디카페인 아메리카노로도 차감 사용이 가능한가요?", "status": "waiting"},
+    {"channel": "인스타DM", "received_time": "19:08", "text": "내일 학과 세미나 때문에 아메리카노 15잔, 라떼 5잔 단체 주문하려는데 오전 9시 30분까지 픽업 가능할까요? 연락처 010-0000-1842입니다.", "status": "draft-ready"},
+    {"channel": "전화", "received_time": "15:13", "text": "방금 매장 4번 테이블에 아이패드 펜슬을 두고 나온 것 같은데 혹시 보관 중인지 확인 부탁드립니다.", "status": "done"},
+    {"channel": "플레이스", "received_time": "10:22", "text": "개인 텀블러 지참 시 할인 혜택이 따로 있나요? 벤티 사이즈 텀블러도 들어가나요?", "status": "done"},
+    {"channel": "카카오톡", "received_time": "16:37", "text": "바스크 치즈케이크 홀케이크로도 사전 주문 판매하시나요? 다음 주 금요일에 필요해서요.", "status": "waiting"},
+    {"channel": "매장", "received_time": "12:48", "text": "소금빵이랑 베이글 알레르기 성분표(견과류 포함 여부) 확인해 주실 수 있나요?", "status": "done"},
+    {"channel": "인스타DM", "received_time": "20:06", "text": "공주 보늬밤 라떼 시즌 메뉴는 언제까지 판매하나요? 12월에도 마실 수 있는지 궁금합니다.", "status": "draft-ready"},
+    {"channel": "플레이스", "received_time": "09:56", "text": "주말 오픈 시간이 9시 30분으로 되어 있는데 혹시 시험기간에는 더 일찍 여시나요?", "status": "done"},
+    {"channel": "전화", "received_time": "10:43", "text": "오전 알바 구인 공고 보고 연락드렸습니다. 평일 오전 8시~12시 타임 아직 지원 가능할까요? (010-0000-3920)", "status": "waiting"},
+    {"channel": "카카오톡", "received_time": "18:12", "text": "어제 오후 2시쯤 결제한 영수증(카드 끝자리 4821) 지출증빙용으로 재발행 받을 수 있을까요?", "status": "draft-ready"},
+    {"channel": "플레이스", "received_time": "13:26", "text": "매장 앞 자전거 거치대나 근처 공영주차장 지원이 되는지 문의드립니다.", "status": "done"},
+    {"channel": "인스타DM", "received_time": "16:09", "text": "어제 먹었던 솔티드 카라멜 마끼아또에 들어가는 소스가 저당 제품인지 궁금합니다.", "status": "done"},
+    {"channel": "카카오톡", "received_time": "11:51", "text": "회원권 남은 횟수가 2잔인데 유효기간 만료 전에 연장 신청이 가능한가요?", "status": "waiting"},
+    {"channel": "매장", "received_time": "12:31", "text": "와이파이 비밀번호가 바뀌었는지 연결이 안 돼서 확인 요청드립니다.", "status": "done"}
   ],
   "manuals": [
     {
