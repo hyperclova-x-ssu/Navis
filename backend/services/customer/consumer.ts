@@ -2,6 +2,10 @@ import type { Pool, PoolClient } from 'pg';
 import { PermanentStreamError, StreamConsumer, type RedisStreams, type StreamEnvelope } from '../../packages/streams/index.ts';
 import { creditMembership, lockClaim, sameSale, settleClaim } from './claims.ts';
 import { isRecord, isUuid, type SaleLink } from './pos-client.ts';
+import { projectFunding } from './reality/05/passes.ts';
+import { event as appendCustomerEvent } from './reality/05/wire.ts';
+import { bookingPosProjectionHandlers } from './reality/06/projection.ts';
+import { calendarPosProjectionHandlers } from './reality/07/projection.ts';
 
 type Quantity = { allocationId: string; quantity: number };
 const invalidEvent = () => new PermanentStreamError('INVALID_CUSTOMER_POS_EVENT');
@@ -53,6 +57,16 @@ async function recognize(db: PoolClient, event: StreamEnvelope) {
   const storeId = storeOf(event);
   const payload = event.payload;
   if (!isRecord(payload)) throw invalidEvent();
+  if (payload.memberId !== undefined) {
+    const { memberId } = payload;
+    const { settlementId } = saleOf(payload);
+    if (!isUuid(memberId) || event.aggregateId !== settlementId) throw invalidEvent();
+    const at = new Date(event.occurredAt);
+    const { rowCount } = await db.query(`INSERT INTO customer.member_visit (store_id,settlement_id,member_id,visited_at)
+      VALUES ($1,$2,$3,$4) ON CONFLICT (store_id,settlement_id) DO NOTHING`, [storeId, settlementId, memberId, at]);
+    if (rowCount) await appendCustomerEvent({ db, storeId, at, actorId: '', day: '' }, 'customer.visit_changed.v1', memberId,
+      { memberId, settlementId, operation: 'recorded' });
+  }
   if (payload.claimId === undefined) return;
   if (!isUuid(payload.claimId)) throw invalidEvent();
   const sale = saleOf(payload);
@@ -75,6 +89,14 @@ async function recognize(db: PoolClient, event: StreamEnvelope) {
     throw new PermanentStreamError('UNSUPPORTED_MEMBERSHIP_CONTRIBUTION');
   }
   await registerContributions(db, storeId, claim.claimId, covered);
+  await db.query('UPDATE customer.pos_claim SET used_at=COALESCE(used_at,$3) WHERE store_id=$1 AND claim_id=$2',
+    [storeId, claim.claimId, event.occurredAt]);
+  if (payload.memberId !== undefined && claim.state === 'held') {
+    const { rows: [membership] } = await db.query<{ version: number }>(`UPDATE customer.membership SET version=version+1
+      WHERE store_id=$1 AND membership_id=$2 RETURNING version`, [storeId, claim.sourceId]);
+    await appendCustomerEvent({ db, storeId, at: new Date(event.occurredAt), actorId: '', day: '' }, 'customer.member_changed.v1',
+      payload.memberId as string, { memberId: payload.memberId, membershipId: claim.sourceId, revision: membership.version });
+  }
 }
 
 async function recordCorrection(db: PoolClient, storeId: string, correctionId: string, eventId: string,
@@ -99,6 +121,13 @@ async function correct(db: PoolClient, event: StreamEnvelope) {
   const storeId = storeOf(event);
   const payload = event.payload;
   if (!isRecord(payload) || !isUuid(payload.settlementId)) throw invalidEvent();
+  if (payload.memberVisitVoided === true) {
+    const at = new Date(event.occurredAt);
+    const { rows: [visit] } = await db.query<{ member_id: string }>(`UPDATE customer.member_visit SET reversed_at=$3
+      WHERE store_id=$1 AND settlement_id=$2 AND reversed_at IS NULL RETURNING member_id`, [storeId, payload.settlementId, at]);
+    if (visit) await appendCustomerEvent({ db, storeId, at, actorId: '', day: '' }, 'customer.visit_changed.v1', visit.member_id,
+      { memberId: visit.member_id, settlementId: payload.settlementId, operation: 'reversed' });
+  }
   const { rows: [match] } = await db.query<{ claim_id: string }>(`
     SELECT claim_id FROM customer.pos_claim
     WHERE store_id = $1 AND settlement_id = $2 AND membership_id IS NOT NULL
@@ -113,8 +142,10 @@ async function correct(db: PoolClient, event: StreamEnvelope) {
     throw invalidEvent();
   }
   const lines = quantities(payload.lines, kind === 'cancel' ? 1 : 0);
-  if (!(await recordCorrection(db, storeId, correctionId, event.eventId, claim.claimId, { kind, lines }))) return;
-  if (kind === 'refund') return;
+  const restoreMember = claim.operating && payload.memberUseRestored === true && isUuid(payload.memberId);
+  const effect = { kind, lines, ...(restoreMember && { restoreMember }) };
+  if (!(await recordCorrection(db, storeId, correctionId, event.eventId, claim.claimId, effect))) return;
+  if (kind === 'refund' && !restoreMember) return;
 
   const { rows } = await db.query<Quantity & { returned: number }>(`
     SELECT allocation_id AS "allocationId", quantity, returned FROM customer.membership_contribution
@@ -123,7 +154,7 @@ async function correct(db: PoolClient, event: StreamEnvelope) {
   if (!rows.length) throw new PermanentStreamError('MEMBERSHIP_CONTRIBUTIONS_MISSING');
 
   const byAllocation = new Map(lines.map(row => [row.allocationId, row.quantity]));
-  const updated = rows.map(row => ({ ...row, returned: row.returned + (byAllocation.get(row.allocationId) ?? 0) }));
+  const updated = rows.map(row => ({ ...row, returned: restoreMember ? row.quantity : row.returned + (byAllocation.get(row.allocationId) ?? 0) }));
   if (updated.some(row => row.returned > row.quantity)) throw new PermanentStreamError('MEMBERSHIP_OVER_REVERSAL');
   await db.query(`
     UPDATE customer.membership_contribution SET returned = line.returned
@@ -134,8 +165,15 @@ async function correct(db: PoolClient, event: StreamEnvelope) {
   if (claim.state !== 'committed' || updated.some(row => row.returned < row.quantity)) return;
   await creditMembership(db, storeId, claim.sourceId);
   await db.query(`
-    UPDATE customer.pos_claim SET state = 'restored' WHERE store_id = $1 AND claim_id = $2
-  `, [storeId, claim.claimId]);
+    UPDATE customer.pos_claim SET state = 'restored', restored_at = $3 WHERE store_id = $1 AND claim_id = $2
+  `, [storeId, claim.claimId, event.occurredAt]);
+  if (restoreMember && isUuid(payload.memberId)) {
+    const { rows: [membership] } = await db.query<{ version: number }>(`UPDATE customer.membership SET version=version+1
+      WHERE store_id=$1 AND membership_id=$2 AND member_id=$3 RETURNING version`, [storeId, claim.sourceId, payload.memberId]);
+    if (!membership) throw invalidEvent();
+    await appendCustomerEvent({ db, storeId, at: new Date(event.occurredAt), actorId: '', day: '' }, 'customer.member_changed.v1',
+      payload.memberId, { memberId: payload.memberId, membershipId: claim.sourceId, revision: membership.version });
+  }
 }
 
 type ConsumerOptions = Partial<Pick<ConstructorParameters<typeof StreamConsumer>[0], 'reclaimIdleMs' | 'afterCommit'>>;
@@ -144,6 +182,12 @@ export function createCustomerConsumer(database: Pool, redis: RedisStreams, name
   return new StreamConsumer({
     ...options,
     database, redis, name, service: 'customer', producer: 'pos', group: 'customer',
-    handlers: { 'pos.sale_recognized.v1': recognize, 'pos.sale_corrected.v1': correct },
+    handlers: { ...calendarPosProjectionHandlers, ...bookingPosProjectionHandlers,
+      async 'pos.custom_pickup_changed.v1'(db, envelope) {
+        await calendarPosProjectionHandlers['pos.custom_pickup_changed.v1'](db, envelope);
+        await bookingPosProjectionHandlers['pos.custom_pickup_changed.v1'](db, envelope);
+      },
+      'pos.sale_recognized.v1': recognize, 'pos.sale_corrected.v1': correct,
+      'pos.member_funding_recorded.v1': projectFunding },
   });
 }

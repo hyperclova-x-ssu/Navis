@@ -105,7 +105,7 @@ BEGIN
         EXECUTE format('ALTER TABLE customer.%I ENABLE ROW LEVEL SECURITY', scoped_table);
         EXECUTE format('ALTER TABLE customer.%I FORCE ROW LEVEL SECURITY', scoped_table);
         EXECUTE format(
-            'CREATE POLICY store_scope ON customer.%I TO customer_migrate, customer_runtime
+            'CREATE POLICY store_scope ON customer.%I TO customer_mig, customer_run
              USING (store_id = (SELECT nullif(current_setting(''app.store_id'', true), '''')::uuid))',
             scoped_table
         );
@@ -113,13 +113,13 @@ BEGIN
 END
 $migration$;
 
-GRANT SELECT ON customer.reservation, customer.membership TO customer_runtime;
+GRANT SELECT ON customer.reservation, customer.membership TO customer_run;
 GRANT SELECT, INSERT ON customer.pos_claim, customer.reservation_cancel_command,
-    customer.membership_contribution, customer.membership_correction TO customer_runtime;
-GRANT UPDATE (status, version, first_order_id, first_bill_id) ON customer.reservation TO customer_runtime;
-GRANT UPDATE (uses_left) ON customer.membership TO customer_runtime;
-GRANT UPDATE (state, pos_bound, settlement_id, bill_id, order_id, release_reason) ON customer.pos_claim TO customer_runtime;
-GRANT UPDATE (returned) ON customer.membership_contribution TO customer_runtime;
+    customer.membership_contribution, customer.membership_correction TO customer_run;
+GRANT UPDATE (status, version, first_order_id, first_bill_id) ON customer.reservation TO customer_run;
+GRANT UPDATE (uses_left) ON customer.membership TO customer_run;
+GRANT UPDATE (state, pos_bound, settlement_id, bill_id, order_id, release_reason) ON customer.pos_claim TO customer_run;
+GRANT UPDATE (returned) ON customer.membership_contribution TO customer_run;
 
 -- Down Migration
 DROP TABLE customer.membership_correction, customer.membership_contribution,

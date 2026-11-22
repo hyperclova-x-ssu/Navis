@@ -11,17 +11,25 @@ export type PosClaim = {
   kind: ClaimKind;
   sourceId: string;
   sourceVersion: number;
+  operating?: boolean;
+  reservationBinding?: { actorId: string; tableId: string | null; expiresAt: string } | null;
 };
 export type SaleLink = { settlementId: string; billId: string; orderId: string };
+export type FirstOrderLink = { billId: string; orderId: string; tableId: string | null };
 export type PosOutcome =
   | { status: 'pending' | 'missing' | 'aborted' | 'rejected' }
+  | { status: 'linked'; order: FirstOrderLink }
   | { status: 'committed'; sale: SaleLink };
 
 export interface PosClient {
   bind(storeId: string, claim: PosClaim): Promise<boolean>;
   outcome(storeId: string, commandKey: string): Promise<PosOutcome | null>;
   abort(storeId: string, claim: PosClaim): Promise<PosOutcome | null>;
+  memberArchive?(storeId: string, body: object, undo: boolean): Promise<PrivateMemberResponse | null>;
+  useMemberPass?(storeId: string, body: object): Promise<PrivateMemberResponse | null>;
+  cancelMemberUse?(storeId: string, body: object): Promise<PrivateMemberResponse | null>;
 }
+export type PrivateMemberResponse = { status: number; body: Record<string, unknown> };
 
 function parseOutcome(body: unknown): PosOutcome | null {
   if (!isRecord(body)) return null;
@@ -30,6 +38,10 @@ function parseOutcome(body: unknown): PosOutcome | null {
   if (!isRecord(result)) return null;
   if (status === 'aborted' || status === 'rejected') {
     return result.ok === false && typeof result.reason === 'string' ? { status } : null;
+  }
+  if (status === 'linked') {
+    const { billId, orderId, tableId } = result;
+    return isUuid(billId) && isUuid(orderId) && (tableId === null || isUuid(tableId)) ? { status, order: { billId, orderId, tableId } } : null;
   }
   if (status !== 'committed' || result.ok !== true || result.status !== 'applied' || !isRecord(result.value)) return null;
   const { settlementId, billId, orderIds, purpose, settled } = result.value;
@@ -64,14 +76,31 @@ export function createPosClient(origin: string, token: string, transport: typeof
     return null;
   }
 
+  async function memberCommand(storeId: string, path: string, body: object): Promise<PrivateMemberResponse | null> {
+    try {
+      const response = await transport(`${base.origin}/internal/v1/pos/stores/${storeId}${path}`, {
+        method: 'POST', headers: { authorization: `Bearer ${token}`, 'x-navis-store-id': storeId, 'content-type': 'application/json' },
+        body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(4500),
+      });
+      const json: unknown = await response.json();
+      return isRecord(json) ? { status: response.status, body: json } : null;
+    } catch {
+      return null;
+    }
+  }
+
   return {
     async bind(storeId, claim) {
+      if (claim.operating) return false;
       const body = await request(storeId, '/claims', {
         claimId: claim.claimId, commandKey: claim.commandKey, kind: claim.kind,
         sourceId: claim.sourceId, sourceVersion: claim.sourceVersion,
+        ...(claim.reservationBinding && { reservationBinding: claim.reservationBinding }),
       });
       return isRecord(body) && body.claimId === claim.claimId && body.commandKey === claim.commandKey
-        && body.kind === claim.kind && body.sourceId === claim.sourceId && body.sourceVersion === claim.sourceVersion;
+        && body.kind === claim.kind && body.sourceId === claim.sourceId && body.sourceVersion === claim.sourceVersion
+        && (!claim.reservationBinding || isRecord(body.reservationBinding) && body.reservationBinding.actorId === claim.reservationBinding.actorId
+          && body.reservationBinding.tableId === claim.reservationBinding.tableId && body.reservationBinding.expiresAt === claim.reservationBinding.expiresAt);
     },
     async outcome(storeId, commandKey) {
       return parseOutcome(await request(storeId, `/outcomes/${encodeURIComponent(commandKey)}`));
@@ -79,5 +108,8 @@ export function createPosClient(origin: string, token: string, transport: typeof
     async abort(storeId, claim) {
       return parseOutcome(await request(storeId, `/outcomes/${encodeURIComponent(claim.commandKey)}/abort`, { claimId: claim.claimId }));
     },
+    memberArchive: (storeId, body, undo) => memberCommand(storeId, undo ? '/member-archive/undo' : '/member-archive', body),
+    useMemberPass: (storeId, body) => memberCommand(storeId, '/member-uses/use', body),
+    cancelMemberUse: (storeId, body) => memberCommand(storeId, '/member-uses/cancel', body),
   };
 }
