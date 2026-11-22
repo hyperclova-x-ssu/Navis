@@ -11,6 +11,8 @@ import { createInsightApp } from './app.ts';
 import { createInsightSalesConsumer, createInsightTableConsumer } from './sales.ts';
 import { InsightError, isUuid } from './scope.ts';
 import { createInsightNaver, searchAdsAuthorization } from './naver/index.ts';
+import { configureBizinfo } from './reality/11/bizinfo.ts';
+import { startGrantRefresh } from './reality/11/grant-refresh.ts';
 import { personaSources, recordSources } from './reality/12/sources.ts';
 
 const fileSecret = (name: string) => {
@@ -87,12 +89,14 @@ const naver = storeId && providerAccount && origin && privateTokenFile ? createI
   ].map(binding => ({ ...binding, storeId, providerAccount, origin, privateTokenFile,
     mode: 'virtual', method: 'GET', timeoutMs: 2_000 })),
 })) : undefined;
+const bizinfo = await configureBizinfo(process.env);
 const app = createInsightApp(pool, {
   gatewayToken, forecastToken, promoToken,
   briefing: { readers: { ...recordSources(sources), ...personaSources(naver ?? {}) } },
   naverReads: naver && storeId ? { naver, linkedStores: [storeId], adsRecord } : undefined,
-  manualsGrants: account && accountToken ? {
-    async verifyPhoto({ storeId, actorId }, fileId) {
+  manualsGrants: {
+    provider: bizinfo,
+    verifyPhoto: account && accountToken ? async ({ storeId, actorId }, fileId) => {
       const url = new URL(`/internal/v1/account/stores/${storeId}/files/${fileId}/manual-evidence-verify`, account);
       const response = await fetch(url, {
         method: 'POST', redirect: 'error', signal: AbortSignal.timeout(2_000),
@@ -103,14 +107,19 @@ const app = createInsightApp(pool, {
       if (response.status === 204) return true;
       if (response.status === 404) return false;
       throw new InsightError(503, 'FILE_VERIFICATION_UNAVAILABLE');
-    },
-  } : undefined,
+    } : undefined,
+  },
   marketing: marketingUrl && marketingToken ? { baseUrl: marketingUrl, token: marketingToken } : undefined,
   provider: process.env.NAVIS_INSIGHT_AGENT_MODE === 'fixture' ? { mode: 'fixture' } : undefined,
   cctvEnabled: process.env.NAVIS_INSIGHT_CCTV_ENABLED === '1',
   now: replayNow ?? (at ? () => at : undefined),
 });
 pool.on('error', () => app.log.warn('Idle database connection closed unexpectedly'));
+let stopGrantRefresh: ReturnType<typeof startGrantRefresh> | undefined;
+if (bizinfo.mode === 'live') app.addHook('onReady', async () => {
+  stopGrantRefresh = startGrantRefresh(pool, bizinfo, isUuid(storeId) ? storeId : undefined,
+    () => app.log.warn('Bizinfo daily refresh unavailable'));
+});
 
 const stop = new AbortController();
 const redisPassword = fileSecret('NAVIS_INSIGHT_REDIS_PASSWORD_FILE');
@@ -131,6 +140,7 @@ if (redisPassword) {
 }
 app.addHook('onClose', async () => {
   stop.abort();
+  await stopGrantRefresh?.();
   await Promise.all(consumers);
   redis?.close();
   await pool.end();

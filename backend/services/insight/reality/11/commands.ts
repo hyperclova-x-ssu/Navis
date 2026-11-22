@@ -1,6 +1,7 @@
 import { fingerprint, InsightError, isDate, isUuid } from '../../scope.ts';
-import { matchNotices, type GrantProvider } from './bizinfo.ts';
-import { byId, conflict, create, currentChecklist, list, missing, noticesForSync, undo,
+import type { GrantProvider } from './bizinfo.ts';
+import { grantSync } from './grant-refresh.ts';
+import { byId, conflict, create, currentChecklist, list, missing, undo,
   type Context, type Data, type Kind, type Row } from './records.ts';
 
 export const invalid = (field: string) => new InsightError(400, `INVALID_${field.toUpperCase()}`);
@@ -191,23 +192,7 @@ export async function perform(ctx: Context, operation: Operation, id: string | n
       const input = object(body, ['region', 'industry']);
       const region = string(input.region, 'region', 40);
       const industry = string(input.industry, 'industry', 80);
-      const day = ctx.businessDay;
-      const fetched = matchNotices(await options.provider.load(region), region, industry)
-        .filter(notice => options.provider.mode === 'fake' || notice.deadline === null || notice.deadline >= day);
-      const existing = await noticesForSync(ctx, fetched.map(notice => notice.noticeId));
-      const pending = new Map(existing.map(notice => [notice.id, notice]));
-      const upserts = fetched.map(notice => {
-        const previous = pending.get(notice.noticeId);
-        pending.delete(notice.noticeId);
-        const data = { ...notice, region, industry, reviewStatus: previous?.data.reviewStatus ?? 'before',
-          matchStatus: 'matched', sourceMode: options.provider.mode, sourceUpdatedAt: ctx.now.toISOString() };
-        return create('notice', data, { id: notice.noticeId });
-      });
-      const remove = [...pending.values()].filter(notice => !notice.archived && (notice.data.region !== region
-        || notice.data.industry !== industry || notice.data.sourceMode !== options.provider.mode
-        || (options.provider.mode === 'live' && typeof notice.data.deadline === 'string' && notice.data.deadline < day)));
-      const changes = [...upserts, ...remove.map(notice => ({ ...notice, archived: true }))];
-      return { resourceId: changes[0]?.id ?? ctx.storeId, changes };
+      return grantSync(ctx, { region, industry }, options.provider.mode, await options.provider.load(region));
     }
     case 'review': {
       const input = object(body, ['expectedRevision']);

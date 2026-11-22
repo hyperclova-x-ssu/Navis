@@ -21,7 +21,7 @@ export function createInsightApp(pool: Pool, {
   gatewayToken, promoToken, forecastToken, provider, marketing, manualsGrants, briefing, naverReads, now = () => new Date(), logging = true, cctvEnabled = true,
 }: {
   gatewayToken?: string; promoToken?: string; forecastToken?: string; marketing?: MarketingEndpoint;
-  manualsGrants?: Pick<Parameters<typeof registerManualsGrants>[2], 'verifyPhoto'>;
+  manualsGrants?: Pick<Parameters<typeof registerManualsGrants>[2], 'verifyPhoto' | 'provider'>;
   briefing?: Pick<BriefingOptions, 'readers' | 'readOpenings'>;
   naverReads?: Omit<NaverReadOptions, 'gatewayToken' | 'now'>;
   provider?: NavisProvider; now?: () => Date; logging?: boolean; cctvEnabled?: boolean;

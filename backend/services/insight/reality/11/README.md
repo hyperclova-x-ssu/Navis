@@ -24,6 +24,18 @@ Migration `20261122001100_real_manuals_grants.sql` requires B10's `2026112200100
 
 ## Provider and attachment registration
 
-The default provider reads a local JSON fixture adapted from the published Bizinfo response example. Its matching tags are test data. The provider uses explicit exact region and industry tags as evidence of a match. The original notice remains the source for eligibility. Live access requires `NAVIS_BIZINFO_MODE=live`, `NAVIS_BIZINFO_A6_APPROVED=1`, `NAVIS_BIZINFO_TERMS_ACCEPTED=1`, and `NAVIS_BIZINFO_KEY_FILE` when the composer uses `configureBizinfo(process.env)`. The client only reads notices from Bizinfo's official API. [Bizinfo API documentation](https://www.bizinfo.go.kr/apiDetail.do?id=bizinfoApi)
+The default provider reads a local JSON fixture adapted from the published Bizinfo response example. Its matching tags are test data. The original notice remains the source for eligibility. Live access requires `NAVIS_BIZINFO_MODE=live`, `NAVIS_BIZINFO_A6_APPROVED=1`, `NAVIS_BIZINFO_TERMS_ACCEPTED=1`, and `NAVIS_BIZINFO_KEY_FILE`. The client reads notices from Bizinfo's official API. [Bizinfo API documentation](https://www.bizinfo.go.kr/apiDetail.do?id=bizinfoApi)
 
 Manual step photos take completed account file UUIDs. Supply `verifyPhoto` from the account service workload client and check store, owner, completed file state, `manual-evidence` purpose and image content type. Until that route is registered, photo writes return `FILE_VERIFICATION_UNAVAILABLE`.
+## Bizinfo daily refresh
+
+Use the local `compose.bizinfo-live.yaml` overlay or the Helm `config.navisBizinfoMode=live` options
+with the `BIZINFO_API_KEY` entry of the `navis-bizinfo` Secret. Insight's provider egress is
+`www.bizinfo.go.kr:443`.
+
+Daily refresh uses the last saved region and industry for each store. It initially uses 서울 and 카페 for the
+configured demo store. For live Seoul café and food-service profiles, a notice can also match when Seoul or
+nationwide coverage is explicit and the title, tags or target mention an approved topic. An explicit
+different region in the title overrides broad tags. The widget shows the source of each match as a chip.
+Open notices appear first, with exact matches ahead of related matches and the nearest deadlines first within each group.
+The fixture and other profiles use exact matches. A failed refresh keeps the last successful notices and fetch time.
