@@ -37,20 +37,19 @@ function setup(template:null|'A'=null,reduced=true){
  return {run,store,tick,Host};
 }
 describe('common closing surface',()=>{
- it('keeps the toast and its undo in the empty notice slot through a locale switch',async()=>{
+ it('keeps the closing toast and a single undo in the closing footer through a locale switch',async()=>{
   const errors=vi.spyOn(console,'error');
   try{
    const {run,store,Host}=setup();run.actions.openClosing('opener');render(<Host/>);
    fireEvent.click(await screen.findByRole('button',{name:'마감 정산하기'}));
-   const undo=await screen.findByRole('button',{name:'되돌리기'}),notice=selectCommonNotice(run.getState());
-   expect(undo.closest('.ui-overlay-notice-slot')).not.toBeNull();
+   const undo=await screen.findByRole('button',{name:'마감 되돌리기'}),notice=selectCommonNotice(run.getState());
+   expect(screen.queryByRole('button',{name:'되돌리기'})).not.toBeInTheDocument();
    await waitFor(()=>expect(screen.getByText('오늘 마감했어요')).toBeVisible());
    const footer=document.querySelector('.ui-overlay-note')!;
    expect(footer).not.toHaveTextContent('가짜 데이터로 만든 화면이에요'); // D-323: no demo notice
    act(()=>run.actions.setLocale('en'));
    expect(selectCommonNotice(run.getState())).toBe(notice);
-   expect(screen.getByRole('button',{name:'Undo'})).toBe(undo);
-   expect(undo.closest('.ui-overlay-notice-slot')).not.toBeNull();
+   expect(footer).toContainElement(undo);
    expect(footer).not.toHaveTextContent('This screen uses sample data');
    fireEvent.click(undo);
    expect(selectClosing(store.getSnapshot(),{date:TODAY,scenario:'normal'}).status).toBe('reopened');
@@ -79,13 +78,12 @@ describe('common closing surface',()=>{
   expect(store.getSnapshot().tables.dayClosing).toHaveLength(manifest.counts.closings + 1);
   expect(selectClosing(store.getSnapshot(),{date:TODAY,scenario:'normal'})).toMatchObject({status:'closed',generation:1});
   expect(screen.getByText('오늘 마감됨 · 15:45')).toBeInTheDocument();
-  const token=selectCommonNotice(run.getState())!.undo!.token;
+  expect(selectCommonNotice(run.getState())?.undo).toBeUndefined();
   const edited=store.dispatch({type:'calendar.addEvent',title:'마감 뒤 메모',date:TODAY});expect(edited.ok).toBe(true);
   tick(6100);expect(selectCommonNotice(run.getState())).toBeNull();
   fireEvent.click(screen.getByRole('button',{name:'마감 되돌리기'}));
   expect(selectClosing(store.getSnapshot(),{date:TODAY,scenario:'normal'}).status).toBe('reopened');
   expect(selectCommonNotice(run.getState())?.messageKey).toBe('data.management.notice.reopened');
-  expect(store.undo(token).ok).toBe(true);
   expect(edited.ok&&edited.undoToken&&store.undo(edited.undoToken).ok).toBe(true);
  });
  it('keeps empty closing separate and retries only the failed closing preview',async()=>{
@@ -102,9 +100,9 @@ describe('common closing surface',()=>{
  it('pauses the common notice on focus and hidden page and keeps a different board layout undo',async()=>{
   const {run,Host,tick}=setup();run.actions.applyLayoutIntent({type:'add-tap',featureId:'menu'});const boardUndo=run.getState().undo;
   run.actions.openClosing('opener');render(<Host/>);fireEvent.click(await screen.findByRole('button',{name:'마감 정산하기'}));
-  const undo=await screen.findByRole('button',{name:'되돌리기'});fireEvent.focus(undo);tick(9000);
+  const notice=await screen.findByText('오늘 마감했어요');const surface=notice.closest<HTMLElement>('[role="status"]')!;fireEvent.focus(surface);tick(9000);
   expect(selectCommonNotice(run.getState())).not.toBeNull();
-  fireEvent.blur(undo);act(()=>run.actions.setPageHidden(true));tick(9000);expect(selectCommonNotice(run.getState())).not.toBeNull();
+  fireEvent.blur(surface);act(()=>run.actions.setPageHidden(true));tick(9000);expect(selectCommonNotice(run.getState())).not.toBeNull();
   act(()=>run.actions.setPageHidden(false));expect(run.getState().boards.management.undo?.token).toBe(boardUndo?.token);
  });
 });

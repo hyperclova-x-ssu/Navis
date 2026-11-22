@@ -4,7 +4,7 @@ import { useBundle } from '../../i18n';
 import { getRegistration } from '../../catalog';
 import {
   ActionButton, ChoiceSubview, ContentCrossfade, ContentRecovery, DialogFrame, Icon, IconButton, LanguageSelect, LanguageSelectRow,
-  LargeTextControl, ListSelectRow, SettingRow, OnboardingFooter, OverlayExitSurface, ThemeTabs, ScrollArea, consumeDismissSequence, useKitT, useUi, type CloseReason, type PresetLayout,
+  LargeTextControl, ListSelectRow, SettingRow, OnboardingFooter, OverlayExitSurface, Spinner, ThemeTabs, ScrollArea, consumeDismissSequence, useKitT, useUi, type CloseReason, type PresetLayout,
 } from '../../ui';
 import { ALL_DATA_WIDGET_IDS, NORMAL_VARIANT, previewVariantBundle, previewVariants, resolveVariant, variantLabelKey } from '../../data/widget-data';
 import { BusinessOptions, type SessionActions } from '../onboarding';
@@ -13,7 +13,9 @@ import type { TableSettingsPanelProps } from '../../ui/components/table-grid-edi
 import { iteration5Bundle } from '../onboarding/messages';
 import { SessionActionsContext } from '../../app/session-actions';
 import { createTableLayout, tableLayoutEnabled } from '../../layout/table-layout';
-import { useAccountController } from '../../app/account-context-value';
+import { AccountContext, useAccountController } from '../../app/account-context-value';
+import { isDemoRestartOwner } from '../../data/reality/00/account/client';
+import type { PresentationRunStore } from '../../state';
 import { resolveClosingVariant } from '../../data/widget-data';
 import { useShellT } from './use-shell-t';
 import { shellBundle } from './messages';
@@ -23,6 +25,7 @@ import { selectPosPreferences } from '../../pos/tables';
 import { tableFailureKey } from '../order/tables/actions';
 import { tableTransferBundle } from '../order/tables/messages';
 import { OrderPreferences } from './OrderPreferences';
+import { SmsSettingsForm } from './SmsSettings';
 import './settings.css';
 
 export { ExampleStateChipForRun } from './ExampleChip';
@@ -44,6 +47,7 @@ interface BodyProps {
   readonly run: RunStore; readonly state: RunState; readonly view: View; readonly setView: (view: View) => void; readonly onClose: () => void;
   readonly onChoose: (type: BusinessType, event: React.MouseEvent<HTMLButtonElement>) => void; readonly announce: (key: Announcement['key'], value?: string) => void;
   readonly interactive?: boolean; readonly highlightBusiness?: boolean; readonly failContent?: boolean; readonly updateSettings?: SessionActions['updateSettings'];
+  readonly onRestart?: () => void; readonly restartRef?: RefObject<HTMLButtonElement | null>;
 }
 const noop = () => undefined;
 const applied = (result:unknown):boolean => result===true || !!result && typeof result==='object' && 'ok' in result && result.ok===true;
@@ -96,14 +100,21 @@ function WidgetVariantChoice({ run, state, featureId, onBack, onClose, interacti
   }} />;
 }
 
-function SettingsBody({ run, state, view, setView, onClose, onChoose, announce, updateSettings, interactive = true, highlightBusiness = false, failContent = false }: BodyProps) {
+function SettingsBody({ run, state, view, setView, onClose, onChoose, announce, updateSettings, onRestart, restartRef, interactive = true, highlightBusiness = false, failContent = false }: BodyProps) {
   if (failContent) throw new Error('Settings body verification failure');
   const { t } = useBundle(shellBundle, previewVariantBundle, iteration5Bundle, posBundle);
   const kit = useKitT();
   const picks = Object.keys(state.preview.overrides).length;
-  // REAL-PLAN F00: stores and sign-out exist only when the account runs over HTTP.
   const account = useAccountController();
   const [switching, setSwitching] = useState(false);
+  const signOut = () => {
+    if (!account) {
+      run.actions.resetRun({ screenPreset: state.screenPreset, catalog: run.catalog, theme: state.theme, reducedMotion: state.reducedMotion });
+      return;
+    }
+    setSwitching(true);
+    void account.signOut().catch(() => setSwitching(false));
+  };
   const unpaid = state.pos.bills.some(bill => bill.status === 'open' || bill.status === 'partial');
   const posPreferences = selectPosPreferences(state.shopSettings);
   const widget = widgetOf(view);
@@ -126,16 +137,21 @@ function SettingsBody({ run, state, view, setView, onClose, onChoose, announce, 
   else body = <div className="settings-sections">
     <div role="group" aria-label={t('settings.store')}><h3>{t('settings.store')}</h3>
     {account && account.stores.length > 1 ? <ListSelectRow label={t('settings.switchStore')} value={account.storeName ?? ''} onPress={interactive ? () => setView('stores') : noop} /> : null}
+    {account && state.shopSettings.smsSettings ? <SmsSettingsForm run={run} interactive={interactive} locale={state.locale} current={state.shopSettings.smsSettings}
+      apply={smsSettings => applied(updateSettings?.({ ...state.shopSettings, smsSettings }))} /> : null}
     <div className="settings-business-select" data-business-highlight={highlightBusiness||undefined}><ListSelectRow label={t('settings.business')} value={state.businessType ? kit.t(`ui.business.${state.businessType}`) : t('settings.businessNone')} ariaLabel={t('settings.changeBusiness')} disabled={unpaid} onPress={interactive ? () => setView('business') : noop} /></div>
     {unpaid ? <ActionButton variant="ghost" disabled aria-describedby="settings-unpaid-reason">{t('step.payment')} · {state.shopSettings.paymentStyle ? t(`payment.${state.shopSettings.paymentStyle}`) : '—'}</ActionButton> : <ListSelectRow label={t('step.payment')} value={state.shopSettings.paymentStyle ? t(`payment.${state.shopSettings.paymentStyle}`) : '—'} onPress={interactive ? () => setView('payment') : noop} />}
     <div lang="ko"><ListSelectRow label={t('pos.settingsTitle')} value={t('pos.startValue',{tab:t(`pos.${posPreferences.startTab}`)})} onPress={interactive ? () => setView('pos-preferences') : noop}/>{unpaid ? <div><p id="settings-unpaid-reason">{t('pos.settingsBlocked')}</p><ActionButton variant="secondary" onClick={interactive ? () => openUnpaidOrders(run) : noop}>{t('pos.showOrders')}</ActionButton></div> : null}</div>
-    <ListSelectRow label={t('step.tables')} value={tableLayoutEnabled(state.shopSettings.businessType,state.shopSettings.paymentStyle) ? state.shopSettings.tableLayout ? t('tables.total',{n:state.shopSettings.tableLayout.tables.length,m:state.shopSettings.tableLayout.tables.reduce((n,v)=>n+v.seats,0)}) : t('settings.noTables') : t('table.reason')} ariaLabel={state.shopSettings.tableLayout||state.locale!=='ko'?t('settings.editTables'):'테이블 배치하기'} disabled={!tableLayoutEnabled(state.shopSettings.businessType,state.shopSettings.paymentStyle)} onPress={interactive ? () => setView('tables') : noop} /></div>
+    {tableLayoutEnabled(state.shopSettings.businessType,state.shopSettings.paymentStyle) ? <ListSelectRow label={t('step.tables')} value={state.shopSettings.tableLayout ? t('tables.total',{n:state.shopSettings.tableLayout.tables.length,m:state.shopSettings.tableLayout.tables.reduce((n,v)=>n+v.seats,0)}) : t('settings.noTables')} ariaLabel={state.shopSettings.tableLayout||state.locale!=='ko'?t('settings.editTables'):'테이블 배치하기'} onPress={interactive ? () => setView('tables') : noop} /> : <SettingRow className="settings-static-row"><span className="ui-list-select-row__label">{t('step.tables')}</span><span className="ui-list-select-row__value">{t('table.settingsUnavailable')}</span></SettingRow>}</div>
     <div role="group" aria-label={t('settings.display')}><h3>{t('settings.display')}</h3>
     <SettingRow><section className="settings-mode" aria-label={t('settings.mode')}><h3 className="settings-label">{t('settings.mode')}</h3><ThemeTabs value={state.theme} onChange={interactive ? run.actions.setTheme : noop} /></section></SettingRow>
     <SettingRow><LargeTextControl checked={state.textScale === 125} onChange={interactive ? checked => run.actions.setTextScale(checked ? 125 : 100) : noop} /></SettingRow>
     <LanguageSelectRow locale={state.locale} onPress={interactive ? () => setView('language') : noop} />
-    {account ? <SettingRow><ActionButton variant="secondary" disabled={switching} onClick={interactive ? () => { setSwitching(true); void account.signOut().catch(() => setSwitching(false)); } : noop}>{t('settings.signOut')}</ActionButton></SettingRow> : null}
+    <SettingRow><ActionButton variant="secondary" disabled={switching} onClick={interactive ? signOut : noop}>{t('settings.signOut')}</ActionButton></SettingRow>
     </div>
+    {(!account || isDemoRestartOwner(account.stores)) && 'restartOnboarding' in run.actions
+      ? <ListSelectRow ref={restartRef} label={t('settings.demoRestart')} value={t('settings.demoRestart.hint')} onPress={interactive ? onRestart ?? noop : noop} />
+      : null}
   </div>;
   return <ScrollArea role="region" aria-label={view === 'business' ? t('business.group') : t('settings.content')} className="settings-content">{body}</ScrollArea>;
 }
@@ -151,6 +167,25 @@ function SettingsSession({ run, state, returnFocusRef, onClose, onChoose, announ
     return previewStatesEnabled() ? 'preview' : 'overview';
   });
   const [tableDraft,setTableDraft]=useState(state.shopSettings.tableLayout ?? createTableLayout());
+  const account = useContext(AccountContext);
+  const restartRef = useRef<HTMLButtonElement>(null), cancelRestartRef = useRef<HTMLButtonElement>(null);
+  const restartInFlight = useRef(false);
+  const [restartConfirmation, setRestartConfirmation] = useState<'ask' | 'saving' | 'error' | null>(null);
+  const { t } = useShellT();
+  const confirmRestart = async () => {
+    if (restartInFlight.current || run.getState().overlay.type !== 'settings') return;
+    restartInFlight.current = true;
+    setRestartConfirmation('saving');
+    try {
+      if (account) await account.restartOnboarding();
+      else (run as PresentationRunStore).actions.restartOnboarding();
+    } catch {
+      // Keep the owner's confirmation open so the same action can be retried.
+    } finally {
+      restartInFlight.current = false;
+      if (run.getState().overlay.type === 'settings') setRestartConfirmation('error');
+    }
+  };
   const [error,setError]=useState<'session.error' | ReturnType<typeof tableFailureKey> | null>(null);const [highlightBusiness,setHighlightBusiness]=useState(false);
   useEffect(()=>{if(!highlightBusiness)return;const timer=window.setTimeout(()=>setHighlightBusiness(false),800);return()=>window.clearTimeout(timer);},[highlightBusiness]);
   const setView = (next:View) => {
@@ -171,11 +206,21 @@ function SettingsSession({ run, state, returnFocusRef, onClose, onChoose, announ
     announce('settings.changed',tableSummary);
     setView('overview');
   };
-  return <DialogFrame open title={title} description={description} variant="settings" popupStyle={view === 'tables' ? tablePopupStyle : undefined} returnFocusRef={returnFocusRef} closeLabel={kit.t('common.close')}
+  return <DialogFrame open title={title} description={description} variant="settings" popupStyle={view === 'tables' ? tablePopupStyle : undefined} returnFocusRef={returnFocusRef} closeLabel={kit.t('common.close')} closeLocked={restartConfirmation === 'saving'} closeLockReason={t('settings.demoRestart.pending')}
     headerAction={sub ? <BackButton onBack={() => setView(parentOf(view))} /> : undefined} onClose={reason => onClose(view, reason,view==='tables'?tableDraft:undefined)} footer={view==='tables'?<OnboardingFooter summary={tableSummary}><ActionButton size="primary" onClick={saveTables}>{t5('save')}</ActionButton></OnboardingFooter>:undefined}>
-    {tableLinkPicker?.disabled && (view === 'overview' || view === 'tables') ? <p lang="ko">테이블별 주문이 있는 후불형에서 연결할 수 있어요</p> : null}
     {view === 'tables' && tableLinkError ? <p role="alert">{tableLinkError}</p> : null}
-    <ContentRecovery onRetry={import.meta.env.DEV ? verification?.onRetry : undefined}><ContentCrossfade contentKey={view}>{view === 'tables' ? <div className="t207-settings-tables"><TableEditor value={tableDraft} linkPicker={tableLinkPicker} onChange={next=>{const protectedIds=new Set([...state.pos.bills.filter(b=>b.status==='open'||b.status==='partial').flatMap(b=>b.tableId?[b.tableId]:[]),...state.pos.tableSessions.filter(s=>s.cleaning).map(s=>s.tableId)]);if([...protectedIds].some(id=>!next.tables.some(table=>table.tableId===id))){setError('pos.tableInUse');return;}setError(null);setTableDraft(next);}}/></div> : <SettingsBody highlightBusiness={highlightBusiness} updateSettings={saveSettings} run={run} state={state} view={view} setView={setView} failContent={failContent} announce={announce} onClose={() => onClose(view, 'button')} onChoose={(type, event) => { consumeDismissSequence(event.nativeEvent); if (run.getState().overlay.type !== 'settings') return; const result=saveSettings({...state.shopSettings,businessType:type}); if(applied(result)) {if(type!==state.businessType)setHighlightBusiness(true);onChoose(type);setView('overview');} }} />}</ContentCrossfade>{error?<p role="alert">{t5(error)}</p>:null}</ContentRecovery>
+    <ContentRecovery onRetry={import.meta.env.DEV ? verification?.onRetry : undefined}><ContentCrossfade contentKey={view}>{view === 'tables' ? <div className="t207-settings-tables"><TableEditor value={tableDraft} linkPicker={tableLinkPicker} onChange={next=>{const protectedIds=new Set([...state.pos.bills.filter(b=>b.status==='open'||b.status==='partial').flatMap(b=>b.tableId?[b.tableId]:[]),...state.pos.tableSessions.filter(s=>s.cleaning).map(s=>s.tableId)]);if([...protectedIds].some(id=>!next.tables.some(table=>table.tableId===id))){setError('pos.tableInUse');return;}setError(null);setTableDraft(next);}}/></div> : <SettingsBody highlightBusiness={highlightBusiness} updateSettings={saveSettings} run={run} state={state} view={view} setView={setView} failContent={failContent} announce={announce} restartRef={restartRef} onRestart={() => setRestartConfirmation('ask')} onClose={() => onClose(view, 'button')} onChoose={(type, event) => { consumeDismissSequence(event.nativeEvent); if (run.getState().overlay.type !== 'settings') return; const result=saveSettings({...state.shopSettings,businessType:type}); if(applied(result)) {if(type!==state.businessType)setHighlightBusiness(true);onChoose(type);setView('overview');} }} />}</ContentCrossfade>{error?<p role="alert">{t5(error)}</p>:null}</ContentRecovery>
+    {restartConfirmation && <DialogFrame open dialogRole="alertdialog" variant="settings" popupClassName="settings-restart-confirm"
+      title={t('settings.demoRestart.confirm')} description={t('settings.demoRestart.description')}
+      initialFocusRef={cancelRestartRef} returnFocusRef={restartRef}
+      closeLocked={restartConfirmation === 'saving'} closeLockReason={t('settings.demoRestart.pending')} onClose={() => setRestartConfirmation(null)}
+      footer={<div className="settings-restart-actions">
+        <ActionButton ref={cancelRestartRef} variant="secondary" disabled={restartConfirmation === 'saving'} onClick={() => setRestartConfirmation(null)}>{t('settings.demoRestart.cancel')}</ActionButton>
+        <ActionButton disabled={restartConfirmation === 'saving'} onClick={() => void confirmRestart()}>{t('settings.demoRestart.apply')}</ActionButton>
+      </div>}>
+      {restartConfirmation === 'saving' && <p className="settings-restart-status" role="status"><Spinner />{t('settings.demoRestart.pending')}</p>}
+      {restartConfirmation === 'error' && <p role="alert">{t5('session.error')}</p>}
+    </DialogFrame>}
   </DialogFrame>;
 }
 

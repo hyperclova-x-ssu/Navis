@@ -71,14 +71,14 @@ export function ClosingOverlay({ run, onOpenReceipt, accounting: explicitAccount
   const blockedCount = (http && fin ? fin.closing.pendingBills.length : closing.pendingBills.length) + (state.posUi.approval?.status === 'pending' ? 1 : 0), cannotClose = blockedCount > 0;
   const money = (value: number) => format.money(value, 'compact'), full = (value: number) => format.money(value, 'full');
   const signed = (value: number) => `${value < 0 ? '−' : value > 0 ? '+' : ''}${full(Math.abs(value))}`;
-  const notify = (result: ReturnType<typeof store.dispatch>) => {
+  const notify = (result: ReturnType<typeof store.dispatch>, includeUndo = true) => {
     if (!result.ok) { run.actions.showNotice({ kind: 'error', messageKey: result.messageKey }); return; }
-    if (!result.duplicate) run.actions.showNotice({ kind: 'complete', messageKey: result.noticeKey ?? 'data.management.notice.reopened', ...(result.undoToken ? { undo: { target: 'data' as const, token: result.undoToken } } : {}) });
+    if (!result.duplicate) run.actions.showNotice({ kind: 'complete', messageKey: result.noticeKey ?? 'data.management.notice.reopened', ...(includeUndo && result.undoToken ? { undo: { target: 'data' as const, token: result.undoToken } } : {}) });
   };
   /** One write at a time: each request carries the revision the previous receipt produced. */
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const sendHttp = (command: DataCommand): Promise<boolean> => {
-    const run = queue.current.then(async () => { setBusy(true); try { const result: DataCommandResult = await execute(command); notify(result); return result.ok; } finally { setBusy(false); } });
+    const run = queue.current.then(async () => { setBusy(true); try { const result: DataCommandResult = await execute(command); notify(result, command.type !== 'closing.closeDay'); return result.ok; } finally { setBusy(false); } });
     queue.current = run.catch(() => undefined);
     return run;
   };
@@ -125,7 +125,7 @@ export function ClosingOverlay({ run, onOpenReceipt, accounting: explicitAccount
     }
     const latest = selectClosing(store.getSnapshot(), { date: TODAY, scenario });
     if (closed) { if (latest.status !== 'closed' || !latest.closingId) return; notify(store.dispatch({ type: 'closing.undoDay', date: TODAY, scenario, closingId: latest.closingId, idempotencyKey: `${latest.closingId}:undo` })); }
-    else { if (cannotClose || latest.status === 'closed' || latest.generation !== closing.generation) return; notify(store.dispatch({ type: 'closing.closeDay', date: TODAY, scenario, expectedGeneration: latest.generation, idempotencyKey: `${state.runId}:closing:${scenario}:${++keySequence}` })); }
+    else { if (cannotClose || latest.status === 'closed' || latest.generation !== closing.generation) return; notify(store.dispatch({ type: 'closing.closeDay', date: TODAY, scenario, expectedGeneration: latest.generation, idempotencyKey: `${state.runId}:closing:${scenario}:${++keySequence}` }), false); }
   };
   type Row = typeof payments.rows[number];
   const columns = useMemo<readonly GridColumn<Row>[]>(() => {
@@ -135,14 +135,14 @@ export function ClosingOverlay({ run, onOpenReceipt, accounting: explicitAccount
     };
     return [
       { id: 'time', header: t('closing.time'), kind: 'text', value: r => r.time, minWidth: layoutTokens.targetDefault * 2, sortable: true },
-      { id: 'transaction', header: t('closing.transaction'), kind: 'text', value: r => r.transactionNo ?? '', minWidth: layoutTokens.targetDefault * 4 },
+      ...(rows.some(r => r.transactionNo) ? [{ id: 'transaction', header: t('closing.transaction'), kind: 'text' as const, value: (r: Row) => r.transactionNo ?? '', minWidth: layoutTokens.targetDefault * 4 }] : []),
       { id: 'order', header: t('closing.orderNo'), kind: 'text', value: r => r.orderNos?.map(n => `#${n}`).join(' · ') ?? '', minWidth: layoutTokens.targetDefault * 2 },
       { id: 'amount', header: t('closing.amount'), kind: 'number', value: r => r.visibleAmount, render: r => <><PosMoney amount={r.visibleAmount}/>{method && method !== 'mixed' && (r.methodSplits?.length ?? 0) > 1 ? <small>{t('closing.mixedPart')}</small> : null}{r.status === 'canceled' && r.originalAmount !== undefined ? <small>{full(r.originalAmount)}</small> : null}</>, accessibleValue: r => state.locale === 'ko' ? full(r.visibleAmount) : String(r.visibleAmount), minWidth: layoutTokens.targetDefault * 3, sortable: true },
       { id: 'method', header: t('closing.method'), kind: 'text', value: r => r.method, render: r => (r.methodSplits?.length ?? 0) > 1 ? r.methodSplits!.map(s => t(`closing.${s.method}`)).join(' · ') : t(`closing.${r.method}`), accessibleValue: r => state.locale === 'ko' ? ((r.methodSplits?.length ?? 0) > 1 ? r.methodSplits!.map(s => t(`closing.${s.method}`)).join(' · ') : t(`closing.${r.method}`)) : r.method, minWidth: layoutTokens.targetDefault * 3, sortable: true },
       { id: 'content', header: t('closing.content'), kind: 'text', value: content, render: r => { const text = content(r); return <span lang={/[가-힣]/u.test(text) ? 'ko' : undefined}>{text}</span>; }, minWidth: layoutTokens.targetDefault * 4 },
       { id: 'status', header: t('closing.status'), kind: 'status', value: r => r.kind, render: r => <>{r.kind !== 'payment' ? <StatusChip>{t(r.kind === 'cancel' ? 'closing.cancel' : 'closing.refund')}</StatusChip> : r.status && r.status !== 'paid' ? <StatusChip>{t(`pos.${r.status}`)}</StatusChip> : null}{r.restockRetail ? <small>{t('closing.restocked')}</small> : null}</>, accessibleValue: r => state.locale === 'ko' ? (r.kind !== 'payment' ? t(r.kind === 'cancel' ? 'closing.cancel' : 'closing.refund') : r.status && r.status !== 'paid' ? t(`pos.${r.status}`) : t('closing.payment')) : r.kind, minWidth: layoutTokens.targetDefault * 2, sortable: true },
     ];
-  }, [t, format, snapshot.tables.menuItem, method, state.locale]);
+  }, [t, format, snapshot.tables.menuItem, method, rows, state.locale]);
   const receipt = (id: string | null) => {
     const targetId = id ?? selected;
     if (!targetId) return;
@@ -155,14 +155,14 @@ export function ClosingOverlay({ run, onOpenReceipt, accounting: explicitAccount
   if (!descriptor) return null;
   const error = <InlineError message={t('closing.error')} onRetry={run.actions.resetClosingPreview}/>;
   const value = (slotId: string, semanticValue: number, children: React.ReactNode) => <VisibleValue slot={{ slotId: `closing:${slotId}`, featureId: 'ledger', scope: 'detail', semanticValue, visible: active && tab === 'sales' }}>{children}</VisibleValue>;
-  const summary = accounting ? <SalesDepositSplitCard stacked view={variant === 'error' ? { status: 'error', period: accounting.period } : scenario === 'empty' ? { status: 'empty', period: accounting.period } : accounting} onRetry={presentation?.onRetry ?? run.actions.resetClosingPreview} /> : <div className="app-closing-summary"><section aria-label={t('closing.sales')}><h3>{t('closing.sales')}</h3>{variant === 'error' || scenario === 'empty' ? <p>—</p> : <>
+  const summary = accounting ? <SalesDepositSplitCard stacked closing view={variant === 'error' ? { status: 'error', period: accounting.period } : scenario === 'empty' ? { status: 'empty', period: accounting.period } : accounting} onRetry={presentation?.onRetry ?? run.actions.resetClosingPreview} /> : <div className="app-closing-summary"><section aria-label={t('closing.sales')}><h3>{t('closing.sales')}</h3>{variant === 'error' || scenario === 'empty' ? <p>—</p> : <>
     <div className="app-closing-total">{value('net', totals.revenue, money(totals.revenue))}</div><p>{full(totals.revenue)}</p>
-    <p>{t('pos.salesCalculation', { gross: money(totals.gross), discount: money(totals.discount), refund: money(totals.refund) })}</p>
     <p>{t('pos.discountComposition', { membership: full(totals.discountBySource.membership), coupon: full(totals.discountBySource.coupon), direct: full(totals.discountBySource.direct) })}</p>
     <p>{t('closing.counts', { payments: totals.paymentCount, charged: money(totals.charged), refunds: totals.refundCount, refund: money(totals.refund), cancels: totals.cancelCount, canceled: money(totals.canceled) })}</p>
     {closing.received > 0 ? <p>{t('pos.pendingReceived', { n: closing.pendingBills.length, amount: full(closing.received) })}</p> : null}
     <CustomClosingSales date={TODAY} />
-    <h3>{t('closing.byMethod')}</h3><dl>{methods.map(m => <div key={m}><dt>{t(`closing.${m}`)}</dt><dd>{value(m, totals.byMethod[m], money(totals.byMethod[m]))} <span>{t('closing.count', { n: totals.methodCounts[m] })}</span>{closed ? <ConfirmedMark/> : null}</dd></div>)}</dl>
+    <h3>{t('closing.byMethod')}</h3><dl>{methods.filter(m => totals.byMethod[m] !== 0).map(m => <div key={m}><dt>{t(`closing.${m}`)}</dt><dd>{value(m, totals.byMethod[m], money(totals.byMethod[m]))} <span>{t('closing.count', { n: totals.methodCounts[m] })}</span>{closed ? <ConfirmedMark/> : null}</dd></div>)}</dl>
+    <div className="app-closing-sales-notes">{methods.filter(m => totals.byMethod[m] === 0).map(m => <p key={m}>{t(`closing.${m}`)} {full(0)}</p>)}<p>{t('pos.salesCalculation', { gross: full(totals.gross), discount: full(totals.discount), refund: full(totals.refund) })}</p></div>
   </>}</section></div>;
   const filters: readonly Filter[] = [undefined, ...methods, 'mixed'];
   const details = accounting ? accounting.status === 'ready' && variant !== 'error' && scenario !== 'empty' ? <AccountingTransactions rows={accounting.transactions} onOpenReceipt={onOpenAccountingReceipt ?? presentation?.onOpenReceipt} /> : null : <div className="app-closing-payments"><h3>{t('closing.payments')}</h3>{variant === 'error' ? error : <DataGrid id="closing-payments" label={t('closing.payments')} rows={rows} getRowId={r => r.paymentId} getRowLabel={r => r.time} columns={columns} sort={sort} onSortChange={setSort} filters={method ? { method } : {}} selectedRowId={selected} onSelectionChange={receipt} expandedRowIds={new Set()} focus={focus} onFocusChange={setFocus} renderFilters={() => <div className="app-closing-filters" role="radiogroup" aria-label={t('closing.method')}>{filters.map((m, index) => <ActionButton key={m ?? 'all'} variant="outline" role="radio" aria-checked={method === m} tabIndex={method === m ? 0 : -1} onKeyDown={e => { if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) { e.preventDefault(); const next = (index + (['ArrowRight', 'ArrowDown'].includes(e.key) ? 1 : -1) + filters.length) % filters.length; setMethod(filters[next]); (e.currentTarget.parentElement?.children[next] as HTMLElement)?.focus(); } }} onClick={() => setMethod(m)}>{method === m ? <Icon name="check" width={16} height={16}/> : null}{t(m ? `closing.${m}` : 'closing.all')}</ActionButton>)}</div>} emptyContent={<InlineEmpty title={t(scenario === 'empty' ? 'closing.empty' : method === 'mixed' ? 'closing.mixedEmpty' : 'closing.filteredEmpty')}/>}/>}</div>;
@@ -195,7 +195,7 @@ export function ClosingOverlay({ run, onOpenReceipt, accounting: explicitAccount
   const historyAccounting = historyRow ? frozenAccounting(historyRow.businessDate) : undefined;
   const history = <div className="app-closing-history"><DataGrid id="closing-history" label={t('closing.history')} rows={closing.history} getRowId={r => r.businessDate} getRowLabel={r => format.date(r.businessDate, 'short')} columns={[
     { id: 'date', header: t('closing.date'), kind: 'text', value: (r: HistoryRow) => format.date(r.businessDate, 'short'), minWidth: layoutTokens.targetDefault * 3 },
-    { id: 'sales', header: t('closing.sales'), kind: 'number', value: r => { const frozen = frozenAccounting(r.businessDate); return money(frozen?.status === 'ready' ? frozen.summary.sales.total : r.revenue); }, minWidth: layoutTokens.targetDefault * 3 },
+    { id: 'sales', header: t('closing.historySales'), kind: 'number', value: r => { const frozen = frozenAccounting(r.businessDate); return full(frozen?.status === 'ready' ? frozen.summary.sales.total : r.revenue); }, minWidth: layoutTokens.targetDefault * 3 },
     ...(accounting ? [{ id: 'deposits', header: accountingCopy.deposits, kind: 'number' as const, value: (r: HistoryRow) => { const frozen = frozenAccounting(r.businessDate); return frozen?.status === 'ready' ? full(frozen.summary.deposits.total) : '—'; }, minWidth: layoutTokens.targetDefault * 3 }] : []),
     { id: 'count', header: t('closing.paymentCount'), kind: 'number', value: r => r.paymentCount, minWidth: layoutTokens.targetDefault * 2 },
     { id: 'difference', header: t('closing.difference'), kind: 'number', value: r => r.cashDrawer.difference === null ? t('pos.cashUnchecked') : signed(r.cashDrawer.difference), render: r => <span data-tone={r.cashDrawer.difference !== null && r.cashDrawer.difference < 0 ? 'short' : 'neutral'}>{r.cashDrawer.difference ? <Icon name={r.cashDrawer.difference < 0 ? 'warning' : 'info'}/> : null}{r.cashDrawer.difference === null ? t('pos.cashUnchecked') : signed(r.cashDrawer.difference)}</span>, minWidth: layoutTokens.targetDefault * 3 },

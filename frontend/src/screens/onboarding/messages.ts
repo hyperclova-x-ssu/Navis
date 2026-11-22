@@ -1,8 +1,8 @@
 import type { MessageBundle } from '../../i18n';
 const ko = {
   'step.business':'업종', 'step.payment':'결제 방식', 'step.tables':'테이블 배치', 'step.start':'시작 화면',
-  'table.reason':'테이블 배치는 후불형 카페·음식점·주점에서 설정해요',
-  'payment.title':'손님이 언제 계산하나요?', 'payment.description':'계산 방식에 맞는 화면을 먼저 보여 드려요',
+  'table.off':'테이블 배치(후불형만)', 'table.settingsUnavailable':'후불형에서만',
+  'payment.title':'손님이 언제 계산하나요?',
   'payment.prepaid':'선불형', 'payment.prepaid.description':'먼저 계산하고 이용해요',
   'payment.postpaid':'후불형', 'payment.postpaid.description':'이용한 뒤 계산해요',
   'tables.title':'테이블을 놓아 주세요', 'tables.description':'예약을 받을 때 맞는 테이블을 골라 드려요',
@@ -21,6 +21,8 @@ const ko = {
   'settings.store':'매장 설정', 'settings.display':'화면 설정', 'settings.editTables':'테이블 배치 고치기',
   'settings.noTables':'아직 설정하지 않았어요', 'settings.changed':'{value}으로 바꿨어요',
   'session.error':'변경을 적용하지 못했어요. 다시 시도해 주세요',
+  'restart.loading':'안숭잘부 카페 데이터를 불러오고 있어요',
+  'restart.retry':'시작 배치 다시 저장하기',
   'settings.closing':'마감 정산 결제 내역', 'settings.empty':'비어 있음', 'settings.error':'불러오기 실패',
   'dev.tables.default':'기본값 점검', 'dev.tables.maximum':'최댓값 점검',
 } as const;

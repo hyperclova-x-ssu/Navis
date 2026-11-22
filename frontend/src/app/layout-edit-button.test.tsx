@@ -66,7 +66,7 @@ describe('배치 편집 header button',()=>{
   expect(run.getState().panels).toHaveLength(0);
   const edit=screen.getByRole('button',{name:'배치 편집하기'});
   expect(edit).toBeDisabled();
-  const reason=screen.getByText('먼저 기능을 추가해 주세요');
+  const reason=screen.getByText('먼저 패널을 추가해 주세요');
   expect(reason).toBeVisible();expect(reason).not.toHaveClass('ui-sr-only');
   expect(edit.getAttribute('aria-describedby')).toBe(reason.id);
   await user.click(edit);
@@ -74,9 +74,9 @@ describe('배치 편집 header button',()=>{
  });
  it('shows no reason while there is something to edit, and the reason leaves once a panel is added',()=>{
   const run=emptyPage();render(<App run={run}/>);
-  expect(screen.getByText('먼저 기능을 추가해 주세요')).toBeInTheDocument();
+  expect(screen.getByText('먼저 패널을 추가해 주세요')).toBeInTheDocument();
   act(()=>{expect(run.actions.applyLayoutIntent({type:'add-tap',featureId:'tax'}).status).not.toBe('rejected');});
-  expect(screen.queryByText('먼저 기능을 추가해 주세요')).not.toBeInTheDocument();
+  expect(screen.queryByText('먼저 패널을 추가해 주세요')).not.toBeInTheDocument();
   expect(screen.getByRole('button',{name:'배치 편집하기'})).toBeEnabled();
  });
  it('is not offered on the order layer, where there is no layout to edit',async()=>{
@@ -88,9 +88,9 @@ describe('배치 편집 header button',()=>{
   expect(await screen.findByRole('button',{name:'배치 편집하기'})).toBeEnabled();
  });
  it.each([
-  ['en','Edit layout','Add a feature first'],
-  ['zh-Hans','编辑布局','请先添加功能'],
-  ['zh-Hant','編輯版面','請先新增功能'],
+  ['en','Edit layout','Add a panel first'],
+  ['zh-Hans','编辑布局','请先添加面板'],
+  ['zh-Hant','編輯版面','請先新增面板'],
  ] as const)('is translated in %s',(locale,label,reason)=>{
   const run=emptyPage();run.actions.setLocale(locale);render(<App run={run}/>);
   const edit=screen.getByRole('button',{name:label});

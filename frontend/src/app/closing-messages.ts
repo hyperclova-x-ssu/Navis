@@ -10,7 +10,7 @@ export const closingBundle = { id:'closing', ko:{
  'closing.memo':'메모', 'closing.remove':'지우기', 'closing.removed':'{kind} 기록을 지웠어요',
  'closing.noMovements':'아직 입출금 기록이 없어요', 'closing.cashClosed':'마감을 되돌린 뒤 고칠 수 있어요',
  'closing.invalidMovement':'1원 이상 넣어 주세요', 'closing.invalidCash':'0 이상의 숫자를 넣어 주세요',
- 'closing.date':'날짜', 'closing.paymentCount':'결제 건수', 'closing.difference':'현금 차이', 'closing.closedAt':'마감 시각',
+ 'closing.date':'날짜', 'closing.historySales':'매출', 'closing.paymentCount':'결제 건수', 'closing.difference':'현금 차이', 'closing.closedAt':'마감 시각',
  'closing.historyEmpty':'아직 마감한 날이 없어요', 'closing.historyNote':'지난 날의 결제 내역은 합계만 보여요',
  'closing.expected':'예상 현금', 'closing.actual':'실제 현금', 'closing.cashMemo':'시재 메모',
  'closing.gross':'주문', 'closing.discount':'할인',

@@ -16,7 +16,7 @@ describe('단계형 시작 설정', () => {
     render(<UiProvider screenPreset={screenPresets.A} reducedMotion><OnboardingScreen run={run} sessionActions={{ completeOnboarding }} /></UiProvider>);
     fireEvent.click(screen.getByRole('button', { name: '미용·뷰티' }));
     expect(screen.getByRole('heading', { name: '손님이 언제 계산하나요?' })).toHaveFocus();
-    expect(screen.getByRole('list', { name: '시작 설정 단계' })).toHaveTextContent('꺼짐');
+    expect(screen.getByRole('list', { name: '시작 설정 단계' })).toHaveTextContent('테이블 배치(후불형만)');
     fireEvent.click(screen.getByRole('radio', { name: /후불형/ }));
     expect(screen.getByRole('heading', { name: '어떤 화면으로 시작할까요?' })).toHaveFocus();
     fireEvent.click(screen.getByRole('button', { name: '이 화면으로 시작하기' }));

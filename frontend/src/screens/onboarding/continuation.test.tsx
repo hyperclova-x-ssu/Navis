@@ -53,7 +53,7 @@ describe('온보딩 초안 포트 연결', () => {
     fireEvent.click(screen.getByRole('button', { name: '이전 단계, 결제 방식' }));
     fireEvent.click(screen.getByRole('radio', { name: /선불형/ }));
     expect(run.getState().onboarding.draft.tableLayout?.tables).toHaveLength(8);
-    expect(screen.getByRole('list', { name: '시작 설정 단계' })).toHaveTextContent('꺼짐');
+    expect(screen.getByRole('list', { name: '시작 설정 단계' })).toHaveTextContent('테이블 배치(후불형만)');
     fireEvent.click(screen.getByRole('button', { name: '이전 단계, 결제 방식' }));
     fireEvent.click(screen.getByRole('radio', { name: /후불형/ }));
     expect(screen.getByRole('spinbutton', { name: '테이블 수' })).toHaveValue(8);
@@ -202,7 +202,7 @@ it('앞으로·이전 전환은 키트 모션을 쓰고 꺼진 단계는 한 번
   expect(payment.closest('.ui-onboarding-step')).not.toBeNull();
   expect(payment.closest('.ui-onboarding-step')).toHaveStyle({ transform: 'translateX(24px)' });
   fireEvent.click(screen.getByRole('radio', { name: /후불형/ }));
-  expect(screen.getByRole('list', { name: '시작 설정 단계' })).toHaveTextContent('꺼짐');
+  expect(screen.getByRole('list', { name: '시작 설정 단계' })).toHaveTextContent('테이블 배치(후불형만)');
   expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
   await waitFor(()=>expect(view.container.querySelectorAll('.ui-onboarding-step')).toHaveLength(1));
   fireEvent.click(screen.getByRole('button', { name: '이전 단계, 결제 방식' }));

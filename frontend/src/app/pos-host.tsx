@@ -17,6 +17,7 @@ import type { CctvLinksProps } from '../features/widgets/mgmt-customers/cctv-det
 import { SessionActionsContext, useSessionActions, type CustomCoordinator } from './session-actions';
 import { useAccountingViews, useMoneyRead, useWidgetDataStore, useWidgetView, WidgetDataProvider } from '../data/react';
 import { dataBundles, resolveDataText, selectMembers } from '../data/widget-data';
+import { formatMaskedCustomer } from '../data/customer-display';
 import { cctvOccupancyObservations, cctvPosLinks, selectLinkedTableStates, tableLinksEnabled } from '../data/iteration7/table-links';
 import { createLinkPickers } from '../features/cctv/zones/linked-ui';
 import { useRealCctvLinks } from '../features/cctv/zones/real-links';
@@ -24,6 +25,7 @@ import { cctvBundle, useCctvView } from '../features/cctv';
 import { getLiveClient } from '../features/cctv/live';
 import { useBundle } from '../i18n';
 import { posBundle } from '../i18n/messages/pos';
+import { membershipPosBundle } from '../i18n/messages/membership-pos';
 import type { MoneyRead, MoneyReversalQuote, SettlementQuote, SettlementTarget } from '../data/iteration7/accounting/types';
 import { selectMemberAccounts } from '../data/iteration7/accounts';
 import { MemberMoneyProvider, memberMoneyBinding, type CreditPort, type OriginalMoneyTransaction, type MemberReturnContext } from '../features/widgets/i7-credit';
@@ -37,6 +39,9 @@ import { bindPosBridge } from '../data/reality/02/adapter';
 import { createPosBridge, type PosBridge } from '../data/reality/02/bridge';
 import { createPosRemote } from '../data/reality/02/remote';
 import { PosBridgeProvider, usePosBridge } from '../pos/remote-context';
+import { projectMemberChoice } from '../data/reality/02/checkout-view';
+import type { PosMemberChoice } from '../data/reality/02/dto';
+import { PassHandoff } from '../screens/order/loyalty/pass-handoff';
 
 export interface M2WidgetBindings {
   readonly customPort: CustomOrderPort;
@@ -234,6 +239,8 @@ export function originalMoneySettlement(read: MoneyRead, transaction: OriginalMo
 }
 
 const CreditPortContext = createContext<CreditPort | null>(null);
+type MembershipUseRequest = { memberId: string; membershipId: string; context: MemberReturnContext;
+  billId?: string; error?: string; active?: boolean; httpMember?: PosMemberChoice };
 /** Registry panels query their own period but use the same route port and source. */
 export function useRunCreditBinding(condition: import('../contracts').QueryCondition) {
   const read = useMoneyRead(), port = useContext(CreditPortContext), view = useWidgetView('credit-receivable', condition);
@@ -262,7 +269,7 @@ export function M2RunHost({ run, children, scheduler = browserApprovalScheduler 
   const [reversal, setReversal] = useState<ReversalEntry | null>(null), [linkError, setLinkError] = useState<string | undefined>();
   const [receipt, setReceipt] = useState<(MoneyReversalReceiptEntry & { context: CustomReturnContext }) | null>(null);
   const [saleOverride, setSaleOverride] = useState<SaleSettlementState | null>(null);
-  const [useRequest, setUseRequest] = useState<{ memberId: string; membershipId: string; context: MemberReturnContext; billId?: string; error?: string; active?: boolean } | null>(null);
+  const [useRequest, setUseRequest] = useState<MembershipUseRequest | null>(null);
   const pendingReversal = useRef(false), reversalJob = useRef<unknown>(undefined), mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; scheduler.cancel(reversalJob.current); }; }, [scheduler]);
   useEffect(() => attachMoneyApprovalScheduler(money, scheduler), [money, scheduler]);
@@ -287,7 +294,8 @@ export function M2RunHost({ run, children, scheduler = browserApprovalScheduler 
   const accounts = selectMemberAccounts(money.read());
   const member = (memberId: string) => {
     const row = accounts.members.find(row => row.memberId === memberId);
-    return row ? { memberId, label: row.name, chargeBalance: row.chargeBalance, receivableBalance: row.receivableBalance } : null;
+    const code = snapshot.tables.memberProfile.find(profile => profile.memberId === memberId)?.memberCode;
+    return row ? { memberId, label: formatMaskedCustomer(row.name, memberId, code), chargeBalance: row.chargeBalance, receivableBalance: row.receivableBalance } : null;
   };
   const canOpen = () => !pendingReversal.current && money.approval()?.status !== 'pending';
   const openPayment = (target: SettlementTarget, context: CustomReturnContext) => {
@@ -296,7 +304,11 @@ export function M2RunHost({ run, children, scheduler = browserApprovalScheduler 
     setPayment({ key: crypto.randomUUID(), quote: money.quoteSettlement({ target, allocations: [] }), context: retainedReturnContext(context) });
   };
   const customPort: CustomOrderPort = { read: custom.read, subscribe: custom.subscribe, dispatch: custom.dispatch,
-    members: selectMembers(snapshot, {}).rows.map(row => ({ memberId: row.memberId, label: typeof row.name === 'string' ? row.name : resolveDataText(t, row.name) })),
+    members: selectMembers(snapshot, {}).rows.map(row => ({
+      memberId: row.memberId,
+      label: formatMaskedCustomer(typeof row.name === 'string' ? row.name : resolveDataText(t, row.name), row.memberId, row.memberCode),
+      code: row.memberCode,
+    })),
     openSettlement: openPayment,
     openReversal: (target, context) => {
       if (!canOpen()) return;
@@ -346,11 +358,11 @@ export function M2RunHost({ run, children, scheduler = browserApprovalScheduler 
     },
     openMembershipUse: (memberId, membershipId, context) => {
       if (!canOpen()) return;
-      if (data.real?.mode('pos') === 'http') {
-        run.actions.showNotice({ kind: 'error', messageKey: 'pos.notice', params: { message: 'POS 결제에서 회원권을 적용할 수 없어요' } });
-        return;
-      }
-      setUseRequest({ memberId, membershipId, context: retainedReturnContext(context) });
+      const profile = snapshot.tables.realMembers?.profiles[memberId];
+      const http = data.real?.mode('pos') === 'http';
+      if (http && !profile) return;
+      setUseRequest({ memberId, membershipId, context: retainedReturnContext(context),
+        ...(http && profile ? { httpMember: projectMemberChoice(profile) } : {}) });
       run.actions.closeOverlay();
     },
   };
@@ -363,6 +375,9 @@ export function M2RunHost({ run, children, scheduler = browserApprovalScheduler 
     session.pos.setTab('order');
     setUseRequest(current => current ? { ...current, active: true } : null);
   }, [useRequest, state.overlay.type, state.exitPendingToken, state.activeInputs, state.layer, run, session.pos]);
+  useEffect(() => {
+    if (useRequest?.active && state.layer !== 'orders-payment') setUseRequest(null);
+  }, [useRequest?.active, state.layer]);
   const binding = memberMoneyBinding(useMoneyRead(), creditPort);
   const completion = approval?.result?.ok ? approval.result.value : undefined;
   const saleState = useMemo<SaleSettlementState>(() => saleOverride ?? {
@@ -414,10 +429,13 @@ export function M2RunHost({ run, children, scheduler = browserApprovalScheduler 
     : payment && 'memberId' in payment.quote.target ? payment.quote.target.memberId : undefined;
   const paymentSummary = paymentTarget?.purpose === 'custom_order' ? custom.read().tables.customOrder.find(order => order.customOrderId === paymentTarget.customOrderId)?.productLabel ?? '' : fundingMemberId ? member(fundingMemberId)?.label ?? '' : '';
   return <WidgetDataProvider store={data} preview={state.preview} viewContext={viewContext}><PosRealHost><M2WidgetProvider value={hostBinding}><CustomOrderProvider port={customPort}><CreditPortContext.Provider value={creditPort}><MemberMoneyProvider binding={binding}><SettlementUiProvider value={salePort}><AccountingPresentationProvider value={presentation}>
-    {children}
+    <PassHandoff.Provider value={useRequest?.active && useRequest.httpMember && state.layer === 'orders-payment'
+      ? { member: useRequest.httpMember, membershipId: useRequest.membershipId } : null}>{children}</PassHandoff.Provider>
     {useRequest && state.layer === 'orders-payment' && <MembershipUseHandoff request={useRequest} session={session} onChange={setUseRequest} onReturn={() => {
       const context = useRequest.context;
-      run.actions.switchLayer('management'); run.actions.openDetailRef(context.detailRef, 'dashboard'); setUseRequest(null);
+      run.actions.switchLayer('management');
+      run.actions.openDetailRef(useRequest.httpMember ? { ...context.detailRef, view: 'member', itemId: context.selectedId } : context.detailRef, 'dashboard');
+      setUseRequest(null);
       scheduler.schedule(() => context.returnFocusRef.current?.focus(), 0);
     }}/>}
     {payment ? <SharedPosPaymentDialog mode="money" key={payment.key} open target={payment.quote.target} summary={paymentSummary} quote={payment.quote} member={fundingMemberId ? member(fundingMemberId) : null} phase={phase} returnFocusRef={payment.context.returnFocusRef} onAllocationsChange={allocations => {
@@ -465,11 +483,11 @@ function PosRealHost({ children }: { readonly children: ReactNode }) {
 }
 
 function MembershipUseHandoff({ request, session, onChange, onReturn }: {
-  readonly request: { memberId: string; membershipId: string; context: MemberReturnContext; billId?: string; error?: string; active?: boolean };
+  readonly request: MembershipUseRequest;
   readonly session: ReturnType<typeof useSessionActions>;
   readonly onChange: (next: typeof request) => void; readonly onReturn: () => void;
 }) {
-  const read = usePosSnapshot(), { t } = useBundle(posBundle);
+  const read = usePosSnapshot(), { t } = useBundle(posBundle, membershipPosBundle);
   const needsBill = read.settings.paymentStyle === 'postpaid' && read.pos.cart.type !== 'takeout';
   const bills = read.pos.bills.filter(row => row.status === 'open');
   const billId = needsBill ? request.billId ?? bills[0]?.billId : getPaymentBillId(read);
@@ -483,12 +501,17 @@ function MembershipUseHandoff({ request, session, onChange, onReturn }: {
     onChange({ ...request, billId, error: result.ok ? undefined : t(result.messageKey as keyof typeof posBundle.ko) });
   };
   return <Card className="app-common-notice ui-pos-notice" role="region" aria-label="회원권 사용 연결" lang="ko" data-pos-alert-blocker>
-    <CardHeader><CardTitle>회원권 사용</CardTitle><CardDescription>이용할 메뉴와 수량을 고른 뒤 회원권을 적용해 주세요</CardDescription></CardHeader>
+    {request.httpMember ? <>
+      <CardHeader><CardTitle>{t('membershipPos.handoffTitle')}</CardTitle><CardDescription>{t('membershipPos.handoffHelp')}</CardDescription></CardHeader>
+      <CardFooter><ActionButton variant="ghost" onClick={onReturn}>{t('membershipPos.returnToMember')}</ActionButton></CardFooter>
+    </> : <>
+    <CardHeader><CardTitle>{t('membershipPos.handoffTitle')}</CardTitle><CardDescription>이용할 메뉴와 수량을 고른 뒤 회원권을 적용해 주세요</CardDescription></CardHeader>
     {(needsBill || request.error) && <CardContent>{needsBill && <ChipChoice label="계산서 고르기" value={billId ?? ''} options={bills.map(row => ({ value: row.billId, label: row.tableId ?? `주문 #${row.originOrderNo}` }))} onChange={value => onChange({ ...request, billId: value, error: undefined })}/>}{request.error && <p role="alert">{request.error}</p>}</CardContent>}
     <CardFooter className="pay-tools__row">
     <ActionButton disabled={!quote?.lines.length || applied} onClick={apply}>{applied ? '회원권을 적용했어요' : '선택한 회원권 적용하기'}</ActionButton>
-    <ActionButton variant="ghost" onClick={onReturn}>회원목록으로 돌아가기</ActionButton>
+    <ActionButton variant="ghost" onClick={onReturn}>{t('membershipPos.returnToMember')}</ActionButton>
     </CardFooter>
+    </>}
   </Card>;
 }
 

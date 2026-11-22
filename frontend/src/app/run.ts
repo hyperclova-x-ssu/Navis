@@ -37,7 +37,7 @@ export function createBrowserRun(preferences=readBrowserPreferences(),win:Window
     registerSessionGate(run,sessionGate);return run;
 }
 /** `signin`: the account service needs an owner session (REAL-PLAN F00); `account` is present only when the account domain runs over HTTP. */
-export interface BootstrapStatus {readonly phase:'waiting'|'preparing'|'ready'|'failed'|'signin';readonly run:RunStore|null;readonly account?:AccountHost|null}
+export interface BootstrapStatus {readonly phase:'waiting'|'preparing'|'ready'|'failed'|'account-unavailable'|'signin';readonly run:RunStore|null;readonly account?:AccountHost|null}
 export function createBrowserBootstrap(win:Window,factory:()=>RunStore|null=()=>createBrowserRun(readBrowserPreferences(),win),accountFactory:AccountHostFactory=createAccountHost){
  let run=factory(),account:AccountHost|null=null,detachAccount:(()=>void)|undefined,status:BootstrapStatus={phase:run?'preparing':'waiting',run},generation=0,started=false,disposed=false,restoring=false,suspended=false;
  const control={restart:()=>restart(),retry:()=>{started=false;prepare();}};
@@ -50,7 +50,7 @@ export function createBrowserBootstrap(win:Window,factory:()=>RunStore|null=()=>
    if(!ready||!account){publish(ready?'ready':'failed');return;}
    // The stored account state (settings, boards, preferences) is in the run before the first screen.
    const host=account;
-   try{await host.load();}catch(error){if(disposed||current!==generation||pending!==run)return;publish((error as {reason?:string}|null)?.reason==='SESSION_REQUIRED'?'signin':'failed');return;}
+   try{await host.load();}catch(error){if(disposed||current!==generation||pending!==run)return;publish((error as {reason?:string}|null)?.reason==='SESSION_REQUIRED'?'signin':'account-unavailable');return;}
    if(disposed||current!==generation||pending!==run)return;
    detachAccount?.();detachAccount=host.attach();publish('ready');
   },()=>{if(!disposed&&current===generation)publish('failed');});};
@@ -62,7 +62,7 @@ export function createBrowserBootstrap(win:Window,factory:()=>RunStore|null=()=>
  const detach=()=>{win.removeEventListener('resize',measure);win.removeEventListener('pageshow',show);win.removeEventListener('pagehide',hide);};
  return {
   getSnapshot:()=>run,getStatus:()=>status,
-  restart,
+  restart,retry:control.retry,
   subscribe(listener:()=>void){listeners.add(listener);if(listeners.size===1){win.addEventListener('resize',measure);win.addEventListener('pageshow',show);win.addEventListener('pagehide',hide);measure();prepare();}return()=>{listeners.delete(listener);if(!listeners.size)detach();};},
   dispose(){if(disposed)return;disposed=true;generation++;detach();listeners.clear();detachAccount?.();account?.dispose();run?.dispose();},
  };

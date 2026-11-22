@@ -1,14 +1,17 @@
-import { useContext, useEffect, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 import type { ManagementTemplateId, PaymentStyle, RunStore, ShopSettings } from '../../contracts';
-import type { PresentationRunStore } from '../../state';
+import { selectDemoRestart, type PresentationRunStore } from '../../state';
 import { getManagementTemplates } from '../../catalog/management-templates';
 import { createTableLayout, tableLayoutEnabled } from '../../layout/table-layout';
 import { koreanScreenText, useBundle } from '../../i18n';
 import {
   ActionButton, ChoiceCard, ContentRecovery, EmptyStartOption, OnboardingFrame, OnboardingFooter,
-  OnboardingStepTransition, ReasonLine, TemplateCard, TemplatePreview, consumeDismissSequence, timePolicy,
+  OnboardingStepTransition, Spinner, TemplateCard, TemplatePreview, consumeDismissSequence, timePolicy,
 } from '../../ui';
 import { SessionActionsContext } from '../../app/session-actions';
+import { accountHostFor } from '../../app/account-host';
+import { useWidgetDataStore } from '../../data/react';
+import { isDataWidgetId, widgetDomains } from '../../data/widget-data';
 import { shellBundle } from '../settings/messages';
 import { BusinessOptions } from './BusinessOptions';
 import { TableEditor } from './TableEditor';
@@ -55,12 +58,55 @@ function PaymentOptions({ value, onSelect }: { value: PaymentStyle | null; onSel
   </div>;
 }
 
+function DemoRestartLoading({ run, transitionToken }: { run: PresentationRunStore; transitionToken: string }) {
+  const { t } = useBundle(iteration5Bundle);
+  const data = useWidgetDataStore();
+  const heading = useRef<HTMLHeadingElement>(null);
+  const save = useRef<Promise<boolean> | undefined>(undefined);
+  const read = useRef<Promise<unknown> | undefined>(undefined);
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  useLayoutEffect(() => { heading.current?.focus(); }, []);
+  useEffect(() => {
+    const account = accountHostFor(run);
+    const port = data.real;
+    save.current ??= account ? account.flush().then(result => result === 'saved' || result === 'unchanged') : Promise.resolve(true);
+    if (port && !read.current) {
+      const ids = run.getState().panels.map(panel => panel.featureId).filter(isDataWidgetId);
+      const domains = new Set(ids.flatMap(widgetDomains));
+      read.current = Promise.all([...domains].map(domain => port.load(domain, { force: true })));
+    }
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const hold = new Promise<void>(resolve => { timer = setTimeout(resolve, timePolicy.completeMs); });
+    void Promise.all([save.current, read.current, hold]).then(([saved]) => {
+      if (!active || run.getState().transitionToken !== transitionToken) return;
+      if (saved) run.actions.finishDemoRestart(transitionToken);
+      else setFailed(true);
+    }, () => { if (active) setFailed(true); });
+    return () => { active = false; clearTimeout(timer); };
+  }, [run, transitionToken, data, attempt]);
+  return <main className="onboarding-restart-loading" lang="ko">
+    <div className="onboarding-restart-loading__status" role={failed ? 'alert' : 'status'}>
+      {!failed && <Spinner />}
+      <h1 ref={heading} tabIndex={-1}>{t(failed ? 'session.error' : 'restart.loading')}</h1>
+    </div>
+    {failed && <ActionButton onClick={() => {
+      save.current = undefined;
+      read.current = undefined;
+      setFailed(false);
+      setAttempt(previous => previous + 1);
+    }}>{t('restart.retry')}</ActionButton>}
+  </main>;
+}
+
 export function OnboardingScreen({ run, sessionActions }: OnboardingScreenProps) {
   const contextActions = useContext(SessionActionsContext);
   const completeOnboarding = sessionActions?.completeOnboarding ?? contextActions?.completeOnboarding;
   const state = useSyncExternalStore(run.subscribe, run.getState);
   const { t, locale } = useBundle(shellBundle, iteration5Bundle);
   const { step, draft, selectedTemplateId } = state.onboarding;
+  const demoRestart = selectDemoRestart(state);
   const [skipped, setSkipped] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const current = step === 'business' ? 0 : step === 'payment' ? 1 : step === 'tables' ? 2 : 3;
@@ -76,24 +122,30 @@ export function OnboardingScreen({ run, sessionActions }: OnboardingScreenProps)
   const off = current > 0 && (!food || draft.paymentStyle === 'prepaid');
   const enabled = tableLayoutEnabled(draft.businessType, draft.paymentStyle);
   const names = [t('step.business'), t('step.payment'), t('step.tables'), t('step.start')];
-  const steps = names.map((label, index) => ({ id: String(index), label,
+  const steps = names.map((label, index) => ({ id: String(index), label: index === 2 && off ? t('table.off') : label,
     state: (index === 2 && off ? 'off' : index === current ? 'current' : index < current ? 'done' : 'next') as 'off' | 'current' | 'done' | 'next',
-    reasonId: index === 2 && off ? 'table-reason' : undefined,
-  }));
-  const previous = current === 3 && !enabled ? 1 : current - 1;
+    showOffLabel: false,
+  })).filter(({ id }) => !demoRestart || id === '0' || id === '3');
+  const previous = demoRestart ? 0 : current === 3 && !enabled ? 1 : current - 1;
   const title = step === 'business' ? t('onboarding.title') : step === 'payment' ? t('payment.title') : step === 'tables' ? t('tables.title') : t('start.title');
-  const subtitle = step === 'business' ? t('onboarding.description') : step === 'payment' ? t('payment.description') : step === 'tables' ? t('tables.description') : t('start.description');
+  const subtitle = step === 'business' ? t('onboarding.description') : step === 'payment' ? undefined : step === 'tables' ? t('tables.description') : t('start.description');
   const layout = draft.tableLayout ?? createTableLayout();
   const templates = getManagementTemplates({ businessType: draft.businessType, paymentStyle: draft.paymentStyle ?? 'prepaid', presetId: state.screenPreset.id });
   const chosen = selectedTemplateId ?? templates.find(item => item.recommended)!.id;
   const summary = t('tables.total', { n: layout.tables.length, m: layout.tables.reduce((sum, table) => sum + table.seats, 0) });
   const complete = (id: ManagementTemplateId | null) => {
+    if (run.getState().onboarding.step !== 'start') return;
+    if (demoRestart) {
+      setError(!(run as PresentationRunStore).actions.chooseDemoLayout(id));
+      return;
+    }
     const result = completeOnboarding?.(id);
     setError(!result || typeof result === 'object' && 'ok' in result && result.ok === false);
   };
 
+  if (demoRestart && step === 'applying') return <DemoRestartLoading run={run as PresentationRunStore} transitionToken={state.transitionToken} />;
+
   return <div className="t207-onboarding-host" data-step={step}><OnboardingFrame title={title} subtitle={subtitle} steps={steps}
-    reason={off ? <ReasonLine id="table-reason">{t('table.reason')}</ReasonLine> : undefined}
     previousStepName={names[previous]} onPrevious={current > 0 ? () => run.actions.onboardingBack() : undefined}>
     <OnboardingStepTransition stepKey={`${state.runId}:${step}`} direction={navigation.direction}>
       <div className={`t207-step-body t207-step-body--${step}`}>

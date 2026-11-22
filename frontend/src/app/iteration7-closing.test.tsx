@@ -62,6 +62,11 @@ it('M3 closing keeps recognized sales, deposits and unknown-count drawer separat
   };
   renderWithKit(<PosProvider value={actions.pos}><ClosingOverlay run={run} onOpenReceipt={() => {}} {...{ accounting }} /></PosProvider>, { store, reducedMotion: true });
   const dialog = screen.getByRole('dialog', { name: '오늘 마감 정산' });
+  const sales = within(dialog).getByRole('region', { name: '오늘 매출' });
+  expect(sales.querySelector('p.app-closing-sales-notes')).toHaveTextContent('주문 금액');
+  expect(sales.querySelector('dl.app-closing-sales-notes')).toHaveTextContent('0원');
+  expect(within(dialog).queryByRole('columnheader', { name: '거래번호' })).not.toBeInTheDocument();
+  expect(within(dialog).queryByRole('columnheader', { name: '정산 유형' })).not.toBeInTheDocument();
   expect(within(within(dialog).getByRole('region', { name: '오늘 매출' })).getByText((_, node) => node?.textContent === '1,284,000원', { selector: '.ui-pos-money' })).toBeInTheDocument();
   expect(within(within(dialog).getByRole('region', { name: '실제 입금' })).getByText((_, node) => node?.textContent === '1,386,336원', { selector: '.ui-pos-money' })).toBeInTheDocument();
   fireEvent.click(within(dialog).getByRole('tab', { name: '현금 시재' }));

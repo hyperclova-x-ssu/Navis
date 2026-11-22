@@ -32,7 +32,8 @@ export interface CommonNotice extends ExpiringNotice {
   readonly chatReceipt?: ChatReceiptIdentity;
   readonly layoutUndo?: ReceiptLayoutUndo;
 }
-type RunState = BaseRunState & { readonly commonNotice: CommonNotice | null; readonly inlineChatReceipt?: ChatReceiptIdentity; readonly detailReturn: DetailReturnState | null; readonly detailState: DetailReturnState | null; readonly closingParent: Extract<BaseRunState['overlay'],{type:'detail'}> | null };
+type RunState = BaseRunState & { readonly commonNotice: CommonNotice | null; readonly inlineChatReceipt?: ChatReceiptIdentity; readonly detailReturn: DetailReturnState | null; readonly detailState: DetailReturnState | null; readonly closingParent: Extract<BaseRunState['overlay'],{type:'detail'}> | null; readonly demoRestart?: boolean };
+export const selectDemoRestart = (state: BaseRunState): boolean => (state as RunState).demoRestart === true;
 export const selectCommonNotice = (state: BaseRunState): CommonNotice | null => 'commonNotice' in state ? (state as RunState).commonNotice : null;
 export function selectChatReceiptNotice(state: BaseRunState): CommonNotice | null {
   const notice = selectCommonNotice(state);
@@ -52,6 +53,7 @@ export interface AccountRestore {
   readonly textScale:100|125;
   readonly locale:Locale;
   readonly onboardingDone:boolean;
+  readonly resumeDemoRestart?:boolean;
   readonly settings:ShopSettings;
   readonly boards:Readonly<Record<DashboardLayerId,{readonly pages:readonly DashboardPage[];readonly currentPage:number;readonly revision:number}>>;
 }
@@ -59,6 +61,9 @@ export interface RunPresentationActions extends RunActions {
   readonly commitNavisLayout: (plan: NavisLayoutPlan, options?: { readonly deferNotice?: boolean }) => CommandResult;
   /** Replace theme, language, settings, onboarding state and both boards with the stored account state. Returns false when it is invalid for this run (the run is left untouched). */
   readonly restoreAccount:(restore:AccountRestore)=>boolean;
+  readonly restartOnboarding:()=>boolean;
+  readonly chooseDemoLayout:(templateId:OnboardingState['selectedTemplateId'])=>boolean;
+  readonly finishDemoRestart:(transitionToken:string)=>boolean;
   readonly setChatReceiptVisible: (receipt: ChatReceiptIdentity, visible: boolean) => void;
   /** Update the current onboarding table draft without advancing its step. */
   readonly updateOnboardingTableDraft:(layout:TableLayout,identity:{readonly runId:string;readonly transitionToken:string})=>boolean;
@@ -660,6 +665,13 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
     });return true;
   }
   const defaultReturn=(ref:DetailRef,focusKey:string):DetailReturnState=>({ref,tab:ref.view??'',query:'',sort:null,filters:{},expandedRowIds:[],selectedRowId:null,scrollTop:0,scrollLeft:0,focusKey});
+  const startDemoRestart=(s:RunState,t:number):RunState=>mirror({
+    ...s, demoRestart:true, screen:'business-question', activeBoard:'management', layer:'management',
+    overlay:{type:'none'}, exitingOverlay:null, exitPendingToken:null, templateTour:null,
+    transitionToken:unique(), runRevision:s.runRevision+1,
+    idle:{...s.idle,mode:'active',lastInputAt:t},
+    onboarding:{step:'business',draft:{businessType:null,paymentStyle:s.shopSettings.paymentStyle??'prepaid',tableLayout:null},selectedTemplateId:null,applyToken:null},
+  });
   const actionImpl:RunPresentationActions={
     observeLinkedOccupancy(input,expectedRunId){
       update((s,t)=>{
@@ -695,7 +707,7 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
     setOnboardingAnswer(answer){
       const s=store.getState(),onboarding=s.onboarding;
       if(onboarding.step==='business'&&Object.keys(answer).length===1&&'businessType' in answer&&validBusiness(answer.businessType)){
-        update(s=>({...s,transitionToken:unique(),onboarding:{...s.onboarding,step:'payment',draft:{...s.onboarding.draft,businessType:answer.businessType!}}}));return true;
+        update(s=>({...s,transitionToken:unique(),onboarding:{...s.onboarding,step:s.demoRestart?'start':'payment',draft:{...s.onboarding.draft,businessType:answer.businessType!}}}));return true;
       }
       if(onboarding.step!=='payment'||Object.keys(answer).length!==1||!['prepaid','postpaid'].includes(answer.paymentStyle??''))return false;
       const draft={...onboarding.draft,paymentStyle:answer.paymentStyle!},enabled=tableLayoutEnabled(draft.businessType,draft.paymentStyle);
@@ -703,7 +715,7 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
     },
     onboardingBack(){
       const s=store.getState(),o=s.onboarding;
-      const step=o.step==='payment'?'business':o.step==='tables'?'payment':o.step==='start'?tableLayoutEnabled(o.draft.businessType,o.draft.paymentStyle)?'tables':'payment':null;
+      const step=o.step==='payment'?'business':o.step==='tables'?'payment':o.step==='start'?s.demoRestart?'business':tableLayoutEnabled(o.draft.businessType,o.draft.paymentStyle)?'tables':'payment':null;
       if(!step)return false;
       update(s=>({...s,transitionToken:unique(),onboarding:{...s.onboarding,step,draft:step==='tables'&&s.onboarding.draft.tableLayout===null?{...s.onboarding.draft,tableLayout:createTableLayout()}:s.onboarding.draft}}));return true;
     },
@@ -723,6 +735,38 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
     selectStartTemplate(templateId){
       const s=store.getState();if(s.onboarding.step!=='start'||!['A','B','C'].includes(templateId))return false;
       if(s.onboarding.selectedTemplateId!==templateId)update(s=>({...s,onboarding:{...s.onboarding,selectedTemplateId:templateId}}));return true;
+    },
+    restartOnboarding(){
+      const s=store.getState();
+      if(disposed||s.screen!=='dashboard'||s.onboarding.step!=='done'||s.overlay.type!=='settings')return false;
+      update(startDemoRestart);
+      return true;
+    },
+    chooseDemoLayout(templateId){
+      const s=store.getState(),{draft,step}=s.onboarding;
+      if(disposed||!s.demoRestart||step!=='start')return false;
+      const template=getManagementTemplates({businessType:draft.businessType,paymentStyle:draft.paymentStyle??'prepaid',presetId:s.screenPreset.id})
+        .find(item=>item.id===templateId);
+      if(templateId!==null&&!template)return false;
+      const panels=template?.panels.map(panel=>({...panel,condition:panel.condition??defaultCondition()}))??[];
+      if(!evaluate(panels,grid(),boardCatalog('management')).valid)return false;
+      update(s=>{
+        const board=s.boards.management;
+        return writeBoard({...s,transitionToken:unique(),layoutRevision:s.layoutRevision+1,runRevision:s.runRevision+1,
+          onboarding:{...s.onboarding,step:'applying',selectedTemplateId:templateId}},'management',{
+          pages:[{pageId:pageId('management',0),panels}],currentPage:0,revision:board.revision+1,
+          guidance:{...emptyGuidance(),firstHintSeen:!!template,panelMilestones:{first:!!template,second:!!template}},
+          starter:template?'completed':'ready',undo:null,notice:null,
+        });
+      });
+      return true;
+    },
+    finishDemoRestart(transitionToken){
+      const s=store.getState();
+      if(disposed||!s.demoRestart||s.onboarding.step!=='applying'||s.transitionToken!==transitionToken)return false;
+      update((s,t)=>({...s,demoRestart:false,screen:'dashboard',transitionToken:unique(),runRevision:s.runRevision+1,
+        onboarding:{...s.onboarding,step:'done'},idle:{...s.idle,lastInputAt:t}}));
+      return true;
     },
     applyManagementTemplate(templateId,baseLayoutRevision=store.getState().layoutRevision){
       if(baseLayoutRevision!==store.getState().layoutRevision)return rejected('STALE_REVISION');
@@ -1141,10 +1185,11 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
         return !!board&&board.pages.length>=1&&board.pages.length<=PAGE_LIMIT&&Number.isInteger(board.currentPage)&&board.currentPage>=0&&board.currentPage<board.pages.length
           &&board.pages.every(page=>{const layout=evaluate(page.panels,grid(),boardCatalog(layer));return layout.valid;});
       }))return false;
-      update(s=>{
+      update((s,t)=>{
         const done=restore.onboardingDone;
         let next:RunState={...s,theme:restore.theme,textScale:restore.textScale,locale:restore.locale,businessType:restore.settings.businessType,shopSettings:immutable({...s.shopSettings,...restore.settings}),
-          ...(done&&s.onboarding.step!=='done'?{screen:'dashboard' as const,transitionToken:unique(),templateTour:null,onboarding:{...s.onboarding,step:'done' as const,selectedTemplateId:null,applyToken:null,draft:{...s.onboarding.draft,businessType:restore.settings.businessType,paymentStyle:restore.settings.paymentStyle,tableLayout:restore.settings.tableLayout}}}:{})};
+          ...(done&&s.onboarding.step!=='done'?{demoRestart:false,screen:'dashboard' as const,transitionToken:unique(),templateTour:null,onboarding:{...s.onboarding,step:'done' as const,selectedTemplateId:null,applyToken:null,draft:{...s.onboarding.draft,businessType:restore.settings.businessType,paymentStyle:restore.settings.paymentStyle,tableLayout:restore.settings.tableLayout}}}:{})};
+        if(!done&&(s.demoRestart||restore.resumeDemoRestart))next=startDemoRestart(next,t);
         for(const layer of dashboardLayers){
           const incoming=restore.boards[layer],board=next.boards[layer];
           // A returning owner is not coached again: every first-run step counts as seen.
@@ -1235,6 +1280,7 @@ export function createRunStore(options:RunOptions&BriefingDayOptions):Presentati
   };
   const commandActions=new Set<keyof RunPresentationActions>(['applyLayoutIntent','commitAssistantBatch','commitNavisLayout','startWithThree','startWithPreset','applyManagementTemplate','commitPreview','movePanelToPage','undo','updatePreview']);
   const booleanActions=new Set<keyof RunPresentationActions>(['setPosUi','setOnboardingAnswer','onboardingBack','updateOnboardingTableDraft','saveOnboardingTables','skipOnboardingTables','selectStartTemplate','startEmpty','templateAssembled','restoreAccount','nextTemplateTour','closeTemplateTour','openClosing','selectPanel','finishEditing','openDrawer','openSettings','openDetail','openDetailRef','dismissCoach','coachedAction','markFirstHintSeen','inputStarted','inputEnded','consumeInput','switchLayer','goToPage','openWidgetHelp','closeWidgetHelp','openLinkedDetail','detailBack','setLocale','rememberDetailState']);
+  for(const action of ['restartOnboarding','chooseDemoLayout','finishDemoRestart'] as const)booleanActions.add(action);
   const tourBlockedActions=new Set<keyof RunPresentationActions>(['applyLayoutIntent','commitAssistantBatch','commitNavisLayout','startWithThree','startWithPreset','beginPreview','updatePreview','commitPreview','movePanelToPage','undo','enterEditing','selectPanel','finishEditing','openDrawer','openSettings','openDetail','openDetailRef','openClosing','dismissCoach','coachedAction','skipWidgetCoaches','markFirstHintSeen','switchLayer','goToPage','addPage','flipPageDuringGesture','openWidgetHelp','openLinkedDetail','acknowledgeBriefing','rememberDetailState']);
   const guardedActions=new Map<keyof RunPresentationActions,(...args:unknown[])=>unknown>();
   // One entrance guard also covers synchronous re-entry through any public action.

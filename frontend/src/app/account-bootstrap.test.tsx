@@ -69,12 +69,18 @@ it('asks for sign-in when no session can be started, then continues after a succ
  stop();bootstrap.dispose();
 });
 
-it('shows the failure screen state when the stored state cannot be read',async()=>{
+it('can retry a temporary account failure in the same run',async()=>{
  const backend=backendWith();
- backend.on('GET','/profile',()=>reply(503,{code:'SERVICE_UNAVAILABLE'}));
+ let unavailable=true;
+ backend.on('GET','/profile',()=>unavailable?reply(503,{code:'SERVICE_UNAVAILABLE'}):stored.profile);
  const {bootstrap}=bootstrapOver(backend);
  const stop=bootstrap.subscribe(()=>{});
- await waitFor(()=>expect(bootstrap.getStatus().phase).toBe('failed'));
+ await waitFor(()=>expect(bootstrap.getStatus().phase).toBe('account-unavailable'));
+ const run=bootstrap.getStatus().run;
+ unavailable=false;
+ bootstrap.retry();
+ await waitFor(()=>expect(bootstrap.getStatus().phase).toBe('ready'));
+ expect(bootstrap.getStatus().run).toBe(run);
  stop();bootstrap.dispose();
  await settle();
 });

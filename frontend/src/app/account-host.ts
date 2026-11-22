@@ -23,6 +23,7 @@ export interface AccountHost {
   attach(): () => void;
   /** Await account persistence after an approved action. Replay can use this without attaching background saves. */
   flush(): Promise<AccountFlushResult>;
+  restartOnboarding(): Promise<AccountFlushResult>;
   dispose(): void;
   readonly client: AccountClient;
   getController(): AccountController;
@@ -59,6 +60,7 @@ export function buildAccountHost(run: PresentationRunStore, control: { readonly 
     load: async () => { await sync.load(); },
     attach: () => sync.attach(),
     flush: () => sync.flush(),
+    restartOnboarding: () => sync.restartOnboarding(),
     dispose() {
       if (hosts.get(run) === host) hosts.delete(run);
       sync.dispose();

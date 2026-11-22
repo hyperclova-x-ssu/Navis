@@ -48,3 +48,13 @@
 .t207-step-body--tables .ui-onboarding-footer__row button {min-width:calc(var(--space-16)*2 + var(--space-8));}
 .t207-step-body--start .ui-onboarding-footer__row {margin-top:var(--space-4);}
 .t207-step-body--start .ui-onboarding-footer__row .ui-button--primary {min-width:calc(var(--space-16)*5);}
+
+.onboarding-restart-loading {
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:var(--space-6); padding:var(--layout-margin); background:var(--background); color:var(--foreground); text-align:center;
+}
+.onboarding-restart-loading__status { display:flex; flex-direction:column; align-items:center; gap:var(--space-4); }
+.onboarding-restart-loading h1 {
+  margin:0; font-size:var(--type-heading); line-height:var(--leading-heading);
+  font-weight:var(--weight-heading); letter-spacing:var(--tracking-heading); text-wrap:balance;
+}
