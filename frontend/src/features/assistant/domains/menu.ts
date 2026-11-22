@@ -363,7 +363,12 @@ function presentEdit(locale: Locale, command: MenuEdit, before: MenuRow, after: 
       fields.push({ label: marginText(locale).t('widget.margin.col.rate'), before: percentage(before.rate), after: percentage(after.rate) });
     }
   }
-  return { title: label, target: label, fields };
+  // C-13: a primary button names what it changes. A single edited field of the menu itself gives "<field> 바꾸기" ("판매가 바꾸기"); several fields, or the
+  // recipe and option editors, keep the generic wording of the card.
+  const own = new Set([t(menuKey('name')), t(menuKey('category')), t(menuKey('price')), t(menuKey('memo')), t(menuKey('saleStatus'))]);
+  const edited = fields.filter(field => own.has(field.label));
+  const single = locale === 'ko' && after && command.type !== 'menu.setRecipe' && command.type !== 'menu.setOptions' && edited.length === 1 && fields.length <= 2 ? edited[0].label : undefined;
+  return { title: label, target: label, ...(single ? { confirmLabel: `${single} 바꾸기` } : {}), fields };
 }
 
 function menuEditAdapter(type: MenuEdit['type']): CommandAdapter<MenuEdit, MenuEditDraft, ReturnType<typeof presentEdit>> {
@@ -687,7 +692,8 @@ function menuRoute(text: string, snapshot: DataSnapshot, locale: Locale): Domain
   }
   const compactRecipeEdit = menuRecipeQuantity.test(unquoted);
   const recipeTarget = /^(.+?)(?:\s*레시피)?에(?:는)?\s+(?=.+?(?:추가|넣어|더해|\d\s*(?:mL|g|밀리|미리|그램|리터)))/iu.exec(unquoted)?.[1];
-  const recipeAddition = !!recipeTarget && !ingredientOffScope.test(unquoted)
+  // A recipe line carries a quantity of an ingredient; a won amount on the line is a price (an option or a surcharge), not a recipe.
+  const recipeAddition = !!recipeTarget && !ingredientOffScope.test(unquoted) && navisMoneySpans(unquoted).length === 0
     && menuReader.search({ snapshot, locale, query: recipeTarget, privateLookup: false }).length > 0;
   // "가격 그대로 4,500원" states the intended price, so it follows the same same-value check as an explicit change.
   const statedPrice = !!row && /(?:가격|값|판매가)\s*(?:은|는)?\s*(?:그대로|똑같이)/u.test(unquoted) && menuAmount(unquoted) !== undefined;

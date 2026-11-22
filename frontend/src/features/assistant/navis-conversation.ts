@@ -104,6 +104,8 @@ export function menuRequestText(text: string): string {
 export interface AgentProposalPreview {
   readonly title: string;
   readonly target: string;
+  readonly confirmLabel?: string;
+  readonly reason?: string;
   readonly fields: readonly { readonly label: string; readonly before: string; readonly after: string }[];
 }
 
@@ -113,6 +115,8 @@ export function proposalPreview(preview: unknown, command?: LocalAgentProposal['
   const text = (value: unknown, fullNoticeBody = false) => typeof value === 'string' && value.trim().length > 0 && (fullNoticeBody || value.length <= 1000);
   if (!preview || typeof preview !== 'object' || !('title' in preview) || !text(preview.title) || !('target' in preview) || !text(preview.target)
     || !('fields' in preview) || !Array.isArray(preview.fields) || preview.fields.length < 1 || preview.fields.length > 30) return undefined;
+  if ('confirmLabel' in preview && !text(preview.confirmLabel)) return undefined;
+  if ('reason' in preview && !text(preview.reason)) return undefined;
   if (!preview.fields.every(field => field && text(field.label) && text(field.before)
     && text(field.after, command === 'notice.send' && noticeBodyRows.has(field.label)))) return undefined;
   return preview as AgentProposalPreview;
@@ -128,6 +132,8 @@ export type ProposalState = Readonly<{
   reproposed?: boolean;
   refreshFailed?: boolean;
   closed?: boolean;
+  /** A new question took this pending card's place; the owner did not cancel it (C-13). */
+  replaced?: boolean;
   receiptIdentity?: ChatReceiptIdentity;
 }>;
 
@@ -218,6 +224,13 @@ export function createProposalSession(initial: LocalAgentProposal, menu: AgentAc
       if (!state.feedback?.requiresExtraConfirmation) return false;
       update({ ...state, feedback: undefined });
       return true;
+    },
+    retireForNewQuestion() {
+      if (!isPending()) return undefined;
+      state.edit?.cancel();
+      const feedback = state.proposal.cancel();
+      update({ ...state, edit: undefined, feedback, reproposed: false, replaced: true });
+      return feedback;
     },
     retireForClose() {
       if (state.closed || state.proposal.getReceipt() && !state.edit) return false;

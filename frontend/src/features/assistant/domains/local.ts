@@ -8,11 +8,13 @@ import type { DataCommand } from '../../../data/commands/types';
 import { addDays, dateOf, inRange, NOW, TODAY, WEEK_END, WEEK_START, weekdayOf } from '../../../data/db/time';
 import type { DataSnapshot, LocalChange, LocalChangeKind } from '../../../data/db/types';
 import type { RealLocal } from '../../../data/reality/13/dto';
+import { getLocalTrendRanking, trendSource, type TrendRanking, type TrendRankRow } from '../../../data/reality/13/trend-ranking';
 import { readModel, dataBundles } from '../../../data/widget-data';
 import { baseBundles, createTranslator, type MessageBundle, type Translator } from '../../../i18n';
 import { mktLocalBundle } from '../../widgets/mkt-local/messages';
+import { seoulStamp } from '../../widgets/mkt-local/local-changes.http';
 import {
-  validateAgentDraft, type AgentFact, type AgentMissingStatus, type AgentRecordMatch, type AgentWireArgs,
+  validateAgentDraft, validateAgentNavigationArgs, type AgentFact, type AgentMissingStatus, type AgentRecordMatch, type AgentWireArgs,
 } from '../../../../shared/navis-agent-schema.mjs';
 import { normalizeNavisInput, normalizeNavisName, parseNavisPeriod, parseNavisTime } from '../navis-input';
 import type { CommandAdapter, DomainAdapter, DomainDetail, DomainRoute, RecordAdapter, RecordSearch } from './registry';
@@ -61,7 +63,6 @@ function labels(locale: Locale) {
     noCompare: tr('유동인구와 방문 손님을 나눠 비교한 자료는 없어요', 'There is no comparison between foot traffic and your visitors.',
       '没有人流量与到店客人的对比数据。', '沒有人流量與到店客人的對比資料。'),
     noAddress: tr('정확한 주소 자료는 없어요', 'There is no exact address on record.', '没有确切地址的资料。', '沒有確切地址的資料。'),
-    noKeyword: tr('찾는 키워드가 이번 자료에 없어요', 'That keyword is not in this data.', '本次资料中没有该关键词。', '本次資料中沒有該關鍵字。'),
     noLive: tr('실시간 유동인구는 볼 수 없어요. 시간대별 일평균 추정만 있어요', 'Live foot traffic is not available. Only the estimated hourly daily average is.',
       '看不到实时人流，只有分时段日均估算。', '看不到即時人流，只有分時段日均估算。'),
     noRows: tr('이번 주 동네 변화가 없어요', 'There are no neighborhood changes this week.', '本周没有周边动态。', '本週沒有周邊動態。'),
@@ -81,10 +82,6 @@ function labels(locale: Locale) {
     total: tr('하루 합계(시간대별 일평균의 합)', 'Daily total (sum of the hourly averages)', '全天合计（分时段日均之和）', '全天合計（分時段日均之和）'),
     am: tr('오전 합계(12시 전)', 'Morning total (before 12:00)', '上午合计（12点前）', '上午合計（12點前）'),
     pm: tr('오후 합계(12시 이후)', 'Afternoon total (from 12:00)', '下午合计（12点起）', '下午合計（12點起）'),
-    top: tr('가장 많이 오른 키워드', 'Biggest rise', '涨幅最大的关键词', '漲幅最大的關鍵字'),
-    declined: tr('언급이 줄어든 키워드', 'Keywords with fewer mentions', '提及减少的关键词', '提及減少的關鍵字'),
-    noComparison: tr('비교 자료 없는 키워드', 'Keywords without comparison data', '没有对比数据的关键词', '沒有比較資料的關鍵字'),
-    definition: tr('언급 횟수', 'Mention count', '提及次数', '提及次數'),
   };
 }
 
@@ -153,7 +150,7 @@ function lunchFact({ population }: RealLocal['trade'], t: Translator): AgentFact
     'count', noon.referenceDate), source: t.t('data.real.local.seoul') };
 }
 
-function sourcedFacts(data: RealLocal, feature: FeatureId, t: Translator): readonly AgentFact[] {
+function sourcedFacts(data: RealLocal, feature: typeof CHANGES | typeof AREA, t: Translator): readonly AgentFact[] {
   if (feature === CHANGES) {
     const { coverage, changes, period, unreadCount } = data;
     return [
@@ -170,25 +167,12 @@ function sourcedFacts(data: RealLocal, feature: FeatureId, t: Translator): reado
       ]),
     ];
   }
-  if (feature === AREA) {
-    const { period } = data.trade;
-    const range = t.format.dateRange(period.from, period.to);
-    return [
-      fact('tradeArea.period', t.t('data.real.local.hourlySales'), range, `POS · ${range}`),
-      lunchFact(data.trade, t),
-      ...Array.from({ length: 24 }, (_, hour) => tradeHourFacts(data.trade, hour, t)).flat(),
-    ];
-  }
-  const { search, sales, period } = data.trends;
+  const { period } = data.trade;
+  const range = t.format.dateRange(period.from, period.to);
   return [
-    fact('localTrends.period', t.t('data.real.local.menuSales'), t.format.dateRange(period.from, period.to)),
-    fact('localTrends.interest.mentions', t.t('data.real.local.searchInterest'), 'unavailable', '언급 횟수는 알 수 없어요'),
-    ...sales.items.slice(-12).map((row, index) => ({ ...fact(`localTrends.sales.${index}`, t.t('data.real.local.menuSales'), row.quantity,
-      `${row.menuName ?? ''} ${t.format.date(row.businessDate, 'short')} · ${t.format.number(row.quantity)} · POS`.trim(), 'count', row.businessDate),
-      source: 'POS', start: period.from, end: period.to })),
-    ...(search?.items.slice(-12).map((row, index) => ({ ...fact(`localTrends.interest.${index}`, t.t('data.real.local.searchInterest'), row.ratio,
-      `${search.query.keywordGroups[0]?.groupName} · ${t.format.date(row.period, 'short')} · ${t.format.number(row.ratio)} · ${t.t('data.real.local.searchSource', { period: t.format.dateRange(search.query.startDate, search.query.endDate) })}`,
-      'relative-index', row.period), source: '네이버 검색 관심도', start: search.query.startDate, end: search.query.endDate })) ?? []),
+    fact('tradeArea.period', t.t('data.real.local.hourlySales'), range, `POS · ${range}`),
+    lunchFact(data.trade, t),
+    ...Array.from({ length: 24 }, (_, hour) => tradeHourFacts(data.trade, hour, t)).flat(),
   ];
 }
 
@@ -262,50 +246,70 @@ function areaFacts(snapshot: DataSnapshot, condition: QueryCondition, locale: Lo
 }
 
 /* ---------- local trends ---------- */
+const trendRowKey = (index: number, field: string) => `localTrends.keyword.${index}.${field}`;
+const trendPercent = (value: number, t: Translator) => {
+  const change = Math.abs(value) < 0.05 ? 0 : value;
+  const percent = new Intl.NumberFormat(t.locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(change);
+  return `${change > 0 ? '+' : ''}${percent}%`;
+};
+const trendRowLabel = (row: TrendRankRow, t: Translator) =>
+  `${row.rank}위 ${row.keyword} · ${t.t('data.real.local.trends.fourWeeks')} ${trendPercent(row.changePercent, t)}`;
+const trendMenuLabel = (row: TrendRankRow, t: Translator) => row.menuName
+  ? t.t('data.real.local.trends.menuMatch', { menu: row.menuName })
+  : row.isMenu === false ? t.t('data.real.local.trends.notMenu') : row.isMenu === true ? '우리 메뉴에 있음' : undefined;
+const trendSourceLine = (ranking: TrendRanking) =>
+  `${trendSource} · ${ranking.fetchedAt ? dateOf(seoulStamp(ranking.fetchedAt)) : ranking.period.to}`;
+
 function trendFacts(snapshot: DataSnapshot, condition: QueryCondition, locale: Locale): { readonly facts: readonly AgentFact[] } | { readonly status: AgentMissingStatus } {
-  if (condition.kind !== 'default') return { status: 'unsupported_period' };
-  const l = labels(locale), { t } = l, day = businessDate(snapshot);
-  const model = readModel(snapshot, TRENDS);
-  const change = (k: { readonly changePercent: number | null }) => {
-    if (k.changePercent === null) return t.t('widget.local-trends.noComparison');
-    const pct = t.format.number(Math.abs(k.changePercent));
-    return k.changePercent > 0 ? `▲ ${t.t('widget.local-trends.rose', { pct })}` : k.changePercent < 0 ? `▼ ${t.t('widget.local-trends.fell', { pct })}` : `– ${t.t('widget.local-trends.rose', { pct: 0 })}`;
-  };
-  const declined = model.keywords.filter(k => k.changePercent !== null && k.changePercent < 0);
-  const fresh = model.keywords.filter(k => k.noComparison);
-  const rising = [...model.notable][0];
-  const current = t.format.dateRange(model.period.start, model.period.end), previous = t.format.dateRange(model.previousPeriod.start, model.previousPeriod.end);
+  const ranking = getLocalTrendRanking(snapshot);
+  if (condition.kind !== 'default' && (condition.kind !== 'dateRange'
+    || condition.start !== ranking?.period.from || condition.end !== ranking?.period.to)) return { status: 'unsupported_period' };
+  if (!ranking || ranking.status === 'disabled' || ranking.status === 'unavailable') return { status: 'unavailable' };
+  if (ranking.status === 'empty' || !ranking.items.length) return { status: 'missing' };
+  const l = labels(locale), { t } = l;
+  const { from: start, to: end } = ranking.period;
+  const from = addDays(end, -6);
+  const scope = { start, end, source: trendSource };
+  const [first] = ranking.items;
+  const missingMenu = ranking.items.filter(row => row.isMenu === false).map(row => trendRowLabel(row, t));
+  const menuExamples = missingMenu.slice(0, 4).join(' · ');
+  const menuCount = counted(t, TRENDS, missingMenu.length);
+  const current = t.format.dateRange(from, end), previous = t.format.dateRange(start, addDays(from, -1));
+  const fetchedAt = ranking.fetchedAt && Date.parse(ranking.fetchedAt);
   return { facts: [
-    fact('localTrends.notable.count', t.t('widget.local-trends.notableKeywords'), model.notableCount, counted(t, 'local-trends', model.notableCount), 'count', day),
-    ...(rising ? [fact('localTrends.top', l.top, rising.keywordId, `${t.t(rising.keywordKey)} ${change(rising)}`)] : []),
-    fact('localTrends.declined.count', l.declined, declined.length, counted(t, 'local-trends', declined.length), 'count', day),
-    fact('localTrends.noComparison.count', l.noComparison, fresh.length, counted(t, 'local-trends', fresh.length), 'count', day),
-    fact('localTrends.period', l.period, `${model.period.start}/${model.period.end}`, t.t('widget.local-trends.comparePeriod', { current, previous }), 'dateRange'),
-    fact('localTrends.definition', l.definition, 'definition', t.t('widget.local-trends.definition')),
-    fact('localTrends.source', l.source, model.sourceKey, t.t(model.sourceKey)),
-    fact('localTrends.updated', l.updated, model.updatedAt, t.format.dateTime(model.updatedAt, { today: day }), 'dateTime', dateOf(model.updatedAt)),
-    ...model.keywords.slice(0, 12).flatMap((k, index) => {
-      const name = t.t(k.keywordKey), key = (field: string) => `localTrends.keyword.${index}.${field}`;
+    { ...fact('localTrends.source', l.source, trendSource, trendSourceLine(ranking)), ...scope },
+    { ...fact('localTrends.period', l.period, `${start}/${end}`, `최근 7일 ${current} · 이전 4주 ${previous} 대비`, 'dateRange'), ...scope },
+    fact('localTrends.definition', t.t('data.real.local.searchInterest'), 'definition',
+      '4주 대비는 최근 7일의 일평균 검색 관심도를 앞선 28일 일평균과 비교한 변화율이에요. 검색이 늘거나 줄어든 이유는 이 자료에서 알 수 없어요.'),
+    fact('localTrends.interest.mentions', t.t('data.real.local.searchInterest'), 'unavailable', '검색이나 언급의 실제 횟수는 알 수 없어요'),
+    ...(ranking.fetchedAt && Number.isFinite(fetchedAt) ? [fact('localTrends.updated', l.updated, ranking.fetchedAt,
+      new Intl.DateTimeFormat(t.locale, { timeZone: 'Asia/Seoul', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(ranking.fetchedAt)), 'dateTime')] : []),
+    { ...fact('localTrends.top', t.t('data.real.local.trends.ranking'), first.changePercent, trendRowLabel(first, t), 'percent'), ...scope },
+    fact('localTrends.notable.count', t.t('data.real.local.trends.ranking'), ranking.items.length, counted(t, TRENDS, ranking.items.length), 'count'),
+    ...(ranking.items.some(row => row.isMenu !== null) ? [fact('localTrends.menu.missing', t.t('data.real.local.trends.notMenu'), missingMenu.length,
+      menuExamples ? `${menuCount}${missingMenu.length > 4 ? ' 중 상위 4개' : ''} · ${menuExamples}` : '우리 메뉴에 없음으로 표시된 검색어가 없어요', 'count')] : []),
+    ...ranking.items.flatMap((row, index) => {
+      const menu = trendMenuLabel(row, t);
       return [
-        fact(key('mentions'), name, k.mentions, t.t('widget.local-trends.mentions', { n: k.mentions }), 'count'),
-        ...(k.previous !== null ? [fact(key('previous'), name, k.previous, t.t('widget.local-trends.previous', { n: k.previous }), 'count')] : []),
-        fact(key('change'), name, k.changePercent ?? 'noComparison', change(k), 'percent'),
-        fact(key('category'), name, k.categoryKey, t.t('widget.local-trends.category', { category: t.t(k.categoryKey) })),
+        { ...fact(trendRowKey(index, 'change'), row.keyword, row.changePercent, trendRowLabel(row, t), 'percent'), ...scope },
+        ...(menu ? [fact(trendRowKey(index, 'menu'), row.keyword, row.menuName ?? 'absent', `${row.keyword} · ${menu}`)] : []),
+        ...(row.sameWeekChangePercent == null ? [] : [{ ...fact(trendRowKey(index, 'year'), row.keyword, row.sameWeekChangePercent,
+          `${row.keyword} · ${t.t('data.real.local.trends.lastYear')} ${trendPercent(row.sameWeekChangePercent, t)}`, 'percent'), ...scope }]),
       ];
     }),
   ] };
 }
 
 function projectWidget(snapshot: DataSnapshot, feature: FeatureId, condition: QueryCondition, locale: Locale) {
+  if (feature === TRENDS) return trendFacts(snapshot, condition, locale);
   const real = snapshot.tables.realLocal;
-  if (real && (feature === CHANGES || feature === AREA || feature === TRENDS)) {
+  if (real && (feature === CHANGES || feature === AREA)) {
     if (condition.kind !== 'default' && (feature !== CHANGES || condition.kind !== 'dateRange'
       || condition.start !== real.period.from || condition.end !== real.period.to)) return { status: 'unsupported_period' as const };
     return { facts: sourcedFacts(real, feature, translator(locale)) };
   }
   if (feature === CHANGES) return changeFacts(snapshot, condition, locale);
   if (feature === AREA) return areaFacts(snapshot, condition, locale);
-  if (feature === TRENDS) return trendFacts(snapshot, condition, locale);
   return undefined;
 }
 
@@ -384,10 +388,12 @@ const reopenVerb = /새\s*소식으로|확인\s*안\s*한\s*걸로|확인\s*필�
 const openVerb = /열어|보여|펼쳐|보기|상세|자세히|이동|넘어가|눌러|가줘/u;
 const changeScope = /동네\s*(?:변화|소식|알림)|새로\s*확인할\s*(?:변화|소식)|몇\s*미터\s*안\s*소식|확인\s*안\s*한\s*걸로|확인\s*필요로|주변\s*(?:변화|소식)|접어\s*둔|접은\s*(?:변화|소식|거)|확인\s*(?:안|끝낸)\s*(?:한|낸)?\s*(?:동네|변화|소식)|(?:행사|공사)\s*(?:장소|소식|알림)|경쟁\s*(?:업체|점|가게)|같은\s*업종/u;
 const areaScope = /유동\s*인구|상권|지나가|지나다|다니는|다녀|길에는|붐비|피크\s*시간|한가한\s*시간|조용한\s*시간|사람\s*(?:수|이\s*많|많|더\s*많|제일|없는)/u;
-const trendScope = /키워드|트렌드|유행|언급|관심\s*지표|증가율|비교\s*기간/u;
+const trendFeature = /검색어|검색\s*관심도|키워드|트렌드|유행/u;
+const trendQuestion = /얼마나|몇\s*(?:퍼센트|%)|증가율|추세|오른|늘|줄었|줄어|내림세|감소|하락|어때|비교/u;
+const trendScope = (value: string) => trendFeature.test(value) || /언급|관심\s*지표|증가율|비교\s*기간/u.test(value);
 const whereIs = /어디\s*(?:있|서\s*봐|에\s*있|메뉴)|위치\s*알려|어느\s*메뉴/u;
 /** The marketing widget a location question names. */
-const whereFeature = (value: string) => /상권|유동\s*인구/u.test(value) ? AREA : /트렌드|유행/u.test(value) ? TRENDS : /동네\s*(?:변화|소식|알림)|경쟁점/u.test(value) ? CHANGES : undefined;
+const whereFeature = (value: string) => /상권|유동\s*인구/u.test(value) ? AREA : trendFeature.test(value) ? TRENDS : /동네\s*(?:변화|소식|알림)|경쟁점/u.test(value) ? CHANGES : undefined;
 const competitor = /(?:경쟁|옆\s*가게|다른\s*(?:카페|가게)).*(?:매출|팔아|얼마|가격|받아)/u;
 
 function kindsOf(value: string): LocalChangeKind[] { return kindWords.filter(([, pattern]) => pattern.test(value)).map(([kind]) => kind); }
@@ -584,55 +590,80 @@ function areaRoute(value: string, snapshot: DataSnapshot, locale: Locale): Domai
   return read(AREA, ['tradeArea.peak.people', 'tradeArea.peak.hour']);
 }
 
-function trendRoute(value: string, snapshot: DataSnapshot, locale: Locale): DomainRoute | undefined {
-  const l = labels(locale), { t } = l, day = businessDate(snapshot);
-  const past = /지난달|지난\s*주|저번\s*주|작년|지난해|\d{1,2}월/u.test(value) ? pastCondition(value, day) : undefined;
-  const real = snapshot.tables.realLocal;
-  if (real) {
-    if (past) return read(TRENDS, ['localTrends.period'], past);
-    const search = real.trends.search;
-    const currentKeyword = search?.query.keywordGroups[0]?.groupName;
-    const named = currentKeyword && normalizeNavisName(value).includes(normalizeNavisName(currentKeyword));
-    const asksMentions = /언급.*(?:몇|횟수|얼마)|몇.*언급/u.test(value);
-    const interestKeys = Array.from({ length: Math.min(12, search?.items.length ?? 0) }, (_, index) => `localTrends.interest.${index}`);
-    if (asksMentions) return read(TRENDS, ['localTrends.interest.mentions', ...(named ? interestKeys.slice(-1) : [])]);
-    if (named && interestKeys.length) return read(TRENDS, interestKeys.slice(-2));
-    if (/^로컬\s*트렌드에서\s+.+\s+(?:어때|얼마나\s*(?:늘|줄)|관심도)/u.test(value)) {
-      return answer('해당 검색어의 자료가 없어요');
-    }
-    const keys = sourcedFacts(real, TRENDS, t).map(item => item.key).filter(key => key !== 'localTrends.interest.mentions');
-    return keys.length > 1 ? read(TRENDS, keys.slice(0, 12)) : answer(t.t('data.real.local.noData'));
-  }
-  const model = readModel(snapshot, TRENDS);
-  if (past) return read(TRENDS, ['localTrends.notable.count'], past);
-  const key = normalizeNavisName(value);
-  const named = model.keywords.map((k, index) => ({ k, index })).filter(({ k }) => words(t.t(k.keywordKey)).some(word => key.includes(normalizeNavisName(word))));
-  const perKeyword = (items: readonly { readonly index: number }[], ...fields: string[]) => items.flatMap(({ index }) => fields.map(field => `localTrends.keyword.${index}.${field}`));
-  const all = model.keywords.map((k, index) => ({ k, index }));
-  if (/비교\s*기간|언제\s*(?:부터|대비)|지난주랑|기준이\s*언제|기준.*언제부터/u.test(value)) return read(TRENDS, ['localTrends.period']);
-  if (/무슨\s*뜻|뭘\s*말|관심\s*지표|언급\s*횟수|어디서\s*센|이\s*숫자/u.test(value)) return read(TRENDS, ['localTrends.definition', 'localTrends.source', 'localTrends.updated']);
-  if (/줄었|줄어|내림세|감소|하락/u.test(value)) {
-    const down = all.filter(({ k }) => k.changePercent !== null && k.changePercent < 0);
-    return read(TRENDS, ['localTrends.declined.count', ...perKeyword(named.length ? named : down, 'mentions', 'change')]);
-  }
-  if (/새로\s*뜨|처음\s*나온|비교할\s*자료\s*없|새\s*키워드/u.test(value)) {
-    return read(TRENDS, ['localTrends.noComparison.count', ...perKeyword(all.filter(({ k }) => k.noComparison), 'mentions', 'change')]);
-  }
-  if (/카테고리|시즌|(?:음료|디저트|카페)\s*키워드/u.test(value)) {
-    const category = all.filter(({ k }) => words(t.t(k.categoryKey)).some(word => key.includes(normalizeNavisName(word))));
-    return read(TRENDS, perKeyword(named.length ? named : category.length ? category : all, 'category'));
-  }
-  if (/제일|가장|1위|급증|확\s*늘/u.test(value) && /오른|늘|증가|급증|올/u.test(value)) return read(TRENDS, ['localTrends.top']);
-  if (named.length) return read(TRENDS, perKeyword(named, 'mentions', 'previous', 'change'));
-  if (/얼마나|몇\s*(?:퍼센트|%)|증가율|추세|어때|비교/u.test(value)) return answer(l.noKeyword);
-  return read(TRENDS, ['localTrends.notable.count', 'localTrends.top']);
+function namedTrendRows(value: string, items: readonly TrendRankRow[]) {
+  const text = normalizeNavisName(value);
+  return items.map((row, index) => ({ row, index })).filter(({ row }) => [row.keyword, row.menuName].some(label => {
+    const name = label && normalizeNavisName(label);
+    return Boolean(name && name.length > 1 && text.includes(name));
+  }));
 }
 
-/** A stored keyword's full name is as specific as a stored change title. */
-const namesKeyword = (value: string, snapshot: DataSnapshot, t: Translator) =>
-  [...(snapshot.tables.realLocal?.trends.search?.query.keywordGroups.map(group => group.groupName) ?? []),
-    ...readModel(snapshot, TRENDS).keywords.map(k => t.t(k.keywordKey))]
-    .some(name => name && normalizeNavisName(value).includes(normalizeNavisName(name)));
+function namesTrend(value: string, snapshot: DataSnapshot) {
+  const ranking = getLocalTrendRanking(snapshot);
+  return ranking?.status === 'ready' && namedTrendRows(value, ranking.items).length > 0;
+}
+
+type TrendOverview = Extract<DomainRoute, { kind: 'answer' }>;
+
+function trendOverview(
+  ranking: TrendRanking,
+  t: Translator,
+  selected: readonly TrendRankRow[],
+  forShop: boolean,
+): TrendOverview {
+  const rows = selected.map(row => `${trendRowLabel(row, t)} · ${trendMenuLabel(row, t) ?? '우리 메뉴 여부를 확인하지 못했어요'}`);
+  const suggested = forShop && ranking.items.find(row => row.isMenu && row.menuName && row.changePercent >= 0.05
+    && row.classification !== 'steady' && row.classification !== 'cooling');
+  if (suggested) {
+    rows.push(`홍보 영상에 우리 메뉴 ‘${suggested.menuName}’ 소개를 넣어 볼 수 있어요. 검색어 ‘${suggested.keyword}’는 4주 대비 ${trendPercent(suggested.changePercent, t)}예요.`);
+  } else if (forShop) {
+    rows.push('우리 메뉴와 연결된 상승 검색어가 없어요.');
+  }
+  return { kind: 'answer', answer: [...rows, trendSourceLine(ranking)].join('\n'),
+    readScope: { featureId: TRENDS, condition: defaultCondition },
+    ...(suggested && { destination: { featureId: 'promo-video', step: 'place-video' } }) };
+}
+
+/** A classified current ranking read uses the same overview as a direct W20 read. */
+export function routeClassifiedTrendOverview(
+  snapshot: DataSnapshot, locale: Locale, hints: readonly string[], text: string,
+): TrendOverview | undefined {
+  const ranking = getLocalTrendRanking(snapshot);
+  if (ranking && namedTrendRows(hints.join(' '), ranking.items).length) return undefined;
+  const routed = trendRoute(normalizeNavisInput(text), snapshot, locale, hints.includes('가게 활용'));
+  return 'kind' in routed && routed.kind === 'answer' ? routed : undefined;
+}
+
+function trendRoute(value: string, snapshot: DataSnapshot, locale: Locale, forShop = false): DomainRoute {
+  const { t } = labels(locale);
+  const ranking = getLocalTrendRanking(snapshot);
+  if (!ranking) return read(TRENDS, ['localTrends.source']);
+  const method = /무슨\s*뜻|뭘\s*말|관심\s*지표|어디서\s*센|이\s*숫자|출처|기준|왜/u.test(value);
+  if (ranking.status !== 'ready' || !ranking.items.length) {
+    const key = ranking.status === 'disabled' ? 'data.real.local.trends.disabled'
+      : ranking.status === 'unavailable' ? 'data.real.error' : 'data.real.local.noData';
+    return answer(`${t.t(key)}. ${trendSource}`);
+  }
+  const scope = ['localTrends.period', 'localTrends.source'];
+  const asksPeriod = /비교\s*기간|언제\s*(?:부터|대비)|기준이\s*언제|기준.*언제부터/u.test(value);
+  const explicitMonth = /지난달|작년|지난해|\d{1,2}월/u.test(value);
+  const priorWeek = /지난\s*주|저번\s*주/u.test(value) && !/대비|보다|비교/u.test(value);
+  const past = !asksPeriod && (explicitMonth || priorWeek)
+    ? pastCondition(value, businessDate(snapshot)) : undefined;
+  if (past) return read(TRENDS, scope, past);
+  if (/언급.*(?:몇|횟수|얼마)|몇.*언급|검색\s*횟수/u.test(value)) return read(TRENDS, ['localTrends.interest.mentions', 'localTrends.source']);
+  if (asksPeriod) return read(TRENDS, scope);
+  if (method) return read(TRENDS, [...scope, 'localTrends.definition', 'localTrends.updated']);
+  const named = namedTrendRows(value, ranking.items);
+  if (named.length) return read(TRENDS, [...scope, ...named.flatMap(({ index }) => ['change', 'menu', 'year'].map(field => trendRowKey(index, field)))]);
+  const entries = ranking.items.map((row, index) => ({ row, index }));
+  if (!forShop && value.includes('메뉴')) return read(TRENDS, [...scope, 'localTrends.menu.missing',
+    ...entries.filter(({ row }) => row.isMenu !== null).slice(0, 4).map(({ index }) => trendRowKey(index, 'menu'))]);
+  const selected = /줄었|줄어|내림세|감소|하락/u.test(value) ? entries.filter(({ row }) => row.changePercent < 0) : entries;
+  if (!selected.length) return answer(`순위에 검색 관심도가 줄어든 검색어가 없어요. ${trendSource}`);
+  const limit = /제일|가장|1위/u.test(value) ? 1 : countOf(value);
+  return trendOverview(ranking, t, selected.slice(0, limit).map(({ row }) => row), forShop);
+}
 
 function route(raw: string, snapshot: DataSnapshot, locale: Locale): DomainRoute | undefined {
   const value = normalizeNavisInput(raw);
@@ -645,7 +676,7 @@ function route(raw: string, snapshot: DataSnapshot, locale: Locale): DomainRoute
     || (ackVerb.test(value) || reopenVerb.test(value)) && (/변화|소식|알림/u.test(value) || changeRows(snapshot).some(row => targetRows(value, [row], l.t).length > 0));
   if (changes) return changeRoute(value, snapshot, locale);
   if (areaScope.test(value)) return areaRoute(value, snapshot, locale);
-  if (trendScope.test(value) || namesKeyword(value, snapshot, l.t)) return trendRoute(value, snapshot, locale);
+  if (trendScope(value) || trendQuestion.test(value) && namesTrend(value, snapshot)) return trendRoute(value, snapshot, locale);
   return undefined;
 }
 
@@ -670,27 +701,21 @@ function cafeReceiptRoute(raw: string, snapshot: DataSnapshot): DomainRoute | un
   return answer(rows.slice(0, 4).map(row => `${row.subject} · ${t.t(`data.real.local.cafe.state.${row.state}`)}`).join('\n'));
 }
 
-function navigation(raw: string, snapshot: DataSnapshot, locale: Locale): DomainDetail | null | undefined {
+function navigation(raw: string, snapshot: DataSnapshot): DomainDetail | null | undefined {
   const value = normalizeNavisInput(raw);
-  const t = translator(locale);
   if (snapshot.tables.realLocal && cafeReceiptQuery.test(value)) return null;
   // A location question is answered from the catalog path, so generic panel navigation must not claim it.
-  if (whereIs.test(value) && (areaScope.test(value) || /트렌드|유행|동네\s*(?:변화|소식|알림)|경쟁점/u.test(value))) return null;
+  if (whereIs.test(value) && whereFeature(value)) return null;
   if ((ackVerb.test(value) || reopenVerb.test(value)) && (changeScope.test(value) || kindsOf(value).length > 0 || /변화|소식/u.test(value))) return null;
   const wantsOpen = openVerb.test(value);
-  if (/트렌드|유행/u.test(value) && wantsOpen && !/(?:^|\s)(?:뭐|뭐였어|키워드\s*뭐)/u.test(value)) {
-    const model = readModel(snapshot, TRENDS);
-    const key = normalizeNavisName(value);
-    const keyword = model.keywords.filter(k => words(t.t(k.keywordKey)).some(word => key.includes(normalizeNavisName(word))));
-    return keyword.length === 1 ? { args: { featureId: TRENDS, view: 'keywords', itemId: keyword[0].keywordId } } : { args: { featureId: TRENDS } };
-  }
-  const trendRow = wantsOpen && /근거|상세|눌러|펼쳐/u.test(value) && !changeScope.test(value) && !areaScope.test(value);
-  if (trendRow) {
-    const model = readModel(snapshot, TRENDS);
-    const key = normalizeNavisName(value);
-    const keyword = model.keywords.filter(k => words(t.t(k.keywordKey)).some(word => key.includes(normalizeNavisName(word))));
-    if (keyword.length === 1) return { args: { featureId: TRENDS, view: 'keywords', itemId: keyword[0].keywordId } };
-    if (/키워드/u.test(value)) return null;
+  if (wantsOpen && /열어|보기|화면|위젯|패널|근거|상세|눌러|펼쳐|이동|넘어가/u.test(value)) {
+    const ranking = getLocalTrendRanking(snapshot);
+    const matches = ranking?.status === 'ready' ? namedTrendRows(value, ranking.items) : [];
+    if (trendFeature.test(value) || matches.length === 1 && !changeScope.test(value) && !areaScope.test(value)) {
+      const view = { featureId: TRENDS, view: 'keywords' } as const;
+      const item = matches.length === 1 && { ...view, itemId: matches[0].row.id };
+      return { args: item && validateAgentNavigationArgs('ui.openDetail', item) ? item : view };
+    }
   }
   if (/상권|유동\s*인구|시간대|막대|칸/u.test(value) && wantsOpen) {
     const hour = hourOf(value);
@@ -728,8 +753,8 @@ export const localDomain: DomainAdapter = {
     const named = changeRows(snapshot).some(row => normalizeNavisName(value).includes(normalizeNavisName(titleOf(row, t))));
     // Marking or reopening a stored change is a card turn, ahead of the briefing's own acknowledge wording.
     const bookkeeping = (ackVerb.test(value) || reopenVerb.test(value)) && kindsOf(value).length > 0;
-    // A menu's price can share the name of a search keyword. Implicit keyword matches yield to price requests.
-    const keyword = (!/가격|판매가/u.test(value) || trendScope.test(value)) && namesKeyword(value, snapshot, t);
+    // Candidate names overlap with the shop catalog. An implicit match needs search context and yields to shop metrics.
+    const keyword = (trendFeature.test(value) || !/가격|판매|팔렸|매출/u.test(value) && trendQuestion.test(value)) && namesTrend(value, snapshot);
     return named || bookkeeping || changeScope.test(value) || keyword ? route(text, snapshot, locale) : undefined;
   },
 };

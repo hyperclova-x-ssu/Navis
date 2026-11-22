@@ -3,18 +3,22 @@ import type { FeatureId, Locale, QueryCondition } from '../../../contracts';
 import { NOW, TODAY } from '../../../data/db/time';
 import type { DataSnapshot, InquiryThread } from '../../../data/db/types';
 import { dataBundles } from '../../../data/widget-data';
-import type { DataCommand } from '../../../data/commands/types';
+import type { DataCommand, DataCommandResult } from '../../../data/commands/types';
 import { checkCommunityResponse, checkInquiryReply, inquiryDraftRevision, inquirySourceText, planInquiryDraft, storedInquiryReply } from '../../../data/commands/reply-guard';
 import { maskAuthor } from '../../../data/models/local';
 import { selectWidget } from '../../../data/models/select';
 import type { AiResponseModel, CommunityModel, OfferRow, ThreadRow } from '../../../data/models/types';
-import { awaitingImports } from '../../../data/reality/15/dto';
+import { PortError, type CommandReceipt, type RealPort } from '../../../data/reality/00';
+import { awaitingImports, localStamp } from '../../../data/reality/15/dto';
+import type { ConsultationThread } from '../../../data/reality/15/hooks';
+import { inboxRows } from '../../../data/reality/15/messages';
+import { exampleReplyCoupons, exampleTalkTalkDraft, readReplyCoupons, readTalkTalkDraft, talkTalkReplyCommand, validTalkTalkDraft } from '../../../data/reality/15/talktalk';
 import { resolveDataText } from '../../../data/text';
 import { baseBundles, createTranslator } from '../../../i18n';
 import { mktLocalBundle } from '../../widgets/mkt-local/messages';
 import { validateAgentDraft, type AgentFact, type AgentRecordMatch } from '../../../../shared/navis-agent-schema.mjs';
 import { normalizeNavisInput, normalizeNavisName } from '../navis-input';
-import type { DomainAdapter, DomainDetail, DomainRoute, DomainTurnInput, LocalSlots, RecordAdapter, RecordSearch, RecordTargets, RunCommandAdapter } from './registry';
+import type { DomainAdapter, DomainDetail, DomainRoute, DomainTurnInput, LocalSlots, RecordAdapter, RecordSearch, RecordTargets, RunCommandAdapter, RunPreflight } from './registry';
 
 const defaultCondition = { kind: 'default' } as const;
 const replies = 'ai-response';
@@ -51,7 +55,7 @@ const threadKey = (snapshot: DataSnapshot, row: ThreadRow) =>
 const communityKey = (snapshot: DataSnapshot, row: OfferRow) =>
   offerKey(`offer.${snapshot.tables.partnershipOffer.findIndex(item => item.offerId === row.offerId)}`);
 const replyLabel = (t: Translation, row: ThreadRow) => t.t(row.type === 'review' ? 'widget.ai-response.reviewDraft' : 'widget.ai-response.draft');
-const received = (t: Translation, row: ThreadRow, snapshot: DataSnapshot) => t.format.dateTime(row.receivedAt, { today: dayOf(snapshot) });
+const received = (t: Translation, row: Pick<ThreadRow, 'receivedAt'>, snapshot: DataSnapshot) => t.format.dateTime(row.receivedAt, { today: dayOf(snapshot) });
 const threadName = (t: Translation, row: Pick<ThreadRow, 'channelKey' | 'authorMasked' | 'rating'>) =>
   join(t.t(row.channelKey), row.authorMasked, row.rating === null ? null : t.t('widget.ai-response.rating', { n: row.rating }));
 const threadTarget = (t: Translation, thread: InquiryThread, source: string) =>
@@ -67,6 +71,64 @@ const offerStatusText = (row: OfferRow, snapshot: DataSnapshot, t: Translation) 
 };
 const activeOffers = (rows: readonly OfferRow[], snapshot: DataSnapshot) => rows.filter(row => offerStatus(row, snapshot) === 'pending');
 
+const reviewSummaryKeys = ['reviews.total', 'reviews.waiting', 'reviews.answered', 'rating', 'reviews.distribution', 'reviews.lowestWaiting'];
+const reviewUnavailable = { kind: 'answer', answer: '리뷰 목록을 불러오지 못했어요' } as const;
+
+function reviewOverview(inbox: NonNullable<DataSnapshot['tables']['realInbox']>, model: AiResponseModel, t: Translation): DomainRoute {
+  return { kind: 'deferred', async resolve({ port }) {
+    // An old inbox projection can still feed the widget, but a failed refresh cannot establish an empty review list.
+    if (inbox.reviews.status !== 'available' || port?.mode('inbox') === 'http' && port.state('inbox').status !== 'ready') {
+      return reviewUnavailable;
+    }
+    const reviews = inbox.reviews.items;
+    const visibleRefs = new Set(reviews.map(row => row.ref));
+    const tracked = new Set(inbox.inquiries.filter(row => row.source === 'review' && row.providerRef && visibleRefs.has(row.providerRef))
+      .map(row => row.id));
+    const saved = model.threads.filter(row => row.type === 'review' && !tracked.has(row.threadId));
+    const total = reviews.length + saved.length;
+    const readScope = { featureId: replies, condition: defaultCondition } as const;
+    if (!total) return { kind: 'answer', answer: '등록된 리뷰가 없어요', readScope };
+
+    const excerpt = (text: string, stars: number | null) => {
+      const first = Array.from(maskContact(text.trim().split(/\r?\n/u, 1)[0]!.trim()));
+      const preview = first.length > 120 ? first.slice(0, 120).join('') + '…' : first.join('');
+      const rating = stars == null ? t.t('data.real.inbox.ui.noStars') : t.t('widget.ai-response.rating', { n: stars });
+      return join(rating, quote(preview) || '내용 없음');
+    };
+    // The venue API returns newest first and does not expose dates for merging with manually recorded rows.
+    const recent = reviews.slice(0, 3);
+    const recentSaved = saved.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt) || a.threadId.localeCompare(b.threadId))
+      .slice(0, 3 - recent.length);
+    return { kind: 'answer', readScope, answer: [
+      `리뷰 ${count(t, total)} · 답변 대기 ${count(t, model.byType.review)}`,
+      ...(recent.length ? [`최근 네이버 리뷰 ${count(t, recent.length)}`, ...recent.map(row => excerpt(row.text ?? '', row.stars))] : []),
+      ...(recentSaved.length ? [`최근 기록한 리뷰 ${count(t, recentSaved.length)}`, ...recentSaved.map(row => excerpt(original(t, row), row.rating))] : []),
+    ].join('\n') };
+  } };
+}
+
+function providerReviewFacts(inbox: NonNullable<DataSnapshot['tables']['realInbox']>, t: Translation) {
+  if (inbox.reviews.status !== 'available') return [];
+  const tracked = new Map(inbox.inquiries.filter(row => row.source === 'review').map(row => [row.providerRef, row]));
+  const reviews = inbox.reviews.items;
+  const waiting = reviews.filter(row => !row.hasReply && tracked.get(row.ref)?.status !== 'done');
+  const rated = waiting.filter(row => row.stars !== null).sort((left, right) => left.stars! - right.stars!);
+  const lowest = rated[0]?.stars;
+  const display = lowest == null ? undefined : join(`${lowest}점`, ...rated.filter(row => row.stars === lowest)
+    .slice(0, 3).map(row => quote(maskContact(row.text ?? ''))));
+  const mean = inbox.reviews.averageStars;
+  const date = Number.isFinite(Date.parse(inbox.asOf)) ? localStamp(inbox.asOf).slice(0, 10) : undefined;
+  const reviewCount = (key: string, labelKey: string, total: number) => fact(replyKey(key), t.t(labelKey), total, count(t, total));
+  return [
+    reviewCount('reviews.total', 'data.channel.naverReview', reviews.length),
+    reviewCount('reviews.waiting', 'widget.ai-response.waiting', waiting.length),
+    reviewCount('reviews.answered', 'widget.ai-response.statusDone', reviews.length - waiting.length),
+    ...(typeof mean === 'number' ? [fact(replyKey('rating'), '평균 별점', mean, `${mean}점`)] : []),
+    ...(reviews.length ? [fact(replyKey('reviews.distribution'), '별점 분포', starGroups(reviews).join(' · '))] : []),
+    ...(lowest == null ? [] : [fact(replyKey('reviews.lowestWaiting'), `${t.t('widget.ai-response.waiting')} · ${local(t, '최저 별점', 'Lowest rating', '最低评分', '最低評分')}`, lowest, display)]),
+  ].map(row => ({ ...row, ...(date && { date }) }));
+}
+
 function threadFacts(snapshot: DataSnapshot, model: AiResponseModel, t: Translation) {
   const noItems = t.t('widget.ai-response.noItems');
   const waiting = t.t('widget.ai-response.waiting');
@@ -76,8 +138,13 @@ function threadFacts(snapshot: DataSnapshot, model: AiResponseModel, t: Translat
   const completed = model.threads.filter(row => !row.waiting && row.type !== 'review')
     .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
   const oldest = [...model.priority].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0];
+  const inbox = snapshot.tables.realInbox;
   const channels = new Map(model.byChannel.map(row => [row.channelKey, row.count]));
-  for (const channel of ['data.channel.kakao', 'data.channel.naverTalk', 'data.channel.naverReview']) {
+  const defaults = inbox ? [
+    ...(inbox.consultations.status === 'available' ? ['data.channel.naverTalk'] : []),
+    ...(inbox.reviews.status === 'available' ? ['data.channel.naverReview'] : []),
+  ] : ['data.channel.kakao', 'data.channel.naverTalk', 'data.channel.naverReview'];
+  for (const channel of defaults) {
     if (!channels.has(channel)) channels.set(channel, 0);
   }
   const speakers = [...channels].map(([channel, total]) => `${t.t(channel)} ${count(t, total)}`);
@@ -88,6 +155,7 @@ function threadFacts(snapshot: DataSnapshot, model: AiResponseModel, t: Translat
   }
   const auto = [...rules].map(([label, topics]) => join(label, topics.join(', '))).join('\n') || noItems;
   return [
+    ...(inbox ? providerReviewFacts(inbox, t) : []),
     fact(replyKey('waiting.count'), waiting, model.waitingCount, count(t, model.waitingCount)),
     fact(replyKey('waiting.message'), t.t('data.fact.inquiry.waiting.message'), model.byType.message, count(t, model.byType.message)),
     fact(replyKey('waiting.review'), t.t('data.fact.inquiry.waiting.review'), model.byType.review, count(t, model.byType.review)),
@@ -95,8 +163,8 @@ function threadFacts(snapshot: DataSnapshot, model: AiResponseModel, t: Translat
     fact(replyKey('waiting.channel'), waiting, speakers.join(' · ') || count(t, 0)),
     fact(replyKey('priority'), t.t('widget.ai-response.recent'), model.priority.slice(0, 4).map(row => join(threadName(t, row), quote(original(t, row)))).join('\n') || noItems),
     fact(replyKey('praise'), t.t('widget.ai-response.tabReviews'), model.praiseCount, t.t('widget.ai-response.praise', { n: model.praiseCount })),
-    fact(replyKey('rating'), local(t, '평균 별점', 'Average rating', '平均评分', '平均評分'), mean ?? noItems,
-      mean === null ? noItems : join(t.t('widget.ai-response.rating', { n: mean }), count(t, reviews.length))),
+    ...(inbox ? [] : [fact(replyKey('rating'), local(t, '평균 별점', 'Average rating', '平均评分', '平均評分'), mean ?? noItems,
+      mean === null ? noItems : join(t.t('widget.ai-response.rating', { n: mean }), count(t, reviews.length)))]),
     fact(replyKey('completed'), t.t('widget.ai-response.statusDone'), completed.slice(0, 3).map(row => {
       const sent = maskContact(threadDraft(t, row));
       return join(threadName(t, row), join(t.t('widget.ai-response.original'), quote(original(t, row))),
@@ -167,7 +235,7 @@ const offerWords = /커뮤니티|공동.?구매|공구|책마루|스탬프|교�
 const offerContext = /(?:받은|보낸|들어온|공개|대기|수락한|지난|놓친|급한|답(?:해야\s*할|할|해야\s*하는)|가게(?:들)?(?:이\s*올린)?)\s*제안|제안(?:이|을)?\s*(?:목록|대기|몇\s*(?:건|개)|응답\s*기한|와\s*있|전부\s*거절)|응답\s*기한/u;
 const isOffer = (text: string, snapshot: DataSnapshot) => offerWords.test(text) || offerContext.test(text)
   || /제안/u.test(text) && (/빵집|책방|꽃집|책마루/u.test(text) || offerQuery(text, snapshot).startsWith('id:'));
-const openWords = /열어|띄워|보여\s*(?:줘|주세요)|\b(?:open|show)\b/iu;
+const openWords = /열어|띄워|켜\s*줘|\bopen\b/iu;
 const draftWords = /초안|답글|답변|답장|\bdraft\b/iu;
 const generationWords = /만들|답글\s*초안$|초안\s*$|써\s*(?:줘|주세요)|새로|다시|초안\s*좀|초안\s*부탁|뭐라고\s*답하지|\b(?:draft|write|generate)\b/iu;
 const changeWords = /바[꿔꾸]|고쳐|수정|\b(?:edit|revise)\b/iu;
@@ -178,9 +246,10 @@ const publicWords = /공개\s*제안|둘러보기|다른\s*가게(?:들)?(?:이\
 const declineWords = /거절(?:해|할|하자|하기)|안\s*하는\s*걸로\s*답해|\bdecline\b/iu;
 const acceptWords = /수락(?:해|할|하자|하기|\s*처리|\s*한\s*번|$)|받을게|받아\s*줘|\baccept\b/iu;
 const interestWords = /관심\s*(?:있다고\s*)?(?:보내(?![지셨])|표시(?:해|할))|\bshow interest\b/iu;
-const separateSms = /(?:테스트|시험)\s*(?:문자|발송|sms)|\btest (?:sms|message)\b/iu;
 const noMutation = /하지\s*마|말아\s*줘|(?:보내|만들|쓰|고치|바꾸|올리|달)지\s*마|(?:발송|게시|전송|수락|거절|관심).{0,5}취소|(?:자동|예약)\s*(?:으로\s*)?(?:발송|전송|보내)|\b(?:do not|don't|automatically)\b/iu;
 const noSend = /(?:보내지|(?:발송|전송|게시)(?:은|는|을)?\s*하지)\s*마(?:세요|요)?/u;
+// "X에게 답장해줘" / "문의에 답해줘": the owner means to answer this one. The chat does not write for them; it opens that item's reply pane at the draft step.
+const answerNowWords = /답장\s*(?:을\s*)?(?:좀\s*)?(?:해|하자|할게|할래)\s*(?:줘|주세요)?|답\s*(?:해|하자|할게|할래)\s*(?:줘|주세요)|답변\s*(?:을\s*)?(?:좀\s*)?(?:해|드릴게|할게)\s*(?:줘|주세요)?/u;
 const bareDraft = /^초안\s*(?:좀\s*)?(?:써|만들어)\s*(?:줘|주세요)[.!]?$/u;
 const replyEdit = (text: string) => changeWords.test(text) && draftWords.test(text);
 const replyGenerate = (text: string) => draftWords.test(text) && generationWords.test(text)
@@ -216,11 +285,14 @@ const offerTopics: readonly [string, RegExp][] = [
   ['bakery', /빵집/u],
 ];
 
-function baseThreadQuery(text: string, rows: readonly InquiryThread[]) {
+function baseThreadQuery(text: string, rows: readonly InquiryThread[], readSummary: boolean) {
   const review = /리뷰|후기/u.test(text);
-  const reviewer = /^([가-힣]{3})(?:\s*님)?\s+(?:리뷰|후기)/u.exec(text)?.[1];
+  const reviewer = /^([가-힣]{2,4})\s*님(?:의)?\s+(?:리뷰|후기)/u.exec(text)?.[1];
+  if (reviewer) return `review:author:${reviewer}`;
+  // A draft or send must retain the named target even when that reviewer is absent.
+  const unmarkedReviewer = !readSummary && /^([가-힣]{3})\s+(?:리뷰|후기)/u.exec(text)?.[1];
   const reviewQualifier = /^(?:네이버|카카오|최근에|이번에|부정적|긍정적|대기중|칭찬한|올라온|작성한|미답변)$/u;
-  if (reviewer && !reviewQualifier.test(reviewer)) return `review:author:${reviewer}`;
+  if (unmarkedReviewer && !reviewQualifier.test(unmarkedReviewer)) return `review:author:${unmarkedReviewer}`;
   const authored = rows.find(row => row.author && !row.author.includes('*') && text.includes(row.author));
   if (authored) return `${review ? 'review:' : ''}author:${authored.author}`;
   const topic = threadTopics.find(([, pattern]) => pattern.test(text))?.[0];
@@ -239,8 +311,8 @@ function baseThreadQuery(text: string, rows: readonly InquiryThread[]) {
   return 'waiting';
 }
 
-function threadQuery(text: string, rows: readonly InquiryThread[]) {
-  const base = baseThreadQuery(text, rows);
+function threadQuery(text: string, rows: readonly InquiryThread[], readSummary = false) {
+  const base = baseThreadQuery(text, rows, readSummary);
   const kakao = /카톡|카카오톡/u.test(text);
   const talk = /톡톡/u.test(text);
   if (talk === kakao) return base;
@@ -359,12 +431,14 @@ const offerReader: RecordAdapter = {
 function read(featureId: typeof replies | typeof community, ...factKeys: string[]): DomainTurnInput {
   return { intent: { kind: 'read', featureId, condition: defaultCondition }, factKeys };
 }
-function starSummary(rows: readonly { readonly stars: number | null }[]): string {
+function starGroups(rows: readonly { readonly stars: number | null }[]): string[] {
   const counts = new Map<number, number>();
   for (const { stars } of rows) if (stars !== null) counts.set(stars, (counts.get(stars) ?? 0) + 1);
   const unrated = rows.filter(({ stars }) => stars === null).length;
-  const parts = [...[...counts].sort(([a], [b]) => b - a).map(([stars, n]) => `${stars}점 ${n}건`), ...(unrated ? [`별점 없음 ${unrated}건`] : [])];
-  return counts.size ? ` (별점 ${parts.join(' · ')})` : '';
+  return [...[...counts].sort(([a], [b]) => b - a).map(([stars, n]) => `${stars}점 ${n}건`), ...(unrated ? [`별점 없음 ${unrated}건`] : [])];
+}
+function starSummary(rows: readonly { readonly stars: number | null }[]): string {
+  return rows.some(row => row.stars !== null) ? ` (별점 ${starGroups(rows).join(' · ')})` : '';
 }
 function noRows(t: Translation, featureId: typeof replies | typeof community): DomainRoute {
   return { kind: 'answer', answer: t.t(featureId === replies ? 'widget.ai-response.noItems' : 'widget.community.noReceived') };
@@ -373,11 +447,12 @@ function noWaitingThread(query: string): string {
   return query === 'waiting' ? '답변 대기 항목이 없어요' : '요청에 맞는 답변 대기 항목이 없어요';
 }
 
-function chooseThread(rows: readonly ThreadRow[], t: Translation, continueWith: (row: ThreadRow) => DomainRoute): DomainRoute {
+function chooseThread(rows: readonly ThreadRow[], t: Translation, continueWith: (row: ThreadRow) => DomainRoute,
+  label = (row: ThreadRow) => join(threadName(t, row), original(t, row))): Extract<DomainRoute, { kind: 'clarification' }> {
   if (!rows.length) return { kind: 'clarification', field: 'threadId', answer: noWaitingThread('waiting') };
   const candidates = rows.slice(0, 6);
   return { kind: 'clarification', field: 'threadId', answer: t.t('widget.ai-response.pickItem'),
-    choices: candidates.map((row, index) => ({ id: handle('thread', index), label: join(threadName(t, row), original(t, row)).slice(0, 180) })),
+    choices: candidates.map((row, index) => ({ id: handle('thread', index), label: label(row).slice(0, 180) })),
     resume: id => {
       const row = candidates.find((_, index) => handle('thread', index) === id);
       return row && continueWith(row);
@@ -409,6 +484,135 @@ function proposeOffer(command: OfferAction, query: string, t: Translation): Doma
     slots: { offerId: query, navisLocale: t.locale }, lookups: [{ kind: 'offer', querySlot: 'offerId', bind: ['offerId'] }] };
 }
 const exact = (id: string) => `id:${id}`;
+
+type ReplyCoupon = ReturnType<typeof exampleReplyCoupons>[number];
+const talkChannel = 'data.channel.naverTalk';
+const talkSubmitLabel = '톡톡으로 보내기';
+const replyPaneRef = (threadId?: string) => ({ featureId: replies, step: 'message-draft' as const, ...(threadId && { itemId: threadId }) });
+const talkFallback = (answer: string, threadId?: string) =>
+  ({ kind: 'refusal' as const, reason: 'widget_only' as const, answer, alternative: replyPaneRef(threadId) });
+const couponName = (coupon: ReplyCoupon, t: Translation) => resolveDataText(t.t, coupon.name);
+function couponBody(coupon: ReplyCoupon, t: Translation) {
+  const params: Readonly<Record<string, string>> = { name: couponName(coupon, t), benefit: resolveDataText(t.t, coupon.benefit), date: coupon.endsOn, code: coupon.code };
+  return inboxRows['data.real.inbox.ui.couponBlock'][0].replace(/\{(\w+)\}/gu, (match, key: string) => params[key] ?? match);
+}
+
+type TalkRoute = Exclude<DomainRoute, { kind: 'deferred' }>;
+
+async function buildTalkProposal(row: ThreadRow, text: string, t: Translation, snapshot: DataSnapshot, signal: AbortSignal,
+  port?: RealPort): Promise<TalkRoute> {
+  const thread = threadRecord(snapshot, row.threadId);
+  if (!thread || thread.status === 'done' || thread.channelKey !== talkChannel) return talkFallback('답장할 톡톡 문의를 확인해 주세요.');
+  const source = maskContact(inquirySourceText(thread) || original(t, row)).slice(0, 1000);
+  if (!source) return talkFallback('톡톡 문의 내용을 확인하지 못했어요.', row.threadId);
+  const real = Boolean(snapshot.tables.realInbox);
+  let draft: ReturnType<typeof exampleTalkTalkDraft>;
+  try {
+    if (real) {
+      if (!port) return talkFallback('톡톡 답변 초안을 불러오지 못했어요.', row.threadId);
+      draft = await readTalkTalkDraft(port, row.threadId, signal);
+    } else {
+      draft = exampleTalkTalkDraft(source, snapshot, value => resolveDataText(t.t, value));
+    }
+  } catch (error) {
+    if (!(error instanceof PortError) || error.reason !== 'DRAFT_UNGROUNDED') {
+      return talkFallback('톡톡 답변 초안을 불러오지 못했어요.', row.threadId);
+    }
+  }
+  if (!validTalkTalkDraft(draft)) {
+    return talkFallback('매장 정보에서 이 문의에 답할 근거를 확인하지 못했어요.', row.threadId);
+  }
+  const { text: draftText, facts } = draft;
+  const revision = thread.real?.revision ?? inquiryDraftRevision(thread);
+  const propose = (coupon?: ReplyCoupon) => {
+    const block = coupon && couponBody(coupon, t);
+    const body = block ? `${draftText}\n\n${block}` : draftText;
+    return { kind: 'local-proposal' as const, command: 'inquiry.send' as const, args: { threadId: { handle: 'thread' }, body: slot('body') },
+      slots: { body, navisLocale: 'ko', talkDraft: draftText, talkRevision: revision, talkSource: source, talkFacts: facts,
+        ...(coupon && { talkCoupon: coupon.id, talkCouponBlock: block! }) },
+      targets: new Map([['thread', { kind: 'thread' as const, id: row.threadId }]]), alternative: replyPaneRef(row.threadId) };
+  };
+  if (!text.includes('쿠폰')) return propose();
+  let coupons: ReplyCoupon[];
+  try { coupons = real && port ? await readReplyCoupons(port, signal) : exampleReplyCoupons(snapshot); }
+  catch { return talkFallback('붙일 수 있는 쿠폰을 불러오지 못했어요.', row.threadId); }
+  const name = normalizeNavisName(text);
+  const named = coupons.filter(coupon => name.includes(normalizeNavisName(couponName(coupon, t))));
+  if (named.length === 1) return propose(named[0]);
+  if (!coupons.length) return talkFallback('붙일 수 있는 진행 중인 Navis 쿠폰이 없어요.', row.threadId);
+  return { kind: 'clarification', field: 'couponId', answer: '어떤 쿠폰을 붙일까요?',
+    choices: coupons.map(coupon => ({ id: coupon.id, label: couponName(coupon, t) })),
+    resume(id) { const coupon = coupons.find(coupon => coupon.id === id); return coupon && propose(coupon); } };
+}
+
+async function withTalkSources(snapshot: DataSnapshot, port: RealPort, signal: AbortSignal): Promise<DataSnapshot> {
+  const waiting = snapshot.tables.inquiryThread.filter(row => row.channelKey === talkChannel && row.status !== 'done' && !row.bodyRaw
+    && row.real?.source === 'talktalk' && row.real.providerRef);
+  const sources = new Map(await Promise.all(waiting.slice(0, 6).map(async row => {
+    const ref = row.real!.providerRef!;
+    try {
+      const thread = await port.reads.one<ConsultationThread>({ resource: 'consultation', path: `/marketing/talktalk/consultations/${encodeURIComponent(ref)}` }, { signal });
+      const messages = thread.messages.filter(message => message.text?.trim());
+      const source = messages.filter(message => message.from === 'user').at(-1)?.text
+        ?? (thread.status === 'waiting' && messages.length === 1 && !messages[0].from ? messages[0].text : null);
+      return [row.threadId, source] as const;
+    } catch { return [row.threadId, null] as const; }
+  })));
+  return { ...snapshot, tables: { ...snapshot.tables, inquiryThread: snapshot.tables.inquiryThread.map(row => {
+    const source = sources.get(row.threadId);
+    return source ? { ...row, bodyRaw: source } : row;
+  }) } };
+}
+
+function newestTalkInquiries(rows: readonly ThreadRow[], snapshot: DataSnapshot): readonly ThreadRow[] {
+  const records = new Map(snapshot.tables.realInbox?.inquiries.map(row => [row.id, row.updatedAt]));
+  const timed = rows.map(row => ({ row, time: Date.parse(records.get(row.threadId) ?? `${row.receivedAt}+09:00`) }));
+  if (timed.some(({ time }) => !Number.isFinite(time))) return rows;
+  timed.sort((a, b) => b.time - a.time);
+  const latest = timed[0]?.time;
+  return latest === undefined ? rows : timed.filter(({ time }) => latest - time <= 60_000).map(({ row }) => row);
+}
+
+function routeTalkReply(raw: string, snapshot: DataSnapshot): DomainRoute | undefined {
+  const { text, body } = replyInput(raw);
+  if (body !== undefined || !replyWords.test(text) || !answerNowWords.test(text) || reviewWords.test(text)
+    || blockedReplyAction(text) || replyEdit(text) || replyGenerate(text) || text.endsWith('?')) return;
+  const recipient = /(?:^|\s)([\p{L}○*]{2,40})\s*님(?:의)?(?=\s|문의)/u.exec(text)?.[1];
+  const query = recipient ? `talk/author:${recipient}` : threadQuery(text, snapshot.tables.inquiryThread);
+  const recent = text.includes('톡톡') && /(?:방금|막|새로)\s*(?:온|들어온|받은)|최근|최신|마지막/u.test(text);
+  const base = query.split('/').at(-1);
+  const scope = recent && base === 'latest' ? 'talk/waiting' : query;
+  const candidates = (current: DataSnapshot) => {
+    const rows = threadRows(current, scope, true);
+    return recent ? newestTalkInquiries(rows, current) : rows;
+  };
+  const rows = candidates(snapshot);
+  const t = tr('ko');
+  const start = (row: ThreadRow): DomainRoute => ({ kind: 'deferred', resolve: ({ snapshot, port, signal }) => buildTalkProposal(row, text, t, snapshot, signal, port) });
+  const choiceLabel = (current: DataSnapshot) => (row: ThreadRow) =>
+    join(threadName(t, row), received(t, row, current), original(t, row).split(/\r?\n/u)[0]);
+  const needsChoice = !recent && (base === 'waiting' || base === 'latest');
+  if (snapshot.tables.realInbox && (text.includes('톡톡') || rows.some(row => row.channelKey === talkChannel)
+    || !rows.length && threadRows(snapshot, 'talk/waiting', true).length > 0)) {
+    return { kind: 'deferred', async resolve({ snapshot, port, signal }) {
+      if (!port) return talkFallback('톡톡 문의를 불러오지 못했어요.');
+      const sourced = await withTalkSources(snapshot, port, signal);
+      const matches = candidates(sourced).filter(row => row.channelKey === talkChannel);
+      if (!matches.length) return talkFallback('문의 내용과 받는 사람을 확인할 수 있는 톡톡 답장 화면을 열어 주세요.');
+      if (matches.length > 1 || needsChoice) return chooseThread(matches, t, start, choiceLabel(sourced));
+      return buildTalkProposal(matches[0], text, t, sourced, signal, port);
+    } };
+  }
+  if (!rows.length) {
+    if (text.includes('톡톡')) return talkFallback('문의 내용과 받는 사람을 확인할 수 있는 톡톡 답장 화면을 열어 주세요.');
+    return;
+  }
+  if (!rows.some(row => row.channelKey === talkChannel)) return;
+  const next = (row: ThreadRow) => row.channelKey === talkChannel
+    ? start(row)
+    : talkFallback(t.t('widget.ai-response.writeReply'), row.threadId);
+  return rows.length === 1 && !needsChoice ? next(rows[0]) : chooseThread(rows, t, next, choiceLabel(snapshot));
+}
 
 function replyWrite(text: string, body: string | undefined, snapshot: DataSnapshot, t: Translation): DomainRoute | undefined {
   if (blockedReplyAction(text)) {
@@ -453,8 +657,10 @@ function replyWrite(text: string, body: string | undefined, snapshot: DataSnapsh
     const body = customBody ?? storedInquiryReply(thread);
     const check = bodySlot(body) ? checkInquiryReply(snapshot.tables, { type: command, threadId: row.threadId, body, idempotencyKey: 'preflight' }) : undefined;
     if (!bodySlot(body) || !check?.ok) {
+      // D-404: nothing to send yet. The owner is taken to this item's reply pane at the draft step by a scoped step (no command, no draft); the
+      // pane's own presses save, send or post.
       return { kind: 'refusal', reason: 'widget_only', answer: t.t('widget.ai-response.writeReply'),
-        alternative: { featureId: replies, command, draft: { threadId: row.threadId, view: row.type === 'review' ? 'review' : 'message' } } };
+        alternative: { featureId: replies, step: row.type === 'review' ? 'review-draft' : 'message-draft', itemId: row.threadId } };
     }
     return proposeThread(command, exact(row.threadId), t, body);
   }
@@ -465,9 +671,28 @@ function replyWrite(text: string, body: string | undefined, snapshot: DataSnapsh
   return chooseThread(rows, t, row => continueWith(row, body));
 }
 
-function replyRead(text: string, snapshot: DataSnapshot, t: Translation): DomainRoute {
+/** An answer-now request without a body: the item's own reply pane at the draft step, through a scoped step (no command, no draft, no write). */
+function replyPane(text: string, snapshot: DataSnapshot, t: Translation): DomainRoute | undefined {
+  if (!answerNowWords.test(text) || replyEdit(text) || noMutation.test(text) || /[?？]\s*$/u.test(text)) return undefined;
+  const rows = threadRows(snapshot, threadQuery(text, snapshot.tables.inquiryThread), true);
+  const open = (row: ThreadRow): DomainRoute => ({ kind: 'refusal', reason: 'widget_only', answer: t.t('widget.ai-response.writeReply'),
+    alternative: { featureId: replies, step: row.type === 'review' ? 'review-draft' : 'message-draft', itemId: row.threadId } });
+  if (!rows.length) return undefined;
+  return rows.length === 1 ? open(rows[0]) : chooseThread(rows, t, open);
+}
+
+function replyRead(text: string, snapshot: DataSnapshot, model: AiResponseModel, t: Translation): DomainRoute {
   const facts = (...keys: string[]) => read(replies, ...keys.map(replyKey));
   if (/채널별|카톡이랑|카카오톡\s*쪽|\bby channel\b/iu.test(text)) return facts('waiting.channel');
+  const query = threadQuery(text, snapshot.tables.inquiryThread, true);
+  const inbox = snapshot.tables.realInbox;
+  if (inbox && query.startsWith('review:') && !openWords.test(text)) {
+    if (inbox.reviews.status !== 'available') return reviewUnavailable;
+    if (query === 'review:waiting' && !draftWords.test(text) && !/별점|평점|\brating\b/iu.test(text)) {
+      return reviewOverview(inbox, model, t);
+    }
+    if (query === 'review:waiting' || query === 'review:negative') return facts(...reviewSummaryKeys);
+  }
   if (/뭐부터|급한\s*문의|먼저\s*볼/u.test(text)) return facts('priority');
   if (/오래\s*(?:기다린|묵은)|오래된\s*대기/u.test(text)) return facts('oldest');
   if (/별점\s*평균|평점\s*평균|\baverage rating\b/iu.test(text)) return facts('rating');
@@ -475,7 +700,6 @@ function replyRead(text: string, snapshot: DataSnapshot, t: Translation): Domain
   if (/답변해\s*준|답\s*끝낸|이미\s*답한|보낸\s*답변/u.test(text)) return facts('completed', 'praise');
   if (/자동\s*(?:응답|답변|답장)/u.test(text)) return facts('autoReply');
   if (/오늘/u.test(text) && /들어온|받은|오늘\s*온/u.test(text)) return facts('today');
-  const query = threadQuery(text, snapshot.tables.inquiryThread);
   if (/몇\s*(?:건|개)|갯수|건수|대기\s*수/u.test(text)) {
     if (reviewWords.test(text)) return facts('waiting.review');
     if (/전화|통화/u.test(text)) return facts('waiting.call');
@@ -491,6 +715,7 @@ function replyRead(text: string, snapshot: DataSnapshot, t: Translation): Domain
       const key = draftWords.test(text) && !/리뷰\s*대기|내용도/u.test(text) && !query.startsWith('review:') ? '.draft' : '';
       return read(replies, ...rows.slice(0, 4).map(row => threadKey(snapshot, row) + key));
     }
+    if (inbox && query.startsWith('review:')) return { kind: 'answer', answer: '조건에 맞는 리뷰를 찾지 못했어요' };
     return noRows(t, replies);
   }
   return facts('waiting.count', 'waiting.message', 'waiting.review');
@@ -546,7 +771,9 @@ function route(raw: string, snapshot: DataSnapshot, locale: Locale): DomainRoute
   if (praiseWords.test(text) && draftWords.test(text)) return read(replies, replyKey('praise'));
   const view = replyModel(snapshot);
   if (view.status !== 'ready' || !view.model.connected) return read(replies, replyKey('waiting.count'));
-  return replyWrite(text, body, snapshot, t) ?? replyRead(text, snapshot, t);
+  const pane = body === undefined ? replyPane(text, snapshot, t) : undefined;
+  if (pane) return pane;
+  return replyWrite(text, body, snapshot, t) ?? replyRead(text, snapshot, view.model, t);
 }
 
 function navigation(raw: string, snapshot: DataSnapshot): DomainDetail | null | undefined {
@@ -597,6 +824,8 @@ function readArgs(wire: unknown, slots: LocalSlots, targets: RecordTargets) {
 }
 
 type ReplyCommand = Extract<DataCommand, { type: ThreadAction | OfferAction }>;
+type TalkReply = { readonly draft: string; readonly revision: number; readonly source: string; readonly facts: readonly string[];
+  readonly couponId?: string; readonly couponBlock?: string };
 type PreviewField = { readonly label: string; readonly before: string; readonly after: string };
 const field = (label: string, after: string, before = after): PreviewField =>
   ({ label, before: before.trim() ? before.slice(0, 1000) : '—', after: after.trim() ? after.slice(0, 1000) : '—' });
@@ -604,7 +833,76 @@ const reject = (result: { code: string; messageKey: string; field?: string; reas
   kind: result.reason === 'TRANSACTION_BUSY' ? 'busy' as const : result.code === 'NOT_FOUND' ? 'conflict' as const : 'invalid' as const,
   messageKey: result.messageKey, field: result.field,
 });
-function planAdapter(command: ThreadAction | OfferAction): RunCommandAdapter<{ command: ReplyCommand; locale: Locale }> {
+
+function preflightTalkReply(command: Extract<ReplyCommand, { type: 'inquiry.send' }>, proposed: TalkReply, snapshot: DataSnapshot,
+  t: Translation): RunPreflight<{ title: string; target: string; confirmLabel: string; fields: PreviewField[] }> {
+  const checked = checkInquiryReply(snapshot.tables, { ...command, body: undefined });
+  if (!checked.ok) return reject(checked);
+  const { thread } = checked;
+  if (thread.channelKey !== talkChannel || thread.needsPersonReason) return { kind: 'invalid' };
+  const real = Boolean(snapshot.tables.realInbox);
+  if ((thread.real?.revision ?? inquiryDraftRevision(thread)) !== proposed.revision) return { kind: 'conflict' };
+  if (!real && proposed.couponId) {
+    const coupon = exampleReplyCoupons(snapshot).find(row => row.id === proposed.couponId);
+    if (!coupon || couponBody(coupon, t) !== proposed.couponBlock) return { kind: 'conflict' };
+  }
+  const save = { type: 'inquiry.saveDraft' as const, threadId: command.threadId, revision: proposed.revision,
+    body: command.body!, idempotencyKey: `${command.idempotencyKey}:draft`, ...(real && { draftSource: 'navis' as const }) };
+  if (!real) {
+    const draft = planInquiryDraft(snapshot.tables, save);
+    if (!draft.ok) return reject(draft);
+  }
+  const recipient = join(threadName(t, { ...thread, authorMasked: maskAuthor(thread.author) }), received(t, thread, snapshot));
+  const preview = {
+    title: '톡톡 답장', target: threadTarget(t, thread, proposed.source), confirmLabel: talkSubmitLabel,
+    fields: [field('받는 사람', recipient), field('문의', quote(proposed.source)), field('답변 초안', proposed.draft),
+      field('매장 정보', proposed.facts.join('\n')), ...(proposed.couponBlock ? [field('붙인 쿠폰', proposed.couponBlock)] : [])],
+  };
+  if (real) {
+    const conflict: DataCommandResult = { ok: false, code: 'CONFLICT', reason: 'STALE_REVISION', messageKey: 'data.real.error.STALE_REVISION' };
+    let outgoing: typeof command | undefined;
+    return { kind: 'ready', featureId: replies, preview, execute: () => ({ kind: 'conflict' }), realAction: {
+      domain: 'inbox', bindings: [command, save],
+      fingerprint: JSON.stringify([command.type, command.threadId, command.body, command.previewVariant, proposed.revision, proposed.couponId]),
+      async execute(store) {
+        if (store.getSnapshot().runId !== snapshot.runId) return conflict;
+        if (outgoing) return store.execute(outgoing);
+        if (proposed.couponId && store.real) {
+          try {
+            const coupon = (await readReplyCoupons(store.real)).find(row => row.id === proposed.couponId);
+            if (!coupon || couponBody(coupon, t) !== proposed.couponBlock) return conflict;
+          } catch { return { ok: false, code: 'PREVIEW_FAILURE', messageKey: 'data.real.error.SERVICE_UNAVAILABLE' }; }
+        }
+        if (store.getSnapshot().runId !== snapshot.runId) return conflict;
+        const latest = store.getSnapshot().tables.realInbox?.inquiries.find(row => row.id === command.threadId);
+        if (!latest || latest.revision !== proposed.revision || latest.status === 'done') return conflict;
+        let revision = latest.revision;
+        if (latest.draft?.text !== command.body) {
+          const saved = await store.execute(save);
+          if (!saved.ok) return saved;
+          const receipt = saved.value as CommandReceipt | undefined;
+          if (!receipt || receipt.resourceId !== command.threadId) return conflict;
+          revision = receipt.revision;
+        }
+        if (store.getSnapshot().runId !== snapshot.runId) return conflict;
+        const saved = store.getSnapshot().tables.realInbox?.inquiries.find(row => row.id === command.threadId);
+        if (saved?.revision !== revision || saved.draft?.text !== command.body) return conflict;
+        outgoing = talkTalkReplyCommand(command.threadId, revision, command.body);
+        return store.execute(outgoing);
+      },
+    } };
+  }
+  return { kind: 'ready', featureId: replies, preview, execute(_run, store) {
+      if (!store || store.getSnapshot() !== snapshot) return { kind: 'conflict' };
+      const saved = store.dispatch(save);
+      if (!saved.ok) return reject(saved);
+      const sent = store.dispatch({ ...command, baseRevision: store.getSnapshot().revision });
+      if (!sent.ok) return reject(sent);
+      return { kind: 'applied', notice: { kind: 'success', featureId: replies, messageKey: 'data.notice.sent' } };
+    } };
+}
+
+function planAdapter(command: ThreadAction | OfferAction): RunCommandAdapter<{ command: ReplyCommand; locale: Locale; talkReply?: TalkReply }> {
   return {
     command, slots: { body: bodySlot, revision: revisionSlot },
     resolve(wire, slots, _snapshot, targets) {
@@ -620,13 +918,29 @@ function planAdapter(command: ThreadAction | OfferAction): RunCommandAdapter<{ c
       if (command === 'inquiry.saveDraft') {
         return revisionSlot(revision) ? { command: { type: command, threadId, body, revision, idempotencyKey: '' }, locale } : undefined;
       }
+      if (command === 'inquiry.send' && bodySlot(slots.talkDraft) && revisionSlot(slots.talkRevision)) {
+        const draft = slots.talkDraft, couponId = slots.talkCoupon, couponBlock = slots.talkCouponBlock;
+        const source = slots.talkSource, facts = slots.talkFacts;
+        if (typeof source !== 'string' || !Array.isArray(facts) || facts.length === 0
+          || facts.some(fact => typeof fact !== 'string' || !draft.split('\n').includes(fact))) return;
+        const talkReply = { draft, revision: slots.talkRevision, source, facts: facts as string[] };
+        if (typeof couponId === 'string' && typeof couponBlock === 'string' && body === `${draft}\n\n${couponBlock}`) {
+          return { command: { type: command, threadId, body, idempotencyKey: '' }, locale,
+            talkReply: { ...talkReply, couponId, couponBlock } };
+        }
+        if (body === draft && couponId === undefined && couponBlock === undefined) {
+          return { command: { type: command, threadId, body, idempotencyKey: '' }, locale, talkReply };
+        }
+        return;
+      }
       return { command: { type: command, threadId, body, idempotencyKey: '' }, locale };
     },
-    preflight({ command: input, locale }, { snapshot, idempotencyKey, run }) {
+    preflight({ command: input, locale, talkReply }, { snapshot, idempotencyKey, run }) {
       const variant = (preview: typeof run.preview) => resolveVariant(replies, preview);
       const command = { ...input, idempotencyKey, baseRevision: snapshot.revision,
         ...(input.type === 'inquiry.send' || input.type === 'inquiry.post' ? { previewVariant: variant(run.preview) } : {}) };
       const t = tr(locale);
+      if (command.type === 'inquiry.send' && talkReply) return preflightTalkReply(command, talkReply, snapshot, t);
       const featureId = 'threadId' in command ? replies : community;
       let title: string;
       let target: string;
@@ -674,8 +988,11 @@ function planAdapter(command: ThreadAction | OfferAction): RunCommandAdapter<{ c
       const realCommunity = featureId === community && !!snapshot.tables.realLocal;
       // HTTP inbox (F15): the card runs the same service command as the widget; the card press stays the only trigger.
       const realThread = featureId === replies && !!snapshot.tables.realInbox && command.type !== 'reply.draft';
+      const stored = realThread && command.type === 'inquiry.send' ? threadRecord(snapshot, command.threadId)?.real : undefined;
+      const realCommand = stored?.source === 'talktalk' && command.type === 'inquiry.send'
+        ? talkTalkReplyCommand(command.threadId, stored.revision, command.body, command.previewVariant) : command;
       return { kind: 'ready', preview: { title, target, fields },
-        ...(realCommunity || realThread ? { realCommand: command, featureId } : {}),
+        ...(realCommunity || realThread ? { realCommand, featureId } : {}),
         ...(realCommunity && command.type === 'community.decline' ? { tier: 'extra-confirm' as const } : {}),
         execute(currentRun, store) {
         if (!store || store.getSnapshot() !== snapshot) return { kind: 'conflict' };
@@ -698,12 +1015,9 @@ export const repliesDomain: DomainAdapter = {
   runCommands: (['reply.draft', 'inquiry.saveDraft', 'inquiry.send', 'inquiry.post', 'community.accept', 'community.decline', 'community.sendInterest'] as const).map(planAdapter),
   reads: [threadReader, offerReader],
   projectWidget, route, navigation,
+  routeBeforeHandoff: routeTalkReply,
   routePresentation(text, snapshot, locale, run) {
     const { text: wording } = replyInput(text);
-    if (separateSms.test(wording) && !noMutation.test(wording)) {
-      return { kind: 'refusal', reason: 'widget_only', answer: tr(locale).t(snapshot.tables.realInbox ? 'data.real.inbox.ui.pressOnly' : 'widget.ai-response.confirmOnly'),
-        alternative: snapshot.tables.realInbox ? { featureId: replies } : { featureId: replies, step: 'test-sms' } };
-    }
     if (run?.layer === 'marketing' && bareDraft.test(wording)) {
       const t = tr(locale);
       const rows = threadRows(snapshot, 'waiting', true);

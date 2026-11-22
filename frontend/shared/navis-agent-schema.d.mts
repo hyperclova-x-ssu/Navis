@@ -600,7 +600,7 @@ export const INTENT_PLAN_PERIODS: readonly ['today', 'yesterday', 'tomorrow', 'w
 export type IntentPlanPeriod = (typeof INTENT_PLAN_PERIODS)[number];
 export type IntentPlan =
   | { readonly kind: 'read'; readonly confidence: 'high' | 'low';
-      readonly compute?: { readonly op: 'sum' | 'diff' | 'ratio'; readonly left: number; readonly right: number };
+      readonly compute?: { readonly op: 'sum' | 'diff' | 'ratio' | 'min' | 'max'; readonly left: number; readonly right: number };
       readonly reads: readonly { readonly featureId: string; readonly period: IntentPlanPeriod; readonly hints?: readonly string[] }[] }
   | { readonly kind: 'clarify'; readonly ask: string }
   | { readonly kind: 'unsupported' };

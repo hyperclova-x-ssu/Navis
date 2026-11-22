@@ -5,7 +5,7 @@ import { createAssistantProvider } from './provider';
 import { createWidgetDataStore } from '../../data/widget-data';
 import type { RealLocal } from '../../data/reality/13/dto';
 import { emptyTotals, type RealFinanceSnapshot } from '../../data/reality/09/dto';
-import { assistantDomains } from './snapshot';
+import { assistantDomains, plainReadQuery } from './snapshot';
 import { recentOrderFacts } from './domains/recent-orders';
 
 type Sent = { intent: { kind: string; featureId?: string; sourceId?: string; condition?: { kind: string; start?: string; end?: string }; reads?: { args: { featureId: string; condition: { kind: string } } }[]; command?: string };
@@ -110,12 +110,90 @@ describe('owner questions (CHAT-REAL-DEV round 2)', () => {
     expect((await ask('둘 차이가 얼마야?')).answer).toContain('이번 주 매출이 지난주보다 3,350원 더 많아요');
   });
 
-  it.each(['최근 결제된 거 있어?', '주문 확인해줘', '방금 결제된 거 얼마야?'])('shows the newest paid orders for %s', async text => {
+  // Independent grading: "이번 주" was the calendar week in one answer and the last seven days in another. With real ledger coverage it is the calendar week
+  // (Monday to today) everywhere, the range is stated, and a widget that only has a rolling window names that window instead of calling it this week.
+  describe('이번 주 means the calendar week, and the range is said', () => {
+    const today = '2026-11-17';
+    function realWeekStore() {
+      const store = createWidgetDataStore();
+      const totals = emptyTotals();
+      const amounts = { '2026-11-13': 9_000, '2026-11-16': 12_000, [today]: 8_000, '2026-11-15': 7_650 };
+      const days = Object.fromEntries(Object.entries(amounts).map(([date, total]) => [date, { ...totals, sales: { ...totals.sales, total } }]));
+      const finance: RealFinanceSnapshot = {
+        today, from: '2026-10-01', to: today, asOf: '2026-11-17T06:45:00Z', days, hours: [], deposits: [], depositsComplete: true, closings: [],
+        closing: { businessDate: today, status: 'open', revision: 0, totals, pendingBills: [], writable: true, closingId: null, closedAt: null, reopenedAt: null,
+          drawer: { opening: 0, actual: null, memo: '', expected: 0, difference: null, in: 0, out: 0, cashApproved: 0, cashReturned: 0, movements: [] } },
+        margins: { today: [], last7: [], last30: [] }, marginsComplete: true,
+      };
+      const base = store.getSnapshot().tables.dailySales[0];
+      store.hydrate({ realFinance: finance, dailySales: Object.entries(amounts).map(([businessDate, recognizedNet]) => ({ ...base, businessDate, recognizedNet })) });
+      return store;
+    }
+    it('reads the ledger for Monday to today in the sales-and-margin sentence too, and labels the margin window it really has', async () => {
+      const { ask, sent } = session(realWeekStore());
+      const reply = await ask('이번 주 매출이랑 마진 알려줘');
+      const reads = sent[0].intent.reads?.map(read => ({ id: read.args.featureId, condition: read.args.condition })) ?? [];
+      expect(reads).toContainEqual({ id: 'ledger', condition: { kind: 'dateRange', start: '2026-11-16', end: '2026-11-17' } });
+      expect(reads.find(read => read.id === 'margin')?.condition).toEqual({ kind: 'dateRange', start: '2026-11-11', end: '2026-11-17' });
+      expect(reply.answer).toContain('20,000원');
+      expect(reply.answer).toMatch(/최근 7일.*마진/u);
+    });
+    it('keeps the rolling seven days when the ledger has no real coverage of the week (demo data)', async () => {
+      const { ask, sent } = session();
+      await ask('이번 주 매출이랑 마진 알려줘');
+      const ledger = sent[0].intent.reads?.find(read => read.args.featureId === 'ledger');
+      const condition = ledger?.args.condition as { kind: string; start: string; end: string } | undefined;
+      expect(condition?.kind).toBe('dateRange');
+      expect((Date.parse(`${condition?.end}T00:00:00Z`) - Date.parse(`${condition?.start}T00:00:00Z`)) / 86_400_000).toBe(6);
+    });
+  });
+
+  // Public review A-3: "마진 제일 좋은 메뉴" answered today's zero totals. A ranking has a direction; on a day with no sales it is read over the last seven days and says so.
+  describe('a margin ranking', () => {
+    it.each([['마진율 제일 낮은 메뉴가 뭐야?', 'min'], ['마진 제일 좋은 메뉴 뭐야?', 'max'], ['마진이 가장 높은 메뉴 알려줘', 'max']] as const)('reads %s as the %s of the menu rates', (text, direction) => {
+      const read = plainReadQuery(text, '2026-11-17');
+      expect(read?.intent).toMatchObject({ kind: 'read', featureId: 'margin', condition: { kind: 'default' } });
+      const facts = [{ key: 'margin.menu.rate', label: '카페라떼', value: 65.2, unit: 'percent', display: '65.2%' }, { key: 'margin.menu.rate', label: '바스크 치즈케이크', value: 51.6, unit: 'percent', display: '51.6%' },
+        { key: 'margin.menu.rate', label: '아메리카노', value: 81.9, unit: 'percent', display: '81.9%' }, { key: 'margin.sales.net', label: '매출', value: 1, unit: 'KRW', display: '1원' }];
+      expect(read?.narrow?.(facts).map(fact => fact.label)).toEqual([direction === 'min' ? '바스크 치즈케이크' : '아메리카노']);
+    });
+    it('is read over the last seven days, named, when today has no sales', () => {
+      const read = plainReadQuery('마진 제일 좋은 메뉴 뭐야?', '2026-11-17', '2026-11-17', undefined, undefined, true);
+      expect(read?.intent).toMatchObject({ kind: 'read', featureId: 'margin', condition: { kind: 'dateRange', start: '2026-11-11', end: '2026-11-17' } });
+      const facts = [{ key: 'margin.menu.rate', label: '아메리카노', value: 81.9, unit: 'percent', display: '81.9%' }];
+      expect(read?.narrow?.(facts)[0].label).toBe('최근 7일(11/11~11/17) 아메리카노');
+    });
+  });
+
+  it.each(['주문 확인해줘', '새 주문 들어왔어?'])('shows the newest orders with their state for %s', async text => {
     const { ask, sent } = session();
     const reply = await ask(text);
     expect(sent[0].intent).toMatchObject({ kind: 'read', sourceId: 'pos' });
     expect(keys(sent[0])).toContain('orders.recent.row');
-    expect(reply.answer).toMatch(/\d+번 주문 \d\d:\d\d · .+ · [\d,]+원 · 결제 완료/u);
+    expect(reply.answer).toMatch(/\d+번 주문 \d\d:\d\d · .+ · [\d,]+원 · (?:접수|준비 중|준비 완료) · 결제 완료/u);
+  });
+  it.each(['최근 결제된 거 있어?', '방금 결제된 거 얼마야?'])('shows the newest payments for %s', async text => {
+    const { ask, sent } = session();
+    const reply = await ask(text);
+    expect(sent[0].intent).toMatchObject({ kind: 'read', sourceId: 'pos' });
+    expect(keys(sent[0])).toContain('payments.recent.row');
+    expect(reply.answer).toMatch(/\d\d:\d\d · [\d,]+원 · (?:카드|간편결제|현금) · 결제 완료/u);
+  });
+
+  // Owner review of the demo path: "최근 결제된 거 있어?" is a payment question (time, amount, method, state), "주문 확인해줘" an order-status one. Both name what they count.
+  it('answers a payment question with the newest payments and today\'s paid total, and an order question with the orders in progress', async () => {
+    const payment = session();
+    const paid = await payment.ask('최근 결제된 거 있어?');
+    expect(keys(payment.sent[0])).toEqual(expect.arrayContaining(['payments.recent.row', 'payments.today.total']));
+    expect(keys(payment.sent[0])).not.toContain('orders.open.count');
+    expect(paid.answer).toMatch(/\d\d:\d\d · [\d,]+원 · (?:카드|간편결제|현금) · 결제 완료/u);
+    expect(paid.answer).toMatch(/오늘 결제 \d+건 · [\d,]+원/u);
+    const orders = session();
+    const open = await orders.ask('주문 확인해줘');
+    expect(keys(orders.sent[0])).toEqual(expect.arrayContaining(['orders.recent.row', 'orders.open.count']));
+    expect(keys(orders.sent[0])).not.toContain('payments.recent.row');
+    // Each listed order says its preparation state next to its payment state, so "진행 중" is not a list of finished payments.
+    expect(open.answer).toMatch(/\d+번 주문 \d\d:\d\d · .+ · [\d,]+원 · (?:접수|준비 중|준비 완료) · (?:결제 완료|결제 전)/u);
   });
 
   it('names what was paid, and the discount, when a bill was paid for less than the order lines add up to', () => {
@@ -141,6 +219,34 @@ describe('owner questions (CHAT-REAL-DEV round 2)', () => {
     expect(sent[0]?.intent).toMatchObject({ kind: 'command', command: 'customTemplate.generate' });
     expect(JSON.stringify(sent[0])).not.toContain('어떤 상품');
     expect(product.length).toBeGreaterThan(0);
+  });
+
+  it.each(['카페라떼 메뉴에 샷 추가 옵션 500원을 저장해줘', '아메리카노에 샷 추가 옵션 묶음과 추가금 500원을 넣어줘'])(
+    'treats "%s" as an option edit of an existing menu: it asks which option, not for a new menu name', async text => {
+      const { ask, sent } = session();
+      const reply = await ask(text);
+      expect(sent).toHaveLength(0);
+      expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'option' });
+      expect(reply.answer).not.toContain('추가할 메뉴 이름');
+    });
+
+  it('says where a custom discount coupon is made when the owner asks to create one, and offers the coupons the chat can open', async () => {
+    const { ask, sent } = session();
+    const reply = await ask('점심시간에 쓸 10프로 할인 쿠폰 하나 만들어줘');
+    expect(sent).toHaveLength(0);
+    expect(reply.turn).toMatchObject({ kind: 'refusal', alternative: { featureId: 'coupon-status' } });
+    expect(reply.answer).toContain('쿠폰 화면에서');
+    expect(reply.answer).toContain('한가한 시간');
+    expect(reply.answer).not.toContain('바꿀 수 있는 내용');
+  });
+
+  it('uses every booking detail in one answer instead of asking for each in turn', async () => {
+    const { ask, sent } = session();
+    await ask('예약 추가해줘');
+    expect((await ask('김철수')).turn).toMatchObject({ kind: 'clarification', field: 'date' });
+    // One answer with the date, the time and the party size completes the card request.
+    await ask('내일 오후 7시 2명');
+    expect(sent.at(-1)?.intent).toMatchObject({ kind: 'command', command: 'booking.create' });
   });
 
   it('does not take other requests for a recent-order question', async () => {
@@ -220,7 +326,8 @@ describe('owner questions (CHAT-REAL-DEV round 2)', () => {
     const { ask } = session();
     const reply = await ask('원두 거래처가 어디고 언제 주문해야 해?');
     expect(reply.answer).toMatch(/발주사 상도브루 로스터리/u);
-    expect(reply.answer).toMatch(/입고 예정 \d+일/u);
+    expect(reply.answer).toMatch(/등록 납기 \d+일/u);
+    expect(reply.answer).not.toContain('입고 예정');
   });
 
   it('turns "만들어줘" for a quiet-hour coupon into the slot coupon card flow', async () => {
@@ -289,5 +396,24 @@ describe('owner questions (CHAT-REAL-DEV round 2)', () => {
     expect(reply.answer).not.toContain('쿠폰 화면');
     expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'slotId' });
     expect(sent).toHaveLength(0);
+  });
+});
+
+// S3-101 (A-3 replay): "접수 언제까지였어" is about the grant's application period, not about how long a stock item lasts.
+describe('a "언제까지" question that names a program or an application is not a stock runway question', () => {
+  it.each([
+    '디지털 전환 지원 접수 언제까지였어?',
+    '디지털 전환 지원 아직 신청할 수 있어?',
+    '디지털전환 지원 마감됐어?',
+  ])('routes %s to the grants widget', async text => {
+    const { ask, sent } = session();
+    await ask(text);
+    expect(sent.some(request => request.intent.featureId === 'inventory-booking' || request.intent.reads?.some(read => read.args.featureId === 'inventory-booking'))).toBe(false);
+    expect(sent.some(request => request.intent.featureId === 'grants' || request.intent.reads?.some(read => read.args.featureId === 'grants'))).toBe(true);
+  });
+  it('still reads the stock runway for an ingredient', async () => {
+    const { ask, sent } = session();
+    await ask('우유 언제까지 쓸 수 있어?');
+    expect(sent.some(request => request.intent.featureId === 'inventory-booking' || request.intent.reads?.some(read => read.args.featureId === 'inventory-booking'))).toBe(true);
   });
 });

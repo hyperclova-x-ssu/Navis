@@ -9,6 +9,7 @@ import { parseAllowedOrigins, privateOriginAllowed, sameOrigin } from './private
 import { createAgentDomainRegistry, resolveAgentTarget } from './navis/registry.mjs';
 import { conversationResolutionText } from './navis/conversation.mjs';
 import { classifyIntent, classifyMessages, CLASSIFY_MAX_TOKENS } from './navis/classify.mjs';
+import { composeAnswer, composeMessages, COMPOSE_MAX_TOKENS } from './navis/compose.mjs';
 import { parseJsonLoose, tidyModelReply } from './navis/json-repair.mjs';
 import { createRecordProjection, RecordScopeError, recordSearchKey as searchKey } from './navis/record-projection.mjs';
 import { agentPolicyReadStatus, agentPolicyRefusal, evaluateAgentPolicy } from './navis/policy.mjs';
@@ -994,9 +995,22 @@ export function replyShape(content) {
   const facts = Array.isArray(parsed.facts) ? parsed.facts : null;
   return { kind: 'object', keys: keys.filter(key => REPLY_SHAPE_KEYS.has(key)).sort(), otherKeys: keys.filter(key => !REPLY_SHAPE_KEYS.has(key)).length,
     outcome: ['reply', 'clarify', 'refused'].includes(parsed.outcome) ? parsed.outcome : parsed.outcome === undefined ? null : 'other',
-    facts: facts ? facts.length : null, badRefs: facts ? facts.filter(ref => typeof ref !== 'string' || !/^f\d{1,4}$/u.test(ref)).length : 0 };
+    facts: facts ? facts.length : null, badRefs: facts ? facts.filter(ref => typeof ref !== 'string' || !/^f\d{1,4}$/u.test(ref)).length : 0,
+    // What the unusable refs are made of (counts only): bare numbers, numeric strings, or other text.
+    ...(facts && facts.some(ref => typeof ref !== 'string' || !/^f\d{1,4}$/u.test(ref)) && { refTypes: {
+      number: facts.filter(ref => typeof ref === 'number').length,
+      numericString: facts.filter(ref => typeof ref === 'string' && /^\d{1,4}$/u.test(ref)).length,
+      prefixedString: facts.filter(ref => typeof ref === 'string' && /^[A-Za-z]\d{1,4}$/u.test(ref) && !/^f\d{1,4}$/u.test(ref)).length,
+      dottedKey: facts.filter(ref => typeof ref === 'string' && /^[A-Za-z][\w-]*(?:\.[\w-]+)+$/u.test(ref)).length,
+      text: facts.filter(ref => typeof ref === 'string' && !/^\d{1,4}$/u.test(ref) && !/^[A-Za-z]\d{1,4}$/u.test(ref) && !/^[A-Za-z][\w-]*(?:\.[\w-]+)+$/u.test(ref)).length,
+      other: facts.filter(ref => typeof ref !== 'number' && typeof ref !== 'string').length } }) };
 }
-const requestShape = ({ prompt, tools, toolChoice, filter }) => ({
+const requestShape = ({ prompt, tools, toolChoice, filter, expectedArgs }) => ({
+  // The forced function's registry id and period kind are codes, not owner words.
+  ...(typeof toolChoice === 'object' && { forced: REGISTERED_TOOLS.has(toolChoice?.function?.name) ? toolChoice.function.name : 'other',
+    schemaChars: JSON.stringify(tools ?? []).length,
+    ...(typeof expectedArgs?.featureId === 'string' && /^[a-z][a-z0-9-]{0,40}$/u.test(expectedArgs.featureId) && { featureId: expectedArgs.featureId }),
+    ...(['default', 'snapshot', 'dateRange'].includes(expectedArgs?.condition?.kind) && { conditionKind: expectedArgs.condition.kind }) }),
   messages: prompt.length, toolMessages: prompt.filter(message => message.role === 'tool' || message.toolCalls !== undefined).length,
   tools: tools?.length ?? 0, toolNames: (tools ?? []).map(tool => REGISTERED_TOOLS.has(tool?.function?.name) ? tool.function.name : 'other'),
   toolChoice: toolChoice === undefined ? 'none' : toolChoice === 'auto' ? 'auto' : 'forced', responseFormat: false, filter: Boolean(filter),
@@ -1203,6 +1217,25 @@ function startAgentJob({ req, res, input, projection, registry, turnMemory, owne
     };
   }
 
+  // HCX-005 sometimes names a fact by its label ("지출") instead of its ref ("f2"). A label that belongs to returned facts is the same choice,
+  // so it is turned into those refs; anything that is neither a ref nor a returned label leaves the reply as it was (and it fails the schema).
+  function resolveLabelRefs(reply) {
+    if (!reply || reply.outcome !== 'reply' || !Array.isArray(reply.facts)) return reply;
+    const byLabel = new Map();
+    for (const [ref, { fact }] of factRefs) {
+      const label = factLabel(fact);
+      if (!byLabel.has(label)) byLabel.set(label, []);
+      byLabel.get(label).push(ref);
+    }
+    const refs = [];
+    for (const item of reply.facts) {
+      if (typeof item === 'string' && /^f\d{1,4}$/u.test(item)) refs.push(item);
+      else if (typeof item === 'string' && byLabel.has(item.trim())) refs.push(...byLabel.get(item.trim()));
+      else return reply;
+    }
+    return { ...reply, facts: [...new Set(refs)] };
+  }
+
   function readReply(reply) {
     const refs = reply.facts ?? [];
     if (new Set(refs).size !== refs.length || refs.some(ref => !factRefs.has(ref))) throw new InvalidOutputError('reply_fact_refs');
@@ -1246,16 +1279,17 @@ function startAgentJob({ req, res, input, projection, registry, turnMemory, owne
       if (repaired !== undefined) reply = repaired;
       else {
         if (!diagnostics || /^(?:\{|\[|"|```)/u.test(trimmed)) throw new InvalidOutputError('reply_json');
-        if (intent.kind === 'read' && factRefs.size === 1) {
-          const [[ref, { projected }]] = factRefs;
-          if (intent.featureId && projected.featureId === intent.featureId || intent.sourceId && projected.sourceId === intent.sourceId) {
-            return { outcome: 'reply', facts: [ref] };
-          }
+        // A model that answers a scoped read in plain prose adds nothing the app does not already hold: the prose is dropped and the read's own vetted
+        // facts (the ones its scope projected, at most twelve) are cited, so the answer is built from the facts and never from the prose.
+        if (intent.kind === 'read') {
+          const own = [...factRefs].filter(([, { projected }]) => intent.featureId && projected.featureId === intent.featureId
+            || intent.sourceId && projected.sourceId === intent.sourceId).map(([ref]) => ref);
+          if (own.length) return { outcome: 'reply', facts: own.slice(0, 12) };
         }
         throw new InvalidOutputError('reply_json');
       }
     }
-    reply = tidyModelReply(reply);
+    reply = tidyModelReply(resolveLabelRefs(reply));
     if (!validateAgentModelReply(reply)) throw new InvalidOutputError('reply_schema');
     return reply;
   }
@@ -1314,7 +1348,7 @@ function startAgentJob({ req, res, input, projection, registry, turnMemory, owne
         const entry = { event: 'navis_agent_provider_call', correlationId, model, mode: 'live',
           requestMode: tools || nativeReadResult ? 'function_calling' : 'text', estimatedPromptTokens, reservedTokens: reservation,
           // Only a failed provider call carries the request's shape (counts and registry tool names), so a code like 40009 can be tied to it.
-          ...(call.providerCode && { requestShape: requestShape({ prompt, tools, toolChoice, filter }) }), ...call };
+          ...(call.providerCode && { requestShape: requestShape({ prompt, tools, toolChoice, filter, expectedArgs }) }), ...call };
         report(entry);
         // An opt-in SSE comment keeps the agent event schema unchanged.
         if (exposed && connected()) res.write(`: navis-metrics ${JSON.stringify(entry)}\n\n`);
@@ -1330,6 +1364,7 @@ function startAgentJob({ req, res, input, projection, registry, turnMemory, owne
       },
       onBytes(count) { bytes += count; if (bytes > MAX_OUTPUT) throw new InvalidOutputError('turn_output_limit'); },
     });
+    try {
     for await (const event of stream) {
       checkTime();
       if (diagnostics) { lastOutput = agentOutputShape(event.data); lastContent = event.data?.message?.content; }
@@ -1363,6 +1398,16 @@ function startAgentJob({ req, res, input, projection, registry, turnMemory, owne
       return { reply: parseModelReply(message.content) };
     }
     throw new InvalidOutputError('missing_result');
+    } catch (error) {
+      // The provider refused a forced lookup twice with code 40009. The lookup is exactly the bridge's own planned call (the model could only
+      // copy it), so it goes on as that call. A forced proposal is never made up locally.
+      if (error?.unsupportedFunction && boundCall && forcedName !== 'propose_action') {
+        const id = `local-${callIds.size + 1}`;
+        callIds.add(id);
+        return { calls: [{ id, type: 'function', function: { name: forcedName, arguments: expectedArgs } }] };
+      }
+      throw error;
+    }
   }
 
   function conversation() {
@@ -1727,7 +1772,7 @@ function startAgentJob({ req, res, input, projection, registry, turnMemory, owne
   return { cancel: finish, done };
 }
 
-export function createBridge({ agentDirect = false, agentClassify = true, agentWindowTurns, agentWindowTokens, apiKey, widgetApiKey = apiKey, agentApiKey = apiKey, baseUrl, model, agentMode, agentModel, allowedOrigins, originAllowed, fetchImpl, agentFetchImpl = navisAgentFakeFetch, clock = REAL_CLOCK, heartbeatMs = DEFAULT_SSE_HEARTBEAT_MS, onDiagnostics, widgets, agentAdapters, agentUndoReceipts, resolveAgentScope } = {}) {
+export function createBridge({ agentDirect = false, agentClassify = true, agentCompose = true, agentWindowTurns, agentWindowTokens, apiKey, widgetApiKey = apiKey, agentApiKey = apiKey, baseUrl, model, agentMode, agentModel, allowedOrigins, originAllowed, fetchImpl, agentFetchImpl = navisAgentFakeFetch, clock = REAL_CLOCK, heartbeatMs = DEFAULT_SSE_HEARTBEAT_MS, onDiagnostics, widgets, agentAdapters, agentUndoReceipts, resolveAgentScope } = {}) {
   const intervalMs = Number.isInteger(heartbeatMs) && heartbeatMs > 0 && heartbeatMs <= 2_147_483_647
     ? heartbeatMs : DEFAULT_SSE_HEARTBEAT_MS;
   const origins = parseAllowedOrigins(allowedOrigins);
@@ -1797,32 +1842,37 @@ export function createBridge({ agentDirect = false, agentClassify = true, agentW
     if (budget.reservations.reduce((total, item) => total + item.cost, cost) > AGENT_WINDOW_TOKENS) throw failure('UNAVAILABLE');
     budget.reservations.push({ time: now, cost });
   }
-  // D-371: read-only classification of the owner's sentence. It is live only, runs beside any chat turn (it never cancels one),
-  // reserves tokens from the store window, and reports counts only.
-  const CLASSIFY_TIMEOUT_MS = 8_000;
-  async function serveClassify(req, res, input, scope, diagnostics) {
-    // NAVIS_AGENT_CLASSIFY=0 is the deploy-time off switch: the browser then keeps answering with its own routers.
-    if (!agentClassify || !live || !diagnostics || shuttingDown || !agentTransport.available) return send(res, 503, 'UNAVAILABLE');
-    const { text, widgets, previous } = input.intent;
-    const classifyInput = { text, widgets, previous, businessDate: input.businessDate };
-    const reserved = estimateTokens({ messages: classifyMessages(classifyInput) }) + CLASSIFY_MAX_TOKENS;
+  // D-371 / D-380: two side requests that read nothing and write nothing. "classify" turns the owner's sentence into a read-only intent plan;
+  // "compose" writes the answer sentences from the fact lines the browser already shows, behind the numeric guard. Both are live only, run beside
+  // any chat turn (never cancelling one), reserve tokens from the store window and report counts only.
+  const SIDE_TIMEOUT_MS = 8_000;
+  async function serveSideRequest(req, res, input, scope, diagnostics) {
+    const compose = input.intent.kind === 'compose';
+    // NAVIS_AGENT_CLASSIFY=0 / NAVIS_AGENT_COMPOSE=0 are the deploy-time off switches: the browser then keeps its own routers and fact lines.
+    if (!(compose ? agentCompose : agentClassify) || !live || !diagnostics || shuttingDown || !agentTransport.available) return send(res, 503, 'UNAVAILABLE');
+    const { text, previous } = input.intent;
+    const sideInput = compose ? { text, lines: input.intent.lines, previous, businessDate: input.businessDate }
+      : { text, widgets: input.intent.widgets, previous, businessDate: input.businessDate };
+    const maxTokens = compose ? COMPOSE_MAX_TOKENS : CLASSIFY_MAX_TOKENS;
+    const reserved = estimateTokens({ messages: compose ? composeMessages(sideInput) : classifyMessages(sideInput) }) + maxTokens;
     try { reserveTokens(scope.storeId, reserved); } catch { return send(res, 429, 'UNAVAILABLE'); }
     const controller = new AbortController();
     const stop = () => controller.abort();
     res.once('close', stop); req.once('aborted', stop);
-    const timer = clock.setTimeout(stop, CLASSIFY_TIMEOUT_MS);
-    let plan = null;
+    const timer = clock.setTimeout(stop, SIDE_TIMEOUT_MS);
+    let outcome = null;
+    const onProviderCall = call => diagnostics.report({ event: 'navis_agent_provider_call', correlationId: diagnostics.correlationId, model: diagnostics.model,
+      mode: 'live', requestMode: compose ? 'text' : 'structured_outputs', estimatedPromptTokens: reserved - maxTokens, reservedTokens: reserved, ...call });
     try {
-      plan = await classifyIntent({ transport: agentTransport, input: classifyInput, signal: controller.signal,
-        onProviderCall: call => diagnostics.report({ event: 'navis_agent_provider_call', correlationId: diagnostics.correlationId, model: diagnostics.model,
-          mode: 'live', requestMode: 'structured_outputs', estimatedPromptTokens: reserved - CLASSIFY_MAX_TOKENS, reservedTokens: reserved, ...call }) });
+      outcome = compose ? await composeAnswer({ transport: agentTransport, input: sideInput, signal: controller.signal, onProviderCall })
+        : await classifyIntent({ transport: agentTransport, input: sideInput, signal: controller.signal, onProviderCall });
     } finally { clock.clearTimeout(timer); res.off('close', stop); req.off('aborted', stop); }
     if (res.destroyed || req.aborted) return;
     res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache, no-store', 'x-accel-buffering': 'no',
       connection: 'keep-alive', [AGENT_PROTOCOL_HEADER]: AGENT_PROTOCOL, 'x-navis-agent-mode': 'live' });
     const write = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     write('status', { step: 'accepted' });
-    if (plan) { write('intent_plan', { plan }); write('done', { outcome: 'reply' }); } else write('error', { code: 'INVALID_OUTPUT' });
+    if (outcome) { write(compose ? 'composed' : 'intent_plan', compose ? outcome : { plan: outcome }); write('done', { outcome: 'reply' }); } else write('error', { code: 'INVALID_OUTPUT' });
     res.end();
   }
   let active = null; let shuttingDown = false;
@@ -1843,11 +1893,11 @@ export function createBridge({ agentDirect = false, agentClassify = true, agentW
     const agent = requested === AGENT_PROTOCOL;
     if (requested !== undefined && !agent) return send(res, 400, 'BAD_REQUEST');
     const started = agent ? clock.now() : undefined;
-    let input, projection, classify = false;
+    let input, projection, sideRequest = false;
     try {
       input = await readBody(req);
-      classify = agent && input?.intent?.kind === 'classify';
-      if (classify ? !validateAgentRequest(input) : agent ? !(projection = agentProjection(input)) : !validInput(input)) throw failure('BAD_REQUEST');
+      sideRequest = agent && ['classify', 'compose'].includes(input?.intent?.kind);
+      if (sideRequest ? !validateAgentRequest(input) : agent ? !(projection = agentProjection(input)) : !validInput(input)) throw failure('BAD_REQUEST');
     }
     catch (error) { return send(res, error.code === 'PAYLOAD_TOO_LARGE' ? 413 : 400, error.code === 'PAYLOAD_TOO_LARGE' ? error.code : 'BAD_REQUEST'); }
     if (res.destroyed || req.aborted) return;
@@ -1869,7 +1919,7 @@ export function createBridge({ agentDirect = false, agentClassify = true, agentW
         reportAgentTurn(diagnostics, 'UNAVAILABLE', 0);
         return send(res, 503, 'UNAVAILABLE');
       }
-      if (classify) return serveClassify(req, res, input, scope, diagnostics);
+      if (sideRequest) return serveSideRequest(req, res, input, scope, diagnostics);
       if (live && !acceptAgentTurn(scope)) {
         reportAgentTurn(diagnostics, 'UNAVAILABLE', 0);
         return send(res, 429, 'UNAVAILABLE');

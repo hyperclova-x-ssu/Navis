@@ -11,6 +11,7 @@ import { createBridge } from './bridge.mjs';
 import { readMediaCredentials } from './media/config.mjs';
 import { createMediaService } from './media/middleware.mjs';
 import { createPromoService } from './promo/service.mjs';
+import { createTalkTalkDraftHandler } from './replies/talktalk.mjs';
 
 const SECRET_FILES = [
   'CLOVASTUDIO_API_KEY', 'NCP_APIGW_KEY_ID', 'NCP_APIGW_KEY',
@@ -72,6 +73,7 @@ export function createNavisServer({ env = process.env, secretsDir, mediaFetch } 
   if (!/^\d+$/.test(portSetting) || port > 65535) throw new Error('Invalid NAVIS_PORT');
 
   const options = bridgeOptionsFromEnv(settings);
+  const draftTalkTalk = createTalkTalkDraftHandler({ settings, apiKey: options.apiKey, baseUrl: options.baseUrl });
   const originAllowed = createOriginCheck(options.allowedOrigins);
   const liveAgent = settings.NAVIS_AGENT_PROVIDER === 'live' && Boolean(options.apiKey);
   const liveWidgets = options.widgets.mode === 'moa';
@@ -99,6 +101,10 @@ export function createNavisServer({ env = process.env, secretsDir, mediaFetch } 
   promo.ready.then(() => { ready = true; }, () => console.error('Navis promo state failed to initialize'));
   const server = createServer((req, res) => {
     const path = req.url?.split('?', 1)[0];
+    if (path === '/internal/v1/replies/talktalk-draft') {
+      void draftTalkTalk(req, res);
+      return;
+    }
     if ((req.method === 'GET' || req.method === 'HEAD') && (path === '/healthz' || path === '/readyz')) {
       const healthy = path === '/healthz' || ready && !closing;
       return sendJson(res, healthy ? 200 : 503, { service: 'navis', status: healthy ? 'ok' : 'unavailable' });

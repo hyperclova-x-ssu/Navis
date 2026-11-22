@@ -108,3 +108,11 @@ test('a feature id that carries the entry name after a bar is read as the id bef
   const copied = { kind: 'read', confidence: 'high', reads: [{ featureId: 'margin|마진', period: 'week', hints: ['아메리카노'] }] };
   assert.deepEqual((await classifyIntent({ transport: fakeTransport([copied]), input })).reads[0].featureId, 'margin');
 });
+
+test('a period written in the model\'s own words is mapped to the fixed list and an unknown one reads as default', async () => {
+  const wording = { kind: 'read', confidence: 'high', reads: [
+    { featureId: 'booking', period: 'this_month', hints: ['부가세'] }, { featureId: 'ledger', period: 'Last-Week', hints: [] },
+    { featureId: 'margin', period: '지난달', hints: [] }, { featureId: 'ledger', period: 'sometime in spring', hints: [] }] };
+  const plan = await classifyIntent({ transport: fakeTransport([wording]), input });
+  assert.deepEqual(plan.reads.map(read => read.period), ['month', 'lastWeek', 'lastMonth', 'default']);
+});

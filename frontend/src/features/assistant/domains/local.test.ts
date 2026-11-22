@@ -2,6 +2,7 @@
 import { appendFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createWidgetDataStore, readModel } from '../../../data/widget-data';
+import type { TrendRanking } from '../../../data/reality/13/trend-ranking';
 import { localDomain } from './local';
 import { createDomainRegistry, registeredDomains, type DomainAdapter } from './registry';
 import { createAssistantProvider } from '../provider';
@@ -10,7 +11,7 @@ import { screenPresets } from '../../../layout';
 import { timePolicy } from '../../../ui';
 import { createRunStore } from '../../../state';
 import { beginDashboard } from '../../../app/test-session';
-import { classifyNavigation, createNavisNavigation, prepareNavigationRequest } from '../../../screens/dashboard/navis-navigation';
+import { classifyNavigation, createNavisNavigation, isDataDisplayRequest, prepareNavigationRequest } from '../../../screens/dashboard/navis-navigation';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame, validateAgentRequest, type AgentRequest } from '../../../../shared/navis-agent-schema.mjs';
 // @ts-expect-error Shared scenario fixtures are JavaScript.
 import { evidence, readTrace } from '../../../../server/navis/scenario-fixtures.mjs';
@@ -21,14 +22,16 @@ import { createNavisMenuHarness, navisAgentFakeFetch } from '../../../../server/
 
 type Kind = 'answer' | 'clarify' | 'proposal' | 'refuse' | 'navigate' | 'multi';
 type Scenario = { id: string; utterances: string[]; expected: { kind: Kind; ask?: string[]; answer_must_contain?: string[]; answer_must_not_contain?: string[] } };
-type TraceRow = { scenario_id: string; slice_id: string; required_slices: string };
+type TraceRow = { scenario_id: string; slice_id: string; required_slices: string; widget: string };
 const trace = readTrace() as TraceRow[];
 const corpus = new Map((JSON.parse(evidence('MERGED.json')) as Scenario[]).map(row => [row.id, row]));
-const assigned = trace.filter(row => row.slice_id === 'N20').map(({ scenario_id }) => corpus.get(scenario_id)!);
+const assigned = trace.filter(row => row.slice_id === 'N20');
+// D-415 replaces the W20 fixture's neighborhood mentions and POS rows with a search ranking.
+const currentScenarios = assigned.filter(row => row.widget !== 'local-trends').map(({ scenario_id }) => corpus.get(scenario_id)!);
 
 /* The café week: the seed rows the widgets show (EXPECT-2 method, values read from the same selectors). */
 const base = createWidgetDataStore().getSnapshot();
-const changes = readModel(base, 'local-changes'), area = readModel(base, 'trade-area'), trends = readModel(base, 'local-trends');
+const changes = readModel(base, 'local-changes'), area = readModel(base, 'trade-area');
 const t = (key: string) => key.replace(/^seed:/u, '');
 const byKind = (kind: string) => changes.changes.find(row => row.kind === kind)!;
 const opening = byKind('opening'), event = byKind('event'), works = byKind('construction');
@@ -37,8 +40,12 @@ const sum = (from: number, to: number) => area.hours.filter(item => item.hour >=
 const grouped = (value: number) => value.toLocaleString('en-US');
 const ranked = [...area.hours].sort((a, b) => b.people - a.people || a.hour - b.hour);
 const lowest = [...area.hours].sort((a, b) => a.people - b.people || a.hour - b.hour)[0];
-const [kwA, kwB, kwC] = trends.keywords;
-const pct = (value: number | null) => String(Math.abs(value ?? 0));
+const ranking = {
+  status: 'ready', period: { from: '2026-10-13', to: '2026-11-16' }, fetchedAt: '2026-11-17T06:45:00Z', items: [
+    { id: 'example-scone', rank: 1, keyword: '호두 스콘', changePercent: 18.2, isMenu: true, menuName: '버터 호두 스콘', points: [] },
+    { id: 'example-tea', rank: 2, keyword: '배 생강차', changePercent: -7.3, isMenu: false, points: [] },
+  ],
+} satisfies TrendRanking;
 
 /** Reviewed café errata. Each authored value that contradicts the café seed is replaced by the value the selector returns. */
 const cafeContains: Readonly<Record<string, readonly (readonly string[] | undefined)[]>> = {
@@ -60,14 +67,6 @@ const cafeContains: Readonly<Record<string, readonly (readonly string[] | undefi
   'S4-176': Array.from({ length: 4 }, () => ['비교한 자료는 없어요']),
   'S4-178': [['비교한 자료는 없어요'], ['비교한 자료는 없어요'], undefined, ['비교한 자료는 없어요']],
   'S4-187': [['마케팅', '동네'], ['마케팅', '동네'], ['마케팅', '동네'], ['마케팅', '동네']],
-  'S4-193': [[`${kwC.mentions}`, `${pct(kwC.changePercent)}%`], undefined, undefined, undefined],
-  'S4-195': [['0개'], ['0개'], ['0개'], undefined],
-  'S4-196': [['0개'], ['0개'], undefined, ['0개']],
-  'S4-198': Array.from({ length: 4 }, () => [t(kwC.keywordKey), `${pct(kwC.changePercent)}%`]),
-  'S4-201': [undefined, [t(kwA.categoryKey), t(kwB.categoryKey), t(kwC.categoryKey)], [t(kwC.categoryKey)], [t(kwA.categoryKey), t(kwB.categoryKey), t(kwC.categoryKey)]],
-  'S4-202': Array.from({ length: 4 }, () => ['제공되지 않아요']),
-  'S4-199': [[`${trends.period.start.slice(5, 7).replace(/^0/u, '')}월`], [`${trends.period.start.slice(5, 7).replace(/^0/u, '')}월`], undefined, undefined],
-  'S4-200': [['게시글', '리뷰'], ['게시글', '리뷰'], ['게시글', '리뷰'], ['게시글', '리뷰']],
   'S8-158': [['자료는 없어요'], ['자료는 없어요'], ['자료는 없어요']],
 };
 
@@ -80,14 +79,15 @@ function spiedDomains() {
   return { state, domains: createDomainRegistry(registeredDomains.map(domain => domain === localDomain ? spied : domain)) };
 }
 
-function fixture(id: string, openingTitleKey?: string) {
+function fixture(id: string, openingTitleKey?: string, trendRanking?: TrendRanking) {
   const run = createRunStore({ screenPreset: screenPresets.A, catalog: getRegistry('A'), time: timePolicy, theme: 'light', clock: () => 0, reducedMotion: true });
   beginDashboard(run, 'cafe');
   run.actions.dismissCoach();
   if (id === 'S4-147') run.actions.switchLayer('marketing');
-  const seed = openingTitleKey ? {
-    localChange: base.tables.localChange.map(row => row.changeId === opening.changeId ? { ...row, titleKey: openingTitleKey } : row),
-  } : undefined;
+  const seed = {
+    ...(openingTitleKey && { localChange: base.tables.localChange.map(row => row.changeId === opening.changeId ? { ...row, titleKey: openingTitleKey } : row) }),
+    ...(trendRanking && { exampleLocalTrends: { candidates: [], ranking: trendRanking } }),
+  };
   const store = createWidgetDataStore(seed, { runId: run.getState().runId });
   // S4-148, S4-151 and S4-157 start with the opening already folded.
   if (['S4-148', 'S4-151', 'S4-157'].includes(id)) expect(store.dispatch({ type: 'localChanges.acknowledge', changeId: opening.changeId }).ok).toBe(true);
@@ -138,10 +138,6 @@ const kindErrata: Readonly<Record<string, { kind: Kind; reason: string }>> = {
 /** Variants a stored-row or keyword name is needed to route, or another widget owns. Their kind is still asserted when listed. */
 const exceptions: Readonly<Record<string, { kind?: Kind; reason: string }>> = {
   ...Object.fromEntries([1, 2, 3, 4].map(variant => [`S4-145/${variant}`, { kind: 'clarify' as Kind, reason: 'D-327 Q3: “새 카페” names a shop type no open opening title contains, so the app asks which opening first.' }])),
-  'S4-212/1': { kind: 'answer', reason: 'The authored keyword is not in the café week, so there is no row to open.' },
-  'S4-212/2': { kind: 'answer', reason: 'The authored keyword is not in the café week, so there is no row to open.' },
-  'S4-212/3': { kind: 'answer', reason: 'The authored keyword is not in the café week, so there is no row to open.' },
-  'S4-212/4': { kind: 'answer', reason: 'The authored keyword is not in the café week, so there is no row to open.' },
 };
 
 async function confirm(id: string, env: Env, result: Awaited<ReturnType<Env['ask']>>, target: typeof opening) {
@@ -180,17 +176,19 @@ const proposalTarget: Readonly<Record<string, typeof opening>> = {
 describe('N20 local intelligence café contract', () => {
   it('enumerates the 42 assignments and the dependency rows', () => {
     expect(assigned).toHaveLength(42);
-    expect(new Set(assigned.map(row => row.id)).size).toBe(42);
+    expect(new Set(assigned.map(row => row.scenario_id)).size).toBe(42);
+    expect(currentScenarios).toHaveLength(31);
     expect(trace.filter(row => row.required_slices.split('|').includes('N20'))).toHaveLength(45);
     expect(changes.changes.map(row => row.kind).sort()).toEqual(['construction', 'event', 'opening']);
   });
 
-  it.each(assigned)('$id replays every authored utterance in the café', async row => {
+  it.each(currentScenarios)('$id replays every authored utterance in the café', async row => {
     for (const [index, utterance] of row.utterances.entries()) {
       const env = fixture(row.id, row.id === 'S4-148' ? 'data.localChange.newCafe' : undefined);
       const result = await env.ask(utterance);
       const owner = env.spy.state.claimed || localDomain.navigation?.(utterance, env.store.getSnapshot(), 'ko') !== undefined ? 'local' : 'other';
-      const wanted = exceptions[`${row.id}/${index + 1}`]?.kind ?? kindErrata[row.id]?.kind ?? row.expected.kind;
+      const authoredKind = row.expected.kind === 'navigate' && isDataDisplayRequest(utterance) ? 'answer' : row.expected.kind;
+      const wanted = exceptions[`${row.id}/${index + 1}`]?.kind ?? kindErrata[row.id]?.kind ?? authoredKind;
       if (process.env.N20_OBSERVATIONS) appendFileSync(process.env.N20_OBSERVATIONS, JSON.stringify({
         id: row.id, variant: index + 1, utterance, authored: row.expected.kind, observed: result.actual, field: result.field,
         copy: result.reply.answer, owner, calls: env.calls.map(call => call.name), detail: result.detail, planned: result.planned, executed: result.executed, overlay: result.overlay,
@@ -207,26 +205,33 @@ describe('N20 local intelligence café contract', () => {
 
 describe('N20 café analogs of the authored targets that are not in the café week', () => {
   it('opens the keyword row, the hour and the folded list the wording names', async () => {
-    const env = fixture('S4-157');
+    const env = fixture('S4-157', undefined, ranking);
     env.run.actions.switchLayer('marketing');
-    const keyword = await env.ask(`${t(kwC.keywordKey)} 근거 보여줘`);
+    const keyword = await env.ask(`${ranking.items[0].keyword} 검색어 근거 열어줘`);
     expect(keyword.actual, keyword.reply.answer).toBe('navigate');
-    expect(keyword.detail).toMatchObject({ featureId: 'local-trends', itemId: kwC.keywordId });
+    expect(keyword.detail).toMatchObject({ featureId: 'local-trends', itemId: ranking.items[0].id });
     const hourly = await env.ask('15시 유동인구 상세');
     expect(hourly.detail).toMatchObject({ featureId: 'trade-area', view: 'hour', hour: 15 });
-    const folded = await env.ask('접어둔 변화 보여줘');
+    const folded = await env.ask('접어둔 변화 열어줘');
     expect(folded.detail).toMatchObject({ featureId: 'local-changes', view: 'folded' });
   });
 
   it('answers a stored keyword by its name', async () => {
-    const env = fixture('analog');
-    for (const text of [`${t(kwC.keywordKey)} 얼마나 늘었어?`, `${t(kwA.keywordKey)} 키워드 어때?`]) {
-      const result = await env.ask(text);
-      expect(result.actual, `${text}\n${result.reply.answer}`).toBe('answer');
-    }
-    const reply = (await env.ask(`${t(kwC.keywordKey)} 얼마나 늘었어?`)).reply.answer;
-    expect(reply).toContain(`${kwC.mentions}`);
-    expect(reply).toContain(`${pct(kwC.changePercent)}%`);
+    const env = fixture('analog', undefined, ranking);
+    const result = await env.ask(`${ranking.items[0].keyword} 검색어 얼마나 늘었어?`);
+    expect(result.actual, result.reply.answer).toBe('answer');
+    expect(result.reply.answer).toContain('18.2%');
+    expect(result.reply.answer).toContain('네이버 검색');
+    expect(result.reply.answer).not.toContain(ranking.items[1].keyword);
+  });
+
+  it('summarizes a named search trend when asked to show it and leaves the widget closed', async () => {
+    const env = fixture('analog', undefined, ranking);
+    const result = await env.ask(`${ranking.items[0].keyword} 검색어 추이 보여줘`);
+    expect(result.actual, result.reply.answer).toBe('answer');
+    expect(result.overlay).not.toBe('detail');
+    expect(result.reply.answer).toContain('18.2%');
+    expect(env.store.getSnapshot()).toBe(result.before);
   });
 });
 

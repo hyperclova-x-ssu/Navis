@@ -6,6 +6,12 @@ import { createTranslator, type Translator } from '../../i18n';
 import { managementUiBundle } from '../../ui/management-messages';
 import type { AgentHandoff } from './types';
 
+/** 을/를 by the last syllable: 손익을, 메뉴를. */
+export function objectParticle(word: string): '을' | '를' {
+  const code = [...word.trim()].at(-1)?.codePointAt(0) ?? 0;
+  return code >= 0xac00 && code <= 0xd7a3 && (code - 0xac00) % 28 !== 0 ? '을' : '를';
+}
+
 export function destinationOpenLabel(destination: AgentHandoff, translator: Translator): string | undefined {
   const registration = getRegistration(destination.featureId);
   const title = registration ? translator.t(registration.nameKey)
@@ -42,8 +48,9 @@ function openedRowLabel(ref: DetailRef, snapshot: ReturnType<WidgetDataStore['ge
 export function openedDetailText(state: RunState, ref: DetailRef, snapshot: ReturnType<WidgetDataStore['getSnapshot']>, translator: Translator): string {
   const registration = getRegistration(ref.featureId);
   if (!registration) return translator.t('common.navis.nav.opened');
-  const widget = `${translator.t(registration.nameKey)} 위젯`;
+  // C-10: the owner's words, not the system's: no "위젯", no closing period ("메뉴를 열었어요").
+  const name = translator.t(registration.nameKey);
   const row = openedRowLabel(ref, snapshot);
-  const opened = row ? `${widget}에서 ${row} 상세를 열었어요.` : `${widget} 화면을 열었어요.`;
-  return detailBoardPlacement(state, registration.id) === 'off-board' ? `${opened} 보드에 없지만 상세는 볼 수 있어요.` : opened;
+  const opened = row ? `${name}에서 ${row} 상세를 열었어요` : `${name}${objectParticle(name)} 열었어요`;
+  return detailBoardPlacement(state, registration.id) === 'off-board' ? `${opened}. 보드에 없지만 상세는 볼 수 있어요` : opened;
 }

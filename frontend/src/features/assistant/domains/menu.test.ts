@@ -474,7 +474,7 @@ it('applies a relative price increase with an intervening modifier to the curren
     const reply = await rig.ask('카페라테도 500원 똑같이 올려줘');
     expect(reply.turn?.kind).toBe('proposal');
     if (reply.turn?.kind !== 'proposal') return;
-    expect(reply.turn.proposal.preview).toMatchObject({ fields: [{ label: '판매가', before: '3,800원', after: '4,300원' }] });
+    expect(reply.turn.proposal.preview).toMatchObject({ confirmLabel: '판매가 바꾸기', fields: [{ label: '판매가', before: '3,800원', after: '4,300원' }] });
     expect(reply.turn.proposal.tier).toBe('normal');
   } finally { rig.close(); }
 });

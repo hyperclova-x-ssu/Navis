@@ -5,6 +5,8 @@ export const couponChatCopy = {
   chooseRecipient: '쿠폰 화면에서 문자에 동의한 받는 사람을 골라 주세요',
   ambiguousExclusion: '그 이름으로는 받는 사람을 한 명으로 고를 수 없어요',
   chooseSlot: '쿠폰을 준비할 날짜와 시간을 알려 주세요',
+  /** A coupon the chat has no card for (a custom percent or amount for a time of day): say where it is made, and which coupons the chat can open. */
+  createElsewhere: '할인율이나 금액을 직접 정하는 새 쿠폰은 쿠폰 화면에서 만들어 주세요. 챗봇은 한가한 시간에 단골에게 보내는 쿠폰과 당일 소진 쿠폰을 바로 준비해 드려요.',
   /** No slot has a regular who visits then and consented to text messages. The next step is named only where the screen has it (the NAVER place coupon form is a real-mode panel). */
   noSlotRecipients: (real: boolean) => `받는 사람이 없어요. 이 시간에 자주 오면서 문자에 동의한 단골이 없어서 빈 시간 쿠폰은 보낼 수 없어요.${real
     ? ' 문자 없이 쓰는 네이버 플레이스 쿠폰은 진행 중인 쿠폰 화면에서 만들 수 있어요.' : ''}`,

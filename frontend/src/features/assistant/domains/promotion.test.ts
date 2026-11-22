@@ -8,8 +8,9 @@ import { baseBundles, createTranslator } from '../../../i18n';
 import { mktCouponBundle } from '../../widgets/mkt-coupon/messages';
 import { mktLocalBundle } from '../../widgets/mkt-local/messages';
 import { mktPromoBundle } from '../../widgets/mkt-promo/messages';
+import { cellText } from '../../widgets/mkt-promo/marketing-today';
 import { screenPresets } from '../../../layout';
-import { classifyNavigation, createNavisNavigation, prepareNavigationRequest } from '../../../screens/dashboard/navis-navigation';
+import { classifyNavigation, createNavisNavigation, isDataDisplayRequest, prepareNavigationRequest } from '../../../screens/dashboard/navis-navigation';
 import { createRunStore } from '../../../state';
 import { timePolicy } from '../../../ui';
 import { createFakeServer } from '../../widgets/mkt-promo/promo-test-server';
@@ -17,6 +18,7 @@ import { promoSession } from '../../widgets/mkt-promo/promo-session';
 import { applyAgentRunUndo } from '../agent-actions';
 import { proposalPreview } from '../navis-conversation';
 import { createAssistantProvider } from '../provider';
+import { promotionDomain } from './promotion';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentFrame, validateAgentRequest } from '../../../../shared/navis-agent-schema.mjs';
 // @ts-expect-error The shared corpus loader is JavaScript.
 import { evidence, readTrace } from '../../../../server/navis/scenario-fixtures.mjs';
@@ -47,6 +49,51 @@ const videoStates: Readonly<Record<string, 'making' | 'done' | 'failed' | 'poste
   'S6-032': 'done', 'S6-033': 'done', 'S6-034': 'done', 'S6-035': 'done', 'S6-036': 'done', 'S6-037': 'done', 'S6-040': 'done',
   'S6-045': 'done', 'S6-048': 'done',
 };
+
+it('primes the promotion overview with the first visible widget suggestion', () => {
+  const snapshot = createWidgetDataStore().getSnapshot();
+  const translator = createTranslator('ko', ...baseBundles, ...dataBundles, mktPromoBundle);
+  const cell = readModel(snapshot, 'marketing-today').cells.find(row => row.kind !== 'quiet-hours' || row.params.regulars > 0);
+  if (!cell) throw Error('The café fixture needs an actionable marketing suggestion');
+  const sentence = cellText(translator, cell).first;
+  const result = promotionDomain.projectWidget?.(snapshot, 'marketing-today', { kind: 'default' }, 'ko');
+  expect(result).toMatchObject({ facts: expect.arrayContaining([
+    expect.objectContaining({ key: `today.cell.${cell.kind}`, label: sentence, display: sentence }),
+  ]) });
+  expect(promotionDomain.route?.('지금 할 홍보는 뭐가 좋아?', snapshot, 'ko')).toMatchObject({
+    intent: { kind: 'read', featureId: 'marketing-today' }, factKeys: expect.arrayContaining([`today.cell.${cell.kind}`]),
+  });
+});
+
+it('falls back to one verified recommendation when chat transport fails', async () => {
+  const data = createWidgetDataStore();
+  const translator = createTranslator('ko', ...baseBundles, ...dataBundles, mktPromoBundle);
+  const cell = readModel(data.getSnapshot(), 'marketing-today').cells.find(row => row.kind !== 'quiet-hours' || row.params.regulars > 0);
+  if (!cell) throw Error('The café fixture needs an actionable marketing suggestion');
+  const provider = createAssistantProvider({ store: data, fetcher: async () => new Response(null, { status: 503 }) });
+  const result = await provider.ask({ text: '지금 어떤 홍보부터 할까?', layer: 'marketing', locale: 'ko', signal: new AbortController().signal });
+  expect(result.answer).toBe(cellText(translator, cell).first);
+  expect(result.panels).toEqual([]);
+});
+
+it('projects each visible recommendation once and omits a quiet slot with zero recipients', () => {
+  const store = createWidgetDataStore({ realGroups: { storeId: 'cafe', groups: null,
+    customers: { regular: [], 'churn-risk': [], 'first-visit': [] }, customersComplete: true,
+    performance: { 'this-month': null, 'last-month': null }, channels: null, failed: [],
+    today: { asOf: '2026-11-17T06:45:00Z', businessDate: '2026-11-17', state: 'ready', missing: [], folded: [], tapTarget: null,
+      cells: [
+        { slot: 'now', kind: 'quiet-hours', sourceFeatureId: 'slot-coupon', params: { regulars: 0 },
+          quietSlot: { slotId: 'quiet-slot', date: '2026-11-18', weekday: 3, startHour: 18, endHour: 20 }, ref: { featureId: 'slot-coupon' } },
+        { slot: 'today', kind: 'replies', sourceFeatureId: 'ai-response', params: { count: 8, drafted: 0 }, ref: { featureId: 'ai-response' } },
+      ],
+    },
+  } });
+  const view = promotionDomain.projectWidget?.(store.getSnapshot(), 'marketing-today', { kind: 'default' }, 'ko');
+  if (!view || !('facts' in view)) throw Error('The recommendations did not load');
+  expect(view.facts.filter(row => row.display.includes('기록한 문의 8건'))).toHaveLength(1);
+  expect(view.facts.map(row => row.key)).not.toContain('today.cell.quiet-hours');
+  expect(view.facts.find(row => row.key === 'today.cells.count')?.value).toBe(1);
+});
 const done = { durationSec: 15, music: { trackId: 'warm-cozy-acoustic', title: 'Cozy', artist: 'MintoDog', licenseLabel: 'CC0-1.0' },
   fileUrl: '/api/promo/jobs/pj-000000000001/video.mp4', sizeBytes: 1234, madeAt: '2026-11-17T15:45' };
 
@@ -441,6 +488,7 @@ describe('N18 localized words', () => {
 const representativeExceptions: Readonly<Record<string, string>> = {
   'S5-050': 'answer', 'S5-051': 'answer', // one projection cites both counts; the two-widget turn is not split
   'S6-015': 'proposal', // the café's 아메리카노 has six photos, so the draft card is eligible (the seed had none)
+  'S6-024': 'proposal', // the newly expanded gallery can resolve design numbers above six
   'S6-028': 'proposal', // D-329 starts a complete draft from the widget's confirmation path.
   'S6-030': 'proposal', // D-328 enables the widget retry command on a card.
   'S6-029': 'answer', // the first turn also requests the withdrawn review theme
@@ -466,14 +514,14 @@ describe('N18 grounded answers', () => {
     expect((await ask('S6-005', '영상 왜 안 됐어?')).reply.answer).toContain('AI 응답이 너무 오래 걸렸어요');
     const making = (await ask('S6-004', '영상 어디까지 만들어졌어?')).reply.answer;
     expect(making).toContain('영상 만드는 중');
-    expect(making).toContain('사진 살펴보기');
+    expect(making).toContain('미리 분석한 사진 정보');
   });
-  it('lists the menus with photos and the six designs', async () => {
+  it('lists menus with photos, the original demo, and the additional designs', async () => {
     const menus = (await ask('S6-008', '어떤 메뉴 사진이 있어?')).reply.answer;
-    for (const name of ['아메리카노', '카페라떼', '휘낭시에']) expect(menus).toContain(name);
+    for (const name of ['아메리카노', '카페라떼', '구운 플레인 베이글']) expect(menus).toContain(name);
     expect(menus).toContain('10장');
     const designs = (await ask('S6-009', '영상 디자인 어떤 거 있어요?')).reply.answer;
-    for (const name of ['디자인 2번', '진열대 천천히 훑기', '손글씨 감성 카드']) expect(designs).toContain(name);
+    for (const name of ['단톡방 대화 + 남은 수량 카운트다운', '줌 렌즈 투어', '스티커 팝', '무디 나이트']) expect(designs).toContain(name);
   });
   it('asks which length before an estimate, and cites the loaded estimate table', async () => {
     const first = await ask('S6-006', '영상 하나 만들면 시간이랑 비용 얼마나 들어?');
@@ -593,7 +641,7 @@ describe('N18 authored utterances', () => {
           expect(env.requests).toEqual([]);
         } else if (row.id === 'S6-023' && index % 2 === 0) {
           expect(result.reply.turn, text).toMatchObject({ kind: 'clarification', field: 'referenceId' });
-          expect(result.reply.answer).toContain('진열대 천천히 훑기');
+          expect(result.reply.answer).toContain('스티커 팝');
           expect(result.reply.answer).not.toContain('리뷰 말풍선 모음');
           expect(env.requests).toEqual([]);
         } else if (row.id === 'S6-023') {
@@ -603,7 +651,10 @@ describe('N18 authored utterances', () => {
           })]);
           expect(promoSession(env.data).getState().draft.referenceId).toBeNull();
         } else if (index === 0) {
-          expect(result.kind, row.id).toBe(representativeExceptions[row.id] ?? row.kind);
+          const wanted = representativeExceptions[row.id] ?? row.kind;
+          // D-419 supersedes the display-only navigation expectations in the authored corpus.
+          if (wanted === 'navigate' && isDataDisplayRequest(text)) expect(result.kind, row.id).toBe('answer');
+          else expect(result.kind, row.id).toBe(wanted);
         }
       } finally { env.close(); }
     }

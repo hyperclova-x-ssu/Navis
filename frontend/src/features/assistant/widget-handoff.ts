@@ -5,12 +5,12 @@ import type { AgentHandoff } from './types';
 
 // These entries open the workflow in the widget where the owner can review and confirm it.
 const destinations = {
-  'test-sms': { featureId: 'ai-response', view: 'message' },
   'cafe-post': { featureId: 'community', view: 'cafe' },
   'local-search-links': { featureId: 'local-trends', view: 'keywords' },
   'sms-schedule': { featureId: 'notice-send', view: 'compose' },
   'sms-status': { featureId: 'notice-send', view: 'scheduled' },
   'review-draft': { featureId: 'ai-response', view: 'review' },
+  'message-draft': { featureId: 'ai-response', view: 'message' },
   'naver-calendar': { featureId: 'calendar', view: 'day' },
   'works-calendar': { featureId: 'staff-schedule', view: 'works' },
   'place-news': { featureId: 'notice-send', view: 'compose' },
@@ -23,13 +23,14 @@ const destinations = {
 } satisfies Record<string, Pick<DetailRef, 'featureId' | 'view'>>;
 
 export type WidgetHandoffStep = keyof typeof destinations;
+const isWidgetStep = (step: string): step is WidgetHandoffStep => Object.hasOwn(destinations, step);
 
-const scopedSteps: ReadonlySet<WidgetHandoffStep> = new Set(['review-draft', 'sms-schedule', 'sms-status', 'place-news', 'tax-evidence-removal']);
+const scopedSteps: ReadonlySet<WidgetHandoffStep> = new Set(['review-draft', 'message-draft', 'sms-schedule', 'sms-status', 'place-news', 'tax-evidence-removal']);
 // These actions require the owner to choose an existing record. Generic action focus opens a creation form.
 const readOnlyEntry: ReadonlySet<WidgetHandoffStep> = new Set(['naver-calendar', 'works-calendar', 'supplier-message']);
 
 export function widgetHandoffRef({ featureId, step, command, draft, itemId }: AgentHandoff): DetailRef | undefined {
-  if (!step || !Object.hasOwn(destinations, step) || command || draft && Object.keys(draft).length) return;
+  if (!step || !isWidgetStep(step) || command || draft && Object.keys(draft).length) return;
   if (itemId !== undefined && (!scopedSteps.has(step) || typeof itemId !== 'string' || !itemId || itemId.length > 200)) return;
   const destination = destinations[step];
   const focusAction = !readOnlyEntry.has(step) && (step !== 'tax-evidence-removal' || Boolean(itemId));

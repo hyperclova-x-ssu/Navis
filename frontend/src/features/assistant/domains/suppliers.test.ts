@@ -295,6 +295,13 @@ describe('A3-B27 purchase-item facts keep the canonical name slot', () => {
     expect(beans.reply.turn?.kind).toBe('read');
   });
 
+  // The registered lead time of a purchase item is a term, not a promise of arrival: "입고 예정 2일" read as "arrives in 2 days" while the order history showed 3 to 5.
+  it('names the lead time of a purchase item as its registered term, never as an expected arrival', async () => {
+    const beans = await driveScenario('S1-201', '원두 거래처가 어디고 언제 주문해야 해?');
+    expect(beans.reply.answer).toMatch(/등록 납기 \d+일/u);
+    expect(beans.reply.answer).not.toContain('입고 예정');
+  });
+
   it('S1-201 lists the purchase items of a named supplier and reports an unknown supplier as not registered', async () => {
     const known = await driveScenario('S1-201', '한강목장에서 뭐 받아?');
     expect(known.calls).toEqual([{ name: 'search_records', args: { kind: 'purchaseItem', querySlot: 'name' } }]);

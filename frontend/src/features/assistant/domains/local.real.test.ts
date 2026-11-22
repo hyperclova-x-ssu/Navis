@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
 import { createWidgetDataStore } from '../../../data/widget-data';
 import type { RealLocal } from '../../../data/reality/13/dto';
-import { localDomain } from './local';
+import type { TrendRanking } from '../../../data/reality/13/trend-ranking';
+import { localDomain, routeClassifiedTrendOverview } from './local';
 
 const period = { from: '2026-11-11', to: '2026-11-17' };
 const band = (startHour: number, estimate: number) => ({
@@ -23,6 +24,24 @@ const realLocal: RealLocal = {
 };
 const snapshot = (data = realLocal) => createWidgetDataStore({ realLocal: data }).getSnapshot();
 const defaultCondition = { kind: 'default' } as const;
+const ranking: TrendRanking = {
+  status: 'ready', period: { from: '2026-10-13', to: '2026-11-16' }, fetchedAt: '2026-11-17T06:45:00Z',
+  items: [
+    { id: 'trend-barley', rank: 1, keyword: '보리 라테', changePercent: 25.4, sameWeekChangePercent: 12.6, classification: 'rising',
+      isMenu: true, menuName: '아이스 보리 라테',
+      points: [{ period: '2026-11-15', ratio: 62 }, { period: '2026-11-16', ratio: 75.1 }] },
+    { id: 'trend-tart', rank: 2, keyword: '꿀밤 타르트', changePercent: -5.2, isMenu: false,
+      points: [{ period: '2026-11-16', ratio: 40 }] },
+    { id: 'trend-tea', rank: 3, keyword: '배 생강차', changePercent: -8.1, isMenu: false, points: [] },
+    { id: 'trend-scone', rank: 4, keyword: '밤 스콘', changePercent: -11.2, isMenu: false, points: [] },
+  ],
+};
+const withRanking = (result = ranking) => snapshot({ ...realLocal, trends: { ...realLocal.trends, ranking: result } });
+const trendFacts = (state: ReturnType<typeof snapshot>) => {
+  const result = localDomain.projectWidget?.(state, 'local-trends', defaultCondition, 'ko');
+  if (!result || !('facts' in result)) throw new Error('Missing search-trend facts');
+  return result.facts;
+};
 const tradeFacts = (data = realLocal) => {
   const result = localDomain.projectWidget?.(snapshot(data), 'trade-area', defaultCondition, 'ko');
   if (!result || !('facts' in result)) throw new Error('Missing trade-area facts');
@@ -46,16 +65,90 @@ it('leaves the lunch average unavailable when an hour has no coverage', () => {
     .toMatchObject({ value: 'unavailable', display: expect.stringContaining('자료가 없어요') });
 });
 
-it('uses keyword-specific relative interest and excludes unrelated store sales from a mention count answer', () => {
-  const route = localDomain.route?.('로컬 트렌드에서 상도동 카공 언급 몇 번이야?', snapshot(), 'ko');
-  expect(route).toMatchObject({ factKeys: ['localTrends.interest.mentions', 'localTrends.interest.1'] });
-  const result = localDomain.projectWidget?.(snapshot(), 'local-trends', defaultCondition, 'ko');
-  expect(result).toMatchObject({ facts: expect.arrayContaining([
-    expect.objectContaining({ key: 'localTrends.interest.mentions', display: '언급 횟수는 알 수 없어요' }),
-    expect.objectContaining({ key: 'localTrends.interest.1', value: 50, source: '네이버 검색 관심도', start: period.from, end: period.to }),
-  ]) });
-  expect(localDomain.route?.('로컬 트렌드에서 숭실대 디저트는 어때?', snapshot(), 'ko'))
-    .toMatchObject({ kind: 'answer', answer: expect.stringContaining('자료가 없어요') });
+it('projects identical stored W20 ranking facts in both modes without POS or standalone lookup data', () => {
+  const operating = trendFacts(withRanking());
+  const example = createWidgetDataStore({ exampleLocalTrends: { candidates: [], ranking } }).getSnapshot();
+  expect(trendFacts(example)).toEqual(operating);
+  expect(operating).toEqual(expect.arrayContaining([
+    expect.objectContaining({ key: 'localTrends.top', value: 25.4, display: expect.stringContaining('1위 보리 라테 · 4주 대비 +25.4%'),
+      source: '네이버 검색어 트렌드 · 전국 · 상대값', start: ranking.period.from, end: ranking.period.to }),
+    expect.objectContaining({ key: 'localTrends.period', display: expect.stringContaining('이전 4주') }),
+    expect.objectContaining({ key: 'localTrends.definition', display: expect.stringContaining('앞선 28일 일평균') }),
+    expect.objectContaining({ key: 'localTrends.source', display: '네이버 검색어 트렌드 · 전국 · 상대값 · 2026-11-17' }),
+    expect.objectContaining({ key: 'localTrends.keyword.0.menu', value: '아이스 보리 라테' }),
+    expect.objectContaining({ key: 'localTrends.keyword.1.menu', display: expect.stringContaining('우리 메뉴에 없음') }),
+    expect.objectContaining({ key: 'localTrends.keyword.0.year', value: 12.6, unit: 'percent' }),
+  ]));
+  expect(operating.some(item => item.key.includes('.sales.') || item.value === '상도동 카공')).toBe(false);
+});
+
+it('scopes matched candidate reads and opens the exact ranked row through the existing handoff', () => {
+  const state = withRanking();
+  expect(localDomain.route?.('보리 라테 검색어 얼마나 늘었어?', state, 'ko')).toMatchObject({
+    factKeys: expect.arrayContaining(['localTrends.keyword.0.change', 'localTrends.keyword.0.menu', 'localTrends.source']),
+  });
+  expect(localDomain.navigation?.('보리 라테 검색어 상세 열어줘', state, 'ko')).toMatchObject({
+    args: { featureId: 'local-trends', view: 'keywords', itemId: 'trend-barley' },
+  });
+  const example = createWidgetDataStore({ exampleLocalTrends: { candidates: [], ranking: { ...ranking,
+    items: ranking.items.map(row => ({ ...row, id: row.keyword })) }, } }).getSnapshot();
+  expect(localDomain.navigation?.('보리 라테 검색어 상세 열어줘', example, 'ko')).toEqual({
+    args: { featureId: 'local-trends', view: 'keywords' },
+  });
+  expect(localDomain.routePresentation?.('보리 라테 오늘 몇 잔 팔렸어?', state, 'ko')).toBeUndefined();
+  expect(localDomain.route?.('검색어에서 꿀밤 타르트 언급 몇 건이야?', state, 'ko')).toMatchObject({
+    factKeys: ['localTrends.interest.mentions', 'localTrends.source'],
+  });
+});
+
+it('summarizes three ranked rows by default and includes the source and each menu match', () => {
+  const result = localDomain.route?.('최근 인기 검색어 순위를 알려 줘', withRanking(), 'ko');
+  expect(result).toMatchObject({ kind: 'answer' });
+  if (!result || !('kind' in result) || result.kind !== 'answer') throw new Error('The ranking overview did not produce an answer');
+  expect(result.answer.split('\n')).toEqual([
+    '1위 보리 라테 · 4주 대비 +25.4% · 우리 메뉴: 아이스 보리 라테',
+    '2위 꿀밤 타르트 · 4주 대비 -5.2% · 우리 메뉴에 없음',
+    '3위 배 생강차 · 4주 대비 -8.1% · 우리 메뉴에 없음',
+    '네이버 검색어 트렌드 · 전국 · 상대값 · 2026-11-17',
+  ]);
+  expect(result.destination).toBeUndefined();
+});
+
+it('offers one existing promotion widget only when classified shop use has a rising menu match', () => {
+  const shopUse = ['가게 활용'];
+  const result = routeClassifiedTrendOverview(withRanking(), 'ko', shopUse, '상승 중인 것 중 매장에서 활용할 후보도 추천해 줄래?');
+  expect(result).toMatchObject({ kind: 'answer', answer: expect.stringContaining('아이스 보리 라테'),
+    destination: { featureId: 'promo-video', step: 'place-video' } });
+  const withoutMatch = withRanking({ ...ranking, items: ranking.items.map(row => ({ ...row, isMenu: false, menuName: null })) });
+  expect(routeClassifiedTrendOverview(withoutMatch, 'ko', shopUse, '가게에서 써볼 만한 재료가 있을까?'))
+    .toMatchObject({ kind: 'answer', answer: expect.stringContaining('우리 메뉴와 연결된 상승 검색어가 없어요') });
+  expect(routeClassifiedTrendOverview(withRanking(), 'ko', [], '어떤 검색어가 인기야?')?.destination).toBeUndefined();
+  expect(routeClassifiedTrendOverview(withRanking(), 'ko', ['보리 라테'], '보리 라테 검색 관심도는 어때?')).toBeUndefined();
+  expect(routeClassifiedTrendOverview(withRanking(), 'ko', ['보리 라테'], '그 메뉴의 관심도는?')).toBeUndefined();
+});
+
+it('keeps display requests on each local data source and preserves an explicit open', () => {
+  const state = withRanking();
+  for (const [question, featureId] of [
+    ['보리 라테 검색어 상세 보여줘', 'local-trends'],
+    ['상권 유동인구 보여줘', 'trade-area'],
+    ['이번 주 동네 변화 보여줘', 'local-changes'],
+  ]) {
+    expect(localDomain.route?.(question, state, 'ko')).toMatchObject({ intent: { kind: 'read', featureId } });
+  }
+  expect(localDomain.navigation?.('보리 라테 검색어 상세 열어줘', state, 'ko')).toMatchObject({
+    args: { featureId: 'local-trends', view: 'keywords', itemId: 'trend-barley' },
+  });
+});
+
+it('keeps unavailable, disabled and empty rankings separate from the retired lists', () => {
+  expect(localDomain.projectWidget?.(snapshot(), 'local-trends', defaultCondition, 'ko')).toEqual({ status: 'unavailable' });
+  expect(localDomain.route?.('요즘 뜨는 검색어 알려줘', withRanking({ ...ranking, status: 'disabled', items: [] }), 'ko'))
+    .toMatchObject({ kind: 'answer', answer: expect.stringContaining('네이버 검색이 꺼져 있어요') });
+  expect(localDomain.projectWidget?.(withRanking({ ...ranking, status: 'empty', items: [] }), 'local-trends', defaultCondition, 'ko'))
+    .toEqual({ status: 'missing' });
+  expect(localDomain.projectWidget?.(withRanking(), 'local-trends', { kind: 'dateRange', start: '2026-10-01', end: '2026-10-31' }, 'ko'))
+    .toEqual({ status: 'unsupported_period' });
 });
 
 it('reports the saved Café publication and sends the owner to its receipt link', () => {

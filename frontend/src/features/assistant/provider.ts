@@ -19,9 +19,9 @@ import { classifyWidgetHandoff, commandWidgetHandoff, missingTaxEvidenceHandoff 
 import { createAgentActions, isMenuPrice, type AgentActionProposal, type LocalAgentProposal } from './agent-actions';
 import { startMultiStepPlan, type MultiStepAttempt, type MultiStepRunner } from './multi-step';
 import {
-  assistantDomains, buildAgentRequest, buildAssistantContext, buildMenuAgentRequest, commandSnapshotEntry, conditionsOf, coveredWeekSales, createLookupScope, defaultStore, isMenuCreateRequest,
+  assistantDomains, buildAgentRequest, buildAssistantContext, buildMenuAgentRequest, calendarWeekFrom, quietToday, stockItemNames, commandSnapshotEntry, conditionsOf, coveredWeekSales, createLookupScope, defaultStore, isMenuCreateRequest,
   normalizeFor, menuPriceFollowUp, orderedRead, rememberMenuPriceQuestion, parseMenuCreateInput, periodFollowUp, plainReadQuery, projectAgentSearch, projectAgentSource, projectAgentWidget, questionContext, readMenuCategory, readMenuName, readNavisCondition,
-  storeFactSource, widgetStatusQuery, wireSearchPage, type AgentReadEvidence, type LocalMenuDraft, type LookupTokens, type MenuCreateInput, type WidgetFactSource,
+  storeFactSource, widgetStatusQuery, wireSearchPage, type AgentReadEvidence, type SnapshotFact, type LocalMenuDraft, type LookupTokens, type MenuCreateInput, type WidgetFactSource,
 } from './snapshot';
 import { classifyNavisDirective, navisDirective, navisPayloadPrefix, navisScopeIssue, normalizeNavisInput, repairColloquial, parseMenuCategoryChoice, parseNavisDate, parseNavisMoney, parseNavisNumber, parseNavisQuantity, parseNavisTime, readNavisBulkRequest, readNavisContradiction, readNavisNoticeDate } from './navis-input';
 import type { DomainLookup, DomainRegistry, DomainRoute, DomainTurnInput, LocalSlots, RecordTargets, ResolvedRecord, SlotValue } from './domains/registry';
@@ -29,7 +29,10 @@ import { selectChatReceiptNotice, selectCommonNotice } from '../../state';
 import { timePolicy } from '../../ui/motion';
 import { conversationMemory, conversationPrice, createProposalSession, followupBoardQuestion, menuRequestText, prepareConversationText, readConversationControl, readOrdinal, referencesMenuPrice, salesRead, type ProposalSession } from './navis-conversation';
 import type { AgentSuggestion, AgentContinuation, AgentHandoff, AgentTurnInput, AskInput, AssistantProvider, AssistantReply, Candidate } from './types';
-import { planToRoute, requestIntentPlan } from './classify';
+import { periodNameOf, planToRoute, requestIntentPlan } from './classify';
+import { readAnswerLines, requestComposedAnswer, worthWording } from './compose';
+import { mentionsQuestion } from './relevance';
+import { lastPaidDayFact, naverOrderFacts, npayApprovalFacts, readNaverOrders, readNpaySettlements } from './naver-orders';
 
 export type { AskInput, AssistantProvider, AssistantReply, Candidate, CandidateSize, ReplyStatus } from './types';
 export { buildAssistantContext } from './snapshot';
@@ -83,6 +86,8 @@ export interface AssistantProviderOptions {
   readonly fetcher?: Fetcher;
   /** D-371 read-only intent plans from the model. On by default for the app's own fetch outside unit tests; a test, dev or replay fetcher turns it on explicitly. */
   readonly classify?: boolean;
+  /** D-380 answer sentences written by the model behind the numeric guard. Same default as `classify`. */
+  readonly compose?: boolean;
   readonly timeoutMs?: number;
   readonly domains?: DomainRegistry;
 }
@@ -340,6 +345,7 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
   const source = options.source ?? storeFactSource(store);
   const fetcher = options.fetcher ?? ((input, init) => fetch(input, init));
   const classifyEnabled = options.classify ?? (options.fetcher === undefined && import.meta.env.MODE !== 'test');
+  const composeEnabled = options.compose ?? classifyEnabled;
   const domains = gateUnreadable(options.domains ?? assistantDomains, store);
   const run = options.run;
   const actions = createAgentActions(store, domains, run);
@@ -380,7 +386,7 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
   function replacePending() {
     // The plan is dropped before its card is cancelled, so that receipt cannot start the next step.
     sequence = undefined;
-    proposal?.cancel();
+    proposal?.retireForNewQuestion();
     generation++;
     proposal = undefined;
     pending = undefined;
@@ -739,26 +745,9 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
     input?: AskInput, isTurnCurrent = () => true, selectedId?: string, turn?: DomainTurnInput, question = '',
   ): AssistantReply {
     const tr = navisTranslator(reply.locale ?? 'ko');
-    const asksForRestockItems = /(?:부족한|보충이 필요한)\s*(?:품목|재료|상품|거)/u.test(question);
     // A context read scopes and checks the answer (its widget and period); only the other reads put facts in the text.
     const contextOnly = new Set(turn?.readParts?.flatMap((part, index) => part.context ? [index] : []));
-    const answer = evidence.flatMap((record, index) => {
-      if (contextOnly.has(index)) return [];
-      if (record.tool === 'search_records') return record.matches.filter(match => !selectedId || match.handle === selectedId)
-        .flatMap(match => {
-          const display = record.display?.get(match.handle);
-          return display ? [display] : match.label && match.price !== undefined ? [`${match.label} ${tr.format.money(match.price, 'full')}`] : [];
-        });
-      return record.facts.map(fact => {
-        if (fact.key === 'menu.count') return tr.t('common.navis.agent.menuCount', { count: typeof fact.value === 'number' ? tr.format.number(fact.value) : fact.display });
-        if (fact.key === 'inventory.restock.count' && fact.value === 0 && asksForRestockItems) {
-          return tr.t('navis.stock.noRestock');
-        }
-        if (/^calendar\.entry\.\d+$/u.test(fact.key)) return fact.source === 'staff-schedule' ? `${fact.label} · ${fact.display}` : fact.display;
-        if (fact.key === 'ledger.candidates.empty') return fact.display;
-        return `${fact.label} ${fact.display}`;
-      });
-    }).join('\n');
+    const answer = readAnswerLines(evidence, tr, question, contextOnly, selectedId).join('\n');
     const search = evidence.find(record => record.tool === 'search_records');
     const records = search?.matches.filter(match => !selectedId || selectedId === match.handle).flatMap(match => match.label ? [{
       id: match.handle, label: match.label,
@@ -903,6 +892,35 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
       return runAgentTurn(input, route);
     }
     const reply = agentReply(locale);
+    if (route.kind === 'deferred') {
+      replacePending();
+      const lifetime = new AbortController();
+      activeAgent = lifetime;
+      const signal = AbortSignal.any([input.signal, lifetime.signal]);
+      const version = generation, capturedRun = run?.getState();
+      const page = capturedRun?.boards[capturedRun.activeBoard].currentPage;
+      return route.resolve({ snapshot, port: store.real, signal }).then(next => {
+        cancelled(signal);
+        const current = store.getSnapshot(), currentRun = run?.getState();
+        if (version !== generation || current.runId !== snapshot.runId || currentRun?.layer !== capturedRun?.layer
+          || currentRun?.activeBoard !== capturedRun?.activeBoard || currentRun?.boards[currentRun.activeBoard].currentPage !== page) {
+          return localReply(input, 'conflict');
+        }
+        return applyDomainRoute(input, current, next);
+      }).finally(() => { if (activeAgent === lifetime) activeAgent = undefined; });
+    }
+    if (route.kind === 'local-proposal') {
+      replacePending();
+      const capturedRun = run?.getState(), runId = snapshot.runId, version = generation;
+      const layer = capturedRun?.activeBoard ?? input.layer ?? 'management';
+      if (!runId || capturedRun?.layer === 'orders-payment') return Promise.resolve(localReply(input, 'manualWidget'));
+      const isCurrent = () => generation === version && store.getSnapshot().runId === runId;
+      const frame = { command: route.command, args: route.args, snapshotRevision: snapshot.revision, proposalId: crypto.randomUUID(),
+        runId, layer, tier: 'normal' } as WireProposal;
+      const outcome = actions.prepare(frame, route.slots, snapshot, isCurrent, route.targets, capturedRun);
+      return Promise.resolve(outcome.kind === 'proposal' ? registerProposal(reply, outcome.proposal)
+        : refusedReply(reply, 'invalid_target', route.alternative));
+    }
     const answered = route.kind === 'answer' ? route.answer : route.kind === 'refusal' ? route.answer : undefined;
     if (answered && DEAD_END.test(answered) && classifyEnabled && !classifiedInputs.has(input) && !input.agentTurn) {
       classifiedInputs.add(input);
@@ -910,7 +928,12 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
     }
     if (route.kind === 'answer') {
       if (route.cancelPending) replacePending();
-      return Promise.resolve({ ...reply, answer: route.answer });
+      if (route.readScope) {
+        memory.rememberRead({ ...reply, answer: route.answer, turn: { kind: 'read', evidence: [] } },
+          { intent: { kind: 'read', ...route.readScope } });
+      }
+      return Promise.resolve({ ...reply, answer: route.answer,
+        ...(route.destination && { turn: { kind: 'handoff', destination: route.destination } }) });
     }
     replacePending();
     if (route.kind === 'refusal') {
@@ -1061,13 +1084,20 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
     const sent = { ...body, ...(page !== undefined ? { page } : {}), ...(readings.length ? { readings } : {}) };
     // An ordered plan's step is bound to the very request that goes out; if the plan refuses it, nothing is sent.
     if (hooks && !hooks.project(sent)) return Promise.resolve(localReply(input, 'manualWidget'));
+    // D-380: the sentences are asked for while the chat turn runs, so the two waits overlap; the answer is used only if it still matches the lines.
+    const composing = intent.kind === 'read' && !hooks ? startCompose(evidence, turn, input) : undefined;
     return askAgent(input, snapshot, sent,
       slots, { ...(read ? { evidence } : {}), turn: { ...turn, intent, reading }, targets, onTerminal: hooks?.onTerminal }).then(reply => {
       const fallback = turn.onMissing;
       // A context read only scopes the answer; it never decides whether the owner's own fact was found.
       const asked = evidence.filter((_, index) => !turn.readParts?.[index]?.context);
       if (fallback && asked.length > 0 && asked.every(record => record.status === 'missing')) {
-        return { ...(fallback.reason ? refusedReply(reply, fallback.reason, fallback.alternative) : reply), answer: fallback.answer };
+        const missed = { ...(fallback.reason ? refusedReply(reply, fallback.reason, fallback.alternative) : reply), answer: fallback.answer };
+        // A lookup that found nothing may have taken a phrase for a name: the planner reads the sentence before the router's "not found" stands.
+        if (classifyEnabled && DEAD_END.test(fallback.answer) && !classifiedInputs.has(input) && !input.agentTurn && !hooks) {
+          return classifiedReply(input, snapshot).then(planned => planned ?? missed);
+        }
+        return missed;
       }
       if (turn.compare && reply.turn?.kind === 'read') {
         const values = turn.compare.map(key => evidence.flatMap(record => 'facts' in record ? record.facts : []).find(fact => fact.key === key)?.value);
@@ -1090,8 +1120,42 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
           }
         }
       }
-      return reply;
+      // D-413: a read whose shown facts share no word with the question was claimed by a loose router; the model's read-only plan gets its turn first.
+      if (intent.kind === 'read' && !hooks && reply.turn?.kind === 'read' && classifyEnabled && !classifiedInputs.has(input) && !input.agentTurn && !turn.compare
+        && run?.getState().layer !== 'orders-payment') {
+        const shown = readAnswerLines(evidence, navisTranslator(reply.locale ?? input.locale ?? 'ko'), input.text,
+          new Set(turn.readParts?.flatMap((part, index) => part.context ? [index] : [])));
+        if (shown.length && !mentionsQuestion(input.text, shown)) {
+          return classifiedReply(input, snapshot).then(planned => planned ?? (composing ? finishCompose(reply, composing, input) : reply));
+        }
+      }
+      // D-380: the model may word a plain read answer; an ordered plan's step keeps its own lines.
+      return composing ? finishCompose(reply, composing, input) : reply;
     });
+  }
+
+  /**
+   * D-380: the model writes the answer sentences from the very fact lines the owner would have been shown. The request starts as soon as the
+   * evidence is known (beside the chat turn); only an unchanged read answer is replaced, and only by sentences that pass the numeric guard
+   * (server and browser). Never throws, never changes cards or writes.
+   */
+  function startCompose(evidence: readonly AgentReadEvidence[], turn: DomainTurnInput | undefined, input: AskInput):
+    { readonly lines: readonly string[]; readonly written: Promise<string | null> } | undefined {
+    if (!composeEnabled || input.signal.aborted) return undefined;
+    const contextOnly = new Set(turn?.readParts?.flatMap((part, index) => part.context ? [index] : []));
+    const lines = readAnswerLines(evidence, navisTranslator(input.locale ?? 'ko'), input.text, contextOnly);
+    if (!worthWording(lines, input.text)) return undefined;
+    const written = requestComposedAnswer({
+      fetcher, snapshot: store.getSnapshot(), locale: input.locale ?? 'ko', layer: input.layer ?? 'management', text: input.text, lines,
+      previous: turnPrevious, signal: input.signal,
+    });
+    return { lines, written };
+  }
+
+  async function finishCompose(reply: AssistantReply, started: { readonly lines: readonly string[]; readonly written: Promise<string | null> }, input: AskInput): Promise<AssistantReply> {
+    if (reply.turn?.kind !== 'read' || reply.mode === 'simple') return reply;
+    const written = await started.written;
+    return written && !input.signal.aborted && reply.answer === started.lines.join('\n') ? { ...reply, answer: written } : reply;
   }
 
   /** A write too broad for one card, or one that contradicts itself, becomes a clarify-only request: the server asks, nothing is previewed. */
@@ -1124,7 +1188,7 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
     if (!runId || !isSequenced(text)) return undefined;
     const business = snapshot.pos?.businessDate ?? TODAY;
     const result = domains.classifyMulti({ planId: crypto.randomUUID(), runId }, text, clause => {
-      const read = plainReadQuery(clause, business, stockDate(snapshot));
+      const read = plainReadQuery(clause, business, stockDate(snapshot), calendarWeekFrom(snapshot), stockItemNames(snapshot), quietToday(snapshot));
       const routed: DomainRoute | undefined = read && !read.unsupported
         ? { intent: read.intent, factKeys: read.factKeys, narrow: read.narrow, readParts: read.parts, compare: read.compare }
         : domains.route(clause, snapshot, locale, matchWidget(navisDirective(clause)), run?.getState());
@@ -1391,8 +1455,13 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
     if (!classifyEnabled || input.agentTurn || (layer !== 'management' && layer !== 'marketing')) return undefined;
     const snapshot = store.getSnapshot();
     const last = memory.lastRead()?.turn;
+    const businessDate = snapshot.pos?.businessDate ?? TODAY;
+    // What the earlier read looked at, as "widget@period": a follow-up that names no new period keeps both.
+    const readOf = (featureId: unknown, condition: unknown) => typeof featureId === 'string' && featureId
+      ? `${featureId}@${periodNameOf((condition as QueryCondition | undefined) ?? { kind: 'default' }, businessDate)}` : undefined;
     const features = last?.intent.kind === 'read'
-      ? [last.intent.featureId, ...(last.intent.reads ?? []).map(read => (read.args as { featureId?: string } | undefined)?.featureId)].filter((id): id is string => !!id) : [];
+      ? [readOf(last.intent.featureId, last.intent.condition), ...(last.intent.reads ?? []).map(read => { const args = read.args as { featureId?: string; condition?: QueryCondition } | undefined; return readOf(args?.featureId, args?.condition); })]
+        .filter((id): id is string => !!id) : [];
     const previousSentence = turnPrevious;
     const previous = previousSentence ? `${previousSentence}${features.length ? ` → ${[...new Set(features)].join(',')}` : ''}` : undefined;
     try {
@@ -1401,7 +1470,7 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
       const lastReads = last?.intent.kind === 'read'
         ? [...(last.intent.featureId ? [{ featureId: last.intent.featureId, condition: last.intent.condition ?? { kind: 'default' as const } }] : []),
           ...(last.intent.reads ?? []).flatMap(read => { const args = read.args as { featureId?: string; condition?: QueryCondition } | undefined; return args?.featureId && args.condition ? [{ featureId: args.featureId, condition: args.condition }] : []; })] : [];
-      return plan ? planToRoute(plan, snapshot, locale, lastReads) : undefined;
+      return plan ? planToRoute(plan, snapshot, locale, lastReads, text) : undefined;
     } catch (error) {
       if (signal?.aborted) throw error;
       return undefined;
@@ -1474,6 +1543,8 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
         return localAction(input, control);
       }
       if (!input.agentTurn && prepared.kind === 'text') {
+        const local = domains.routeBeforeHandoff(text.trim(), snapshot, locale, run?.getState());
+        if (local) return applyDomainRoute(input, snapshot, local);
         const widget = classifyWidgetHandoff(prepared.text, snapshot);
         const feature = widget?.featureId;
         if (widget && feature && isDataWidgetId(feature) && store.real?.mode(WIDGET_DOMAIN[feature]) === 'http') {
@@ -1501,7 +1572,7 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
       if (clarifying) { replacePending(); return runAgentTurn(input, clarifying); }
       const week = !input.agentTurn && prepared.kind === 'text' ? coveredWeekSales(prepared.text, snapshot.tables.realFinance) : undefined;
       if (week) return runAgentTurn(input, week);
-      const plainRead = !input.agentTurn && prepared.kind === 'text' ? plainReadQuery(prepared.text, snapshot.pos?.businessDate ?? TODAY, stockDate(snapshot)) : undefined;
+      const plainRead = !input.agentTurn && prepared.kind === 'text' ? plainReadQuery(prepared.text, snapshot.pos?.businessDate ?? TODAY, stockDate(snapshot), calendarWeekFrom(snapshot), stockItemNames(snapshot), quietToday(snapshot)) : undefined;
       // The period list in an unsupported-period answer is Korean; other languages keep the localized no-data notice.
       const plain = plainRead?.unsupported?.answer && locale !== 'ko' ? undefined : plainRead;
       if (plain?.unsupported && classifyEnabled && !classifiedInputs.has(input) && !input.agentTurn) {
@@ -1515,7 +1586,25 @@ export function createAssistantProvider(options: AssistantProviderOptions = {}):
         return { ...agentReply(locale), answer: plain.unsupported.answer ?? PLAIN_READ_UNSUPPORTED,
           turn: { kind: 'read', evidence: [{ tool: 'get_widget', args: { featureId, condition }, status: 'unsupported_period', facts: [] }] } };
       }
-      if (plain) return runAgentTurn(input, { intent: plain.intent, factKeys: plain.factKeys, narrow: plain.narrow, readParts: plain.parts, compare: plain.compare });
+      if (plain) {
+        // An order answer states what the order status screen states: the NAVER orders still open, and on a day with no POS order yet the latest day that had sales.
+        const ordersAsked = !!plain.factKeys?.includes('orders.recent.row');
+        // A payment answer also states the Npay approvals behind the NAVER orders, read the way the order status screen reads them.
+        const paymentsAsked = !!plain.factKeys?.includes('payments.recent.row');
+        const naver = (ordersAsked || paymentsAsked) && !simpleSignal?.aborted ? await readNaverOrders(store, AbortSignal.any([signal, AbortSignal.timeout(2500)])) : undefined;
+        const npay = paymentsAsked && !simpleSignal?.aborted ? await readNpaySettlements(store, naver, AbortSignal.any([signal, AbortSignal.timeout(2500)])) : [];
+        cancelled(signal);
+        const lastPaid = snapshot.pos && !snapshot.pos.orders.length ? [lastPaidDayFact(snapshot.tables.realFinance?.days, snapshot.pos.businessDate)].filter((fact): fact is NonNullable<typeof fact> => !!fact) : [];
+        const extra = paymentsAsked ? [...npayApprovalFacts(npay), ...lastPaid]
+          : ordersAsked ? [...naverOrderFacts(naver, snapshot.pos?.businessDate ?? TODAY), ...lastPaid] : [];
+        const naverOpen = Number(extra.find(fact => fact.key === 'orders.naver.open.count')?.value ?? 0);
+        // The headline is what the order status screen counts as in progress: the POS orders open plus the NAVER orders not yet picked up, with both parts named.
+        const withNaver = (facts: readonly SnapshotFact[]) => naverOpen > 0 ? facts.flatMap(fact => fact.key === 'orders.open.count' && typeof fact.value === 'number'
+          ? [{ ...fact, value: fact.value + naverOpen, display: `${fact.value + naverOpen}건` },
+            { ...fact, key: 'orders.pos.open.count', label: '매장·커넥트 주문 진행 중', display: `${fact.value}건` }] : [fact]) : facts;
+        const narrow = extra.length ? (facts: readonly SnapshotFact[]) => [...withNaver(plain.narrow ? plain.narrow(facts) : facts), ...extra] : plain.narrow;
+        return runAgentTurn(input, { intent: plain.intent, factKeys: plain.factKeys, narrow, readParts: plain.parts, compare: plain.compare });
+      }
       // An ordered plan (B23): every clause becomes a read or a card-confirmed write, run one after another.
       const planned = !input.agentTurn && prepared.kind === 'text' ? planSequence(input, text.trim(), snapshot) : undefined;
       if (planned) return startSequence(planned);

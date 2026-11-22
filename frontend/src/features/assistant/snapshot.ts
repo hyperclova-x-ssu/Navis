@@ -17,7 +17,7 @@ import { norm, has, normalizedRules, CUSTOMERS, TOMORROW_WORDS, PAST_WORDS, WEEK
 import { selectM2DayTotals } from '../../data/pos/projection';
 import { unreadableDomain, unreadableSource, unreadableWidget } from './real-gate';
 import { realStock, stockDate } from '../../data/reality/03/stock-projection';
-import { peakOrderFacts, recentOrderFacts } from './domains/recent-orders';
+import { peakOrderFacts, recentOrderFacts, recentPaymentFacts } from './domains/recent-orders';
 
 export const MAX_CATALOG = 32;
 const defaultCondition: QueryCondition = Object.freeze({ kind: 'default' });
@@ -171,10 +171,24 @@ export function readMenuDraft(text: string): LocalMenuDraft | null {
 }
 
 /** Map a spoken time window to the exact condition supported by the widget. */
-export function readNavisCondition(featureId: FeatureId, text: string, businessDate: string): QueryCondition | null {
+/**
+ * "이번 주" is the calendar week, Monday to today, wherever the data can say it: this is the week's Monday when the real ledger covers it, else undefined
+ * (a widget with only a rolling window then answers with that window, named as such).
+ */
+export function calendarWeekFrom(snapshot: DataSnapshot): string | undefined {
+  const today = snapshot.pos?.businessDate ?? TODAY;
+  const week = parseNavisPeriod('이번 주', today);
+  const finance = snapshot.tables.realFinance;
+  return week && finance && week.start >= finance.from && today <= finance.to && week.start <= today ? week.start : undefined;
+}
+
+export function readNavisCondition(featureId: FeatureId, text: string, businessDate: string, weekFrom?: string): QueryCondition | null {
   const available = conditionsOf(featureId);
   const date = parseNavisDate(text, businessDate);
   const period = parseNavisPeriod(text, businessDate);
+  if (featureId === 'ledger' && weekFrom && period?.start === weekFrom && /이번\s*주/u.test(text) && !/주말/u.test(text)) {
+    return { kind: 'dateRange', start: weekFrom, end: businessDate };
+  }
   const ranges = available.filter(condition => condition.kind === 'dateRange');
   const snapshots = available.filter(condition => condition.kind === 'snapshot');
   if (period) {
@@ -249,12 +263,14 @@ const deliveriesOf = (item: string | undefined) => (facts: readonly SnapshotFact
 };
 const rateOf = (fact: SnapshotFact) => /(\d+(?:\.\d+)?)%/u.exec(fact.display)?.[1];
 /** The lowest margin rate per menu (ties stay together): the typed `margin.menu.rate` facts, or the percent shown on each menu row. */
-const lowestMargin = (facts: readonly SnapshotFact[]): readonly SnapshotFact[] => {
+/** The menus at the top (or bottom) of the margin rates (ties stay together), with the period the figures are for when it is not today. */
+const rankedMargin = (direction: 'min' | 'max', window?: string) => (facts: readonly SnapshotFact[]): readonly SnapshotFact[] => {
   const typed = facts.filter(fact => fact.key === 'margin.menu.rate' && typeof fact.value === 'number');
   const rows = typed.length ? typed.map(fact => ({ fact, rate: fact.value as number }))
     : facts.filter(fact => fact.key === 'margin.menu.row').flatMap(fact => { const rate = rateOf(fact); return rate === undefined ? [] : [{ fact, rate: Number(rate) }]; });
-  const lowest = Math.min(...rows.map(row => row.rate));
-  return rows.filter(row => row.rate === lowest).map(row => row.fact);
+  if (!rows.length) return [];
+  const best = (direction === 'min' ? Math.min : Math.max)(...rows.map(row => row.rate));
+  return rows.filter(row => row.rate === best).map(({ fact }) => window ? { ...fact, label: `${window} ${fact.label}` } : fact);
 };
 const readOf = (featureId: FeatureId, condition: QueryCondition): PlainRead['intent'] => ({ kind: 'read', featureId, condition });
 const fullMoney = (facts: readonly SnapshotFact[]): readonly SnapshotFact[] => facts.map(fact =>
@@ -342,6 +358,23 @@ const lowestDaysLeft = (item?: string) => (facts: readonly SnapshotFact[]): read
 };
 const STOCK_LOW = /(?:제일|가장|젤)\s*(?:적게|조금)\s*남|거의\s*(?:다\s*)?(?:떨어|바닥)|곧\s*(?:다\s*)?떨어|얼마\s*안\s*남|떨어져\s*가|먼저\s*떨어/u;
 // Only the hedged wording ("원두 언제쯤 떨어질 것 같아?"); "컵 언제 떨어져?" and "우유 며칠 쓸 수 있어?" are the inventory domain's reviewed answers.
+const namesStockItem = (word: string, names: readonly string[]) => {
+  const wanted = norm(word);
+  return wanted.length >= 2 && names.some(name => { const known = norm(name); return known.length >= 2 && (known.includes(wanted) || wanted.includes(known)); });
+};
+/** True when today has no recognized sale yet (a quiet day): the real ledger's day total is zero or absent, else the POS has no order. */
+export function quietToday(snapshot: DataSnapshot): boolean {
+  const today = snapshot.pos?.businessDate ?? TODAY;
+  const finance = snapshot.tables.realFinance;
+  if (finance) return (finance.days[today]?.sales.total ?? 0) <= 0;
+  return !!snapshot.pos && !snapshot.pos.orders.length;
+}
+/** The store's stock item names (the demo catalog and the service's own items), for deciding whether a named thing is stock at all. */
+export function stockItemNames(snapshot: DataSnapshot, locale: Locale = 'ko'): readonly string[] {
+  const tr = navisTranslator(locale);
+  return [...snapshot.tables.inventoryItem.filter(row => !row.deletedAt).map(row => resolveDataText(tr.t, row.name ?? { key: row.nameKey })),
+    ...(snapshot.tables.realStock?.[0]?.items.map(item => item.name) ?? [])].filter((name): name is string => typeof name === 'string' && name.length > 0);
+}
 const STOCK_ITEM_DAYS = /^(.{1,12}?)\s*(?:은|는|이|가)?\s*(?:언제쯤|언제\s*까지|얼마나\s*(?:버텨|버틸|갈))/u;
 const BUSIEST = /(?:제일|가장|젤)\s*(?:붐비|바쁜|바쁠|바빠|손님\s*(?:많은|많이)|주문\s*(?:많은|많이))\s*(?:시간|때)/u;
 const STATUS_LOOSE = /(?:장사|가게|매장)\s*(?:는\s*)?잘\s*(?:돼|되고|되는|돌아가)|(?:^|[?,]\s*)이상한\s*(?:거|것|점)\s*(?:없|있)(?:어|나|니)/u;
@@ -355,10 +388,16 @@ const bundle = (parts: readonly { readonly read: ReturnType<typeof widgetRead> |
   intent: { kind: 'read', reads: parts.map(part => part.read) },
   parts: parts.map(({ factKeys, narrow }) => ({ factKeys, ...(narrow && { narrow }) })),
 });
-function ownerQuestionRead(value: string, businessDate: string, stockDate: string): PlainRead | undefined {
+const LOW_MARGIN = /마진(?:율)?\s*(?:이\s*)?(?:제일|가장)?\s*(?:낮|꼴찌|최저|적)|남는\s*(?:게|거|것)\s*(?:없|적)|(?:이익|마진)\s*(?:이\s*)?(?:제일|가장)\s*(?:낮|적)/u;
+const HIGH_MARGIN = /마진(?:율)?\s*(?:이\s*)?(?:제일|가장)?\s*(?:높|좋|많|최고|최대)|(?:이익|마진)\s*(?:이\s*)?(?:제일|가장)\s*(?:높|좋|많)|남는\s*(?:게|거|것)\s*(?:제일|가장)?\s*(?:많|좋)|제일\s*(?:많이\s*)?남는/u;
+const marginDirection = (value: string): 'min' | 'max' | undefined => LOW_MARGIN.test(value) ? 'min' : HIGH_MARGIN.test(value) ? 'max' : undefined;
+function ownerQuestionRead(value: string, businessDate: string, stockDate: string, stockNames?: readonly string[]): PlainRead | undefined {
   const asksSales = /매출|벌었|장사|판매액/u.test(value);
   if (RECENT_ORDER_WORDS.test(value) && !NAV_VERBS.test(value.replace(/주문\s*확인(?:해\s*줘|해줘)?$/u, '')) && !/예약|발주|메뉴|재고|쿠폰|세금|세무|리뷰|공지/u.test(value)) {
-    return { intent: { kind: 'read', sourceId: 'pos', condition: defaultCondition }, factKeys: ['orders.recent.row', 'orders.open.count'] };
+    // The subject noun decides the answer: a question about 결제 (payments) is answered with payments, one about 주문 (orders) with the orders in progress.
+    const subject = /결제|계산/u.test(value) && !/주문/u.test(value) ? 'payments' : 'orders';
+    return { intent: { kind: 'read', sourceId: 'pos', condition: defaultCondition },
+      factKeys: subject === 'payments' ? ['payments.recent.row', 'payments.today.total'] : ['orders.recent.row', 'orders.open.count'] };
   }
   if (BRIEFING_WORDS.test(value) && !NAV_VERBS.test(value) && !/매출|재고|예약|쿠폰|세금|세무|리뷰|공지|발주|직원|근무/u.test(value.replace(/브리핑/gu, ''))) {
     return { intent: readOf('briefing', defaultCondition), factKeys: [...BRIEFING_KEYS] };
@@ -371,7 +410,9 @@ function ownerQuestionRead(value: string, businessDate: string, stockDate: strin
     return { intent: readOf('inventory-booking', { kind: 'snapshot', asOf: stockDate }), narrow: lowestDaysLeft() };
   }
   const stockItem = STOCK_ITEM_DAYS.exec(value)?.[1]?.trim();
-  if (stockItem && !/입고|발주|배송|예약|손님|매출|쿠폰|세금/u.test(value) && !/^(?:오늘|내일|언제|그거|이거|저거|그럼)$/u.test(stockItem)) {
+  // "<thing> 언제까지": an ingredient running out only when the named thing is one of the store's stock items; anything else is another subject's deadline.
+  if (stockItem && !/입고|발주|배송|예약|손님|매출|쿠폰|세금/u.test(value) && !/^(?:오늘|내일|언제|그거|이거|저거|그럼)$/u.test(stockItem)
+    && (!stockNames || namesStockItem(stockItem, stockNames))) {
     return { intent: readOf('inventory-booking', { kind: 'snapshot', asOf: stockDate }), narrow: lowestDaysLeft(stockItem) };
   }
   if (BUSIEST.test(value) && !/상권|유동|지나가|동네|주변|카메라|CCTV|cctv/u.test(value)) {
@@ -442,7 +483,7 @@ export const PERIOD_LABELS: Partial<Record<FeatureId, string>> = {
  * "이번 달 지출", "이번 주 매출이랑 마진", "최근 30일 마진": plain metric words plus a stated period. Each metric reads its widget at
  * the period that widget really supports (never today's value standing in for another period); a period the widget lacks says which ones exist.
  */
-function periodMetricRead(value: string, businessDate: string): PlainRead | undefined {
+function periodMetricRead(value: string, businessDate: string, weekFrom?: string): PlainRead | undefined {
   if (/차이|비교|대비|같(?!이)|똑같|안\s*맞|다른|달라|어제|그제|내일/u.test(value)) return;
   const period = parseNavisPeriod(value, businessDate);
   if (!period || !METRIC_WORDS.test(value)) { METRIC_WORDS.lastIndex = 0; return; }
@@ -458,7 +499,7 @@ function periodMetricRead(value: string, businessDate: string): PlainRead | unde
     if (ledger) ledger.keys.push('ledger.expenses.total'); else reads.push({ featureId: 'ledger', keys: ['ledger.expenses.total'], money: true });
   }
   if (margin) reads.push({ featureId: 'margin', keys: ['margin.rate'], money: false });
-  const resolved = reads.map(read => ({ ...read, condition: readNavisCondition(read.featureId, value, businessDate) }));
+  const resolved = reads.map(read => ({ ...read, condition: readNavisCondition(read.featureId, value, businessDate, weekFrom) }));
   const missing = resolved.find(read => !read.condition || read.condition.kind === 'snapshot');
   // A margin-only question about a period the margin widget lacks keeps the menu domain's reviewed answer (A-3 S2-010).
   if (missing?.featureId === 'margin' && resolved.length === 1) return;
@@ -468,13 +509,24 @@ function periodMetricRead(value: string, businessDate: string): PlainRead | unde
       // The reviewed unsupported-period phrase leads (A-3 S1-277, S8-028); the supported periods follow.
       answer: `이 기간의 자료는 제공되지 않아요. ${/이번\s*달|이달/u.test(asked) && missing.featureId === 'margin' ? '마진은 이번 달 전체로는 볼 수 없고, ' : ''}볼 수 있는 기간은 ${PERIOD_LABELS[missing.featureId]}이에요.` } };
   }
+  // A widget that only has a rolling window answers "이번 주" with that window; its figure says so instead of passing for this calendar week.
+  const windowName = (read: { readonly featureId: FeatureId; readonly condition: QueryCondition | null }) => {
+    const condition = read.condition;
+    if (!/이번\s*주/u.test(value) || condition?.kind !== 'dateRange' || daysBetween(condition.start, condition.end) !== 6) return undefined;
+    return read.featureId === 'ledger' && weekFrom ? undefined : `최근 7일(${condition.start.slice(5).replace('-', '/')}~${condition.end.slice(5).replace('-', '/')})`;
+  };
+  const labelled = (read: typeof resolved[number]) => {
+    const name = windowName(read);
+    return name ? (facts: readonly SnapshotFact[]) => (read.money ? fullMoney(facts) : facts).map(fact => ({ ...fact, label: `${name} ${fact.label}` })) : read.money ? fullMoney : undefined;
+  };
   if (resolved.length === 1) {
     const [only] = resolved;
-    return { intent: readOf(only.featureId, only.condition!), factKeys: only.keys, ...(only.money && { narrow: fullMoney }) };
+    const narrow = labelled(only);
+    return { intent: readOf(only.featureId, only.condition!), factKeys: only.keys, ...(narrow && { narrow }) };
   }
   return {
     intent: { kind: 'read', reads: resolved.map(read => ({ name: 'get_widget' as const, args: { featureId: read.featureId, condition: read.condition! } })) },
-    parts: resolved.map(read => ({ factKeys: read.keys, ...(read.money && { narrow: fullMoney }) })),
+    parts: resolved.map(read => ({ factKeys: read.keys, ...(labelled(read) && { narrow: labelled(read) }) })),
   };
 }
 
@@ -482,19 +534,19 @@ function periodMetricRead(value: string, businessDate: string): PlainRead | unde
  * Typed reads for plain Korean questions that the widget domains do not own. Writes, layout and navigation words are never read here,
  * and a period without a widget condition stays local (no tool) so the reply can say which period is missing.
  */
-export function plainReadQuery(text: string, businessDate: string, stockBusinessDate = businessDate): PlainRead | undefined {
+export function plainReadQuery(text: string, businessDate: string, stockBusinessDate = businessDate, weekFrom?: string, stockNames?: readonly string[], quietToday = false): PlainRead | undefined {
   const value = normalizeNavisInput(text).replace(/[.!?。！？]+$/u, '').trim();
   if (/^메뉴판\s*보여\s*(?:줘|주세요)?$/u.test(value)) {
     return { intent: readOf('menu', defaultCondition), factKeys: ['menu.count', 'menu.price'] };
   }
   if (value && value.length <= 80) {
-    const owner = ownerQuestionRead(value, businessDate, stockBusinessDate);
+    const owner = ownerQuestionRead(value, businessDate, stockBusinessDate, stockNames);
     if (owner) return owner;
   }
   if (!value || value.length > 80 || WRITE_OR_LAYOUT.test(value)) return undefined;
   // "이번 주 매출": the ledger shows today and a rolling seven days, so both are read, in that order (S8-016).
   if (/이번\s*주/u.test(value) && /매출|벌었|장사\s*(?:어때|얼마)/u.test(value) && !/지난|다음|마진|재고|세금|지출|비교/u.test(value)) {
-    const week = readNavisCondition('ledger', value, businessDate);
+    const week = readNavisCondition('ledger', value, businessDate, weekFrom);
     if (week?.kind === 'dateRange') {
       const part = { factKeys: ['ledger.sales.net'], narrow: fullMoney };
       return { intent: { kind: 'read', reads: [widgetRead('ledger'), { name: 'get_widget', args: { featureId: 'ledger', condition: week } }] }, parts: [part, part] };
@@ -517,7 +569,7 @@ export function plainReadQuery(text: string, businessDate: string, stockBusiness
   const margin = /마진/u.test(value), sales = /매출|손익|가계부/u.test(value);
   const saleMargin = saleMarginRead(value, businessDate);
   if (saleMargin) return saleMargin;
-  const periodMetric = periodMetricRead(value, businessDate);
+  const periodMetric = periodMetricRead(value, businessDate, weekFrom);
   if (periodMetric) return periodMetric;
   if (margin && sales && /같(?!이)|똑같|안\s*맞|다른|달라|차이/u.test(value)) {
     return { intent: { kind: 'read', reads: [widgetRead('margin'), widgetRead('ledger')] },
@@ -530,8 +582,12 @@ export function plainReadQuery(text: string, businessDate: string, stockBusiness
   if (/충전금.*(?:결제|사용|쓴|썼)|충전금\s*사용액/u.test(value)) {
     return { intent: { kind: 'read', sourceId: 'pos', condition: { kind: 'default' } }, factKeys: ['accounting.sales.charge'] };
   }
-  if (/마진(?:율)?\s*(?:이\s*)?(?:제일|가장)?\s*(?:낮|꼴찌|최저|적)|남는\s*(?:게|거|것)\s*(?:없|적)|(?:이익|마진)\s*(?:이\s*)?(?:제일|가장)\s*(?:낮|적)/u.test(value)) {
-    return { intent: readOf('margin', { kind: 'default' }), narrow: lowestMargin };
+  // A margin ranking has a direction (lowest or highest). When today has no sales the ranking is read over the last seven days, and says so.
+  const direction = marginDirection(value);
+  if (direction) {
+    const window = quietToday ? readNavisCondition('margin', '최근 7일', businessDate) : null;
+    const named = window?.kind === 'dateRange' ? `최근 7일(${window.start.slice(5).replace('-', '/')}~${window.end.slice(5).replace('-', '/')})` : undefined;
+    return { intent: readOf('margin', window ?? { kind: 'default' }), narrow: rankedMargin(direction, named) };
   }
   const named = /^(.+?)\s*(?:마진(?:율)?|남는\s*비율)\s*(?:이|은|는)?\s*(?:얼마(?:야|예요)?|몇\s*(?:퍼센트|퍼|%)|알려\s*(?:줘|주세요))?$/u.exec(value)?.[1]?.trim();
   const cleanName = !!named && named.split(/\s+/u).length <= 2
@@ -656,7 +712,7 @@ export function projectAgentSource(snapshot: DataSnapshot, sourceId: AgentSource
     (condition.kind === 'snapshot' ? fact.date === condition.asOf : !!fact.date && fact.date >= condition.start && fact.date <= condition.end));
   const closing = domains.projectSource(snapshot, sourceId, condition, locale, run) ?? [];
   // The newest orders belong to today's POS read only (a past day or another period has its own ledger).
-  const recent = sourceId === 'pos' && condition.kind === 'default' ? [...recentOrderFacts(snapshot, locale), ...peakOrderFacts(snapshot, locale)] : [];
+  const recent = sourceId === 'pos' && condition.kind === 'default' ? [...recentOrderFacts(snapshot, locale), ...recentPaymentFacts(snapshot, locale), ...peakOrderFacts(snapshot, locale)] : [];
   const extended = [...closing, ...recent];
   const status = scoped.length || extended.length ? 'ready' : condition.kind === 'default' ? 'missing' : 'unsupported_period';
   return { tool: 'get_source', args, status, facts: [...scoped.map(fact => localizeFact(fact, locale)), ...extended] };

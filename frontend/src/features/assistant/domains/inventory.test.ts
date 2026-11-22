@@ -175,6 +175,70 @@ it.each([40, null])('scopes the real channel read when online stock is %s', onli
   expect(projectInventoryFacts(snapshot, featureId, today, 'ko')).toEqual({ status: 'unsupported_period' });
 });
 
+// Independent grading found "유통기한 임박한 재료랑 재고 모자란 재료" answered with "등록된 품목이 없어요" while the service held two lots expiring that day.
+describe('expiring lots', () => {
+  const itemId = '35a259a3-ca1f-455f-aa41-b97d8d152345', otherId = '9a2c0e5a-1111-4a3b-8c0d-2f7d2a9a0001';
+  const stockItem = (id: string, name: string) => ({
+    itemId: id, sku: `PD-${id.slice(-3)}`, name, kind: 'retail' as const, unit: 'pcs' as const, baseUnit: 'pcs' as const,
+    thresholdBase: '30', trackRestock: false, trackExpiry: false, revision: 1, updatedAt: null,
+    businessDate: TODAY, stock: null, onlineStock: null, expiresOn: null, referenced: false,
+  });
+  const batch = (batchId: string, id: string, expiresOn: string, remaining: string, discardedAt: string | null = null) => ({
+    batchId, itemId: id, quantityBase: '20', remainingQuantityBase: remaining, expiresOn, receivedAt: `${TODAY}T01:00:00.000Z`, discardedAt, revision: 1,
+  });
+  const storeWith = (batches: ReturnType<typeof batch>[]) => createWidgetDataStore({
+    inventoryItem: [{ ...retail[0], itemId }],
+    inventoryStock: [{ itemId, channel: 'store', qty: 120 }, { itemId, channel: 'online', qty: 10 }],
+    realStock: [{ businessDate: TODAY, items: [stockItem(itemId, '바스크 치즈케이크(조각)'), stockItem(otherId, '버터 소금빵')], movements: [], movementsComplete: true,
+      batches, batchesComplete: true, forecast: null }],
+  });
+  const lots = [batch('b-today', itemId, TODAY, '8'), batch('b-soon', otherId, addDays(TODAY, 2), '12'),
+    batch('b-far', itemId, addDays(TODAY, 9), '20'), batch('b-gone', itemId, TODAY, '5', `${TODAY}T02:00:00.000Z`), batch('b-empty', otherId, TODAY, '0')];
+
+  it('projects a count and one fact per live lot that expires within three days, with its date and remaining quantity', () => {
+    const snapshot = storeWith(lots).getSnapshot();
+    const result = projectInventoryFacts(snapshot, featureId, { kind: 'snapshot', asOf: TODAY }, 'ko');
+    if (!result || !('facts' in result)) throw new Error('Expected facts');
+    const expiry = result.facts.filter(fact => fact.key.startsWith('inventory.expiry.'));
+    expect(expiry.map(fact => fact.key)).toEqual(['inventory.expiry.count', 'inventory.expiry.b-today', 'inventory.expiry.b-soon']);
+    expect(expiry[0]).toMatchObject({ value: 2, label: '유통기한 임박(3일 안)' });
+    expect(expiry[1]).toMatchObject({ value: 8, unit: 'pcs', date: TODAY, label: expect.stringContaining('바스크 치즈케이크(조각)') });
+    expect(expiry[1].label).toContain('유통기한');
+    expect(expiry[2]).toMatchObject({ value: 12, date: addDays(TODAY, 2) });
+  });
+
+  it('says zero when no live lot is close to its date, and gives no expiry facts when the lots were not all read', () => {
+    const none = projectInventoryFacts(storeWith([batch('b-far', itemId, addDays(TODAY, 9), '20')]).getSnapshot(), featureId, { kind: 'snapshot', asOf: TODAY }, 'ko');
+    if (!none || !('facts' in none)) throw new Error('Expected facts');
+    expect(none.facts.find(fact => fact.key === 'inventory.expiry.count')).toMatchObject({ value: 0 });
+    const partial = createWidgetDataStore({
+      inventoryItem: [{ ...retail[0], itemId }], inventoryStock: [{ itemId, channel: 'store', qty: 120 }, { itemId, channel: 'online', qty: 10 }],
+      realStock: [{ businessDate: TODAY, items: [stockItem(itemId, '바스크 치즈케이크(조각)')], movements: [], movementsComplete: true, batches: lots, batchesComplete: false, forecast: null }],
+    }).getSnapshot();
+    const incomplete = projectInventoryFacts(partial, featureId, { kind: 'snapshot', asOf: TODAY }, 'ko');
+    if (!incomplete || !('facts' in incomplete)) throw new Error('Expected facts');
+    expect(incomplete.facts.some(fact => fact.key.startsWith('inventory.expiry.'))).toBe(false);
+  });
+
+  // D-413: no phrase route for expiry. A sentence that names no stock item is the planner's, and what it reads are the general expiry facts above.
+  it('answers an expiry sentence from the expiry facts the planner reads, not with the router\'s unchecked "no registered item"', async () => {
+    const store = storeWith(lots);
+    const text = '유통기한 임박한 재료랑 재고 모자란 재료 같이 알려줘';
+    const fetcher = (async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { intent: { kind: string } };
+      if (body.intent.kind !== 'classify') return new Response('', { status: 503 });
+      const frames = [['status', { step: 'accepted' }], ['intent_plan', { plan: { kind: 'read', confidence: 'high',
+        reads: [{ featureId, period: 'default', hints: ['유통기한'] }] } }], ['done', { outcome: 'reply' }]];
+      return new Response(frames.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join(''), { status: 200, headers: { 'x-navis-protocol': 'agent-v1' } });
+    }) as never;
+    const reply = await createAssistantProvider({ store, fetcher, classify: true, compose: false }).ask({ text, signal: new AbortController().signal });
+    expect(reply.turn?.kind).toBe('read');
+    expect(reply.answer).not.toContain('등록된 품목이 없어요');
+    expect(reply.answer).toContain('유통기한 임박(3일 안) 2개');
+    expect(reply.answer).toContain('바스크 치즈케이크(조각)');
+  });
+});
+
 it('keeps a missing package size separate from another stocked product with the same name', async () => {
   const stockedProduct: InventoryItem = { ...retail[0], name: { raw: '허브 200g' } };
   const store = createWidgetDataStore({ inventoryItem: [...seed.inventoryItem, stockedProduct], inventoryStock: [...seed.inventoryStock, ...stockedRetail.slice(0, 2)] });

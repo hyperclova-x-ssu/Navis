@@ -12,6 +12,7 @@ export function bridgeOptionsFromEnv(env) {
     ...(env.NAVIS_AGENT_WINDOW_TURNS !== undefined && { agentWindowTurns: Number(env.NAVIS_AGENT_WINDOW_TURNS) }),
     ...(env.NAVIS_AGENT_WINDOW_TOKENS !== undefined && { agentWindowTokens: Number(env.NAVIS_AGENT_WINDOW_TOKENS) }),
     ...(env.NAVIS_AGENT_CLASSIFY === '0' && { agentClassify: false }),
+    ...(env.NAVIS_AGENT_COMPOSE === '0' && { agentCompose: false }),
     allowedOrigins: env.NAVIS_ALLOWED_ORIGINS,
     widgets: {
       mode: env.NAVIS_WIDGET_MODE,

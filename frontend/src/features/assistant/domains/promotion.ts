@@ -26,10 +26,12 @@ import {
 import { couponChatCopy } from './coupons.messages';
 import { mktCouponBundle } from '../../widgets/mkt-coupon/messages';
 import { mktLocalBundle } from '../../widgets/mkt-local/messages';
+import { cellText } from '../../widgets/mkt-promo/marketing-today';
 import { lookupEstimate, estimateCostText, estimateTimeText, roundEstimateSeconds } from '../../widgets/mkt-promo/promo-format';
 import { mktPromoBundle } from '../../widgets/mkt-promo/messages';
 import { EMPTY_DRAFT, inputOfDraft, offlinePromoRetry, peekPromoSession, promoSession, type PromoDraft } from '../../widgets/mkt-promo/promo-session';
 import { normalizeNavisInput, normalizeNavisName, parseNavisNumber } from '../navis-input';
+import { matchWidget } from '../question';
 import type {
   DomainAdapter, DomainDetail, DomainRoute, DomainTurnInput, LocalSlots, ReadToolAdapter, RecordAdapter, RecordSearch,
   RecordTargets, RunActionOutcome, RunCommandAdapter,
@@ -70,8 +72,7 @@ function words(locale: Locale) {
 type Words = ReturnType<typeof words>;
 
 function referenceName(id: string, w: Words) {
-  // Keep the stored reference id and its gallery position for existing drafts.
-  return id === 'ref-2' ? '디자인 2번' : w.t(`promo.ref.${id}.name`);
+  return w.t(`promo.ref.${id}.name`);
 }
 
 function fact(key: string, label: string, value: number | string, display = String(value), unit = 'text', date?: string): AgentFact {
@@ -188,27 +189,23 @@ function todayFacts(snapshot: DataSnapshot, w: Words) {
   const view = selectWidget(snapshot, todayFeature, defaultCondition, 'normal');
   const replies = snapshot.tables.realGroups && !snapshot.tables.realInbox ? undefined : model(snapshot, 'ai-response');
   if (view.status !== 'ready') {
-    return { facts: [fact('today.none', w.t('widget.marketing-today.title'),
-      snapshot.tables.realGroups && view.messageKey.includes('unavailable') ? 'unavailable' : 0, w.t(view.messageKey))] };
+    const display = w.t(view.messageKey);
+    return { facts: [fact('today.none', display,
+      snapshot.tables.realGroups && view.messageKey.includes('unavailable') ? 'unavailable' : 0, display)] };
   }
   const m = view.model;
-  const cellText = (cell: typeof m.cells[number]) => {
-    switch (cell.kind) {
-      case 'quiet-hours': return [w.t('widget.marketing-today.quiet.s1', { day: w.f.weekday(cell.quietSlot.date, 'long'), s: cell.quietSlot.startHour, e: cell.quietSlot.endHour }),
-        w.t('widget.marketing-today.quiet.s2', { n: cell.params.regulars })];
-      case 'expiry': return [w.t('widget.marketing-today.expiry.s1', { item: cell.itemName ?? w.t(cell.itemNameKey), n: cell.params.count })];
-      case 'replies': return [w.t('widget.marketing-today.replies.s1', { n: cell.params.count }), w.t('widget.marketing-today.replies.s2')];
-      case 'video': return [w.t('widget.marketing-today.video.photos', { n: cell.params.photos }), w.t('widget.marketing-today.video.s2')];
-    }
-  };
-  const repliesCell = m.cells.find(cell => cell.kind === 'replies');
+  const visible = m.cells.filter(cell => cell.kind !== 'quiet-hours' || cell.params.regulars > 0);
+  const repliesCell = visible.find(cell => cell.kind === 'replies');
+  const empty = w.t('data.state.marketing-today.none');
   return { facts: [
-    fact('today.cells.count', w.t('widget.marketing-today.title'), m.cells.length,
-      m.cells.length ? w.l(`${m.cells.length}가지가 있어요`, `${m.cells.length} to do`, `有 ${m.cells.length} 项待办`, `有 ${m.cells.length} 項待辦`) : w.t('widget.marketing-today.sr.nothing'), 'count', TODAY),
-    ...(m.cells.length ? [] : [fact('today.none', w.t('widget.marketing-today.title'), 0, w.t('data.state.marketing-today.none'))]),
-    ...m.cells.map(cell => fact(`today.cell.${cell.kind}`, w.t(`widget.marketing-today.slot.${cell.slot}`),
-      cell.kind === 'quiet-hours' ? cell.params.regulars : cell.kind === 'video' ? cell.params.photos : cell.params.count,
-      cellText(cell).join('. '), 'count')),
+    ...visible.map(cell => {
+      const display = cellText(w.tr, cell).first;
+      return fact(`today.cell.${cell.kind}`, display,
+        cell.kind === 'quiet-hours' ? cell.params.regulars : cell.kind === 'video' ? cell.params.photos : cell.params.count, display, 'count');
+    }),
+    ...(visible.length ? [] : [fact('today.none', empty, 0, empty)]),
+    fact('today.cells.count', w.t('widget.marketing-today.title'), visible.length,
+      visible.length ? w.l(`${visible.length}가지가 있어요`, `${visible.length} to do`, `有 ${visible.length} 项待办`, `有 ${visible.length} 項待辦`) : w.t('widget.marketing-today.sr.nothing'), 'count', TODAY),
     ...(m.missing ?? []).map(source => fact(`today.missing.${source}`, w.t('widget.marketing-today.title'), 'unavailable', w.t(`data.real.groups.today.missing.${source}`))),
     ...(replies && !m.missing?.includes('replies') ? [{ ...fact('today.replies.compare', w.t('widget.ai-response.waiting'), replies.waitingCount,
       repliesCell?.kind === 'replies'
@@ -684,16 +681,18 @@ function draftRoute(text: string, snapshot: DataSnapshot, locale: Locale, forced
   }
 
   // design reference
+  const explicitId = /\bref-[1-9][0-9]*\b/iu.exec(fieldsText)?.[0]?.toLowerCase();
   const refNumber = /(?:ref[-\s]?|레퍼런스\s*|디자인\s*)([0-9]+|[일이삼사오육칠팔구십]+)\s*번?|([0-9]+|[일이삼사오육칠팔구십]+)\s*번\s*(?:레퍼런스|디자인)|(일곱|여덟|아홉|열|[한두세네]|다섯|여섯|[0-9]+|[일이삼사오육칠팔구십]+)\s*번째/iu.exec(fieldsText);
   const nameHit = REFERENCE_IDS.filter(id => {
-    if (id === 'ref-2') return false;
+    if (normalized.includes(normalizeNavisName(referenceName(id, w)))) return true;
     const tokens = referenceName(id, w).split(/[\s+·]+/u).filter(token => token.length >= 3);
     return tokens.some(token => normalized.includes(normalizeNavisName(token)))
       && !REFERENCE_IDS.some(other => other !== id && referenceName(other, w).includes(referenceName(id, w).split(/[\s+·]+/u).find(token => token.length >= 3 && normalized.includes(normalizeNavisName(token))) ?? '\u0000'));
   });
   if (!forced?.referenceId && (retiredDesign || refNumber || nameHit.length === 1 && /디자인|레퍼런스|스타일|말풍선|로\s*(?:해|골)/u.test(fieldsText))) {
     const number = refNumber ? parseNavisNumber(refNumber[1] ?? refNumber[2] ?? refNumber[3]) : undefined;
-    const id = retiredDesign ? undefined : refNumber ? REFERENCE_IDS[(number ?? 0) - 1] : nameHit[0];
+    const id = retiredDesign ? undefined : explicitId ? REFERENCE_IDS.find(value => value === explicitId)
+      : refNumber ? REFERENCE_IDS[(number ?? 0) - 1] : nameHit[0];
     if (!id) {
       const choices = REFERENCE_IDS.map((value, index) => ({ id: value, label: `${index + 1}. ${referenceName(value, w)}` }));
       const prompt = retiredDesign
@@ -997,10 +996,11 @@ function perfRoute(raw: string, snapshot: DataSnapshot): DomainRoute | undefined
 
 function todayRoute(raw: string): DomainRoute | undefined {
   const text = normalizeNavisInput(raw);
-  if (/오늘\s*할\s*홍보|홍보\s*칸|할\s*홍보|급한\s*홍보|홍보\s*다\s*끝|홍보\s*(?:남|없)/u.test(text) && !openWords.test(text)) {
+  if ((/오늘\s*할\s*홍보|홍보\s*칸|할\s*홍보|급한\s*홍보|홍보\s*다\s*끝|홍보\s*(?:남|없)/u.test(text)
+    || matchWidget(raw) === todayFeature) && !openWords.test(text)) {
     if (/답변|답장|응대|건수/u.test(text)) return read(todayFeature, ['today.replies.compare', 'today.cell.replies', 'today.missing.replies']);
-    return read(todayFeature, ['today.cells.count', 'today.none', 'today.cell.quiet-hours', 'today.cell.expiry', 'today.cell.replies', 'today.cell.video',
-      'today.missing.coupons', 'today.missing.replies', 'today.missing.assets']);
+    return { ...read(todayFeature, ['today.cell.quiet-hours', 'today.cell.expiry', 'today.cell.replies', 'today.cell.video', 'today.none']),
+      narrow: facts => facts.slice(0, 1) };
   }
   if (/(?:답변|답장)\s*(?:다\s*)?(?:대기|보냈)|대기\s*몇\s*개|응대\s*대기/u.test(text) && /홍보|칸/u.test(text)) return read(todayFeature, ['today.replies.compare', 'today.cell.replies']);
   return undefined;

@@ -8,7 +8,7 @@ import { createLegacySeedTables } from '../../../data/db/legacy-seed';
 import type { DataTables } from '../../../data/db/types';
 import { createWidgetDataStore } from '../../../data/widget-data';
 import { screenPresets } from '../../../layout';
-import { classifyNavigation, createNavisNavigation, prepareNavigationRequest } from '../../../screens/dashboard/navis-navigation';
+import { classifyNavigation, createNavisNavigation, isDataDisplayRequest, prepareNavigationRequest } from '../../../screens/dashboard/navis-navigation';
 import { createRunStore } from '../../../state';
 import { timePolicy } from '../../../ui';
 import { applyAgentRunUndo } from '../agent-actions';
@@ -24,6 +24,7 @@ import { createNavisMenuHarness, navisAgentFakeFetch } from '../../../../server/
 
 interface Scenario {
   readonly id: string;
+  readonly class: string;
   readonly utterances: readonly string[];
   readonly expected: { readonly kind: string };
 }
@@ -92,7 +93,7 @@ function fixture(id: string, overrides: Partial<Pick<DataTables, 'inquiryThread'
         : reply.turn?.kind === 'refusal' || reply.turn?.kind === 'handoff' ? 'refuse' : 'answer';
     return { reply, detailRef, kind, before };
   }
-  return { data, run, ask, bridge, requests };
+  return { data, run, ask, bridge, requests, navigation };
 }
 
 describe('N17 replies and community', () => {
@@ -144,7 +145,16 @@ describe('N17 replies and community', () => {
   it('opens the review tab with the praise filter without changing the queue', async () => {
     const env = fixture('S5-044');
     try {
-      expect((await env.ask('칭찬 리뷰만 보여줘')).detailRef).toMatchObject({ featureId: 'ai-response', view: 'review', filter: 'praise' });
+      expect((await env.ask('칭찬 리뷰 필터 열어줘')).detailRef).toMatchObject({ featureId: 'ai-response', view: 'review', filter: 'praise' });
+    } finally { env.bridge.close(); }
+  });
+
+  it('answers a display request for the review queue without asking for an item or opening the tab', async () => {
+    const env = fixture('S5-040');
+    try {
+      const result = await env.ask('리뷰 응대 내역 좀 보여 주세요');
+      expect(result.kind).toBe('answer');
+      expect(result.detailRef).toBeUndefined();
     } finally { env.bridge.close(); }
   });
 
@@ -208,7 +218,13 @@ describe('N17 replies and community', () => {
       } finally { env.bridge.close(); }
     }
     if (process.env.NAVIS_N17_OBSERVATIONS) appendFileSync(process.env.NAVIS_N17_OBSERVATIONS, JSON.stringify({ id: row.id, expected: row.kind, results }) + '\n');
-    expect(results.map(result => result.kind)).toEqual(differences[row.id] ?? row.utterances.map(() => row.kind));
+    const expected = differences[row.id] ?? row.utterances.map(() => row.kind);
+    results.forEach(({ kind }, index) => {
+      // D-419 supersedes the display-only navigation expectations in the authored corpus.
+      if ((expected[index] === 'navigate' || row.class === 'navigate' && expected[index] === 'clarify') && isDataDisplayRequest(row.utterances[index])) {
+        expect(['answer', 'clarify']).toContain(kind);
+      } else expect(kind).toBe(expected[index]);
+    });
   });
 });
 
@@ -268,6 +284,131 @@ it('S5-019 keeps the requested channel and drafts without sending', async () => 
       { threadId: 'th-2', status: 'draft-ready', replyDraft: { origin: 'generated' } },
     ]);
     expect(env.data.getSnapshot().tables.inquiryThread[0].replyDraft).toBeUndefined();
+  } finally { env.bridge.close(); }
+});
+
+// D-404: the W21 test-SMS flow is retired. A test-text request is no longer special; a reply request hands off to the item's own reply pane.
+it('does not treat a test-text request as a reply handoff or a write, in either mode', async () => {
+  const env = fixture('S5-019');
+  try {
+    for (const text of ['시험 문자 보내줘', '테스트 문자 보내줘']) {
+      const { reply } = await env.ask(text);
+      expect(reply.turn?.kind, text).not.toBe('proposal');
+      const alternative = reply.turn?.kind === 'refusal' ? reply.turn.alternative : reply.turn?.kind === 'handoff' ? reply.turn.destination : undefined;
+      expect(alternative?.step, text).not.toBe('test-sms');
+    }
+  } finally { env.bridge.close(); }
+  expect(repliesDomain.routePresentation?.('시험 문자 보내줘', createWidgetDataStore().getSnapshot(), 'ko', undefined)).toBeUndefined();
+});
+
+it('hands a reply request off to that item\'s reply pane at the draft step, with the item and the draft body only on the owner\'s press', async () => {
+  const env = fixture('S5-019');
+  try {
+    const { reply, before } = await env.ask('톡톡 주차 질문 답장 써줘, 보내지 마');
+    const proposal = reply.proposalSession?.getSnapshot().proposal;
+    if (!proposal) throw new Error(reply.answer);
+    expect(proposal.command).toBe('reply.draft');
+    expect(env.data.getSnapshot()).toBe(before);
+    const threadId = 'th-2';
+    expect(env.data.getSnapshot().tables.inquiryThread.some(row => row.threadId === threadId)).toBe(true);
+    const body = 'Thanks';
+    for (const command of ['reply.draft', 'inquiry.saveDraft']) {
+      expect(repliesDomain.handoff?.(command, { threadId, body })).toEqual({
+        featureId: 'ai-response', view: 'message', focus: 'action', itemId: threadId,
+        prefill: { kind: 'widget-draft', command, fields: { body } },
+      });
+    }
+    // Sending and posting are the pane's own buttons: the handoff lands on the item with no prefill unless a body was drafted.
+    expect(repliesDomain.handoff?.('inquiry.send', { threadId })).toEqual({ featureId: 'ai-response', view: 'message', focus: 'action', itemId: threadId });
+    expect(repliesDomain.handoff?.('inquiry.post', { threadId })).toEqual({ featureId: 'ai-response', view: 'review', focus: 'action', itemId: threadId });
+    expect(repliesDomain.handoff?.('reply.draft', { threadId, view: 'review' })).toMatchObject({ view: 'review', itemId: threadId });
+  } finally { env.bridge.close(); }
+});
+
+// D-404: a reply request with nothing to send yet opens that item's reply pane at the draft step through a scoped step (no command, no draft),
+// so navigation never has to validate an inquiry.send/post with a thread and a view but no body. Sending stays the owner's own presses.
+it('opens the named message thread\'s reply pane at the draft step when there is nothing to send yet, without a command or a write', async () => {
+  const env = fixture('S5-019', { inquiryThread: [{ ...parkingThread, replyDraft: undefined, draftKey: null }] });
+  try {
+    const { reply, before } = await env.ask('톡톡 주차 질문에 답장 보내줘');
+    const turn = reply.turn;
+    if (turn?.kind !== 'refusal' || !turn.alternative) throw new Error(`${turn?.kind}: ${reply.answer}`);
+    expect(turn.alternative).toEqual({ featureId: 'ai-response', step: 'message-draft', itemId: 'th-2' });
+    expect(turn.alternative).not.toHaveProperty('command');
+    expect(turn.alternative).not.toHaveProperty('draft');
+    await expect(env.navigation.handoff(turn.alternative)).resolves.toBe('opened');
+    const overlay = env.run.getState().overlay;
+    expect(overlay.type === 'detail' ? overlay.stack?.at(-1) ?? { featureId: overlay.featureId } : undefined)
+      .toMatchObject({ featureId: 'ai-response', view: 'message', itemId: 'th-2', focus: 'action' });
+    expect(env.data.getSnapshot()).toBe(before);
+  } finally { env.bridge.close(); }
+});
+
+it.each(['주차 문의에 답장해줘', '톡톡 주차 질문에 답장해줘', '주차 문의 답해줘'])('"%s" opens that thread\'s reply pane at the draft step and writes nothing', async text => {
+  for (const stored of [true, false]) {
+    const env = fixture('S5-019', { inquiryThread: [stored ? parkingThread : { ...parkingThread, replyDraft: undefined, draftKey: null }] });
+    try {
+      const { reply, before } = await env.ask(text);
+      const turn = reply.turn;
+      if (turn?.kind !== 'refusal' || !turn.alternative) throw new Error(`${turn?.kind}: ${reply.answer}`);
+      expect(turn.reason).toBe('widget_only');
+      expect(turn.alternative).toEqual({ featureId: 'ai-response', step: 'message-draft', itemId: 'th-2' });
+      expect(reply.proposalSession).toBeUndefined();
+      await expect(env.navigation.handoff(turn.alternative)).resolves.toBe('opened');
+      expect(env.data.getSnapshot()).toBe(before);
+    } finally { env.bridge.close(); }
+  }
+});
+
+it('asks which thread when several wait, then opens the chosen one\'s reply pane; a draft with a body in the sentence still proposes a card', async () => {
+  const second = { ...parkingThread, threadId: 'th-other', channelKey: 'data.channel.kakao' };
+  const env = fixture('S5-019', { inquiryThread: [{ ...parkingThread, replyDraft: undefined, draftKey: null }, second] });
+  try {
+    const { reply } = await env.ask('문의에 답장해줘');
+    const turn = reply.turn;
+    if (turn?.kind !== 'clarification' && turn?.kind !== 'ambiguity') throw new Error(`${turn?.kind}: ${reply.answer}`);
+    expect(turn.choices.length).toBeGreaterThan(1);
+    expect(reply.turn?.kind === 'proposal').toBe(false);
+  } finally { env.bridge.close(); }
+  const withBody = fixture('S5-027');
+  try {
+    const { reply } = await withBody.ask("주차 답변을 '건물 뒤 2대까지 주차돼요'로 고쳐줘");
+    expect(reply.turn?.kind).toBe('proposal');
+  } finally { withBody.bridge.close(); }
+});
+
+it('opens a waiting review\'s reply pane at the draft step through the review step when there is nothing to post yet', async () => {
+  const review = { ...parkingThread, threadId: 'review-th', type: 'review' as const, channelKey: 'data.channel.review', replyDraft: undefined, draftKey: null };
+  const env = fixture('S5-020', { inquiryThread: [review] });
+  try {
+    const { reply, before } = await env.ask('리뷰 답글 올려줘');
+    const turn = reply.turn;
+    if (turn?.kind !== 'refusal' || !turn.alternative) throw new Error(`${turn?.kind}: ${reply.answer}`);
+    expect(turn.alternative).toMatchObject({ featureId: 'ai-response', step: 'review-draft' });
+    expect(turn.alternative).not.toHaveProperty('command');
+    expect(env.data.getSnapshot()).toBe(before);
+  } finally { env.bridge.close(); }
+});
+
+it('previews a grounded TalkTalk reply and sends it once from the confirmation card in example mode', async () => {
+  const inquiry = { ...parkingThread, bodyRaw: '일요일에 매장 문 열어요?', draftKey: null, replyDraft: undefined };
+  const env = fixture('S5-019', { inquiryThread: [inquiry] });
+  try {
+    const { reply, before } = await env.ask('일요일 영업시간 문의에 답장해줘');
+    const session = reply.proposalSession;
+    if (!session) throw new Error(reply.answer);
+    const { preview, proposal } = session.getSnapshot();
+    expect(proposal.command).toBe('inquiry.send');
+    expect(env.requests).toHaveLength(0);
+    expect(preview).toMatchObject({ confirmLabel: '톡톡으로 보내기' });
+    expect(preview?.fields.map(field => field.after).join('\n')).toContain('일요일 영업시간은');
+    await env.ask('확인');
+    expect(env.data.getSnapshot()).toBe(before);
+    expect(session.confirm(env.data, proposal.id)).toMatchObject({ frame: { outcome: 'applied' } });
+    const sent = env.data.getSnapshot();
+    expect(session.confirm(env.data, proposal.id)).toBeUndefined();
+    expect(env.data.getSnapshot()).toBe(sent);
+    expect(env.data.getSnapshot().tables.inquiryThread).toEqual([expect.objectContaining({ status: 'done', sentReplyBody: expect.stringContaining('일요일 영업시간은') })]);
   } finally { env.bridge.close(); }
 });
 
@@ -361,7 +502,7 @@ it('keeps completed reviews out of waiting review choices without filtering by s
   const done = { ...review, threadId: 'completed-review', author: '이서연', status: 'done' as const };
   const env = fixture('S5-043', { inquiryThread: [neutral, review, done] });
   try {
-    const { reply } = await env.ask('대기 중인 리뷰 보여줘');
+    const { reply } = await env.ask('대기 중인 리뷰 열어줘');
     expect(reply.turn).toMatchObject({ kind: 'clarification', field: 'threadId', choices: [
       { label: expect.stringContaining('김**') }, { label: expect.stringContaining('박**') },
     ] });

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createWidgetDataStore } from '../../data/widget-data';
 import { AGENT_PROTOCOL, AGENT_PROTOCOL_HEADER, validateAgentRequest } from '../../../shared/navis-agent-schema.mjs';
 import { createAssistantProvider } from './provider';
-import { keepHinted, planToRoute, readPlanFrames, requestIntentPlan, widgetLines, type IntentPlan } from './classify';
+import { inferCompute, keepHinted, periodNameOf, planToRoute, readPlanFrames, requestIntentPlan, widgetLines, type IntentPlan } from './classify';
 import { projectAgentWidget, type SnapshotFact } from './snapshot';
 
 const store = createWidgetDataStore();
@@ -116,15 +116,132 @@ describe('turning a plan into typed reads', () => {
     expect(none.narrow(facts).some(item => item.key.startsWith('derived.'))).toBe(false);
   });
   it('keeps the period of the read a follow-up stays on when the widget has none for the new one', () => {
-    const last = [{ featureId: 'staff-schedule', condition: { kind: 'default' as const } }];
-    const plan: IntentPlan = { kind: 'read', confidence: 'high', reads: [{ featureId: 'staff-schedule', period: 'tomorrow', hints: ['오전'] }] };
-    expect(planToRoute(plan, snapshot, 'ko', last)).toMatchObject({ intent: { kind: 'read', featureId: 'staff-schedule' } });
+    const last = [{ featureId: 'ledger', condition: { kind: 'default' as const } }];
+    const plan: IntentPlan = { kind: 'read', confidence: 'high', reads: [{ featureId: 'ledger', period: 'tomorrow', hints: ['매출'] }] };
+    expect(planToRoute(plan, snapshot, 'ko', last)).toMatchObject({ intent: { kind: 'read', featureId: 'ledger' } });
     expect(planToRoute(plan, snapshot, 'ko', [])).toMatchObject({ kind: 'answer' });
+  });
+  it('reads the shifts of tomorrow with the widget\'s own one-day range, so the people and their hours are shown', () => {
+    const route = planToRoute({ kind: 'read', confidence: 'high', reads: [{ featureId: 'staff-schedule', period: 'tomorrow', hints: ['오전'] }] }, snapshot) as
+      { intent: { kind: string; featureId: string; condition: { kind: string; start: string; end: string } } };
+    expect(route.intent).toMatchObject({ kind: 'read', featureId: 'staff-schedule', condition: { kind: 'dateRange' } });
+    expect(route.intent.condition.start).toBe(route.intent.condition.end);
+    expect(route.intent.condition.start > (snapshot.pos?.businessDate ?? '')).toBe(true);
+  });
+  it('keeps the shifts that overlap the part of the day named in the hints (오전·오후·저녁), whatever else the facts say', () => {
+    const shifts = [fact('근무 2명', '근무 2명'), fact('근무 11/18(수)', '박도현 16:00~22:00'), fact('근무 11/18(수)', '윤서진 08:00~16:30'), fact('근무 11/18(수)', '한소은 10:00~15:00')];
+    const names = (hints: string[]) => keepHinted(hints)(shifts).map(item => item.display);
+    expect(names(['오전'])).toEqual(['윤서진 08:00~16:30', '한소은 10:00~15:00']);
+    expect(names(['오후'])).toEqual(['박도현 16:00~22:00', '윤서진 08:00~16:30', '한소은 10:00~15:00']);
+    expect(names(['저녁'])).toEqual(['박도현 16:00~22:00']);
+    expect(names(['오전', '윤서진'])).toEqual(['윤서진 08:00~16:30']);
+    expect(names(['새벽'])).toEqual([]);
+  });
+  it('puts the facts with a time range first when the sentence asks until when or what time and the model named nothing', () => {
+    const shifts = [fact('근무 2명', '근무 2명'), fact('직원', '직원 5명'), fact('근무 11/18(수)', '박도현 16:00~22:00')];
+    expect(keepHinted([], { timeWords: true })(shifts).map(item => item.display)).toEqual(['박도현 16:00~22:00', '근무 2명', '직원 5명']);
+    expect(keepHinted([])(shifts).map(item => item.display)).toEqual(['근무 2명', '직원 5명', '박도현 16:00~22:00']);
   });
 });
 
+describe('arithmetic the sentence asks for', () => {
+  const read = (hints: string[], featureId = 'ledger', period: 'today' | 'month' | 'default' = 'month') => ({ featureId, period, hints });
+  const base = { kind: 'read' as const, confidence: 'high' as const };
+  it('adds a difference for "빼면 얼마 남아", keeping sales on the left whatever order the model gave', () => {
+    const plan = inferCompute({ ...base, reads: [read(['지출']), read(['매출'])] }, '이번달 매출에서 지출 빼면 얼마 남아?');
+    expect(plan).toMatchObject({ compute: { op: 'diff', left: 1, right: 0 } });
+  });
+  it('adds a sum for "합치면" and a share (sales as the divisor) for "몇 퍼센트"', () => {
+    expect(inferCompute({ ...base, reads: [read(['부가세'], 'tax', 'default'), read(['지출'])] }, '부가세 낼 돈이랑 이번달 지출 합치면 얼마야?'))
+      .toMatchObject({ compute: { op: 'sum', left: 0, right: 1 } });
+    expect(inferCompute({ ...base, reads: [read(['원재료', '매출'])] }, '재료비가 매출에서 몇 퍼센트 차지해?'))
+      .toMatchObject({ reads: [{ hints: ['원재료'] }, { hints: ['매출'] }], compute: { op: 'ratio', left: 0, right: 1 } });
+  });
+  it('leaves a plan alone when the model already chose arithmetic, no cue is in the sentence, or the reads are not a pair', () => {
+    const own = { ...base, compute: { op: 'sum' as const, left: 0, right: 1 }, reads: [read(['매출']), read(['지출'])] };
+    expect(inferCompute(own, '빼면 얼마')).toBe(own);
+    const plain = { ...base, reads: [read(['매출']), read(['지출'])] };
+    expect(inferCompute(plain, '이번달 매출이랑 지출 알려줘')).toBe(plain);
+    const three = { ...base, reads: [read(['a']), read(['b']), read(['c'])] };
+    expect(inferCompute(three, '합치면 얼마')).toBe(three);
+  });
+  it('answers with the derived amount among the shown facts', () => {
+    const facts = projectAgentWidget(snapshot, 'ledger', { kind: 'default' }, 'ko').facts as readonly SnapshotFact[];
+    const sales = facts.find(item => item.label.includes('매출') && item.unit === 'KRW')!;
+    const spent = facts.find(item => item.label.includes('지출') && item.unit === 'KRW')!;
+    const route = planToRoute({ ...base, reads: [read(['매출'], 'ledger', 'today'), read(['지출'], 'ledger', 'today')] }, snapshot, 'ko', [], '오늘 매출에서 지출 빼면 얼마 남아?') as
+      { narrow: (f: readonly SnapshotFact[]) => readonly SnapshotFact[] };
+    expect(route.narrow(facts).find(item => item.key === 'derived.diff')?.value).toBe(Number(sales.value) - Number(spent.value));
+  });
+});
+
+describe('picking the facts a question is about', () => {
+  const hourly = (hour: string, display: string) => ({ ...fact(`시간대별 매출 ${hour}`, display, 'ledger.sales.hourly') });
+  it('keeps the hours of a named part of the day (점심 = 11~13시) from facts that carry a single hour', () => {
+    const rows = [hourly('10:00', '86,420원'), hourly('11:00', '73,900원'), hourly('12:00', '156,740원'), hourly('13:00', '115,240원'), hourly('14:00', '105,370원')];
+    expect(keepHinted(['점심'])(rows).map(item => item.label)).toEqual(['시간대별 매출 11:00', '시간대별 매출 12:00', '시간대별 매출 13:00']);
+    expect(keepHinted(['저녁'])(rows)).toEqual([]);
+  });
+  it('maps peak, per-day and per-hour words to the fact kinds that hold them', () => {
+    const rows = [fact('오늘 매출', '83만', 'ledger.sales.net'), hourly('12:00', '156,740원'), { ...fact('시간대별 매출 12:00', '156,740원', 'ledger.sales.peak') },
+      fact('11월 16일', '1,077,440원', 'ledger.sales.daily'), fact('11월 17일', '831,220원', 'ledger.sales.daily')];
+    expect(keepHinted(['피크 시간']).call(null, rows).map(item => item.key)).toEqual(['ledger.sales.peak']);
+    expect(keepHinted(['요일별']).call(null, rows).map(item => item.label)).toEqual(['11월 16일', '11월 17일']);
+    expect(keepHinted(['시간대별'])(rows).every(item => item.key === 'ledger.sales.hourly')).toBe(true);
+  });
+  it('puts the exact menu name and the kind of number the sentence asks for (rate or count) first', () => {
+    const rows = [fact('헤이즐넛 아메리카노', '36,064원'), fact('아메리카노', '1,123,040원'), { ...fact('헤이즐넛 아메리카노', '77.1%'), unit: 'percent' }, { ...fact('아메리카노', '81.8%'), unit: 'percent' },
+      { ...fact('아메리카노', '475잔'), unit: 'count' }];
+    expect(keepHinted(['아메리카노'], { prefer: 'percent' })(rows).map(item => item.display)[0]).toBe('81.8%');
+    // Two named items: each gets its own best fact first, so a comparison shows both rates before anything else.
+    const two = [...rows, { ...fact('카페라떼', '65.2%'), unit: 'percent' }, fact('카페라떼', '273,492원')];
+    expect(keepHinted(['카페라떼', '아메리카노'], { prefer: 'percent' })(two).map(item => item.display).slice(0, 2)).toEqual(['65.2%', '81.8%']);
+    expect(keepHinted(['아메리카노'], { prefer: 'count' })(rows).map(item => item.display)[0]).toBe('475잔');
+  });
+  it('picks the lowest or highest day for "제일 한가했던 요일", with its weekday, and nothing when there is only one day', () => {
+    const days = [{ ...fact('11월 15일', '830,000원', 'ledger.sales.daily'), value: 830000, date: '2026-11-15' }, { ...fact('11월 16일', '1,077,440원', 'ledger.sales.daily'), value: 1077440, date: '2026-11-16' },
+      { ...fact('11월 17일', '600,000원', 'ledger.sales.daily'), value: 600000, date: '2026-11-17' }];
+    const low = inferCompute({ kind: 'read', confidence: 'high', reads: [{ featureId: 'ledger', period: 'week', hints: [] }] }, '이번 주에 제일 한가했던 요일이 언제야?');
+    expect(low).toMatchObject({ compute: { op: 'min', left: 0, right: 0 } });
+    const route = planToRoute({ kind: 'read', confidence: 'high', reads: [{ featureId: 'ledger', period: 'week', hints: [] }] }, snapshot, 'ko', [], '이번 주에 제일 한가했던 요일이 언제야?') as
+      { narrow: (f: readonly SnapshotFact[]) => readonly SnapshotFact[] };
+    const shown = route.narrow(days);
+    expect(shown.find(item => item.key === 'derived.min')).toMatchObject({ value: 600000, display: expect.stringContaining('화요일') });
+    expect(route.narrow([days[0]]).some(item => item.key === 'derived.min')).toBe(false);
+  });
+  it('writes the month and day of the lowest day, not the year twice', () => {
+    const days = [{ ...fact('11월 15일', '830,000원', 'ledger.sales.daily'), value: 830000, date: '2026-11-15' }, { ...fact('11월 16일', '1,077,440원', 'ledger.sales.daily'), value: 1077440, date: '2026-11-16' }];
+    const route = planToRoute({ kind: 'read', confidence: 'high', reads: [{ featureId: 'ledger', period: 'week', hints: [] }] }, snapshot, 'ko', [], '이번 주에 제일 한가했던 요일이 언제야?') as
+      { narrow: (f: readonly SnapshotFact[]) => readonly SnapshotFact[] };
+    expect(route.narrow(days).find(item => item.key === 'derived.min')?.display).toBe('11월 15일(일요일) 830,000원');
+    // The per-day rows come from the widget's rolling window, so the answer names that window instead of passing for the calendar week.
+    expect(route.narrow(days).find(item => item.key === 'derived.min')?.label).toMatch(/^최근 7일\(\d\d\/\d\d~\d\d\/\d\d\) 중 가장 낮은 날$/u);
+  });
+  it('says a state-only widget has no history when two of its periods are asked for', () => {
+    const route = planToRoute({ kind: 'read', confidence: 'high', reads: [{ featureId: 'members', period: 'week', hints: ['단골'] }, { featureId: 'members', period: 'lastWeek', hints: ['단골'] }] }, snapshot);
+    expect(route).toMatchObject({ kind: 'answer', answer: expect.stringContaining('비교할 수 없어요') });
+  });
+  it('reads a periodless widget (tax, menu, members, stock) as its current state for whatever period the model wrote', () => {
+    for (const period of ['month', 'lastMonth', 'week', 'default'] as const) {
+      expect(planToRoute({ kind: 'read', confidence: 'high', reads: [{ featureId: 'tax', period, hints: ['부가세'] }] }, snapshot)).toMatchObject({ intent: { kind: 'read', featureId: 'tax' } });
+    }
+  });
+});
+
+describe('naming the period an earlier read used, for a follow-up', () => {
+  const today = '2026-11-17';
+  it.each([
+    [{ kind: 'default' }, 'default'], [{ kind: 'snapshot', asOf: today }, 'today'],
+    [{ kind: 'dateRange', start: today, end: today }, 'today'], [{ kind: 'dateRange', start: '2026-11-18', end: '2026-11-18' }, 'tomorrow'],
+    [{ kind: 'dateRange', start: '2026-11-16', end: '2026-11-16' }, 'yesterday'], [{ kind: 'dateRange', start: '2026-11-11', end: today }, 'week'],
+    [{ kind: 'dateRange', start: '2026-11-16', end: today }, 'week'], [{ kind: 'dateRange', start: '2026-11-09', end: '2026-11-15' }, 'lastWeek'],
+    [{ kind: 'dateRange', start: '2026-11-01', end: today }, 'month'], [{ kind: 'dateRange', start: '2026-10-19', end: today }, 'last30'],
+    [{ kind: 'dateRange', start: '2026-10-01', end: '2026-10-31' }, 'lastMonth'], [{ kind: 'dateRange', start: '2026-03-02', end: '2026-03-04' }, 'default'],
+  ] as const)('%j is %s', (condition, name) => { expect(periodNameOf(condition, today)).toBe(name); });
+});
+
 describe('the provider hook', () => {
-  type Sent = { intent: { kind: string; featureId?: string } };
+  type Sent = { intent: { kind: string; featureId?: string; previous?: string } };
   const planFetcher = (plan: unknown, sent: Sent[]) => (async (_url: string, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body)) as Sent;
     sent.push(body);
@@ -134,7 +251,7 @@ describe('the provider hook', () => {
     }
     return new Response('', { status: 503 });
   }) as never;
-  const ask = (text: string, plan: unknown, sent: Sent[]) => createAssistantProvider({ store: createWidgetDataStore(), fetcher: planFetcher(plan, sent), classify: true })
+  const ask = (text: string, plan: unknown, sent: Sent[]) => createAssistantProvider({ store: createWidgetDataStore(), fetcher: planFetcher(plan, sent), classify: true, compose: false })
     .ask({ text, signal: new AbortController().signal });
 
   it('asks for a plan only for a sentence no router placed, then sends the planned typed read', async () => {
@@ -148,6 +265,37 @@ describe('the provider hook', () => {
     const reply = await ask('뭔가 처음 보는 말투로 물어봐요 가나다', { kind: 'clarify', ask: '어느 기간인가요?' }, sent);
     expect(reply.answer).toBe('어느 기간인가요?');
     expect(sent).toHaveLength(1);
+  });
+  it.each([false, true])('answers a classified current ranking with one grounded promotion handoff (follow-up %s)', async followUp => {
+    const sent: Sent[] = [];
+    const data = createWidgetDataStore({ exampleLocalTrends: { candidates: [], ranking: {
+      status: 'ready', period: { from: '2026-10-13', to: '2026-11-16' }, fetchedAt: '2026-11-17T06:45:00Z',
+      items: [{ rank: 1, id: 'scone', keyword: '호두 스콘', changePercent: 17.2, points: [], isMenu: true,
+        menuName: '버터 호두 스콘', classification: 'rising' }],
+    } } });
+    const current = { featureId: 'local-trends', period: 'default', hints: ['가게 활용'] };
+    const reads = followUp ? [{ featureId: 'local-changes', period: 'default', hints: [] }, current,
+      { featureId: 'trade-area', period: 'default', hints: [] }] : [current];
+    const fetcher = planFetcher({ kind: 'read', confidence: 'high', reads }, sent);
+    const provider = createAssistantProvider({ store: data, fetcher, classify: true, compose: false });
+    if (followUp) {
+      await provider.ask({ text: '최근 인기 검색어 순위 알려 줘', layer: 'marketing', signal: new AbortController().signal });
+    }
+    const reply = await provider.ask({
+      text: '최근 인기를 끄는 것 중 우리 매장에 접목할 아이디어가 있나?', layer: 'marketing', signal: new AbortController().signal,
+    });
+    expect(sent.map(item => item.intent.kind)).toEqual(['classify']);
+    if (followUp) {
+      expect(sent[0].intent.previous).toContain('local-trends@default');
+      expect(planToRoute({ kind: 'read', confidence: 'high', reads: [
+        { featureId: 'local-changes', period: 'default', hints: [] },
+        { featureId: 'local-trends', period: 'default', hints: [] },
+      ] }, data.getSnapshot(), 'ko', [{ featureId: 'local-trends', condition: { kind: 'default' } }],
+      '동네 변화도 인기 검색어와 함께 알려줘')).toMatchObject({ intent: { kind: 'read', reads: [{ name: 'get_widget' }, { name: 'get_widget' }] } });
+    }
+    expect(reply.answer).toContain('호두 스콘 · 4주 대비 +17.2%');
+    expect(reply.turn).toEqual({ kind: 'handoff', destination: { featureId: 'promo-video', step: 'place-video' } });
+    expect(reply.proposalSession).toBeUndefined();
   });
   it('keeps the existing answer when the plan is unsupported or the route fails', async () => {
     for (const plan of [{ kind: 'unsupported' }, undefined]) {

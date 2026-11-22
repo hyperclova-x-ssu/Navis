@@ -105,6 +105,51 @@ describe('assistant conversation', () => {
     fireEvent.click(target);
     expect(open).toHaveBeenCalledExactlyOnceWith({ featureId: 'ledger', view: 'sales' }, target);
   });
+  it('uses one detail chip and caption for a read that also suggested the same widget', () => {
+    const open = vi.fn();
+    const answer = '오늘 순매출은 2,000원이에요.';
+    const condition = { kind: 'default' } as const;
+    const store = createWidgetDataStore();
+    const panel: Candidate = { featureId: 'ledger', condition, size: { width: 2, height: 1 }, reason: '답변 기준',
+      preview: storeFactSource(store).view('ledger', condition), placement: 'current-layer', summary: { label: '순매출', display: '2,000원' } };
+    const reply: AssistantReply = { answer, panels: [panel], locale: 'ko', turn: { kind: 'read', evidence: [{
+      tool: 'get_widget', args: { featureId: 'ledger', condition }, status: 'ready', facts: [
+        { key: 'ledger.sales.net', label: '순매출', display: '2,000원', value: 2000, unit: 'KRW', date: '2026-11-17' },
+        { key: 'ledger.sales.net', label: '순매출', display: '1,000원', value: 1000, unit: 'KRW', date: '2026-11-16' },
+      ],
+    }] } };
+    render(<AiConversation draft="" messages={[{ id: 'a', role: 'assistant', text: answer, reply }]} phase="idle" onOpenEvidence={open} {...noop} />);
+    expect(screen.queryByRole('group', { name: '손익' })).toBeNull();
+    expect(screen.getByText('근거 · 손익 · 11월 17일')).toBeInTheDocument();
+    expect(screen.getByText('근거 · 손익 · 11월 16일')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '손익 열기' })).toHaveLength(1);
+  });
+  it('shares a basis caption across distinct read-only detail tabs', () => {
+    const answer = '매출 2,000원, 지출 500원이에요.';
+    const reply: AssistantReply = { answer, panels: [], locale: 'ko', turn: { kind: 'read', evidence: [{
+      tool: 'get_widget', args: { featureId: 'ledger', condition: { kind: 'default' } }, status: 'ready', facts: [
+        { key: 'ledger.sales.net', label: '순매출', display: '2,000원', value: 2000, unit: 'KRW', date: '2026-11-17' },
+        { key: 'ledger.expenses.total', label: '지출 합계', display: '500원', value: 500, unit: 'KRW', date: '2026-11-17' },
+      ],
+    }] } };
+    render(<AiConversation draft="" messages={[{ id: 'a', role: 'assistant', text: answer, reply }]} phase="idle" onOpenEvidence={vi.fn()} {...noop} />);
+    expect(screen.getAllByText('근거 · 손익 · 11월 17일')).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: '손익 열기' })).toHaveLength(2);
+  });
+  it('offers the review tab from provider review totals', () => {
+    const answer = '네이버 리뷰 11건 · 답변 대기 10건';
+    const open = vi.fn();
+    const reply: AssistantReply = { answer, panels: [], locale: 'ko', turn: { kind: 'read', evidence: [{
+      tool: 'get_widget', args: { featureId: 'ai-response', condition: { kind: 'default' } }, status: 'ready', facts: [
+        { key: 'inquiry.reviews.total', label: '네이버 리뷰', display: '11건', value: 11, unit: 'count', date: '2026-11-17' },
+        { key: 'inquiry.reviews.waiting', label: '답변 대기', display: '10건', value: 10, unit: 'count', date: '2026-11-17' },
+      ],
+    }] } };
+    render(<AiConversation draft="" messages={[{ id: 'a', role: 'assistant', text: answer, reply }]} phase="idle" onOpenEvidence={open} {...noop} />);
+    const button = screen.getByRole('button', { name: '메시지·리뷰 응대 열기' });
+    fireEvent.click(button);
+    expect(open).toHaveBeenCalledExactlyOnceWith({ featureId: 'ai-response', view: 'review' }, button);
+  });
   it('shows the Navis mark once in the title (M-02) and only the text label in assistant messages (M-25)', () => {
     render(<AiConversation draft="" messages={[{ id: 'a', role: 'assistant', text: '안녕하세요' }, { id: 'u', role: 'user', text: '안녕' }]} phase="idle" {...noop} />);
     const title = screen.getByRole('heading', { name: 'Navis', level: 2 });

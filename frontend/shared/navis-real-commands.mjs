@@ -26,7 +26,7 @@ const realCommandGroups = {
   coupons: ['coupon.sendSlot', 'coupon.createExpiry', 'coupon.markPosted', 'coupon.pause', 'coupon.resume', 'coupon.extend',
     'coupon.update', 'coupon.sendReachOut', 'coupon.endEarly', 'coupon.unpublish', 'coupon.notifyEnding'],
   inbox: ['notice.saveDraft', 'notice.importClosure', 'notice.deleteDraft', 'notice.send', 'reply.draft', 'inquiry.saveDraft',
-    'inquiry.send', 'inquiry.post'],
+    ['inquiry.send', 'inquiry.send', 'optional'], 'inquiry.post'],
   promo: [['promo.draft.set', 'promo.saveDraft'], ['video.make', 'video.make', true], ['video.retry', 'video.retry', true]],
   tax: ['tax.createPayment', 'tax.updatePayment', 'tax.deletePayment', 'tax.markChecked'],
 };

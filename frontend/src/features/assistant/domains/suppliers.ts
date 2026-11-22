@@ -237,7 +237,7 @@ function makeReader(kind: SupplyKind): RecordAdapter {
         unitPrice: inLocale(locale, '단가', 'Unit price', '单价', '單價'),
         minimumQty: inLocale(locale, '최소 주문', 'Minimum order', '最低订购量', '最低訂購量'),
         orderStep: inLocale(locale, '주문 단위', 'Order step', '订购单位', '訂購單位'),
-        leadDays: inLocale(locale, '입고 예정', 'Lead time', '到货时间', '到貨時間'),
+        leadDays: inLocale(locale, '등록 납기', 'Registered lead time', '登记交货周期', '登記交貨週期'),
       };
       const facts = {
         supplier: supplierName(snapshot, purchase.supplierId, locale),

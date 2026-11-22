@@ -8,7 +8,7 @@ import { isNightHour, NIGHT_SEND_RESTRICTION, ratePercent, SLOT_BENEFIT_IDS } fr
 import { benefitName, benefitPrice, benefitProblem, couponBenefit, COUPON_BENEFIT_KINDS } from '../../../data/marketing/benefit';
 import type { CouponBenefit, CouponRow, ExpiryItem, MarketingCommand, MarketingModelMap, QuietSlot, SlotBenefitId } from '../../../data/marketing/types';
 import { realCouponRow } from '../../../data/reality/14/project';
-import { couponReminderSms, queuedCouponSmsTime } from '../../../data/reality/14/sms';
+import { couponReminderSms, expirySmsCopy, queuedCouponSmsTime } from '../../../data/reality/14/sms';
 import { expiryDiscount, EXTEND_DAYS, PUBLIC_ISSUE_LIMIT, readDemand, resolveDataText, selectWidget } from '../../../data/widget-data';
 import {
   validateAgentCommandArgs, validateAgentDraft, validateAgentPrefill,
@@ -18,6 +18,7 @@ import { navisTranslator } from '../messages';
 import { navisMoneySpans, normalizeNavisInput, normalizeNavisName, parseNavisDate, parseNavisNumber, parseNavisPeriod, parseNavisTime } from '../navis-input';
 import { mktCouponBundle } from '../../widgets/mkt-coupon/messages';
 import { couponChatCopy } from './coupons.messages';
+import { nextNightSmsAt, nightSmsCopy } from './night-sms';
 import type {
   CommandAdapter, DomainAdapter, DomainDetail, DomainRoute, DomainTurnInput, LocalSlots,
   ReadToolAdapter, RecordAdapter, RecordSearch, RecordTargets, RunActionOutcome, RunCommandAdapter,
@@ -353,12 +354,13 @@ const actionTitles = (w: Words) => ({
   'coupon.unpublish': w.l('쿠폰 게시 취소', 'Unpublish coupon', '取消发布优惠券', '取消發布優惠券'),
 });
 
-type ActionDraft = { args: Record<string, unknown>; locale: Locale };
+type ActionDraft = { args: Record<string, unknown>; locale: Locale; expiryNightSms?: string };
 function resolveAction(type: Action, wire: unknown, slots: LocalSlots, targets: RecordTargets): ActionDraft | undefined {
   if (!validateAgentDraft(type, wire)) return;
   const args = expand(wire, slots, targets);
   if (type === 'coupon.createExpiry' && args.benefit) args.benefit = expand(args.benefit, slots, targets);
-  if (validateAgentCommandArgs(type, args)) return { args, locale: asLocale(slots.navisLocale) };
+  if (validateAgentCommandArgs(type, args)) return { args, locale: asLocale(slots.navisLocale),
+    ...(type === 'coupon.createExpiry' && isStamp(slots.expiryNightSms) && { expiryNightSms: slots.expiryNightSms }) };
 }
 
 function lifecycle(type: Lifecycle): CommandAdapter<Extract<MarketingCommand, { type: Lifecycle }>, ActionDraft> {
@@ -493,12 +495,14 @@ function createBenefit(args: ActionDraft['args']): CouponBenefit | undefined {
 const createExpiry: RunCommandAdapter<ActionDraft> = {
   command: 'coupon.createExpiry', slots: { discountRate: isDiscountRate, benefitValue: isCount },
   resolve: (wire, slots, _snapshot, targets) => resolveAction('coupon.createExpiry', wire, slots, targets),
-  preflight({ args, locale }, { snapshot, proposalId, idempotencyKey }) {
-    const w = words(locale), item = model(snapshot, expiryFeature)?.items.find(row => row.itemId === args.itemId);
+  preflight({ args, locale, expiryNightSms }, { snapshot, proposalId, idempotencyKey }) {
+    const w = words(locale), m = model(snapshot, expiryFeature), item = m?.items.find(row => row.itemId === args.itemId);
     const benefit = createBenefit(args);
     if (!item || !benefit || item.unitCost === null) return { kind: 'conflict' };
-    const command = { type: 'coupon.createExpiry', itemId: item.itemId, benefit, route: 'place_news', idempotencyKey } as const;
     const live = snapshot.tables.realCoupons;
+    if (expiryNightSms && (!live || expiryNightSms !== nextNightSmsAt(true) || !m?.routes.sms.recipients)) return { kind: 'invalid' };
+    const route = expiryNightSms ? 'sms' : 'place_news';
+    const command = { type: 'coupon.createExpiry', itemId: item.itemId, benefit, route, idempotencyKey } as const;
     if (live) {
       if (item.handled) return { kind: 'conflict' };
       const problem = benefitProblem(benefit, item.price, item.unitCost);
@@ -510,12 +514,19 @@ const createExpiry: RunCommandAdapter<ActionDraft> = {
     const price = benefitPrice(item.price, benefit);
     const field = (label: string, before: string, after: string) => ({ label, before, after });
     const target = expiryName(item, w);
-    return { kind: 'ready', ...(live ? { realCommand: command, featureId: expiryFeature } : {}), preview: { title: actionTitles(w)['coupon.createExpiry'], target, fields: [
+    // W25's service defaults to the first available 08:00, including the same morning before opening.
+    const copy = expiryNightSms === nextNightSmsAt() ? nightSmsCopy : {
+      confirmLabel: nightSmsCopy.confirmLabel.replace('내일', '오늘'), reason: nightSmsCopy.reason.replace('내일', '오늘'),
+    };
+    return { kind: 'ready', ...(live ? { realCommand: command, featureId: expiryFeature } : {}), preview: {
+      title: actionTitles(w)['coupon.createExpiry'], target, ...(expiryNightSms && copy), fields: [
       field(w.l(couponChatCopy.itemLabel, 'Item', '商品', '商品'), dash, target),
       field(w.benefit, dash, w.dt(benefitName(benefit))),
       field(w.discounted, w.money(item.price), w.money(price)),
       field(w.marginEach, dash, w.money(price - item.unitCost)),
-      field(w.route, dash, w.t(routeNameKey('place_news'))),
+      field(w.route, dash, w.t(routeNameKey(route))),
+      ...(expiryNightSms ? [field(w.sendAt, dash, w.f.dateTime(expiryNightSms)), field(w.recipients, dash, w.people(m!.routes.sms.recipients)),
+        field(w.message, dash, expirySmsCopy(target, benefit))] : []),
     ] },
     execute(_run, store) {
       if (!store || store.getSnapshot() !== snapshot) return { kind: 'conflict' };
@@ -544,8 +555,8 @@ function outbound(type: Outbound): RunCommandAdapter<ActionDraft> {
     preflight({ args, locale }, { snapshot, idempotencyKey }) {
       const feature = features[type], w = words(locale), title = actionTitles(w)[type];
       const field = (label: string, after: string) => ({ label, before: dash, after });
-      const ready = (command: MarketingCommand, target: string, fields: readonly ReturnType<typeof field>[]) => ({
-        kind: 'ready' as const, preview: { title, target, fields },
+      const ready = (command: MarketingCommand, target: string, fields: readonly ReturnType<typeof field>[], automaticNight = false) => ({
+        kind: 'ready' as const, preview: { title, target, fields, ...(automaticNight && nightSmsCopy) },
         ...(snapshot.tables.realCoupons ? { realCommand: command, featureId: feature } : {}),
         execute(_run: unknown, store?: import('../../../data/widget-data').WidgetDataStore): RunActionOutcome {
           if (!store || store.getSnapshot() !== snapshot) return { kind: 'conflict' };
@@ -558,7 +569,9 @@ function outbound(type: Outbound): RunCommandAdapter<ActionDraft> {
       if (type === 'coupon.sendSlot') {
         const m = model(snapshot, slotFeature);
         const slot = m?.openSlots.find(row => row.slotId === args.slotId);
-        const benefit = args.benefitId, body = args.body, sendAt = args.sendAt;
+        const benefit = args.benefitId, body = args.body;
+        const night = snapshot.tables.realCoupons ? nextNightSmsAt() : undefined;
+        const sendAt = args.sendAt ?? night;
         if (!m || !slot) return { kind: 'conflict' };
         if (!isBenefit(benefit) || !m.benefits.options.some(option => option.id === benefit) || (body !== undefined && !isText(body))) return invalid('data.marketing.error.benefitInvalid');
         if (sendAt !== undefined && (!isStamp(sendAt) || sendAt < clockAt(snapshot))) return invalid('data.marketing.error.sendAtPast');
@@ -566,15 +579,13 @@ function outbound(type: Outbound): RunCommandAdapter<ActionDraft> {
         const recipients = eligible(m, slot.slotId);
         if (!recipients.length) return invalid('data.marketing.error.noRecipients');
         const target = slotLabel(slot, w);
-        const localHour = Number(clockAt(snapshot).slice(11, 13));
-        const night = snapshot.tables.realCoupons && isNightHour(localHour);
         const message = body?.trim() ?? w.dt(m.message.bodies[benefit]);
         return ready({ type, slotIds: [slot.slotId], recipientIds: recipients.map(row => row.customerId), benefit, idempotencyKey,
           ...((body || snapshot.tables.realCoupons) && { messageEdits: message }), ...(sendAt && { sendAt }) }, target, [
           field(w.slots, target), field(w.benefit, w.dt(m.benefits.options.find(row => row.id === benefit)!.name)),
           field(w.recipients, w.people(recipients.length)), field(w.message, message),
-          field(w.sendAt, sendAt ? w.f.dateTime(sendAt) : night ? '내일 8시' : w.l('지금', 'Now', '现在', '現在')),
-        ]);
+          field(w.sendAt, sendAt ? w.f.dateTime(sendAt) : w.l('지금', 'Now', '现在', '現在')),
+        ], !!night && sendAt === night);
       }
       if (type === 'coupon.notifyEnding') {
         const row = statusRows(snapshot).find(coupon => coupon.couponId === args.couponId);
@@ -785,13 +796,18 @@ function slotSend(text: string, snapshot: DataSnapshot, locale: Locale, scopedSl
   if (later && !time) return clarify('sendAt', w.l('예약 발송 시각을 알려 주세요', 'Enter a time for the scheduled send.', '请输入定时发送的时间。', '請輸入排程傳送的時間。'),
     value => slotSend(`${text} ${value}`, snapshot, locale, scopedSlotId));
   if (later && !date) return clarify('sendAt', couponChatCopy.chooseSendDate);
-  const sendAt = time && date ? `${date}T${time}` : undefined;
+  const morning = snapshot.tables.realCoupons ? nextNightSmsAt() : undefined;
+  const nightTime = time && isNightHour(Number(time.slice(0, 2)));
+  const sendAt = (!time || nightTime) && morning ? morning : time && date ? `${date}T${time}` : undefined;
   if (sendAt && sendAt < clockAt(snapshot)) return answer(w.t('data.marketing.error.sendAtPast'));
-  if (snapshot.tables.realCoupons && time && isNightHour(Number(time.slice(0, 2)))) return answer('밤 9시부터 아침 8시까지는 문자를 보낼 수 없어요.');
+  if (snapshot.tables.realCoupons && nightTime && !morning) return answer('밤 9시부터 아침 8시까지는 문자를 보낼 수 없어요.');
   const body = draftBody(text);
-  return propose('coupon.sendSlot', 'slot', 'slotId', selected.slotId, locale,
-    { benefitId, ...(sendAt && { sendAt: ref('sendAt') }), ...(isText(body) && { body: ref('body') }) },
-    { ...(sendAt && { sendAt }), ...(isText(body) && { body }) });
+  const args = { benefitId, ...(sendAt && { sendAt: ref('sendAt') }), ...(isText(body) && { body: ref('body') }) };
+  const slots = { ...(sendAt && { sendAt }), ...(isText(body) && { body }) };
+  if (morning && sendAt === morning) return { kind: 'local-proposal', command: 'coupon.sendSlot',
+    args: { ...args, slotId: { handle: 'slot' } }, slots: { ...slots, navisLocale: locale },
+    targets: new Map([['slot', { kind: 'slot', id: selected.slotId }]]) };
+  return propose('coupon.sendSlot', 'slot', 'slotId', selected.slotId, locale, args, slots);
 }
 
 function statusAction(text: string, snapshot: DataSnapshot, locale: Locale, type: Lifecycle | 'coupon.notifyEnding' | 'coupon.endEarly' | 'coupon.update', selectedId?: string): DomainRoute {
@@ -946,14 +962,18 @@ function route(raw: string, snapshot: DataSnapshot, locale: Locale, run?: Parame
   if (expiry) {
     const m = model(snapshot, expiryFeature);
     const item = expiryItem(text, m, w);
-    if (/문자|sms|短信|簡訊/iu.test(text) && sendWords.test(text) && !readWords.test(text)) {
+    const wantsSms = /문자|sms|短信|簡訊/iu.test(text);
+    const sends = sendWords.test(text) && !readWords.test(text);
+    const nightSms = snapshot.tables.realCoupons && sends && !openWords.test(text)
+      && (wantsSms || !placeOffer && !otherPostingRoute.test(text)) ? nextNightSmsAt(true) : undefined;
+    if (wantsSms && sends && !nightSms) {
       return refuse(w.l('당일 소진 쿠폰은 문자로 보낼 수 없어요', 'Sell-today coupons cannot be sent by SMS.',
         '当天售完优惠券无法通过短信发送。', '當日售完優惠券無法以簡訊傳送。'), widgetRef(expiryFeature, 'create', item?.itemId));
     }
-    if (createsExpiry) {
+    if (createsExpiry || nightSms) {
       if (rate !== undefined && !isDiscountRate(rate)) return answer(w.t('data.marketing.error.percentRange'));
       const benefit = expiryBenefit(text, rate);
-      if (otherPostingRoute.test(text) || /短信|簡訊/iu.test(text) || directPublish.test(text) || markWords.test(text)
+      if ((!nightSms && (otherPostingRoute.test(text) || /短信|簡訊/iu.test(text))) || directPublish.test(text) || markWords.test(text)
         || bundledItems.test(text) || /세트/u.test(text) && benefit?.kind !== 'setPrice') {
         return refuse(w.l('당일 소진 쿠폰에서 내용을 확인하고 만들어 주세요', 'Review and create the coupon in the sell-today widget.',
           '请在当天售完组件中确认并创建。', '請在當日售完元件中確認並建立。'),
@@ -973,6 +993,12 @@ function route(raw: string, snapshot: DataSnapshot, locale: Locale, run?: Parame
       const proposedBenefit = benefit.kind === 'percent' ? { discountRate: ref('discountRate') }
         : { benefit: { kind: benefit.kind, value: ref('benefitValue') } };
       const values = benefit.kind === 'percent' ? { discountRate: benefit.value } : { benefitValue: benefit.value };
+      if (nightSms) {
+        if (!m?.routes.sms.recipients) return clarify('recipientId', w.t('data.marketing.error.noRecipients'));
+        // The widget command uses the service's night window to schedule SMS.
+        return { kind: 'local-proposal', command: 'coupon.createExpiry', args: { ...proposedBenefit, itemId: { handle: 'expiry' }, route: 'place_news' },
+          slots: { ...values, navisLocale: locale, expiryNightSms: nightSms }, targets: new Map([['expiry', { kind: 'stock', id: target.itemId }]]) };
+      }
       return propose('coupon.createExpiry', 'stock', 'itemId', expiryName(target, w), locale,
         { ...proposedBenefit, route: 'place_news' }, values);
     }
@@ -992,9 +1018,12 @@ function route(raw: string, snapshot: DataSnapshot, locale: Locale, run?: Parame
   // CHAT-REAL-DEV: "한가한 시간에 쓸 쿠폰 만들어줘" asks for the quiet-hour coupon the widget sends; it opens that card, not a refusal.
   const slotCreate = slotContext && coupon && modifyExpiry.test(text) && !readWords.test(text);
   if ((coupon || slotContext) && (sendWords.test(text) || slotCreate) && !openWords.test(text) &&
-      (slotContext || slotClockWords.test(text) || /쿠폰\s*보내기|쿠폰\s*지금\s*보내/u.test(text))) return slotSend(text, snapshot, locale);
+      (slotContext || slotClockWords.test(text) || /쿠폰\s*보내기|쿠폰\s*지금\s*보내/u.test(text)
+        || snapshot.tables.realCoupons && !readWords.test(text) && nextNightSmsAt())) return slotSend(text, snapshot, locale);
   if (coupon && !readWords.test(text) && (modifyExpiry.test(text) || sendWords.test(text))) {
-    return refuse(restriction, widgetRef(slotFeature, 'send'));
+    // A new coupon with its own discount has no card here: name where it is made, instead of "check the available changes".
+    const plainCreate = locale === 'ko' && !sendWords.test(text);
+    return plainCreate ? refuse(couponChatCopy.createElsewhere, widgetRef(statusFeature, 'active')) : refuse(restriction, widgetRef(slotFeature, 'send'));
   }
   if (/예상\s*손님|\d+시.*\d+시|시간별로\s*손님/u.test(text)) {
     const iso = parseNavisDate(text, businessDay(snapshot));
@@ -1163,6 +1192,11 @@ export function withExpiryStock(inventory: DomainAdapter): DomainAdapter {
 }
 
 export const couponsDomain: DomainAdapter = {
+  routeBeforeHandoff(text, snapshot, locale, run) {
+    if (!snapshot.tables.realCoupons || !nextNightSmsAt()) return;
+    const result = route(text, snapshot, locale, run);
+    if (result && 'kind' in result && result.kind === 'local-proposal') return result;
+  },
   featureIds: [slotFeature, expiryFeature, statusFeature],
   commands: [lifecycle('coupon.pause'), lifecycle('coupon.resume'), lifecycle('coupon.extend'),
     ...(['coupon.update', 'coupon.endEarly', 'coupon.unpublish'] as const).map(editing)],

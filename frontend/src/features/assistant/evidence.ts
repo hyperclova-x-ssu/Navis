@@ -63,7 +63,8 @@ function widgetDestination(featureId: FeatureId, fact: SnapshotFact, condition: 
   if (!view) return;
   if (featureId === 'ledger' && fact.key.startsWith('ledger.evidence.')) view = 'evidence';
   if (featureId === 'ledger' && fact.key.startsWith('ledger.expense')) view = 'expenses';
-  if (featureId === 'ai-response' && fact.key === 'inquiry.waiting.review') view = 'review';
+  if (featureId === 'ai-response' && (fact.key.startsWith('inquiry.reviews.') ||
+    ['inquiry.waiting.review', 'inquiry.rating', 'inquiry.praise'].includes(fact.key))) view = 'review';
   const destination = { featureId, ...(view === true ? {} : { view }) };
   if (!validateAgentDetailRef(destination)) return;
   if (condition.kind === 'default') return destination;

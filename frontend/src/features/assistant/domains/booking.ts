@@ -426,7 +426,18 @@ function createRoute(fields: CreateFields, snapshot: DataSnapshot, locale: Local
     resume(value) {
       if (field === 'name' && (!nonEmpty(value) || !/^[\p{L}○●*' .-]+$/u.test(value))) return;
       const next = parse(value);
-      return next === undefined ? undefined : createRoute({ ...fields, [field]: next }, snapshot, locale);
+      if (next === undefined) return;
+      const filled = { ...fields, [field]: next };
+      // One answer may carry several details ("내일 오후 7시 2명"): take the missing date, time and party size from it too.
+      if (field !== 'name') {
+        const day = filled.date ?? (field !== 'date' ? readBookingDate(value, anchor) : undefined);
+        const clock = filled.time ?? (field !== 'time' ? contextualTime(timesIn(value).at(-1), time => !slotHasPassed(day ?? anchor, time)) : undefined);
+        const party = filled.partySize ?? (field !== 'partySize' ? partyIn(value).value : undefined);
+        if (filled.date === undefined && day !== undefined) filled.date = day;
+        if (filled.time === undefined && clock !== undefined) filled.time = clock;
+        if (filled.partySize === undefined && party !== undefined) filled.partySize = party;
+      }
+      return createRoute(filled, snapshot, locale);
     },
   });
   const anchor = snapshot.pos?.businessDate ?? BUSINESS_CLOCK.date;

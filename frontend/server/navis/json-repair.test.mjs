@@ -32,3 +32,13 @@ test('a reply with an extra key or too many fact refs is tidied into the reply s
   assert.equal(validateAgentModelReply(tidyModelReply({ outcome: 'clarify' })), false);
   assert.equal(tidyModelReply('text'), 'text');
 });
+
+test('a JSON object wrapped in prose or a code fence in the middle of the text is found and parsed, text without one is not', () => {
+  const object = { kind: 'read', reads: [{ featureId: 'ledger' }] };
+  const json = JSON.stringify(object);
+  assert.deepEqual(parseJsonLoose(`이전 질문을 이어서 읽겠습니다.\n\n\`\`\`json\n${json}\n\`\`\`\n이렇게 하면 됩니다.`), object);
+  assert.deepEqual(parseJsonLoose(`따라서 답변은 다음과 같습니다: ${json} 이상입니다.`), object);
+  assert.deepEqual(parseJsonLoose(`설명 {"kind":"read","reads":[{"featureId":"ledger"}]`), object);
+  assert.equal(parseJsonLoose('그냥 설명뿐이고 JSON은 없어요.'), undefined);
+  assert.equal(parseJsonLoose('집합 {a, b} 을 말하는 글'), undefined);
+});

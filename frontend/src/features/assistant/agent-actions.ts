@@ -86,6 +86,7 @@ type Executable<Preview> = Rejected | {
   readonly preview: Preview;
   readonly tier?: ConfirmationTier;
   readonly commandFingerprint?: string;
+  readonly revalidateRecord?: boolean;
   readonly execute: () => ExecutionRejection | Applied;
   /** Present for data commands: true when the real port owns this command (it then runs through `executeAsync`, never `execute`). */
   readonly routed?: () => boolean;
@@ -390,7 +391,8 @@ export function createAgentActions(store: WidgetDataStore, domains: DomainRegist
         if (receipt) return receipt;
         if (locked) return busy();
         if (!isPendingProposal()) return conflict();
-        if (store.getSnapshot().revision !== snapshot.revision) return stale();
+        const currentSnapshot = store.getSnapshot();
+        if (!result.revalidateRecord && currentSnapshot.revision !== snapshot.revision) return stale();
         if (tier === 'extra-confirm' && (!acknowledged || acknowledgedProposalId !== id)) {
           acknowledged = true;
           return { ...report('invalid'), requiresExtraConfirmation: true };
@@ -398,11 +400,11 @@ export function createAgentActions(store: WidgetDataStore, domains: DomainRegist
         locked = true;
         let handedOff = false;
         try {
-          const latest = prepare(draft, context, true);
+          const latest = prepare(draft, result.revalidateRecord ? { ...context, snapshot: currentSnapshot } : context, true);
           if (latest.kind === 'busy') return busy();
           if (latest.kind !== 'ready' || JSON.stringify(latest.preview) !== fingerprint
             || latest.commandFingerprint !== result.commandFingerprint || latest.tier !== result.tier
-            || store.getSnapshot() !== snapshot || !isPendingProposal()) return conflict();
+            || store.getSnapshot() !== (result.revalidateRecord ? currentSnapshot : snapshot) || !isPendingProposal()) return conflict();
           if (result.executeAsync && result.routed?.()) {
             // The real port owns this command: wait for the authoritative receipt (the card stays locked, pending).
             handedOff = true;
@@ -539,7 +541,7 @@ export function createAgentActions(store: WidgetDataStore, domains: DomainRegist
       const feature = result.featureId ?? policyFeature;
       const featureDomain = feature && isDataWidgetId(feature) ? WIDGET_DOMAIN[feature] : undefined;
       const operating = [mappedDomain, featureDomain].some(domain => domain && store.real?.mode(domain) === 'http');
-      if (realCommand && (!metadata || metadata.workflow || metadata.command !== realCommand.type || realAction)) return { kind: 'invalid' };
+      if (realCommand && (!metadata || metadata.workflow === true || metadata.command !== realCommand.type || realAction)) return { kind: 'invalid' };
       if (realAction && (!metadata?.workflow || mappedDomain !== realAction.domain || realAction.bindings[0].type !== metadata.command)) return { kind: 'invalid' };
       const hasCommand = !!realCommand && store.real?.route(realCommand) != null;
       const hasWorkflow = () => !!realAction && store.real?.mode(realAction.domain) === 'http'
@@ -570,6 +572,8 @@ export function createAgentActions(store: WidgetDataStore, domains: DomainRegist
         },
       } : realAction ? {
         commandFingerprint: realAction.fingerprint,
+        // Optional workflows bind the authoritative record revision and recheck it before the first write.
+        revalidateRecord: metadata?.workflow === 'optional',
         routed: hasWorkflow,
         executeAsync: async () => settle(await realAction.execute(store)),
       } : account ? {

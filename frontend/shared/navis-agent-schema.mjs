@@ -1,5 +1,7 @@
 // Agent v1 carries local slot references and revision-scoped handles. The
 // expanded schemas also validate values when the browser resolves those refs.
+import { PROMO_REFERENCE_IDS } from './promo-references.mjs';
+
 export const AGENT_PROTOCOL_HEADER = 'x-navis-protocol';
 export const AGENT_PROTOCOL = 'agent-v1';
 
@@ -136,7 +138,7 @@ const promoDraft = {
   concepts: unique(oneOf('review-roundup', 'behind-the-scenes', 'todays-deal', 'new-item', 'day-at-shop'), 5),
   moods: unique(oneOf('warm', 'clean', 'lively', 'elegant'), 4),
   lengthSec: oneOf(10, 15, 30), locale,
-  referenceId: oneOf('ref-1', 'ref-2', 'ref-3', 'ref-4', 'ref-5', 'ref-6'),
+  referenceId: oneOf(...PROMO_REFERENCE_IDS),
   memo: string(200, '^[\\s\\S]{0,100}$'),
 };
 const promoMake = optional({
@@ -1155,9 +1157,12 @@ const conversationResolution = either(
 // widget list (one "id|name|fact labels" line each) and an optional one-line summary of the previous turn. The answer is an intent plan.
 export const INTENT_PLAN_PERIODS = freeze(['today', 'yesterday', 'tomorrow', 'week', 'lastWeek', 'month', 'lastMonth', 'last30', 'default']);
 const classifyIntent = record({ kind: oneOf('classify'), text: string(240), widgets: array(string(400), 64, 1), previous: string(300) }, ['kind', 'text', 'widgets']);
+// D-380: the model may write the answer sentences. The browser sends the question and the fact lines it already shows; the answer is checked
+// against those lines by navis-answer-guard before it leaves the server and again before it is shown. It carries no command and writes nothing.
+const composeIntent = record({ kind: oneOf('compose'), text: string(240), lines: array(string(240), 24, 1), previous: string(300) }, ['kind', 'text', 'lines']);
 const planRead = record({ featureId: widgetId, period: oneOf(...INTENT_PLAN_PERIODS), hints: array(string(24), 4) }, ['featureId', 'period']);
 // `compute` asks the browser for one derived number from two reads (a sum, a difference or a ratio of their first matching amounts).
-const planCompute = record({ op: oneOf('sum', 'diff', 'ratio'), left: integer(0, 3), right: integer(0, 3) });
+const planCompute = record({ op: oneOf('sum', 'diff', 'ratio', 'min', 'max'), left: integer(0, 3), right: integer(0, 3) });
 const intentPlan = either(
   record({ kind: oneOf('read'), reads: array(planRead, 4, 1), confidence: oneOf('high', 'low'), compute: planCompute }, ['kind', 'reads', 'confidence']),
   record({ kind: oneOf('clarify'), ask: string(120) }),
@@ -1171,6 +1176,7 @@ const intent = either(
   record({ kind: oneOf('help', 'layout', 'unsupported') }),
   conversationIntent,
   classifyIntent,
+  composeIntent,
 );
 const request = record({
   runId: id, snapshotRevision: integer(), locale, layer, page, businessDate: date, intent,
@@ -1310,6 +1316,7 @@ const frameSchemas = {
   ),
   error: record({ code: oneOf(...AGENT_ERROR_CODES) }),
   intent_plan: record({ plan: intentPlan }),
+  composed: record({ text: string(600), used: array(integer(0, 23), 24) }, ['text']),
   action_result: record({ proposalId: id, outcome: oneOf('applied', 'unchanged', 'invalid', 'busy', 'conflict', 'cancelled'), revision: integer(), messageKey: string(120) }, ['proposalId', 'outcome']),
 };
 

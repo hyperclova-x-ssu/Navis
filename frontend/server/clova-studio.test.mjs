@@ -287,3 +287,15 @@ test('a JSON-mode 40009 is retried once, and a different 4xx code is not', async
   await assert.rejects(collect(other.complete({ messages: [], maxTokens: 64, jsonResponse: true, onProviderCall() {} })), error => error.code === 'UNAVAILABLE');
   assert.equal(calls, 1);
 });
+
+// A side request (classify, compose) has a short budget: it waits for a rate-limit reset only when the reset fits, and never longer.
+test('a numeric retryRateLimit retries a 42901 only when the reset fits inside that many milliseconds', async () => {
+  const fits = new Clock(); let calls = 0;
+  const client = createClovaStudio({ apiKey: 'fake', clock: fits, fetchImpl: async () => ++calls === 1 ? rateLimit({ 'x-ratelimit-reset-requests': '1s' }) : response([frame('result', { message: { role: 'assistant', content: 'ok' }, finishReason: 'stop', usage: {} })]) });
+  const pending = collect(client.complete({ messages: [], maxTokens: 64, retryRateLimit: 3000 })); await pump();
+  assert.equal(calls, 1); fits.tick(1000); assert.equal((await pending).at(-1).event, 'result'); assert.equal(calls, 2);
+  const tooLong = new Clock(); let longCalls = 0;
+  const slow = createClovaStudio({ apiKey: 'fake', clock: tooLong, fetchImpl: async () => { longCalls++; return rateLimit({ 'x-ratelimit-reset-requests': '10s' }); } });
+  await assert.rejects(collect(slow.complete({ messages: [], maxTokens: 64, retryRateLimit: 3000 })), error => error.code === 'UNAVAILABLE');
+  assert.equal(longCalls, 1); assert.equal(tooLong.timers.size, 0);
+});

@@ -78,7 +78,7 @@ export function createClovaStudio({ apiKey, baseUrl = 'https://clovastudio.strea
   const key = typeof apiKey === 'string' ? apiKey.trim() : '';
   const available = Boolean(key && endpointBase);
 
-  async function* request({ messages, tools, toolChoice, maxTokens, responseFormat, jsonResponse = false, model: requestModel = model, signal, onBytes, includeAiFilters,
+  async function* request({ messages, tools, toolChoice, maxTokens, responseFormat, temperature, seed, jsonResponse = false, model: requestModel = model, signal, onBytes, includeAiFilters,
     requestId, responseInfo }) {
     let reader;
     let cancelReader;
@@ -119,6 +119,8 @@ export function createClovaStudio({ apiKey, baseUrl = 'https://clovastudio.strea
       // HCX-007 defaults to low reasoning. Function calling requires it disabled explicitly.
       if (structured || selectedModel === 'HCX-007') body.thinking = { effort: 'none' };
       if (structured) body.responseFormat = responseFormat;
+      if (structured && temperature !== undefined) body.temperature = temperature;
+      if (structured && seed !== undefined) body.seed = seed;
       if (!structured && tools !== undefined) body.tools = tools;
       if (!structured && toolChoice !== undefined) body.toolChoice = toolChoice;
       if (includeAiFilters) body.includeAiFilters = true;
@@ -260,10 +262,12 @@ export function createClovaStudio({ apiKey, baseUrl = 'https://clovastudio.strea
       } catch (error) {
         outcome = error?.rateExceeded ? 'rate_limited' : error?.code === 'AI_FILTER' ? 'filtered'
           : error?.code === 'INVALID_OUTPUT' ? error.code : 'UNAVAILABLE';
-        if (retryRateLimit && error?.rateExceeded && attempt === 0 && !emitted) retryDelay = error.delayMs;
+        // `retryRateLimit` is true (wait for whatever reset the provider names), false, or the most milliseconds a short-budget caller can wait.
+        if (retryRateLimit && error?.rateExceeded && attempt === 0 && !emitted && (retryRateLimit === true || error.delayMs <= retryRateLimit)) retryDelay = error.delayMs;
         else if (error?.transient && attempt === 0 && !emitted) retryDelay = 0;
         else if (error?.name === 'AbortError' || ['AI_FILTER', 'INVALID_OUTPUT'].includes(error?.code)) throw error;
-        else throw failure('UNAVAILABLE');
+        // A second 40009 in a row: the caller may carry on without this model call when the call was only a protocol step.
+        else throw Object.assign(failure('UNAVAILABLE'), error?.transient ? { unsupportedFunction: true } : {});
       } finally {
         if (onProviderCall) {
           const { promptTokens, completionTokens, totalTokens } = usage ?? {};

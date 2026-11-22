@@ -12,6 +12,8 @@ import type { AgentFact } from '../../../../shared/navis-agent-schema.mjs';
 import { navisTranslator } from '../messages';
 
 export const RECENT_ORDER_COUNT = 3;
+const METHOD = { card: '카드', easy_pay: '간편결제', cash: '현금' } as const;
+const PREPARATION = { accepted: '접수', preparing: '준비 중', completed: '준비 완료' } as const;
 
 const STATUS: Readonly<Record<OrderPaymentStatus, { readonly ko: string; readonly en: string }>> = {
   paid: { ko: '결제 완료', en: 'Paid' }, unpaid: { ko: '결제 전', en: 'Not paid yet' }, partial: { ko: '일부 결제', en: 'Partly paid' },
@@ -35,10 +37,33 @@ export function recentOrderFacts(snapshot: DataSnapshot, locale: Locale): readon
     const paid = read.pos.payments.filter(payment => payment.status === 'paid' && billIds.has(payment.billId)).reduce((sum, payment) => sum + payment.amount, 0);
     const settled = row.paymentStatus === 'paid' && paid > 0 ? paid : row.amount;
     const discount = row.paymentStatus === 'paid' && paid > 0 && paid < row.amount ? row.amount - paid : 0;
-    const display = [time, row.menuText, tr.format.money(settled, 'full'), status, discount > 0 && (locale === 'ko' ? `할인 ${tr.format.money(discount, 'full')}` : `Discount ${tr.format.money(discount, 'full')}`),
+    const prepared = row.preparation === 'canceled' ? undefined : PREPARATION[row.preparation];
+    const display = [time, row.menuText, tr.format.money(settled, 'full'), locale === 'ko' ? prepared : undefined, status, discount > 0 && (locale === 'ko' ? `할인 ${tr.format.money(discount, 'full')}` : `Discount ${tr.format.money(discount, 'full')}`),
       origin && `${origin.source} ${origin.payment}`].filter(Boolean).join(' · ');
     return { key: 'orders.recent.row', label, value: settled, unit: 'KRW', display, date };
   });
+}
+
+/**
+ * "최근 결제된 거 있어?": the newest payments (time, amount, method, state) and what today's payments add up to. A payment is a money fact, apart from the
+ * order it paid for; refunds and cancellations are not listed as paid.
+ */
+export function recentPaymentFacts(snapshot: DataSnapshot, locale: Locale): readonly AgentFact[] {
+  const read = posReadForFacts(snapshot);
+  if (!read || locale !== 'ko') return [];
+  const tr = navisTranslator(locale), date = read.pos.businessDate;
+  const orders = selectOrderSummary(read, { filter: 'all' }).rows;
+  const paid = [...read.pos.payments].filter(payment => payment.status === 'paid').sort((a, b) => b.at.localeCompare(a.at) || b.seq - a.seq);
+  const rows = paid.slice(0, RECENT_ORDER_COUNT).map((payment): AgentFact => {
+    const methods = [...new Set(payment.splits.map(split => METHOD[split.method]))].join('·') || METHOD[payment.countedMethod];
+    const order = orders.find(row => row.billIds.includes(payment.billId));
+    const connect = order && connectOrigin({ orderNo: order.no, memo: order.memo });
+    return { key: 'payments.recent.row', label: '최근 결제', value: payment.amount, unit: 'KRW',
+      display: [payment.at.slice(11, 16), tr.format.money(payment.amount, 'full'), methods, '결제 완료', connect?.source].filter(Boolean).join(' · '), date };
+  });
+  if (!paid.length) return [{ key: 'payments.today.total', label: '오늘 결제', value: 0, unit: 'KRW', display: '0건 · 0원', date }];
+  const total = paid.reduce((sum, payment) => sum + payment.amount, 0);
+  return [...rows, { key: 'payments.today.total', label: '오늘 결제', value: total, unit: 'KRW', display: `${paid.length}건 · ${tr.format.money(total, 'full')}`, date }];
 }
 
 /** The hour with the most orders today, from the loaded POS orders ("오늘 제일 붐비는 시간이 언제야?"). */

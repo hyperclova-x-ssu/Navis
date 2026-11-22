@@ -30,7 +30,7 @@ const isLocale = (value: unknown): value is Locale => value === 'ko' || value ==
 const copy = {
   ko: {
     sku: '코드(SKU)', name: '이름', unit: '단위', stock: '현재 재고', threshold: '안전 재고', trackRestock: '보충 알림',
-    trackExpiry: '당일 소진', on: '사용', off: '사용 안 함', history: '재고 변동 기록', opening: '시작 재고', daysLeft: '오늘 사용량 기준 남은 일수',
+    trackExpiry: '당일 소진', expirySoon: '유통기한 임박(3일 안)', expiresOn: '유통기한', on: '사용', off: '사용 안 함', history: '재고 변동 기록', opening: '시작 재고', daysLeft: '오늘 사용량 기준 남은 일수',
     usage: '사용량', received: '입고량', ending: '남은 재고', week: '최근 7일', lowChannelCount: '재고가 부족한 판매 채널', daysLeftNone: '오늘 사용량이 없어 계산할 수 없어요', unavailable: '확인할 재고 기록이 없어요',
     itemMissing: '등록된 품목이 없어요', stockQuestion: '현재 재고를 얼마나 기록할까요?', thresholdQuestion: '안전 재고를 얼마로 설정할까요?',
     qtyQuestion: '몇 개를 옮길까요?', skuQuestion: '품목 코드(SKU)를 무엇으로 할까요?', unitQuestion: '어떤 단위를 사용할까요?',
@@ -41,7 +41,7 @@ const copy = {
   },
   en: {
     sku: 'SKU', name: 'Name', unit: 'Unit', stock: 'Current stock', threshold: 'Safety stock', trackRestock: 'Restock alerts',
-    trackExpiry: 'Use today', on: 'On', off: 'Off', history: 'Stock history', opening: 'Opening stock', daysLeft: 'Days left at today’s usage',
+    trackExpiry: 'Use today', expirySoon: 'Expiring within 3 days', expiresOn: 'Expires', on: 'On', off: 'Off', history: 'Stock history', opening: 'Opening stock', daysLeft: 'Days left at today’s usage',
     usage: 'Usage', received: 'Received', ending: 'Remaining stock', week: 'Last 7 days', lowChannelCount: 'Retail channels below their threshold', daysLeftNone: 'No usage today, so it cannot be calculated', unavailable: 'No stock history is available',
     itemMissing: 'No matching item', stockQuestion: 'How much current stock should I record?', thresholdQuestion: 'What safety stock should I use?',
     qtyQuestion: 'How many should I move?', skuQuestion: 'What SKU should I use?', unitQuestion: 'Which unit should I use?',
@@ -52,7 +52,7 @@ const copy = {
   },
   'zh-Hans': {
     sku: '商品编码 (SKU)', name: '名称', unit: '单位', stock: '当前库存', threshold: '安全库存', trackRestock: '补货提醒',
-    trackExpiry: '当日用完', on: '开启', off: '关闭', history: '库存变动记录', opening: '期初库存', daysLeft: '按今日用量计算的剩余天数',
+    trackExpiry: '当日用完', expirySoon: '3 天内临期', expiresOn: '保质期', on: '开启', off: '关闭', history: '库存变动记录', opening: '期初库存', daysLeft: '按今日用量计算的剩余天数',
     usage: '用量', received: '入库量', ending: '剩余库存', week: '最近 7 天', lowChannelCount: '库存不足的在售渠道', daysLeftNone: '今日没有用量，无法计算', unavailable: '没有可查看的库存记录',
     itemMissing: '未找到已登记的品项', stockQuestion: '要记录多少当前库存？', thresholdQuestion: '安全库存设为多少？',
     qtyQuestion: '要移动多少件？', skuQuestion: '要使用哪个商品编码？', unitQuestion: '要使用哪个单位？',
@@ -63,7 +63,7 @@ const copy = {
   },
   'zh-Hant': {
     sku: '商品編碼 (SKU)', name: '名稱', unit: '單位', stock: '目前庫存', threshold: '安全庫存', trackRestock: '補貨提醒',
-    trackExpiry: '當日用完', on: '開啟', off: '關閉', history: '庫存變動記錄', opening: '期初庫存', daysLeft: '按今日用量計算的剩餘天數',
+    trackExpiry: '當日用完', expirySoon: '3 天內臨期', expiresOn: '保存期限', on: '開啟', off: '關閉', history: '庫存變動記錄', opening: '期初庫存', daysLeft: '按今日用量計算的剩餘天數',
     usage: '用量', received: '入庫量', ending: '剩餘庫存', week: '最近 7 天', lowChannelCount: '庫存不足的在售渠道', daysLeftNone: '今日沒有用量，無法計算', unavailable: '沒有可查看的庫存記錄',
     itemMissing: '未找到已登記的品項', stockQuestion: '要記錄多少目前庫存？', thresholdQuestion: '安全庫存設為多少？',
     qtyQuestion: '要移動多少件？', skuQuestion: '要使用哪個商品編碼？', unitQuestion: '要使用哪個單位？',
@@ -183,6 +183,19 @@ export function projectInventoryFacts(snapshot: DataSnapshot, feature: FeatureId
   }
   fact('inventory.restock.count', model.restockCount, 'item', supply.t('widget.inventory-booking.restockNeeded'));
   fact('inventory.outOfStock.count', model.outOfStockCount, 'item', supply.t('widget.inventory-booking.outBadge'));
+  // Lots close to their date, from the service's own batches: the count (zero is a finding, not silence) and one fact per live lot with its date and what is left.
+  // Only when every lot was read; a partial read says nothing about expiry.
+  if (source?.batchesComplete) {
+    const soon = addDays(date, 3);
+    const expiring = source.batches.filter(lot => !lot.discardedAt && lot.expiresOn <= soon && (baseQuantity(lot.remainingQuantityBase) ?? 0) > 0)
+      .sort((a, b) => a.expiresOn.localeCompare(b.expiresOn) || a.batchId.localeCompare(b.batchId));
+    fact('inventory.expiry.count', expiring.length, 'item', t.expirySoon);
+    for (const lot of expiring) {
+      const stockItem = source.items.find(row => row.itemId === lot.itemId);
+      const quantity = stockItem?.unit ? fromBase(baseQuantity(lot.remainingQuantityBase) ?? 0, stockItem.unit) : null;
+      if (stockItem?.unit && quantity !== null) fact(`inventory.expiry.${lot.batchId}`, quantity, stockItem.unit, `${stockItem.name} · ${t.expiresOn} ${tr.format.date(lot.expiresOn, 'short')}`, { date: lot.expiresOn });
+    }
+  }
   const products = model.products.items;
   for (const channel of ['store', 'online'] as const) {
     if (products.length && products.every(item => channelBalance(snapshot, item.itemId, channel) !== undefined)) {
@@ -648,7 +661,7 @@ export function readInventoryTurn(raw: string, snapshot: DataSnapshot, locale: L
     if (bare && !rewriteWords.test(text) && !otherSubject.test(bare[1]) && [...bare[1].trim()].length >= 2) {
       return lookupMissing(bare[1].trim(), t.itemMissing);
     }
-    if (stockWords.test(text) && readWords.test(text) && !rewriteWords.test(text) && !/^재고|(?:매출|발주|쿠폰|예약|위젯|마진|레시피)/u.test(text)) return answer(t.itemMissing);
+    // No item was named, so "no registered item" would be a claim nobody checked: leave the sentence to the planner instead of answering it.
     return;
   }
   const tail = mention?.tail.trim() ?? text;

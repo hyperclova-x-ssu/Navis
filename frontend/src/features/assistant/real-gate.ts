@@ -11,6 +11,7 @@ import { widgetDomains, type RealDomain } from '../../data/reality/00/port';
 import type { WidgetDataStore } from '../../data/widget-data';
 import type { CommandAdapter, DomainRegistry } from './domains/registry';
 import { AGENT_COMMAND_CATALOG, type AgentKnownCommand, type AgentSourceId } from '../../../shared/navis-agent-schema.mjs';
+import { realCommandFor } from '../../../shared/navis-real-commands.mjs';
 
 export function unreadableDomain(store: Pick<WidgetDataStore, 'real'>, domain: RealDomain): boolean {
   const state = store.real?.state(domain);
@@ -51,8 +52,14 @@ export function gateUnreadable(domains: DomainRegistry, store: Pick<WidgetDataSt
       const adapter = domains.runCommand(command);
       if (!adapter || !store.real) return adapter;
       const feature = AGENT_COMMAND_CATALOG[command as AgentKnownCommand]?.featureId as FeatureId | undefined;
-      return { ...adapter, preflight: (draft, context) =>
-        unreadable(feature) ? unavailable() : adapter.preflight(draft, context) };
+      const metadata = realCommandFor(command);
+      return { ...adapter, preflight(draft, context) {
+        if (!unreadable(feature)) return adapter.preflight(draft, context);
+        if (metadata?.workflow !== 'optional') return unavailable();
+        const prepared = adapter.preflight(draft, context);
+        return prepared.kind === 'ready' && prepared.realAction && prepared.realAction.domain === metadata.domain
+          && !unreadableDomain(store, prepared.realAction.domain) ? prepared : unavailable();
+      } };
     },
     reader(kind) {
       const adapter = domains.reader(kind);

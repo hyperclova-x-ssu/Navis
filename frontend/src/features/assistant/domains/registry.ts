@@ -2,7 +2,7 @@ import type { DetailRef, FeatureId, Locale, NoticeRequest, QueryCondition, RunSt
 import type { DataCommand, DataCommandResult } from '../../../data/commands/types';
 import type { DataSnapshot } from '../../../data/db/types';
 import type { WidgetDataStore } from '../../../data/widget-data';
-import type { RealDomain } from '../../../data/reality/00';
+import type { RealDomain, RealPort } from '../../../data/reality/00';
 import {
   AGENT_COMMAND_CATALOG, agentCommandPolicy, type AgentExtraReadTool, type AgentFact, type AgentMissingStatus,
   type AgentKnownCommand, type AgentReadArgs, type AgentReadProjection, type AgentRecordKind, type AgentRecordMatch,
@@ -124,6 +124,8 @@ export interface DomainAdapter {
   readonly featureIds?: readonly FeatureId[];
   readonly tools?: readonly ReadToolAdapter[];
   readonly classifyMulti?: typeof classifyMultiRequest; // N21
+  /** Domain-owned routing for requests that can be fulfilled inside chat before a widget handoff. */
+  routeBeforeHandoff?(text: string, snapshot: DataSnapshot, locale: Locale, run?: RunState): DomainRoute | undefined;
   /** Explicit shell requests are resolved before widget-specific language. */
   routePresentation?(text: string, snapshot: DataSnapshot, locale: Locale, run?: RunState): DomainRoute | undefined;
   route?(text: string, snapshot: DataSnapshot, locale: Locale, run?: RunState): DomainRoute | undefined;
@@ -166,7 +168,13 @@ export interface DomainTurnInput extends AgentTurnInput {
   readonly additionalReadings?: readonly AgentReadProjection[];
   readonly onMissing?: { readonly answer: string; readonly reason?: AgentRefusal['reason']; readonly alternative?: AgentHandoff };
 }
-export type DomainRoute = DomainTurnInput
+export type DomainRoute = ImmediateDomainRoute
+  | { readonly kind: 'deferred'; resolve(context: { readonly snapshot: DataSnapshot; readonly port?: RealPort;
+    readonly signal: AbortSignal }): Promise<ImmediateDomainRoute> };
+
+type ImmediateDomainRoute = DomainTurnInput
+  | { readonly kind: 'local-proposal'; readonly command: AgentKnownCommand; readonly args: AgentWireArgs; readonly slots: LocalSlots;
+    readonly targets: RecordTargets; readonly alternative?: AgentHandoff }
   | {
     readonly kind: 'clarification'; readonly field: string; readonly answer: string;
     // D-325 historical confirmation uses a choice pressed on the card.
@@ -174,7 +182,8 @@ export type DomainRoute = DomainTurnInput
     resume?(value: string, run?: RunState): DomainRoute | undefined;
   }
   | { readonly kind: 'refusal'; readonly reason: AgentRefusal['reason']; readonly answer?: string; readonly alternative?: AgentHandoff }
-  | { readonly kind: 'answer'; readonly answer: string; readonly cancelPending?: true };
+  | { readonly kind: 'answer'; readonly answer: string; readonly cancelPending?: true; readonly destination?: AgentHandoff;
+    readonly readScope?: { readonly featureId: FeatureId; readonly condition: QueryCondition } };
 export interface DomainDetail {
   readonly args: AgentWireArgs;
   readonly target?: ResolvedRecord;
@@ -248,6 +257,8 @@ export function createDomainRegistry(adapters: readonly DomainAdapter[]) {
     readFeatures: (tool: AgentExtraReadTool | undefined, kind: AgentRecordKind | undefined) =>
       first(domain => domain.tools?.some(adapter => adapter.tool === tool) || domain.reads.some(adapter => adapter.kind === kind)
         ? features(domain) : undefined) ?? [],
+    routeBeforeHandoff: (text: string, snapshot: DataSnapshot, locale: Locale, run?: RunState) =>
+      first(domain => domain.routeBeforeHandoff?.(text, snapshot, locale, run)),
     route(text: string, snapshot: DataSnapshot, locale: Locale, feature?: FeatureId | null, run?: RunState) {
       const preferred = feature ? adapters.find(domain => features(domain).includes(feature)) : undefined;
       return first(domain => domain.routePresentation?.(text, snapshot, locale, run)) ??

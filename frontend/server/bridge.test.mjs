@@ -2227,6 +2227,20 @@ test('live scoped read renders its single vetted fact when the provider returns 
   assert.doesNotMatch(run.raw(), /private-prose|9999/u);
 });
 
+test('live scoped read with several vetted facts also finishes as a reply when the provider answers in prose, citing the read\'s own facts and none of the prose', async t => {
+  const second = { ...fact, key: 'ledger.sales.delta', label: '비교 기간 대비', value: -23.8, unit: 'percent', display: '-23.8%' };
+  const several = { ...liveWidgetRead, snapshot: [{ featureId: 'ledger', condition, facts: [fact, second] }] };
+  const fake = fakeAgentScript(agentCall('get_widget', ledgerToolArgs), result('private-prose 9999 매출이 많이 줄었어요'));
+  const bridge = createBridge({ agentMode: 'live', apiKey: 'test-key', fetchImpl: fake.agentFetchImpl, onDiagnostics() {} });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, several);
+  await run.done;
+  assert.equal(run.events().at(-1).data.outcome, 'reply');
+  assert.match(run.raw(), /128.4만 원/u);
+  assert.match(run.raw(), /-23.8%/u);
+  assert.doesNotMatch(run.raw(), /private-prose|9999|줄었어요/u);
+});
+
 test('live forced lookup refuses multiple calls and logs only their shape', async t => {
   const raw = frame('result', { message: { role: 'assistant', content: 'private-side-text', toolCalls: [
     { id: 'call-1', type: 'function', function: { name: 'search_records', arguments: menuSearchCall } },
@@ -3094,7 +3108,8 @@ test('an invalid reply is logged by shape (keys from a fixed list, outcome, fact
   assert.deepEqual(run.events().at(-1).data, { code: 'INVALID_OUTPUT' });
   const turn = diagnostics.find(entry => entry.event === 'navis_agent_turn');
   assert.equal(turn.invalidReason, 'reply_schema');
-  assert.deepEqual(turn.replyShape, { kind: 'object', keys: ['facts', 'outcome', 'reason'], otherKeys: 1, outcome: 'reply', facts: 3, badRefs: 1 });
+  assert.deepEqual(turn.replyShape, { kind: 'object', keys: ['facts', 'outcome', 'reason'], otherKeys: 1, outcome: 'reply', facts: 3, badRefs: 1,
+    refTypes: { number: 0, numericString: 0, prefixedString: 0, dottedKey: 0, text: 1, other: 0 } });
   assert.equal(JSON.stringify(diagnostics).includes('비밀문장'), false);
   assert.equal(JSON.stringify(diagnostics).includes('12,252,500'), false);
 });
@@ -3123,11 +3138,105 @@ test('a provider call that ends in code 40009 logs the request shape: counts, to
   assert.ok(calls.length >= 1);
   for (const call of calls) {
     assert.equal(call.providerCode, '40009');
-    assert.deepEqual(Object.keys(call.requestShape).sort(), ['filter', 'messages', 'responseFormat', 'toolChoice', 'toolMessages', 'toolNames', 'tools']);
+    const keys = Object.keys(call.requestShape).sort();
+    assert.deepEqual(keys.filter(key => !['forced', 'schemaChars', 'featureId', 'conditionKind'].includes(key)), ['filter', 'messages', 'responseFormat', 'toolChoice', 'toolMessages', 'toolNames', 'tools']);
+    if (call.requestShape.toolChoice === 'forced') assert.ok(Number.isSafeInteger(call.requestShape.schemaChars) && call.requestShape.forced);
     assert.ok(call.requestShape.tools >= 1);
     assert.ok(call.requestShape.toolNames.every(name => ['list_widget_ids', 'get_widget', 'search_records', 'get_source', 'propose_action', 'other'].includes(name)));
     assert.ok(['auto', 'forced', 'none'].includes(call.requestShape.toolChoice));
   }
   assert.equal(JSON.stringify(diagnostics).includes('12,252,500'), false);
   assert.equal(JSON.stringify(diagnostics).includes('private words'), false);
+});
+
+test('fact refs written as the fact\'s own label are resolved to the refs, and an unknown label or a mix with an unknown one stays invalid', async t => {
+  const run = async facts => {
+    const bridge = createBridge({ agentMode: 'live', apiKey: 'test-key', fetchImpl: liveFetchReturning(JSON.stringify({ outcome: 'reply', facts })).fetchImpl, onDiagnostics() {} });
+    t.after(() => bridge.close());
+    const turn = agentClient(bridge, { ...liveWidgetRead, intent: { kind: 'read' } });
+    await turn.done;
+    return turn.events().at(-1).data;
+  };
+  assert.deepEqual(await run(['매출']), { outcome: 'reply' });
+  assert.deepEqual(await run(['f0']), { outcome: 'reply' });
+  assert.deepEqual(await run(['없는 이름']), { code: 'INVALID_OUTPUT' });
+  assert.deepEqual(await run(['매출', '없는 이름']), { code: 'INVALID_OUTPUT' });
+});
+
+test('a forced lookup that the provider refuses twice with code 40009 continues with the planned lookup', async t => {
+  const calls = [];
+  const fetchImpl = async (_url, { body }) => {
+    const request = JSON.parse(body);
+    calls.push(request);
+    const forced = typeof request.toolChoice === 'object';
+    if (forced) return new Response(frame('error', { status: { code: '40009', message: 'private' } }), { headers: { 'content-type': 'text/event-stream' } });
+    const final = JSON.parse(result('{"outcome":"reply","facts":["f0"]}').split('\n')[1].slice(5));
+    return new Response(frame('result', { ...final, ...(request.includeAiFilters && { aiFilter: [{ score: '2' }] }) }), { headers: { 'content-type': 'text/event-stream' } });
+  };
+  const bridge = createBridge({ agentMode: 'live', apiKey: 'test-key', fetchImpl, onDiagnostics() {} });
+  t.after(() => bridge.close());
+  const run = agentClient(bridge, { ...liveWidgetRead, intent: { kind: 'read', reads: [{ name: 'get_widget', args: ledgerToolArgs }] } });
+  await run.done;
+  assert.equal(run.events().at(-1).data.outcome, 'reply');
+  assert.equal(calls.filter(request => typeof request.toolChoice === 'object').length, 2, 'the forced call was tried twice before the local lookup');
+});
+
+// D-380: the model writes the answer sentences behind the numeric guard.
+const composeBody = (intent = {}) => ({
+  runId: 'compose-run', snapshotRevision: 1, locale: 'ko', layer: 'management', businessDate: '2026-11-22',
+  intent: { kind: 'compose', text: '오늘 매출 어때?', lines: ['오늘 매출 48.1만 원', '비교 기간 대비 -33.6%'], ...intent },
+  slots: [], catalog: [], snapshot: [], searches: [],
+});
+
+test('a live compose turn returns one composed frame with only guarded numbers, logs counts only and takes no chat turn from the allowance', async t => {
+  const diagnostics = [];
+  const bodies = [];
+  const bridge = createBridge({ clock: new Clock(), agentMode: 'live', apiKey: 'test-key', agentWindowTurns: 2, onDiagnostics: entry => diagnostics.push(entry),
+    fetchImpl: async (_url, init) => { bodies.push(JSON.parse(init.body)); return hcxJson({ text: '오늘 매출은 48.1만 원이에요. 비교 기간보다 33.6% 낮아요.', used: [0, 1] }); } });
+  t.after(() => bridge.close());
+  for (let index = 0; index < 4; index++) {
+    const run = agentClient(bridge, { ...composeBody(), runId: `compose-${index}` });
+    await run.done;
+    assert.equal(run.res.statusCode, 200);
+    const frames = run.events().filter(item => item.event !== 'status');
+    assert.deepEqual(frames, [{ event: 'composed', data: { text: '오늘 매출은 48.1만 원이에요. 비교 기간보다 33.6% 낮아요.', used: [0, 1] } }, { event: 'done', data: { outcome: 'reply' } }]);
+  }
+  assert.equal(bodies[0].tools, undefined);
+  assert.equal(bodies[0].responseFormat, undefined);
+  const calls = diagnostics.filter(entry => entry.event === 'navis_agent_provider_call');
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every(entry => entry.requestMode === 'text' && entry.promptTokens === 100));
+  assert.equal(JSON.stringify(diagnostics).includes('매출'), false);
+});
+
+test('a compose answer with nothing left after the guard, or a compose request while switched off, ends without an answer', async t => {
+  const rejecting = createBridge({ clock: new Clock(), agentMode: 'live', apiKey: 'test-key', onDiagnostics() {},
+    fetchImpl: async () => hcxJson({ text: '오늘 매출은 50만 원이에요.', used: [0] }) });
+  t.after(() => rejecting.close());
+  const run = agentClient(rejecting, composeBody());
+  await run.done;
+  assert.deepEqual(run.events().at(-1), { event: 'error', data: { code: 'INVALID_OUTPUT' } });
+  assert.equal(run.events().some(item => item.event === 'composed'), false);
+  const off = createBridge({ ...bridgeOptionsFromEnv({ NAVIS_AGENT_COMPOSE: '0' }), clock: new Clock(), agentMode: 'live', apiKey: 'test-key', onDiagnostics() {},
+    fetchImpl: () => assert.fail('compose reached the provider while switched off') });
+  t.after(() => off.close());
+  const blocked = agentClient(off, composeBody());
+  await blocked.done;
+  assert.equal(blocked.res.statusCode, 503);
+  assert.equal(bridgeOptionsFromEnv({ NAVIS_AGENT_COMPOSE: '1' }).agentCompose, undefined);
+});
+
+test('a compose request must carry only the question, the lines and an optional previous turn, and it is live only', async t => {
+  const live = createBridge({ clock: new Clock(), agentMode: 'live', apiKey: 'test-key', onDiagnostics() {}, fetchImpl: () => assert.fail('reached the provider') });
+  t.after(() => live.close());
+  for (const bad of [{ command: 'menu.delete' }, { lines: [] }, { text: '' }, { lines: Array(25).fill('줄') }]) {
+    const run = agentClient(live, composeBody(bad));
+    await run.done;
+    assert.equal(run.res.statusCode, 400, JSON.stringify(bad).slice(0, 40));
+  }
+  const fixture = createBridge({ onDiagnostics() {} });
+  t.after(() => fixture.close());
+  const run = agentClient(fixture, composeBody());
+  await run.done;
+  assert.equal(run.res.statusCode, 503);
 });

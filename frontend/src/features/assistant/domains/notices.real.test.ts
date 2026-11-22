@@ -1,5 +1,8 @@
-import { expect, it } from 'vitest';
-import { createWidgetDataStore } from '../../../data/widget-data';
+import { expect, it, vi } from 'vitest';
+import { readAppClock } from '../../../data/db/app-clock';
+import { couponsDomain } from './coupons';
+import { readNotice } from '../../../data/reality/15/adapter';
+import { createWidgetDataStore, selectWidget } from '../../../data/widget-data';
 import type { NoticeDto, RealInbox } from '../../../data/reality/15/dto';
 import { noticeDraftRow, noticeHistoryRows } from '../../../data/reality/15/dto';
 import { noticesDomain } from './notices';
@@ -19,6 +22,37 @@ function snapshot(...notices: NoticeDto[]) {
 }
 
 const condition = { kind: 'default' } as const;
+
+it('proposes the existing SMS commands at night at each widget’s reservation time', async () => {
+  const time = vi.spyOn(await import('../../../data/db/app-clock'), 'readAppClock');
+  time.mockReturnValue({ ...readAppClock(), local: '2026-11-17T03:00' });
+  const reader = vi.spyOn(await import('../../../data/reality/15/adapter'), 'readNotice');
+  try {
+    const draft: NoticeDto = { ...row, id: 'draft', status: 'draft', result: null };
+    const state = snapshot(draft);
+    reader.mockResolvedValue({ ...draft, smsPreview: { content: '서비스에서 미리 본 문자', recipientCount: 3, sendAllowed: true } } as Awaited<ReturnType<typeof readNotice>>);
+    const route = noticesDomain.routeBeforeHandoff?.('“매장 소식” 공지를 지금 문자로 보내줘', state, 'ko');
+    if (!route || !('kind' in route) || route.kind !== 'deferred') throw Error('Missing notice preview');
+    const proposal = await route.resolve({ snapshot: state, port: { reads: {} } as NonNullable<Parameters<typeof route.resolve>[0]['port']>, signal: new AbortController().signal });
+    expect(proposal).toMatchObject({ kind: 'local-proposal', command: 'notice.send', slots: { sendAt: '2026-11-18T08:00' } });
+
+    const base = createWidgetDataStore().getSnapshot();
+    const expiry = selectWidget(base, 'expiry-coupon', condition, 'normal');
+    const slots = selectWidget(base, 'slot-coupon', condition, 'normal');
+    const status = selectWidget(base, 'coupon-status', condition, 'normal');
+    if (expiry.status !== 'ready' || slots.status !== 'ready' || status.status !== 'ready') throw Error('Missing coupon models');
+    const real = { ...base, tables: { ...base.tables, realCoupons: { coupons: [], businessDate: '2026-11-17', localAt: '2026-11-17T03:00', status: status.model, expiry: expiry.model, slots: slots.model, naver: null, missing: [] } } };
+    const eligibleSlots = slots.model.openSlots.filter(slot => slots.model.recipients.some(person => person.selectable && person.slotIds.includes(slot.slotId)));
+    real.tables.realCoupons.slots = { ...slots.model, openSlots: eligibleSlots.slice(0, 1) };
+    const slotResult = couponsDomain.routeBeforeHandoff?.('빈 시간 쿠폰 지금 보내줘', real, 'ko');
+    expect(slotResult).toMatchObject({ kind: 'local-proposal', command: 'coupon.sendSlot', slots: { sendAt: '2026-11-18T08:00' } });
+    expect(couponsDomain.route?.('바스크 치즈케이크 당일 소진 쿠폰 40% 할인해서 문자로 보내줘', real, 'ko'))
+      .toMatchObject({ kind: 'local-proposal', command: 'coupon.createExpiry', slots: { expiryNightSms: '2026-11-17T08:00' } });
+  } finally {
+    reader.mockRestore();
+    time.mockRestore();
+  }
+});
 
 it('shows the stored reservation and cancellation separately from sent notices', () => {
   const canceled: NoticeDto = { ...row, id: 'canceled', title: '취소한 소식', result: { state: 'canceled', scheduledFor: '2026-11-18T10:00' } };

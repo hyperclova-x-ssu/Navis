@@ -78,3 +78,21 @@ it('opens the SMS reservation list when a title is ambiguous or the owner asks f
     expect(widgetHandoffRef(handoff)).toEqual({ featureId: 'notice-send', view: 'scheduled', focus: 'action' });
   }
 });
+
+it('opens one message thread\'s reply pane at the draft step with the thread and the action focus, and nothing else', () => {
+  expect(widgetHandoffRef({ featureId: 'ai-response', step: 'message-draft', itemId: 'th-2' })).toEqual({ featureId: 'ai-response', view: 'message', focus: 'action', itemId: 'th-2' });
+  expect(widgetHandoffRef({ featureId: 'ai-response', step: 'message-draft' })).toEqual({ featureId: 'ai-response', view: 'message', focus: 'action' });
+  // The step carries no command or draft, and an item id must be a short string.
+  expect(widgetHandoffRef({ featureId: 'ai-response', step: 'message-draft', itemId: 'th-2', command: 'inquiry.send' })).toBeUndefined();
+  expect(widgetHandoffRef({ featureId: 'ai-response', step: 'message-draft', itemId: 'th-2', draft: { body: 'x' } })).toBeUndefined();
+  expect(widgetHandoffRef({ featureId: 'ai-response', step: 'message-draft', itemId: 'x'.repeat(201) })).toBeUndefined();
+  expect(widgetHandoffRef({ featureId: 'community', step: 'message-draft', itemId: 'th-2' })).toBeUndefined();
+});
+
+// D-404: the W21 test-SMS flow is retired. Nothing opens a "test-sms" step any more; a reply request reaches the item's reply pane by its command.
+it('has no test-SMS destination and never classifies a test-text request as a widget handoff', () => {
+  expect(widgetHandoffRef({ featureId: 'ai-response', step: 'test-sms' as never })).toBeUndefined();
+  for (const text of ['시험 문자 보내줘', '테스트 문자 보내줘', 'test sms 보내줘']) expect(classifyWidgetHandoff(text)?.step, text).not.toBe('test-sms');
+  // The review-draft step stays: it opens the review tab for the named review.
+  expect(widgetHandoffRef({ featureId: 'ai-response', step: 'review-draft', itemId: 'review-1' })).toMatchObject({ featureId: 'ai-response', view: 'review', itemId: 'review-1', focus: 'action' });
+});

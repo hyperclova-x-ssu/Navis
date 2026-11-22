@@ -199,7 +199,7 @@ function reviewAction(command: string) {
 function ProposalCard({ session, previewTranslator, onNotice, onActionResult, run, receiptVisible = true, onRepropose, onOpenDetail }:
   Omit<AgentReplyControlsProps, 'reply' | 'onContinue'> & { readonly session: ProposalSession; readonly previewTranslator: Translator }) {
   const store = useWidgetDataStore();
-  const { proposal, menu, preview, edit, editField, feedback, reproposed, refreshFailed, closed, receiptIdentity } =
+  const { proposal, menu, preview, edit, editField, feedback, reproposed, refreshFailed, closed, replaced, receiptIdentity } =
     useSyncExternalStore(session.subscribe, session.getSnapshot);
   const t = korean;
   const editButton = useRef<HTMLButtonElement>(null);
@@ -226,10 +226,11 @@ function ProposalCard({ session, previewTranslator, onNotice, onActionResult, ru
   const when = command === 'notice.send' ? preview?.fields.find(field => sendTimeLabels.has(field.label))?.after : undefined;
   const nextMorning = when === NIGHT_NOTICE_TIME_LABEL;
   // M-15 (DS §10.2): cards that send something out of the store carry the "밖으로 나가요" strip with the kind of message.
-  const outboundKind = command === 'notice.send' ? '공지' : command === 'coupon.sendSlot' || command === 'coupon.sendReachOut' || command === 'coupon.notifyEnding' ? '문자' : undefined;
+  const outboundKind = command === 'notice.send' ? '공지' : command === 'coupon.sendSlot' || command === 'coupon.sendReachOut' || command === 'coupon.notifyEnding'
+    || command === 'coupon.createExpiry' && preview?.reason ? '문자' : undefined;
   const action = destructive ? `${destructive} 내용 확인하기`
-    : when ? nextMorning ? `${NIGHT_NOTICE_TIME_LABEL}에 보내기` : '발송 예약하기'
-    : menu ? t.t(`${key}confirm`) : reviewAction(command);
+    : preview?.confirmLabel ?? (when ? nextMorning ? `${NIGHT_NOTICE_TIME_LABEL}에 보내기` : '발송 예약하기'
+    : menu ? t.t(`${key}confirm`) : reviewAction(command));
 
   useLayoutEffect(() => {
     // A late (real) receipt only takes focus when the owner has not moved on: focus is still lost to the page after the pressed button went away.
@@ -307,6 +308,13 @@ function ProposalCard({ session, previewTranslator, onNotice, onActionResult, ru
       {history && openLabel && onOpenDetail && <ActionButton variant="outline" onClick={event => onOpenDetail(history, event.currentTarget)}>{openLabel}</ActionButton>}
     </div>;
   }
+  // C-13: a card that a new question closed was not cancelled by the owner; it says so and offers the proposal again.
+  if (replaced && outcome === 'cancelled') return <div className="navis-agent-controls navis-receipt" data-outcome="replaced">
+    <Icon name="info" /><span>새 질문을 받아 이 제안은 닫았어요</span>
+    {onRepropose && <ActionButton variant="secondary" onKeyDown={ignoreKeyRepeat} onClick={event => {
+      if (event.detail < 2) onRepropose();
+    }}>다시 제안 받기</ActionButton>}
+  </div>;
   if (outcome === 'cancelled' || outcome === 'unchanged') return <div className="navis-agent-controls navis-receipt" data-outcome={outcome}>
     <Icon name="ban" /><span>{t.t(`${key}${outcome}`)}</span>
   </div>;
@@ -349,7 +357,7 @@ function ProposalCard({ session, previewTranslator, onNotice, onActionResult, ru
     </div> : <div key="review" className="navis-agent-controls__review" data-refresh={reproposed || undefined}>
       {!edit && <>
         {outboundKind && <p className="navis-card__strip"><Icon name="send" /><span>{`밖으로 나가요 · ${outboundKind}`}</span></p>}
-        {nextMorning && <p>{`지금은 보낼 수 없어서 ${NIGHT_NOTICE_TIME_LABEL}에 보내도록 예약할 수 있어요`}</p>}
+        {preview?.reason ? <p>{preview.reason}</p> : nextMorning && <p>{`지금은 보낼 수 없어서 ${NIGHT_NOTICE_TIME_LABEL}에 보내도록 예약할 수 있어요`}</p>}
         {menu ? <MenuPreview key={proposal.id} menu={menu} t={t} invalid={receipt?.field} />
           : <ProposalRows preview={preview!} notice={command === 'notice.send'}
             immediate={command === 'notice.send' && !when || command === 'coupon.notifyEnding'} />}

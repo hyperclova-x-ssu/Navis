@@ -10,6 +10,7 @@ import {
   type NoticeCommand, type NoticeDraft, type NoticePreviewView, type NoticeSent,
 } from '../../../data/iteration7/notices';
 import { resolveNoticeRecipients } from '../../../data/iteration7/notices/recipients';
+import { readNotice } from '../../../data/reality/15/adapter';
 import type { CustomerGroupId } from '../../../data/marketing/types';
 import {
   validateAgentCommandArgs, validateAgentDraft, validateAgentPrefill, type AgentFact, type AgentRecordMatch, type AgentWireArgs,
@@ -17,6 +18,7 @@ import {
 import { navisTranslator } from '../messages';
 import { noticeWidgetStep } from '../widget-handoff';
 import { normalizeNavisInput, normalizeNavisName, parseNavisDate, parseNavisPeriod, parseNavisTime } from '../navis-input';
+import { nextNightSmsAt, nightSmsCopy } from './night-sms';
 import type {
   CommandAdapter, DomainAdapter, DomainDetail, DomainLookup, DomainRoute, LocalSlots, ReadToolAdapter,
   RecordAdapter, RecordSearch, RecordTargets, RunCommandAdapter,
@@ -280,7 +282,8 @@ function commandAdapter(type: LocalNoticeCommand['type']): CommandAdapter<LocalN
 
 const isStamp = (value: unknown): value is string => typeof value === 'string' && value.length === 16 && value[10] === 'T'
   && isIsoDate(value.slice(0, 10)) && /^(?:[01]\d|2[0-3]):[0-5]\d$/u.test(value.slice(11));
-type SendDraft = { noticeId: string; draftRevision: number; sendAt?: string; automaticNight: boolean; locale: Locale };
+type SendDraft = { noticeId: string; draftRevision: number; sendAt?: string; automaticNight: boolean; locale: Locale;
+  nightSms?: { body: string; recipients: number } };
 /** D-326 Q4: the same preview the commit checks, now or at the chosen time. */
 function sendPreview(snapshot: DataSnapshot, noticeId: string, draftRevision: number, sendAt?: string) {
   if (sendAt === undefined) return previewNotice(snapshot, { noticeId, draftRevision }, now(snapshot));
@@ -301,11 +304,26 @@ const send: RunCommandAdapter<SendDraft> = {
     const timeRef: unknown = wire.sendAt;
     if (sendAt !== slots.sendAt || (timeRef !== undefined && (!record(timeRef) || timeRef.slot !== 'sendAt' || sendAt === undefined))) return;
     const automaticNight = slots.noticeNightAuto === true && sendAt !== undefined && sendAt === automaticNightSchedule(now(snapshot));
-    return { noticeId: args.noticeId, draftRevision: args.draftRevision, sendAt, automaticNight, locale: slotLocale(slots.navisLocale) };
+    const body = slots.nightSmsBody, recipients = slots.nightSmsRecipients;
+    const nightSms = typeof body === 'string' && body && typeof recipients === 'number' && recipients > 0 ? { body, recipients } : undefined;
+    return { noticeId: args.noticeId, draftRevision: args.draftRevision, sendAt, automaticNight, nightSms, locale: slotLocale(slots.navisLocale) };
   },
-  preflight({ noticeId, draftRevision, sendAt, automaticNight, locale }, { snapshot, idempotencyKey }) {
+  preflight({ noticeId, draftRevision, sendAt, automaticNight, nightSms, locale }, { snapshot, idempotencyKey }) {
     const draft = snapshot.tables.noticeDraft.find(row => row.noticeId === noticeId);
     if (!draft) return { kind: 'conflict' };
+    if (nightSms) {
+      if (!snapshot.tables.realInbox || draft.channel !== 'sms' || draft.revision !== draftRevision || !sendAt || sendAt !== nextNightSmsAt()) return { kind: 'invalid' };
+      if (alreadySent(snapshot, draft)) return { kind: 'unchanged' };
+      const closure = selectDraftClosureLink(snapshot, draft);
+      if (closure !== 'none' && closure !== 'current') return { kind: 'conflict' };
+      const l = labels(locale);
+      return { kind: 'ready', featureId, realCommand: { type: 'notice.send', noticeId, draftRevision, previewId: 'service', sendAt, idempotencyKey },
+        preview: { title: l.scheduledSend, target: draft.title, ...nightSmsCopy, fields: [
+          { label: l.sendTime, before: dash, after: NIGHT_NOTICE_TIME_LABEL },
+          { label: l.body, before: dash, after: nightSms.body },
+          { label: l.recipients, before: dash, after: people(nightSms.recipients, l) },
+        ] }, execute: () => ({ kind: 'invalid' }) };
+    }
     if (noticeWidgetStep(snapshot, noticeId, sendAt !== undefined)) return { kind: 'invalid' };
     if (alreadySent(snapshot, draft)) return { kind: 'unchanged' };
     const result = sendPreview(snapshot, noticeId, draftRevision, sendAt);
@@ -483,9 +501,27 @@ function route(raw: string, snapshot: DataSnapshot, locale: Locale, run?: RunSta
       const key = closureLink === 'changed' ? 'CLOSURE_CHANGED' : closureLink === 'removed' ? 'CLOSURE_REMOVED' : 'CLOSURE_DATES_DIFFER';
       return clarify('closureEventId', statusKey(`data.notices.error.${key}`, labels('ko')));
     }
-    return { kind: 'refusal', reason: 'widget_only',
+    const fallback = { kind: 'refusal' as const, reason: 'widget_only' as const,
       ...(automaticNight ? { answer: '공지 발송에서 내일 8시로 예약해 주세요' } : {}),
-      alternative: { featureId, step: 'sms-schedule', itemId: saved.noticeId } };
+      alternative: { featureId, step: 'sms-schedule' as const, itemId: saved.noticeId } };
+    const sendAt = automaticNight && snapshot.tables.realInbox ? nextNightSmsAt() : undefined;
+    if (!sendAt) return fallback;
+    return { kind: 'deferred', async resolve({ port, signal }) {
+      if (!port) return fallback;
+      try {
+        const detail = await readNotice(port.reads, saved.noticeId, signal);
+        const preview = detail.smsPreview;
+        if (detail.revision !== saved.revision || detail.status !== 'draft' || detail.channel !== 'sms'
+          || detail.smsEnabled === false || detail.closureStatus === 'changed' || detail.closureStatus === 'unavailable'
+          || !preview?.sendAllowed || !preview.content || !preview.recipientCount) return fallback;
+        return { kind: 'local-proposal', command: 'notice.send',
+          args: { noticeId: { handle: 'notice' }, draftRevision: slot('draftRevision'), sendAt: slot('sendAt') },
+          slots: { draftRevision: saved.revision, sendAt, nightSmsBody: preview.content, nightSmsRecipients: preview.recipientCount, navisLocale: locale },
+          targets: new Map([['notice', { kind: 'noticeDraft', id: saved.noticeId }]]), alternative: fallback.alternative };
+      } catch {
+        return fallback;
+      }
+    } };
   };
   if (snapshot.tables.realInbox && !isSend && !isDelete && /(?:문자|공지).*예약|예약.*(?:문자|공지)/u.test(wording)
     && /몇\s*(?:건|개)|현황/u.test(wording)) {
@@ -726,6 +762,11 @@ export const noticesDomain: DomainAdapter = {
   reads: [reader('noticeDraft'), reader('noticeSent')],
   tools: [previewTool],
   projectWidget, route, navigation,
+  routeBeforeHandoff(text, snapshot, locale, run) {
+    if (!snapshot.tables.realInbox || !nextNightSmsAt()) return;
+    const result = route(text, snapshot, locale, run);
+    if (result && 'kind' in result && result.kind === 'deferred') return result;
+  },
   handoff(command, fields) {
     if (command !== 'notice.send') return;
     const { noticeId, kind, title, body, startDate, endDate, audience, groupIds } = fields;

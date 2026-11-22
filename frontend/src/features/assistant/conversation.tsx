@@ -1,7 +1,7 @@
 import navisSymbol from '../../assets/brand/navis-symbol.svg';
 import '../../assets/brand/brand.css';
 import { Fragment, useContext, useId, useRef, useLayoutEffect, useState, type ReactNode, type KeyboardEvent } from 'react';
-import type { BatchResult, DetailRef, FeatureId, PanelSpec } from '../../contracts';
+import type { BatchResult, DetailRef, FeatureId, PanelSpec, QueryCondition } from '../../contracts';
 import { ActionButton, IconButton } from '../../ui/components/controls';
 import { getRegistration } from '../../catalog';
 import { useBundle, type Translator } from '../../i18n';
@@ -13,7 +13,7 @@ import { ChatGlyph } from './chat-glyphs';
 import type { AnalysisAnswer } from './analysis';
 import { navisBundle, navisTranslator, navisStreamMessages as copy } from './messages';
 import { localizeFact } from './snapshot';
-import { selectVerifiedEvidence } from './evidence';
+import { selectVerifiedEvidence, type EvidenceRow } from './evidence';
 import type { PromptSuggestion } from './prompt-suggestions';
 import type { AssistantReply, Candidate } from './types';
 import { NAVIS_INPUT_LIMIT } from './navis-conversation';
@@ -64,6 +64,34 @@ export function CandidateCard({ candidate, onSelect, placed = null, onViewOnBoar
     return <div className="ai-candidate" data-readonly="placed" role="group" aria-label={`${name}. ${note}`} style={groupStyle(registration.groupId)}>{body}<span>{note}</span>{onViewOnBoard && <ActionButton variant="secondary" onClick={onViewOnBoard}>{t.t('navis.card.viewOnBoard')}</ActionButton>}</div>;
   }
   return <button type="button" className="ai-candidate" style={groupStyle(registration.groupId)} onClick={onSelect}>{body}<span>{t.t('navis.card.action')}</span></button>;
+}
+
+type EvidenceAction = Required<Pick<EvidenceRow, 'destination' | 'openLabel'>>;
+
+function evidenceGroups(rows: readonly EvidenceRow[], canOpen: boolean) {
+  const groups = new Map<string, { source: string; periodLabel: string; actions: EvidenceAction[] }>();
+  const seen = new Set<string>();
+  for (const { source, periodLabel, destination, openLabel } of rows) {
+    const key = JSON.stringify([source, periodLabel]);
+    const group = groups.get(key) ?? { source, periodLabel, actions: [] };
+    groups.set(key, group);
+    if (!canOpen || !destination || !openLabel) continue;
+    const target = JSON.stringify(destination);
+    if (seen.has(target)) continue;
+    seen.add(target);
+    group.actions.push({ destination, openLabel });
+  }
+  return [...groups.entries()];
+}
+
+function matchesCandidateScope(destination: EvidenceAction['destination'], candidate: Candidate) {
+  if (destination.featureId !== candidate.featureId) return false;
+  const condition: QueryCondition = destination.condition ?? (destination.date
+    ? { kind: 'dateRange', start: destination.date, end: destination.date } : { kind: 'default' });
+  const preview = candidate.condition;
+  if (condition.kind === 'dateRange') return preview.kind === 'dateRange' && condition.start === preview.start && condition.end === preview.end;
+  if (condition.kind === 'snapshot') return preview.kind === 'snapshot' && condition.asOf === preview.asOf;
+  return preview.kind === 'default';
 }
 
 /** Reduced motion: the app's own setting when a UiProvider is mounted, else the system preference. */
@@ -253,8 +281,12 @@ export function AiConversation({ draft, onDraftChange, messages, phase, onSubmit
     const text = message.text;
     const reads = message.reply?.turn?.kind === 'read' ? message.reply.turn.evidence : undefined;
     // The app's grounded read formatter emits the ready facts from these producing reads.
-    const evidence = reads && text && selectVerifiedEvidence(reads, reads.flatMap(read =>
-      read.status === 'ready' && read.tool !== 'search_records' ? read.facts.map(fact => ({ fact })) : []), bubble);
+    const evidence = reads && text ? evidenceGroups(selectVerifiedEvidence(reads, reads.flatMap(read =>
+      read.status === 'ready' && read.tool !== 'search_records' ? read.facts.map(fact => ({ fact })) : []), bubble), Boolean(onOpenEvidence)) : [];
+    const sources = evidence.flatMap(([, group]) => group.actions.map(action => action.destination));
+    const candidates = (message.reply?.panels ?? []).filter(candidate => !sources.some(source => matchesCandidateScope(source, candidate)))
+      .map(candidate => candidate.summary && text.includes(`${candidate.summary.label} ${candidate.summary.display}`)
+        ? { ...candidate, summary: null } : candidate);
     if (!pending && !hasContent(message)) return null;
     // M-17: a stopped or failed reply is one notice (icon + sentence + at most one action); the retry keeps its behaviour.
     const retry = !message.retryDismissed && onRetry && (message.reply?.mode === 'simple' || message.delivery === 'stopped' || failed(message))
@@ -269,22 +301,22 @@ export function AiConversation({ draft, onDraftChange, messages, phase, onSubmit
       {/* One element for everything the reply brings, so the answer and the cards appear in the same render with one fade (C-1). */}
       {!pending && <div className="ai-conversation__reveal" data-fade={fade || undefined}>
       {failed(message) ? <div className="ai-notice" data-tone="error"><Icon name="warning" />{answer}{retry}</div> : answer}
-      {evidence && evidence.length > 0 && <ul className="ai-conversation__evidence">{evidence.map(({ source, periodLabel, destination, openLabel }) => {
-        const chip = Boolean(destination && openLabel && onOpenEvidence);
-        const registration = destination && getRegistration(destination.featureId);
-        return <li key={JSON.stringify([source, periodLabel, destination])} style={registration ? groupStyle(registration.groupId) : undefined}>
-          <span className="ai-conversation__basis">{!chip && <Icon name="info" />}<span>{`근거 · ${source} · ${periodLabel}`}</span></span>
-          {chip && destination && onOpenEvidence && <ActionButton className="ai-conversation__chip" variant="outline" onClick={event => onOpenEvidence(destination, event.currentTarget)}>
+      {evidence.length > 0 && <ul className="ai-conversation__evidence">{evidence.map(([basis, { source, periodLabel, actions }]) => <li key={basis}>
+        <span className="ai-conversation__basis">{actions.length === 0 && <Icon name="info" />}<span>{`근거 · ${source} · ${periodLabel}`}</span></span>
+        {onOpenEvidence && actions.map(({ destination, openLabel }) => {
+          const registration = getRegistration(destination.featureId);
+          return <ActionButton key={JSON.stringify(destination)} className="ai-conversation__chip" variant="outline"
+            style={registration ? groupStyle(registration.groupId) : undefined} onClick={event => onOpenEvidence(destination, event.currentTarget)}>
             {registration && <Icon name={registration.id} />}{openLabel}<ChatGlyph name="open" />
-          </ActionButton>}
-        </li>;
-      })}</ul>}
+          </ActionButton>;
+        })}
+      </li>)}</ul>}
       {message.delivery === 'stopped' && <div className="ai-notice" data-tone="info"><Icon name="info" /><p>{copy.stopped}</p>{retry}</div>}
       {message.reply?.mode === 'simple' && !message.reply.outOfScope && !message.retryDismissed && <p className="ai-conversation__caption ai-conversation__simple"><Icon name="info" />{copy.simple}</p>}
       {!failed(message) && message.delivery !== 'stopped' && retry}
       {message.placementResults?.map((line,index)=><p key={index}>{line}</p>)}
       {message.placementPrompt && <p>{message.placementPrompt}</p>}
-      {message.reply?.panels.length ? <div className="ai-conversation__candidates">{message.reply.panels.some(candidate => !placedOf?.(candidate)) && <strong>{t.t('navis.candidates')}</strong>}{message.reply.panels.map((candidate, index) => <div key={`${candidate.featureId}-${index}`}>{renderCandidate ? renderCandidate(candidate) : <CandidateCard candidate={candidate} onSelect={() => onSelectCandidate?.(candidate)} placed={placedOf?.(candidate) ?? null} onViewOnBoard={onViewCandidateOnBoard ? () => onViewCandidateOnBoard(candidate) : undefined} />}</div>)}</div> : null}
+      {candidates.length ? <div className="ai-conversation__candidates">{candidates.some(candidate => !placedOf?.(candidate)) && <strong>{t.t('navis.candidates')}</strong>}{candidates.map((candidate, index) => <div key={`${candidate.featureId}-${index}`}>{renderCandidate ? renderCandidate(candidate) : <CandidateCard candidate={candidate} onSelect={() => onSelectCandidate?.(candidate)} placed={placedOf?.(candidate) ?? null} onViewOnBoard={onViewCandidateOnBoard ? () => onViewCandidateOnBoard(candidate) : undefined} />}</div>)}</div> : null}
       {message.reply && renderAgentReply?.(message.reply, message)}
       {message.reply?.examples?.map(exampleButton)}
       {message.analysis && <div className="ai-conversation__analysis"><strong>{t.t('navis.analysis.title', { name: name(message.analysis.suggestions[0].featureId) })}</strong><p>{message.analysis.periodLabel}</p>{message.analysis.metrics.map((metric) => <p key={metric.label}>{metric.label}: <strong>{metric.display}</strong></p>)}<p>{message.analysis.interpretation}</p>{message.analysis.suggestions.map((spec) => <ActionButton key={spec.featureId} variant="secondary" aria-label={t.t('navis.placeActionLabel', { name: name(spec.featureId) })} disabled={phase !== 'idle'} onClick={() => onPlaceSuggestion?.(message.analysis!.suggestions)}>{t.t('navis.placeAction')}</ActionButton>)}</div>}

@@ -25,7 +25,7 @@ export const CLASSIFY_SCHEMA = {
       },
     },
     ask: { type: 'string' },
-    compute: { type: 'object', properties: { op: { type: 'string', enum: ['sum', 'diff', 'ratio'] }, left: { type: 'integer' }, right: { type: 'integer' } } },
+    compute: { type: 'object', properties: { op: { type: 'string', enum: ['sum', 'diff', 'ratio', 'min', 'max'] }, left: { type: 'integer' }, right: { type: 'integer' } } },
   },
   required: ['kind'],
 };
@@ -40,21 +40,23 @@ const INSTRUCTIONS = [
   '두 기간을 비교하거나 추이를 묻는 질문은 기간마다 read 하나씩 고른다. 같은 위젯을 기간만 바꿔 여러 번 고를 수 있다.',
   'hints는 질문이 콕 집어 묻는 항목 이름(위젯 항목 이름, 메뉴·품목 이름)을 위젯 목록의 표기대로 최대 4개 적는다. 전체를 묻거나 모르면 빈 배열.',
   '오타와 줄임말은 바로잡아 해석한다(아아=아이스 아메리카노, 알바=직원, 매츨=매출, 재곱=재고, 췩소=취소).',
-  'hints에는 별명이나 줄임말을 정식 이름으로 풀어 적는다(아아·뜨아→아메리카노, 알바→직원, 라떼→카페라떼).',
-  '예) "이번 주랑 지난주 매출 비교" → {"kind":"read","confidence":"high","reads":[{"featureId":"ledger","period":"week","hints":["매출"]},{"featureId":"ledger","period":"lastWeek","hints":["매출"]}]}',
-  '예) "아아 이번 주 몇 잔" → {"kind":"read","confidence":"high","reads":[{"featureId":"margin","period":"week","hints":["아메리카노"]}]}',
-  '예) "소금빵이랑 베이글 뭐가 더 팔려" → {"kind":"read","confidence":"high","reads":[{"featureId":"margin","period":"week","hints":["소금빵","베이글"]}]}',
-  '예) "오늘 챙길 것" → {"kind":"read","confidence":"high","reads":[{"featureId":"briefing","period":"today","hints":[]}]}',
-  '예) previous가 "내일 근무 누구야? → staff-schedule"이고 "그 중에 오전은?" → {"kind":"read","confidence":"high","reads":[{"featureId":"staff-schedule","period":"tomorrow","hints":["오전"]}]}',
-  '예) "오늘 매출이 왜 낮아?" → {"kind":"read","confidence":"low","reads":[{"featureId":"ledger","period":"today","hints":["매출"]},{"featureId":"ledger","period":"yesterday","hints":["매출"]},{"featureId":"briefing","period":"today","hints":["매출"]}]}',
-  '후속 질문(그 중에, 그럼, 거기)은 previous의 앞선 질문과 읽은 위젯을 이어 해석한다. previous가 없으면 clarify로 되묻는다.',
-  '"왜", "이유", "원인"을 묻는 질문은 이유를 짐작할 수 있는 값을 읽는다(같은 위젯의 다른 기간, 시간대·메뉴별 값, briefing).',
+  'hints에는 별명이나 줄임말을 정식 이름으로 풀어 적는다(아아·뜨아→아메리카노, 알바→직원, 라떼→카페라떼). 오전·오후·아침·점심·저녁 같은 시간대 말은 hints에 그대로 적는다.',
+  '날짜별·요일별 매출은 ledger(손익)의 week 읽기가 날짜마다 한 줄씩 갖고 있다(hints에 "일별"). 가장 낮은·높은 날을 묻는 말도 이 읽기를 쓴다. CCTV·상권 위젯은 손님 수와 유동 인구를 다루고 매출 위젯이 아니다. 시간대별 값은 hints에 "시간대별", 가장 붐비는 시간은 "피크 시간".',
+  '메뉴 판매 수량과 마진을 기간 없이 물으면 week(최근 7일)로 읽는다. 기간이 말에 있으면 그 기간을 쓴다.',
+  '예) "지난달이랑 이번 달 쿠폰 사용 건수 비교" → {"kind":"read","confidence":"high","reads":[{"featureId":"coupon-status","period":"lastMonth","hints":["사용"]},{"featureId":"coupon-status","period":"month","hints":["사용"]}]}',
+  '예) "크루아상 몇 개 팔렸어" → {"kind":"read","confidence":"high","reads":[{"featureId":"margin","period":"week","hints":["크루아상"]}]}',
+  '예) "식빵이랑 크루아상 중에 마진 높은 게 뭐야" → {"kind":"read","confidence":"high","reads":[{"featureId":"margin","period":"week","hints":["식빵","크루아상"]}]}',
+  '예) "오늘 해야 할 일 알려줘" → {"kind":"read","confidence":"high","reads":[{"featureId":"briefing","period":"today","hints":[]}]}',
+  '예) previous가 "오늘 예약 몇 팀이야? → booking"이고 "그 중에 저녁은?" → {"kind":"read","confidence":"high","reads":[{"featureId":"booking","period":"today","hints":["저녁"]}]}',
+  '예) "이번 주 지출이 왜 이렇게 늘었어?" → {"kind":"read","confidence":"low","reads":[{"featureId":"ledger","period":"week","hints":["지출"]},{"featureId":"ledger","period":"lastWeek","hints":["지출"]}]}',
+  '후속 질문(그 중에, 그럼, 거기)은 previous의 앞선 질문과 읽은 위젯을 이어 해석한다. previous 끝의 "위젯@기간"은 앞서 읽은 위젯과 기간이다. 새 기간이 말에 없으면 같은 위젯을 같은 기간으로 읽는다(예: previous가 "…→ booking@tomorrow"이면 period는 tomorrow). previous가 없으면 clarify로 되묻는다.',
+  '"왜", "이유", "원인"을 묻는 질문은 이유를 짐작할 수 있는 값을 읽는다(같은 위젯의 다른 기간, 시간대·메뉴별 값, briefing). previous가 있으면 되묻지 말고 previous의 위젯을 오늘과 어제로 함께 읽는다.',
   '메뉴가 몇 잔·몇 개 팔렸는지, 가장 많이 팔린 메뉴는 margin 위젯(메뉴별 판매 수량)이다. 메뉴 가격은 menu, 재고는 inventory-booking이다.',
   '위젯으로 답할 수 없으면 {"kind":"unsupported"}. 꼭 필요한 정보가 빠졌으면 {"kind":"clarify","ask":"짧은 한국어 되묻기"}.',
   '위젯을 골랐으면 {"kind":"read","confidence":"high|low","reads":[{"featureId":"...","period":"...","hints":[]}]}. 확신이 크면 high.',
   '두 값을 더하거나 빼거나 나눠야 답이 되면(합치면, 얼마 남아, 몇 퍼센트, 늘었어 줄었어) "compute":{"op":"sum|diff|ratio","left":읽기 번호,"right":읽기 번호}를 더한다. 번호는 reads 안의 순서(0부터)이고, 각 읽기의 첫 금액이 쓰인다. diff는 left에서 right를 뺀 값, ratio는 left÷right이다. hints로 각 읽기가 가리키는 금액을 정확히 좁혀야 한다.',
-  '예) "이번 달 매출에서 지출 빼면" → {"kind":"read","confidence":"high","reads":[{"featureId":"ledger","period":"month","hints":["매출"]},{"featureId":"ledger","period":"month","hints":["지출"]}],"compute":{"op":"diff","left":0,"right":1}}',
-  '예) "재료비가 매출의 몇 퍼센트" → {"kind":"read","confidence":"high","reads":[{"featureId":"ledger","period":"week","hints":["원재료"]},{"featureId":"ledger","period":"week","hints":["매출"]}],"compute":{"op":"ratio","left":0,"right":1}}',
+  '예) "오늘 입금에서 환불 빼면 얼마야" → {"kind":"read","confidence":"high","reads":[{"featureId":"ledger","period":"today","hints":["입금"]},{"featureId":"ledger","period":"today","hints":["환불"]}],"compute":{"op":"diff","left":0,"right":1}}',
+  '예) "이번 주 할인액이 매출의 몇 퍼센트야" → {"kind":"read","confidence":"high","reads":[{"featureId":"ledger","period":"week","hints":["할인"]},{"featureId":"ledger","period":"week","hints":["매출"]}],"compute":{"op":"ratio","left":0,"right":1}}',
   '출력은 JSON 객체 하나뿐이다.',
 ].join('\n');
 
@@ -72,6 +74,21 @@ export function classifyMessages({ text, widgets, previous, businessDate }) {
   ];
 }
 
+// The model sometimes writes a period in its own words ("this_month", "지난주"). Known spellings map to the fixed list; anything else reads as "default".
+const PERIOD_ALIASES = new Map(Object.entries({
+  today: 'today', tonight: 'today', now: 'today', 오늘: 'today', yesterday: 'yesterday', 어제: 'yesterday', tomorrow: 'tomorrow', 내일: 'tomorrow',
+  week: 'week', thisweek: 'week', currentweek: 'week', past7days: 'week', last7days: 'week', recent7days: 'week', 이번주: 'week', 최근7일: 'week',
+  lastweek: 'lastWeek', previousweek: 'lastWeek', 지난주: 'lastWeek', 저번주: 'lastWeek',
+  month: 'month', thismonth: 'month', currentmonth: 'month', 이번달: 'month', 이달: 'month',
+  lastmonth: 'lastMonth', previousmonth: 'lastMonth', 지난달: 'lastMonth', 저번달: 'lastMonth',
+  last30: 'last30', last30days: 'last30', past30days: 'last30', recent30days: 'last30', 최근30일: 'last30', default: 'default',
+}));
+const normalizePeriod = value => {
+  if (typeof value !== 'string') return value;
+  if (INTENT_PLAN_PERIODS.includes(value)) return value;
+  return PERIOD_ALIASES.get(value.toLowerCase().replace(/[\s_-]+/gu, '')) ?? 'default';
+};
+
 const clean = (value, limit) => (typeof value === 'string' ? value.normalize('NFC').trim().slice(0, limit) : '');
 
 /** Keep only the fields each kind owns, so harmless nulls and empty arrays from the model do not fail the strict schema. */
@@ -80,12 +97,12 @@ function normalizePlan(raw) {
   if (raw.kind === 'unsupported') return { kind: 'unsupported' };
   if (raw.kind === 'clarify') return { kind: 'clarify', ask: clean(raw.ask, 120) };
   if (raw.kind !== 'read' || !Array.isArray(raw.reads)) return raw;
-  const compute = raw.compute && typeof raw.compute === 'object' && ['sum', 'diff', 'ratio'].includes(raw.compute.op)
+  const compute = raw.compute && typeof raw.compute === 'object' && ['sum', 'diff', 'ratio', 'min', 'max'].includes(raw.compute.op)
     && Number.isInteger(raw.compute.left) && Number.isInteger(raw.compute.right) ? { op: raw.compute.op, left: raw.compute.left, right: raw.compute.right } : undefined;
   return {
     kind: 'read', confidence: raw.confidence === 'high' ? 'high' : 'low', ...(compute && { compute }),
     // A list of periods means "compare these": one read per period, in the order given.
-    reads: raw.reads.flatMap(read => (Array.isArray(read?.period) ? read.period : [read?.period]).map(period => ({
+    reads: raw.reads.flatMap(read => (Array.isArray(read?.period) ? read.period : [read?.period]).map(normalizePeriod).map(period => ({
       // The model sometimes copies a whole "id|name" entry: the id is the part before the bar.
       featureId: typeof read?.featureId === 'string' ? read.featureId.split('|', 1)[0].trim() : read?.featureId, period,
       hints: (Array.isArray(read?.hints) ? read.hints : []).map(hint => clean(hint, 24)).filter(Boolean).slice(0, 4),
@@ -106,7 +123,8 @@ export async function classifyIntent({ transport, input, signal, onProviderCall,
     for await (const event of transport.complete({
       // HCX-005 rejects structured outputs (HTTP 400, code 40001); the prompt fixes the JSON shape and the plan is validated below.
       messages: classifyMessages(input), maxTokens: CLASSIFY_MAX_TOKENS, jsonResponse: true,
-      signal, onProviderCall, onAttempt, retryRateLimit: false,
+      // A short budget: one retry when the provider's reset fits in three seconds, none when it does not.
+      signal, onProviderCall, onAttempt, retryRateLimit: 3000,
     })) {
       if (event.event === 'result') content = event.data?.message?.content;
     }

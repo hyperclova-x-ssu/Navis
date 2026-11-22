@@ -35,7 +35,9 @@ export interface AgentHandoff {
   readonly command?: string;
   readonly draft?: Readonly<Record<string, unknown>>;
   /** Local widget entry that requires its own draft and confirmation. */
-  readonly step?: WidgetHandoffStep;
+  // D-404 retired the 'test-sms' step (no destination, `widgetHandoffRef` returns nothing for it). The literal stays in this type only because
+  // screens/dashboard/navis.tsx (CHAT-UI-SALVAGE) still compares against it; delete it together with that dead branch and TestSmsHandoffCard.
+  readonly step?: WidgetHandoffStep | 'test-sms';
   readonly itemId?: string;
 }
 
