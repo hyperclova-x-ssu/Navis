@@ -477,8 +477,9 @@ export function createGateway({
             headers.set('x-navis-business-day-start', businessDayStart);
           }
           const path = suffix.replace(/:(\w+)/g, (_, name: string) => encodeURIComponent(params[name]));
+          const timeout = suffix === '/inquiries/:id/navis-draft-preview' ? 12_500 : 7_000;
           const response = await request(upstream, `/internal/v1/${service}/stores/${store}${path}${query ? `?${query}` : ''}`, {
-            method, headers, body, signal: AbortSignal.timeout(7_000),
+            method, headers, body, signal: AbortSignal.timeout(timeout),
           });
           if ((service === 'insight' || service === 'marketing') && response.status >= 400 && response.status < 500
             && response.headers.get('content-type')?.startsWith('application/json')) {

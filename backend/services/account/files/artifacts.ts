@@ -54,8 +54,8 @@ async function find(client: PoolClient, storeId: string, fileId: string, lock = 
 }
 
 export function createPromoArtifacts(pool: Pool, storage: PromoStorage) {
-  async function verifiedBytes(artifact: Artifact) {
-    const bytes = await storage.read(artifact.storage_key);
+  async function verifiedBytes(artifact: Artifact, storeId: string) {
+    const bytes = await storage.read(artifact.storage_key, { storeId });
     return bytes && matches(artifact, bytes) ? bytes : undefined;
   }
 
@@ -107,8 +107,8 @@ export function createPromoArtifacts(pool: Pool, storage: PromoStorage) {
       const artifact = await find(client, storeId, fileId, true);
       if (!artifact || artifact.status === 'deleted') return 'NOT_FOUND' as const;
       if (!matches(artifact, bytes)) return 'INVALID_REQUEST' as const;
-      if (artifact.status === 'ready') return (await verifiedBytes(artifact)) ? null : 'ARTIFACT_NOT_READY' as const;
-      await storage.write(artifact.storage_key, bytes);
+      if (artifact.status === 'ready') return (await verifiedBytes(artifact, storeId)) ? null : 'ARTIFACT_NOT_READY' as const;
+      await storage.write(artifact.storage_key, bytes, { storeId, mime: artifact.mime });
       return null;
     });
   }
@@ -117,7 +117,7 @@ export function createPromoArtifacts(pool: Pool, storage: PromoStorage) {
     return inStore(pool, scope.storeId, async (client) => {
       const artifact = await find(client, scope.storeId, fileId, true);
       if (!artifact || artifact.resource_id !== scope.resourceId || artifact.status === 'deleted') return 'NOT_FOUND' as const;
-      if (!await verifiedBytes(artifact)) return 'ARTIFACT_NOT_READY' as const;
+      if (!await verifiedBytes(artifact, scope.storeId)) return 'ARTIFACT_NOT_READY' as const;
       if (artifact.status === 'uploading') {
         await client.query("UPDATE account.file_object SET status = 'ready' WHERE store_id = $1 AND file_id = $2", [scope.storeId, fileId]);
         artifact.status = 'ready';
@@ -134,7 +134,7 @@ export function createPromoArtifacts(pool: Pool, storage: PromoStorage) {
         return 'NOT_FOUND' as const;
       }
       if (artifact.status !== 'ready') return 'ARTIFACT_NOT_READY' as const;
-      const bytes = await verifiedBytes(artifact);
+      const bytes = await verifiedBytes(artifact, storeId);
       return bytes ? { fileId: artifact.file_id, mime: artifact.mime, bytes } : 'ARTIFACT_NOT_READY' as const;
     });
   }
@@ -147,7 +147,7 @@ export function createPromoArtifacts(pool: Pool, storage: PromoStorage) {
         ORDER BY created_at, file_id LIMIT 50 FOR UPDATE SKIP LOCKED
       `, [storeId]);
       // A failed commit leaves only an uploading row, so the next cleanup can safely repeat removal.
-      for (const artifact of rows) await storage.remove(artifact.storage_key);
+      for (const artifact of rows) await storage.remove(artifact.storage_key, { storeId });
       await client.query("UPDATE account.file_object SET status = 'deleted' WHERE store_id = $1 AND file_id = ANY($2::uuid[])",
         [storeId, rows.map((artifact) => artifact.file_id)]);
       return { deleted: rows.length };

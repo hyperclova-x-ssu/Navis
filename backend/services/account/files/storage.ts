@@ -39,4 +39,19 @@ export function createLocalPromoStorage(directory: string) {
   };
 }
 
-export type PromoStorage = ReturnType<typeof createLocalPromoStorage>;
+export interface PromoStorage {
+  write(key: string, bytes: Buffer, scope: { storeId: string; mime: string }): Promise<void>;
+  read(key: string, scope: { storeId: string }): Promise<Buffer | undefined>;
+  remove(key: string, scope: { storeId: string }): Promise<void>;
+}
+
+export function withNcpPromoStorage(local: PromoStorage, ncp: PromoStorage): PromoStorage {
+  return {
+    write: ncp.write,
+    async read(key, scope) { return await ncp.read(key, scope) ?? await local.read(key, scope); },
+    async remove(key, scope) {
+      await ncp.remove(key, scope);
+      await local.remove(key, scope);
+    },
+  };
+}

@@ -153,6 +153,20 @@ export async function seed(pool: Pool, context = { ...createSeedContext(), opera
       INSERT INTO inventory.supplier (store_id, supplier_id, name)
       VALUES ($1, $2, $3) ON CONFLICT DO NOTHING
     `, [cafeId, supplier.dbId, supplier.name]);
+    if (operatingHistory) {
+      const suppliers = content.suppliers.map(source => ({
+        supplier_id: seedCatalog.suppliers.find(row => row.supplierId === source.id)!.dbId,
+        contact: source.test_contact.email, phone: source.test_contact.phone,
+        memo: `${source.test_contact.name} · 시험용 연락처`,
+      }));
+      await client.query(`
+        UPDATE inventory.supplier AS existing SET contact = seed.contact, phone = seed.phone, memo = seed.memo
+        FROM jsonb_to_recordset($2::jsonb) seed(supplier_id uuid, contact text, phone text, memo text)
+        WHERE existing.store_id = $1 AND existing.supplier_id = seed.supplier_id
+          AND existing.archived_at IS NULL AND existing.revision = 1
+          AND existing.contact IS NULL AND existing.phone IS NULL AND existing.memo IS NULL
+      `, [cafeId, JSON.stringify(suppliers)]);
+    }
     await client.query(`
       INSERT INTO inventory.purchase_order (store_id, po_id, supplier_id, ordered_on)
       VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING

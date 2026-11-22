@@ -39,8 +39,21 @@ function cctvPosLinks(value: unknown) {
   return links;
 }
 
+function smsSettings(value: unknown) {
+  const input = record(value, ['senderNumber', 'optOutNumber'], 'smsSettings');
+  function number(value: unknown, field: string, pattern: RegExp) {
+    if (value === null) return null;
+    const normalized = typeof value === 'string' && value.replace(/[ -]/g, '');
+    if (!normalized || !pattern.test(normalized)) throw invalid(field);
+    return normalized;
+  }
+  return { senderNumber: number(input.senderNumber, 'senderNumber', /^[0-9]{8,11}$/),
+    optOutNumber: number(input.optOutNumber, 'optOutNumber', /^080[0-9]{7,8}$/) };
+}
+
 export function parseProfile(value: unknown) {
-  const input = record(value, ['businessType', 'paymentStyle', 'tableLayout', 'posPreferences', 'cctvPosLinks', 'onboardingDone', 'expectedRevision']);
+  const input = record(value, ['businessType', 'paymentStyle', 'tableLayout', 'posPreferences', 'cctvPosLinks',
+    'onboardingDone', 'smsSettings', 'expectedRevision']);
   return {
     expected: expectedRevision(input.expectedRevision),
     patch: {
@@ -50,6 +63,7 @@ export function parseProfile(value: unknown) {
       ...(input.posPreferences !== undefined ? { posPreferences: posPreferences(input.posPreferences) } : {}),
       ...(input.cctvPosLinks !== undefined ? { cctvPosLinks: cctvPosLinks(input.cctvPosLinks) } : {}),
       ...(input.onboardingDone !== undefined ? { onboardingDone: boolean(input.onboardingDone, 'onboardingDone') } : {}),
+      ...(input.smsSettings !== undefined ? { smsSettings: smsSettings(input.smsSettings) } : {}),
     },
   };
 }
@@ -63,7 +77,8 @@ export async function readProfile(client: PoolClient, storeId: string): Promise<
   const { rows: [profile] } = await client.query<Profile>(`
     SELECT store_id AS "storeId", display_name AS name, business_type AS "businessType", payment_style AS "paymentStyle",
       table_layout AS "tableLayout", pos_preferences AS "posPreferences", cctv_pos_links AS "cctvPosLinks",
-      onboarding_done AS "onboardingDone", settings_revision AS revision
+      onboarding_done AS "onboardingDone", settings_revision AS revision,
+      jsonb_build_object('senderNumber', sms_sender_number, 'optOutNumber', sms_opt_out_number) AS "smsSettings"
     FROM account.store WHERE store_id = $1
   `, [storeId]);
   if (!profile) return;
@@ -76,9 +91,11 @@ export async function saveProfile(client: PoolClient, profile: Profile, revision
   await client.query(`
     UPDATE account.store SET business_type = $2, payment_style = $3, table_layout = $4, pos_preferences = $5,
       cctv_pos_links = $6, onboarding_done = $7, settings_revision = $8, pos_start_tab = COALESCE($9, pos_start_tab),
+      sms_sender_number = $10, sms_opt_out_number = $11,
       updated_at = statement_timestamp() WHERE store_id = $1
   `, [profile.storeId, profile.businessType, profile.paymentStyle, profile.tableLayout, profile.posPreferences,
-    profile.cctvPosLinks && JSON.stringify(profile.cctvPosLinks), profile.onboardingDone, revision, profile.posPreferences?.startTab]);
+    profile.cctvPosLinks && JSON.stringify(profile.cctvPosLinks), profile.onboardingDone, revision, profile.posPreferences?.startTab,
+    profile.smsSettings.senderNumber, profile.smsSettings.optOutNumber]);
 }
 
 export function parsePreferences(value: unknown) {

@@ -56,17 +56,17 @@ async function plan(tx: PosTx, customer: CustomerMemberClient, billId: string, i
   const receivable = input.allocations.find((row): row is Value => row.kind === 'receivable')?.amount ?? 0;
   const line = quote.lines.find(row => row.allocationId === passUse?.allocationId);
   const pass = member.pass;
-  let recognizedAmount = 0;
+  let covered = 0, recognizedAmount = 0;
   if (passUse) {
     if (!pass || pass.status !== 'active' || pass.startsOn > day || pass.endsOn < day || pass.usesLeft === 0 ||
-      !line || passUse.quantity !== line.qty || !pass.terms.menuIds.includes(line.menuId) ||
+      !line || (passUse.quantity !== 1 && passUse.quantity !== line.qty) || !pass.terms.menuIds.includes(line.menuId) ||
       (passUse.kind === 'membership_count') !== (pass.terms.kind === 'count')) throw new PosError(409, 'MEMBERSHIP_UNAVAILABLE');
+    covered = passUse.quantity === line.qty ? line.amount : Math.floor(line.amount / line.qty);
     if (pass.terms.totalUses !== null) {
       const base = Math.trunc(pass.terms.soldPrice / pass.terms.totalUses);
-      recognizedAmount = Math.min(line.amount, base + (pass.usesLeft === 1 ? pass.terms.soldPrice % pass.terms.totalUses : 0));
+      recognizedAmount = Math.min(covered, base + (pass.usesLeft === 1 ? pass.terms.soldPrice % pass.terms.totalUses : 0));
     }
   }
-  const covered = passUse ? line!.amount : 0;
   const discount = covered - recognizedAmount;
   const amountDue = quote.payable - covered;
   if (!Number.isSafeInteger(realAmount + charge + receivable) || realAmount + charge + receivable !== amountDue) {
@@ -106,7 +106,7 @@ export function recordMemberCheckout(tx: PosTx, customer: CustomerMemberClient, 
     const quote = current.passUse ? { ...current.quote, payable: current.quote.payable - current.discount,
       discount: current.quote.discount + current.discount, lines: current.quote.lines.map(line =>
         line.allocationId === current.passUse?.allocationId
-          ? { ...line, amount: current.recognizedAmount, discount: line.discount + current.discount } : line) } : current.quote;
+          ? { ...line, amount: line.amount - current.discount, discount: line.discount + current.discount } : line) } : current.quote;
     const at = terminal ? new Date(terminal.occurredAt) : tx.at;
     const recordedAllocations = allocations.map(row => 'membershipId' in row
       ? { ...row, amount: current.recognizedAmount, membershipDiscount: current.discount } : row);

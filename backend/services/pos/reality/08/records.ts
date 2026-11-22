@@ -4,6 +4,7 @@ import type { CustomHistory, CustomOrder, CustomOrderView, CustomReceipt, Custom
 import { appendOutbox } from '../../ledger.ts';
 import { commandReceipt, fingerprint, object, PosError, type PosTx } from '../../wire.ts';
 import { listInput } from '../02/reads.ts';
+import { attachMemberCodes, type MemberSource } from '../05/customer-client.ts';
 import { duplicateIdentity, pickupStatuses, stages, text } from './input.ts';
 
 export const customSources = ['custom-order', 'voice-booking', 'calendar', 'briefing'];
@@ -135,11 +136,12 @@ export async function readOrder(tx: PosTx, id: string, byPickup = false) {
   return withPickup(row);
 }
 
-export async function orderDetail(tx: PosTx, id: string) {
-  return orderView(await readOrder(tx, id));
+export async function orderDetail(tx: PosTx, id: string, customer?: MemberSource) {
+  const [order] = await attachMemberCodes(tx.storeId, [orderView(await readOrder(tx, id))], customer);
+  return order;
 }
 
-export async function listOrders(tx: PosTx, query: unknown) {
+export async function listOrders(tx: PosTx, query: unknown, customer?: MemberSource) {
   const { query: search, ...list } = object(query, ['cursor', 'limit', 'status', 'businessDate', 'from', 'to', 'query']);
   const { cursor, limit, filter, from, to } = listInput(list, stages, true);
   const term = search === undefined ? null : text(search, 'query', 120, true);
@@ -151,7 +153,8 @@ export async function listOrders(tx: PosTx, query: unknown) {
         OR strpos(lower(o.receipt->'guest'->>'name'), lower($6)) > 0
         OR strpos('co-' || lpad(o.order_no::text, greatest(3,length(o.order_no::text)), '0'), lower($6)) > 0)
     ORDER BY o.custom_order_id LIMIT $7`, [tx.storeId, cursor, filter, from, to, term || null, limit + 1]);
-  return customPage(tx, rows.map(row => orderView(withPickup(row))), limit, item => item.customOrderId);
+  const items = await attachMemberCodes(tx.storeId, rows.map(row => orderView(withPickup(row))), customer);
+  return customPage(tx, items, limit, item => item.customOrderId);
 }
 
 export async function listPickups(tx: PosTx, query: unknown) {

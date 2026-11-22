@@ -83,10 +83,11 @@ export function registerAccountRecords(app: FastifyInstance, pool: Pool, verifyW
     if (!clock) throw notFound();
     return clock;
   }));
-  app.get<{ Params: Params }>(`${accountRoot}/profile`, options, accountStoreHandler(pool, false, async (client, { store_id: storeId }) => {
+  app.get<{ Params: Params }>(`${accountRoot}/profile`, options, accountStoreHandler(pool, false, async (client, { store_id: storeId, role }) => {
     const profile = await readProfile(client, storeId);
     if (!profile) throw notFound();
-    return profile;
+    const { smsSettings, ...publicProfile } = profile;
+    return role === 'owner' ? { ...publicProfile, smsSettings } : publicProfile;
   }));
   app.patch<{ Params: Params }>(`${accountRoot}/profile`, options, accountStoreHandler(pool, true, (client, actor, request) => {
     const input = parseProfile(request.body);

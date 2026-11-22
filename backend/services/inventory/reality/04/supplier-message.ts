@@ -16,10 +16,11 @@ export type SupplierChannel = 'sms' | 'mail';
 type DispatchState = 'queued' | 'ready' | 'dispatching' | 'unknown' | 'accepted' | 'delivered' | 'failed' | 'blocked';
 export type SupplierMessageReceipt = {
   receiptId: string; resourceId: string; revision: number; channel: SupplierChannel;
-  scheduledAt: string | null; state: Exclude<DispatchState, 'ready'>;
+  scheduledAt: string | null; state: Exclude<DispatchState, 'ready'>; providerMode: 'virtual' | 'live'; reason?: string;
 };
 type Dispatch = { receipt_id: string; po_id: string; order_revision: number; channel: SupplierChannel; snapshot: string;
-  scheduled_at: Date | null; state: DispatchState; provider_id: string | null; started_at: Date | null };
+  scheduled_at: Date | null; state: DispatchState; provider_id: string | null; started_at: Date | null;
+  provider_live: boolean; block_reason: string | null };
 const email = /^[^\s@]{1,64}@[^\s@]{1,190}\.[A-Za-z]{2,}$/;
 const quantityFormat = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 3 });
 const dateFormat = new Intl.DateTimeFormat('ko-KR', { weekday: 'short', timeZone: 'Asia/Seoul' });
@@ -63,7 +64,9 @@ async function source(db: PoolClient, store: string, id: string, channel: Suppli
 
 function receipt(row: Dispatch): SupplierMessageReceipt {
   return { receiptId: row.receipt_id, resourceId: row.po_id, revision: row.order_revision, channel: row.channel,
-    scheduledAt: row.scheduled_at?.toISOString() ?? null, state: row.state === 'ready' ? 'queued' : row.state };
+    scheduledAt: row.scheduled_at?.toISOString() ?? null, state: row.state === 'ready' ? 'queued' : row.state,
+    providerMode: row.provider_live ? 'live' : 'virtual',
+    ...(row.block_reason && { reason: row.block_reason }) };
 }
 
 async function statusEvent(db: PoolClient, store: string, row: Dispatch, state: DispatchState) {
@@ -73,7 +76,8 @@ async function statusEvent(db: PoolClient, store: string, row: Dispatch, state: 
 
 export function registerSupplierMessages(
   app: FastifyInstance, pool: Pool, gatewayToken: string,
-  { workerToken, storeId, now = () => new Date() }: { workerToken: string; storeId: string; now?: () => Date },
+  { workerToken, storeId, now = () => new Date(), live = process.env.NAVIS_NCP_SENS_PROVIDER === 'live' }:
+    { workerToken: string; storeId: string; now?: () => Date; live?: boolean },
 ) {
   if (!workerToken || workerToken === gatewayToken) throw new Error('Supplier worker requires a distinct private workload token');
   const configuredStore = uuid(storeId, 'storeId');
@@ -112,11 +116,11 @@ export function registerSupplierMessages(
       const { target, supplierRevision, display } = await source(db, scope.storeId, id, channel);
       if (fingerprint([supplierRevision, target, display]) !== view.sourceRevision) throw new CardError(409, 'STALE_REVISION');
       const { rows: [created] } = await db.query<Dispatch>(`
-        INSERT INTO inventory.supplier_dispatch (store_id, receipt_id, po_id, order_revision, channel, snapshot, scheduled_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        INSERT INTO inventory.supplier_dispatch (store_id, receipt_id, po_id, order_revision, channel, snapshot, scheduled_at, provider_live)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         ON CONFLICT (store_id, po_id, order_revision, channel)
           WHERE state NOT IN ('failed', 'blocked') DO NOTHING RETURNING *
-      `, [scope.storeId, receiptId, id, display.orderRevision, channel, view.sourceRevision, view.scheduledAt]);
+      `, [scope.storeId, receiptId, id, display.orderRevision, channel, view.sourceRevision, view.scheduledAt, live]);
       if (!created) throw new CardError(409, 'SUPPLIER_ORDER_ALREADY_QUEUED');
       await appendPurchaseEvent(db, scope.storeId, new Date(), supplierMessageRequested, receiptId, { receiptId });
       return { ...receipt(created), affectedSources: ['inventory.supplier-message'] };
@@ -146,7 +150,8 @@ export function registerSupplierMessages(
            OR state='accepted' OR (state='dispatching' AND started_at < clock_timestamp() - interval '2 minutes'))
           ORDER BY CASE WHEN state='ready' THEN 0 ELSE 1 END, receipt_id LIMIT 20
         `, [store, now()]);
-        return rows.map(row => ({ ...receipt(row), state: row.state, providerId: row.provider_id }));
+        return rows.map(row => ({ ...receipt(row), state: row.state, providerId: row.provider_id,
+          ...(row.provider_live && { providerLive: true }) }));
       }, { readOnly: true });
     });
     routes.post<{ Params: Params }>(supplierWorkerRoot + '/:receiptId/ready', async (req, reply) => {
@@ -171,7 +176,8 @@ export function registerSupplierMessages(
           // A queued receipt can still carry the exact text the owner approved before this format changed.
           const accepted = [display, { ...display, body: messageBody(order, true) }]
             .find(candidate => fingerprint([supplierRevision, target, candidate]) === row.snapshot);
-          if (accepted) return { channel: row.channel, target, title: accepted.title, body: accepted.body };
+          if (accepted) return { channel: row.channel, target, title: accepted.title, body: accepted.body,
+            ...(row.provider_live && { providerLive: true }) };
         } catch (error) {
           if (!(error instanceof CardError) && !(error instanceof Error && 'status' in error && error.status === 404)) throw error;
         }
@@ -180,22 +186,24 @@ export function registerSupplierMessages(
         return null;
       });
     });
-    routes.post<{ Params: Params; Body: { state?: string; providerId?: string } }>(supplierWorkerRoot + '/:receiptId/result',
+    routes.post<{ Params: Params; Body: { state?: string; providerId?: string; reason?: string } }>(supplierWorkerRoot + '/:receiptId/result',
       { bodyLimit: 1024 }, async (req, reply) => {
         const store = boundStore(req.params.storeId);
-        const { state, providerId } = req.body ?? {};
-        if ((state !== 'accepted' && state !== 'delivered' && state !== 'failed' && state !== 'unknown')
+        const { state, providerId, reason } = req.body ?? {};
+        if ((state !== 'accepted' && state !== 'delivered' && state !== 'failed' && state !== 'unknown' && state !== 'blocked')
+          || (state === 'blocked' ? !['NOT_SENT_TEST_MODE', 'SMS_SETTINGS_REQUIRED'].includes(reason ?? '') : reason !== undefined)
           || (state === 'accepted' && (typeof providerId !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(providerId)))) {
           throw new CardError(400, 'INVALID_SUPPLIER_STATUS');
         }
         await withStoreTransaction(pool, store, async db => {
           const { rows: [row] } = await db.query<Dispatch>(`
-            UPDATE inventory.supplier_dispatch SET state=$3, provider_id=coalesce($4,provider_id)
+            UPDATE inventory.supplier_dispatch SET state=$3, provider_id=coalesce($4,provider_id), block_reason=$5
             WHERE store_id=$1 AND receipt_id=$2 AND
               (($3 IN ('accepted','unknown') AND state='dispatching') OR
+               ($3='blocked' AND provider_live AND state='dispatching') OR
                ($3='failed' AND state IN ('dispatching','accepted')) OR ($3='delivered' AND state='accepted'))
             RETURNING *
-          `, [store, uuid(req.params.receiptId, 'receiptId'), state, state === 'accepted' ? providerId : null]);
+          `, [store, uuid(req.params.receiptId, 'receiptId'), state, state === 'accepted' ? providerId : null, reason ?? null]);
           if (row) await statusEvent(db, store, row, state);
         });
         return reply.code(204).send();

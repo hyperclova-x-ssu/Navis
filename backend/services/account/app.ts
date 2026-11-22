@@ -6,10 +6,11 @@ import { accessTokenResponseSchema, errorResponseSchema } from '../../packages/c
 import { registerAttachments } from './files/attachments.ts';
 import { registerPromoInputRoutes } from './files/promo-input.ts';
 import { registerPromoFileRoutes, type PromoFileOptions } from './files/routes.ts';
-import { createLocalPromoStorage } from './files/storage.ts';
+import { createLocalPromoStorage, withNcpPromoStorage, type PromoStorage } from './files/storage.ts';
 import { normalizedLogin } from './identity.ts';
 import type { SessionClaims, SigningKeys } from './keys.ts';
 import { accountErrors, registerAccountRecords } from './reality/00/routes.ts';
+import { readProfile } from './reality/00/settings.ts';
 import { AccountError, actorFrom, invalid, record, uuid as uuidRe } from './reality/00/wire.ts';
 import { changeStore, createDemoSession, currentRole, login, logout, refreshCookieName, refreshCredential, rotateRefresh, uuidPattern } from './sessions.ts';
 import { inStore } from './transaction.ts';
@@ -61,7 +62,8 @@ interface AccountOptions {
   hostedDemoAuth?: string;
   publicOrigin?: string;
   logging?: boolean;
-  promoFiles?: PromoFileOptions;
+  promoFiles?: PromoFileOptions & { storage?: PromoStorage };
+  sensStoreId?: string;
   inventoryFilesToken?: string;
   posReferenceToken?: string;
   insightFilesToken?: string;
@@ -79,7 +81,7 @@ function sendSession(reply: FastifyReply, issued: Issued, secure: boolean) {
 
 export function createAccountApp({
   pool, keys, gatewayToken, demoAuth, replayDemoAuth, hostedDemoAuth, publicOrigin = loopbackOrigin, logging = true, promoFiles, inventoryFilesToken,
-  posReferenceToken, insightFilesToken, community,
+  posReferenceToken, insightFilesToken, community, sensStoreId,
 }: AccountOptions) {
   const origin = new URL(publicOrigin);
   const localHttp = origin.protocol === 'http:' && origin.hostname === '127.0.0.1';
@@ -90,6 +92,7 @@ export function createAccountApp({
   if (promoFiles && (!promoFiles.marketingToken || promoFiles.marketingToken === gatewayToken)) {
     throw new Error('Promo files require a distinct marketing workload credential');
   }
+  if (sensStoreId && (!uuidRe.test(sensStoreId) || !promoFiles)) throw new Error('Invalid NCP SENS settings scope');
   if (inventoryFilesToken && (inventoryFilesToken === gatewayToken || inventoryFilesToken === promoFiles?.marketingToken)) {
     throw new Error('Menu photo verification requires a distinct inventory workload credential');
   }
@@ -226,8 +229,25 @@ export function createAccountApp({
     return reply.code(204).send();
   });
   if (promoFiles) {
-    registerPromoFileRoutes(app, pool, createLocalPromoStorage(promoFiles.storageDirectory), promoFiles);
+    const local = createLocalPromoStorage(promoFiles.storageDirectory);
+    const storage = promoFiles.storage ? withNcpPromoStorage(local, promoFiles.storage) : local;
+    registerPromoFileRoutes(app, pool, storage, promoFiles);
     registerPromoInputRoutes(app, pool, promoFiles.marketingToken);
+    if (sensStoreId) {
+      const expected = digest(`Bearer ${promoFiles.marketingToken}`);
+      app.get<{ Params: { storeId: string } }>('/internal/v1/account/stores/:storeId/sens-settings', {
+        onRequest: async (req, reply) => {
+          if (!timingSafeEqual(expected, digest(req.headers.authorization ?? ''))) {
+            return reply.code(401).send({ code: 'UNAUTHENTICATED' });
+          }
+          if (req.params.storeId !== sensStoreId) return reply.code(403).send({ code: 'STORE_FORBIDDEN' });
+        },
+      }, async (_req, reply) => {
+        const profile = await inStore(pool, sensStoreId, db => readProfile(db, sensStoreId));
+        if (!profile) return reply.code(404).send({ code: 'NOT_FOUND' });
+        return { storeName: profile.name, ...profile.smsSettings };
+      });
+    }
   }
   registerAccountRecords(app, pool, verifyWorkload);
   registerAttachments(app, pool, verifyWorkload, {

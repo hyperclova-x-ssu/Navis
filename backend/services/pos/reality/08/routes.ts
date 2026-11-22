@@ -8,15 +8,15 @@ import { archiveTemplate, generateTemplate, saveTemplate, undoTemplate } from '.
 import { undoCustomReceipt } from './undo.ts';
 
 export function registerCustomOrderRoutes(owner: PosOwnerRouteWithPreflight, options: OrderDependencies & { reversalSecret: string }) {
-  const { reversalSecret } = options;
+  const { reversalSecret, customer } = options;
   owner('GET', '/custom-templates', 'read', (tx, _, _body, _key, query) => listTemplates(tx, query));
   owner('GET', '/custom-templates/:id', 'read', (tx, { id }) => templateDetail(tx, uuid(id)));
   owner('POST', '/custom-templates', 'command', (tx, _, body, key) => saveTemplate(tx, key, body));
   owner('POST', '/custom-templates/generate', 'command', (tx, _, body, key) => generateTemplate(tx, key, body));
   owner('PATCH', '/custom-templates/:id', 'command', (tx, { id }, body, key) => saveTemplate(tx, key, body, uuid(id)));
   owner('DELETE', '/custom-templates/:id', 'command', (tx, { id }, body, key) => archiveTemplate(tx, key, uuid(id), body));
-  owner('GET', '/custom-orders', 'read', (tx, _, _body, _key, query) => listOrders(tx, query));
-  owner('GET', '/custom-orders/:id', 'read', (tx, { id }) => orderDetail(tx, uuid(id)));
+  owner('GET', '/custom-orders', 'read', (tx, _, _body, _key, query) => listOrders(tx, query, customer));
+  owner('GET', '/custom-orders/:id', 'read', (tx, { id }) => orderDetail(tx, uuid(id), customer));
   owner('POST', '/custom-orders', 'command', {
     prepare: (scope, _params, body, key) => prepareCreateOrder(scope, options, key, body),
   });

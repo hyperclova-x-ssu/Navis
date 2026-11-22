@@ -9,8 +9,8 @@ export const briefingReadPaths = {
 } as const;
 
 export const couponReadPaths = {
-  customer: ['/customers'],
-  inventory: ['/items/:itemId', '/stock-batches', '/menu', '/menu/:menuId', '/coupon-expiring-lots'],
+  customer: ['/customers', '/member-codes'],
+  inventory: ['/items/:itemId', '/stock-batches', '/menu', '/menu/:menuId', '/coupon-expiring-lots', '/place/venue'],
   pos: ['/bills/:id'],
 } as const;
 

@@ -33,7 +33,7 @@ it('serves every seeded café menu photo from Account after a new owner login', 
   });
   const account = createAccountApp({ pool: accountDb, gatewayToken: accountToken,
     keys: await createSigningKeys(privateKey), publicOrigin: origin, logging: false });
-  const inventory = createInventoryApp(inventoryDb, inventoryToken, false, undefined, undefined, { posCatalogToken });
+  const inventory = createInventoryApp(inventoryDb, inventoryToken, false, () => new Date('2026-11-17T06:45:00Z'), undefined, { posCatalogToken });
   const [accountUrl, inventoryUrl] = await Promise.all(
     [account, inventory].map(app => app.listen({ host: '127.0.0.1', port: 0 })),
   );
@@ -68,8 +68,17 @@ it('serves every seeded café menu photo from Account after a new owner login', 
     expect(second.statusCode).toBe(200);
     const { items } = second.json();
     expect(items).toEqual(first.json().items);
-    expect(items).toHaveLength(24);
-    expect(new Set(items.map((item: { photoFileId: string }) => item.photoFileId)).size).toBe(24);
+    expect(items).toHaveLength(25);
+    expect(new Set(items.map((item: { photoFileId: string }) => item.photoFileId)).size).toBe(25);
+    const strawberryCake = seedCatalog.menu.find(menu => menu.menuId === 'm-strawberry-cake')!;
+    const stockItem = seedCatalog.items.find(item => item.itemId === 'i-strawberry-cake-slice')!;
+    expect(items).toContainEqual(expect.objectContaining({ menuId: strawberryCake.dbId, name: '딸기 케이크',
+      category: 'dessert', price: 6500, unitCost: 2420,
+      recipeLines: expect.arrayContaining([expect.objectContaining({ itemId: stockItem.dbId, quantity: 1, unit: 'pcs', cost: 0 })]),
+    }));
+    const stock = await gateway.inject({ method: 'GET', url: `${root}/inventory/items/${stockItem.dbId}`, headers: auth });
+    expect(stock.statusCode).toBe(200);
+    expect(stock.json()).toMatchObject({ name: '딸기 케이크 완제품', baseUnit: 'pcs', stock: { availableQuantityBase: '6' } });
     const posQuery = new URLSearchParams(seedCatalog.menu.map(menu => ['menuId', menu.dbId]));
     const pos = await inventory.inject({
       method: 'GET',
@@ -81,7 +90,7 @@ it('serves every seeded café menu photo from Account after a new owner login', 
     });
     expect(pos.statusCode).toBe(200);
     const posItems = pos.json().items;
-    expect(posItems).toHaveLength(24);
+    expect(posItems).toHaveLength(25);
     for (const menu of seedCatalog.menu) {
       const record = items.find((item: { menuId: string }) => item.menuId === menu.dbId);
       expect(record).toMatchObject({ photoFileId: expect.any(String), photoKey: null });

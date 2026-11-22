@@ -6,6 +6,27 @@ import { registerSupplierMessages, supplierSendTime } from './supplier-message.t
 import { fingerprint } from '../01/owner-card.ts';
 
 describe('supplier message authorization', () => {
+  it('returns the saved provider mode for both virtual and live receipts', async () => {
+    const app = Fastify();
+    const store = randomUUID(), order = randomUUID(), actor = randomUUID(), gateway = randomUUID(), worker = randomUUID();
+    const receipts = [false, true].map(provider_live => ({ receipt_id: randomUUID(), po_id: order, channel: 'sms',
+      order_revision: 1, scheduled_at: null, state: 'delivered', provider_live, block_reason: null }));
+    const pool = { connect: async () => ({ release() {}, query: async (sql: string) => ({
+      rows: sql.includes('FROM inventory.supplier_dispatch') ? receipts : [],
+    }) }) } as unknown as Pool;
+    registerSupplierMessages(app, pool, gateway, { workerToken: worker, storeId: store });
+    try {
+      const reply = await app.inject({ url: `/internal/v1/inventory/stores/${store}/purchase-orders/${order}/supplier-message`,
+        headers: { authorization: 'Bearer ' + gateway, 'x-navis-user-id': actor, 'x-navis-store-id': store, 'x-navis-store-role': 'owner' } });
+      expect(reply.statusCode).toBe(200);
+      expect(reply.json().items).toEqual(receipts.map((row, index) => expect.objectContaining({
+        receiptId: row.receipt_id, providerMode: index === 0 ? 'virtual' : 'live', state: 'delivered',
+      })));
+    } finally {
+      await app.close();
+    }
+  });
+
   it('rejects text and spoofed cards before acquiring a database connection', async () => {
     const app = Fastify();
     const store = randomUUID();

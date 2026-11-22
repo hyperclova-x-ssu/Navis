@@ -49,7 +49,9 @@ beforeAll(async () => {
     });
   }
   const customer = {
-    member: async (_store: string, id: string) => ({ memberId: id, active: id === memberId, product: null }),
+    member: async (_store: string, id: string) => ({ memberId: id, memberCode: 'M-0008', active: id === memberId, product: null }),
+    memberCodes: async (store: string, ids: string[]) =>
+      new Map(store === storeId && ids.includes(memberId) ? [[memberId, 'M-0008']] : []),
     archive: async () => { throw new Error('Unexpected archive'); },
     reserve: async () => { throw new Error('Unexpected pass claim'); },
   };
@@ -92,8 +94,10 @@ it('persists the same pickup, records an advance once and recognizes income at h
   const created = await createOrder(template.templateId, '45,000원 케이크', { referencePhotoKeys: [photo] });
   const path = pathFor(created.customOrderId);
   expect((await ok('GET', '/custom-orders?query=CO-001&limit=1')).items).toMatchObject([
-    { customOrderId: created.customOrderId, orderNo: 1, revision: created.revision },
+    { customOrderId: created.customOrderId, orderNo: 1, revision: created.revision, memberId, memberCode: 'M-0008' },
   ]);
+  expect(await ok('GET', path)).toMatchObject({ memberId, memberCode: 'M-0008' });
+  expect(await ok('GET', '/member-accounts/' + memberId)).toMatchObject({ memberId, memberCode: 'M-0008' });
   const quote = await transition(created, 'customOrder.quote', { quoteAmount: 45000, proposedPickupAt: day + 'T17:00' });
   const approved = await transition(quote, 'customOrder.recordDecision', { decision: 'approved', quoteRevision: quote.quoteRevision, paymentTiming: 'advance' });
   expect((await ok('GET', path)).pickup).toMatchObject({ reservationId: approved.pickupReservationId, status: 'confirmed', time: '17:00' });

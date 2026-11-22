@@ -8,7 +8,7 @@ import type { PosOwnerRoute } from '../02/routes.ts';
 import { validDate } from '../02/terminal.ts';
 import { balance, balances, entries } from './accounts.ts';
 import { quoteMemberCheckout, recordMemberCheckout } from './checkout.ts';
-import type { CustomerMemberClient } from './customer-client.ts';
+import { attachMemberCodes, type CustomerMemberClient } from './customer-client.ts';
 import { readFunding, recordFunding, refundFunding } from './funding.ts';
 
 type PrivateRegistrar = (method: 'POST', path: string, mode: 'write',
@@ -16,16 +16,26 @@ type PrivateRegistrar = (method: 'POST', path: string, mode: 'write',
 type Options = { customer: CustomerMemberClient; readCatalog?: ReadPosCatalog };
 
 export function registerMemberAccountRoutes(owner: PosOwnerRoute, { customer, readCatalog }: Options) {
-  owner('GET', '/member-accounts', 'read', (tx, _params, _body, _key, query) => balances(tx, query));
+  owner('GET', '/member-accounts', 'read', async (tx, _params, _body, _key, query) => {
+    const page = await balances(tx, query);
+    return { ...page, items: await attachMemberCodes(tx.storeId, page.items, customer) };
+  });
   owner('GET', '/member-accounts/:id', 'read', async (tx, { id }) => {
     const memberId = uuid(id);
-    await customer.member(tx.storeId, memberId, tx.at.toISOString().slice(0, 10));
-    return balance(tx, memberId);
+    const { memberCode } = await customer.member(tx.storeId, memberId, tx.at.toISOString().slice(0, 10));
+    return { ...await balance(tx, memberId), ...(memberCode && { memberCode }) };
   });
-  owner('GET', '/member-accounts/:id/entries', 'read', (tx, { id }, _body, _key, query) => entries(tx, uuid(id), query));
+  owner('GET', '/member-accounts/:id/entries', 'read', async (tx, { id }, _body, _key, query) => {
+    const page = await entries(tx, uuid(id), query);
+    return { ...page, items: await attachMemberCodes(tx.storeId, page.items, customer) };
+  });
   owner('POST', '/member-accounts/:id/entries', 'command', (tx, { id }, body, key) =>
     recordFunding(tx, customer, key, uuid(id), body));
-  owner('GET', '/member-funding/:id', 'read', (tx, { id }) => readFunding(tx, uuid(id)));
+  owner('GET', '/member-funding/:id', 'read', async (tx, { id }) => {
+    const funding = await readFunding(tx, uuid(id));
+    const [withCode] = await attachMemberCodes(tx.storeId, [funding], customer);
+    return withCode;
+  });
   owner('POST', '/member-funding/:id/refunds', 'command', (tx, { id }, body, key) =>
     refundFunding(tx, key, uuid(id), body, customer));
   owner('POST', '/bills/:id/member-quote', 'read', (tx, { id }, body) =>

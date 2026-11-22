@@ -138,6 +138,8 @@ export const insightRecordRoutes: readonly RecordRoute[] = [
 export const marketingLocalRoutes: readonly RecordRoute[] = [
   ['GET', '/community/cafe-boards'], ['GET', '/community/cafe-posts'],
   ['GET', '/local-changes'], ['GET', '/trade-area'], ['GET', '/local-trends'], ['GET', '/offers'], ['GET', '/offers/peers'],
+  ['GET', '/local-trends/candidates'], ['POST', '/local-trends/candidates'], ['DELETE', '/local-trends/candidates/:id'],
+  ['POST', '/local-trends/preview'],
   ['POST', '/local-changes'], ['POST', '/local-changes/:id/ack'], ['POST', '/local-changes/:id/unack'],
   ['POST', '/local-changes/receipts/:id/undo'], ['POST', '/offers'], ['POST', '/offers/:id/accept'],
   ['POST', '/offers/:id/decline'], ['POST', '/offers/:id/interest'],
@@ -150,6 +152,7 @@ export const marketingNoticeRoutes: readonly RecordRoute[] = [
   ['POST', '/notice-reply-approvals'],
   ['GET', '/inquiries'], ['POST', '/inquiries'], ['GET', '/inquiries/:id'],
   ['PATCH', '/inquiries/:id/draft'], ['POST', '/inquiries/:id/attestation'],
+  ['POST', '/inquiries/:id/navis-draft-preview'],
   ['POST', '/inquiries/:id/reply'], ['PATCH', '/inquiries/:id/reply'], ['DELETE', '/inquiries/:id/reply'],
   ['GET', '/notices'], ['POST', '/notices'], ['GET', '/notices/:id'], ['PATCH', '/notices/:id/draft'],
   ['POST', '/notices/:id/attestation'], ['DELETE', '/notices/:id/draft'], ['POST', '/notices/:id/send'],

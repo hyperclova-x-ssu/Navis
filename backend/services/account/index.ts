@@ -2,6 +2,7 @@ import { listen } from '../../infra/http.ts';
 import { disposableReplayClock } from '../../packages/contracts/replay-clock.ts';
 import { dbPool, readSecret } from '../../packages/db/index.ts';
 import { createAccountApp } from './app.ts';
+import { createNcpPromoStorage } from './files/ncp-storage.ts';
 import { uuidPattern } from './sessions.ts';
 import { loadSigningKeys } from './keys.ts';
 
@@ -27,10 +28,15 @@ if (Boolean(marketingTokenPath) !== Boolean(storageDirectory)) {
 const keys = await loadSigningKeys(keyPath);
 const gatewayToken = readSecret(workloadTokenPath);
 const pool = dbPool('account');
+const replayDemoAuth = Boolean(disposableReplayClock());
+const storage = replayDemoAuth ? undefined : createNcpPromoStorage();
+if (!replayDemoAuth && process.env.NAVIS_NCP_OBJECT_STORAGE_PROVIDER === 'live' && (!storage || !marketingTokenPath || !storageDirectory)) {
+  throw new Error('Live Object Storage requires the mounted NCP file configuration and the promo artifact service');
+}
 const app = createAccountApp({
   pool, keys, gatewayToken,
   demoAuth: process.env.NAVIS_BACKEND_DEMO_AUTH,
-  replayDemoAuth: Boolean(disposableReplayClock()),
+  replayDemoAuth,
   hostedDemoAuth: process.env.NAVIS_HOSTED_DEMO_AUTH,
   publicOrigin: process.env.NAVIS_ACCOUNT_PUBLIC_ORIGIN,
   inventoryFilesToken: inventoryFilesTokenPath && readSecret(inventoryFilesTokenPath),
@@ -39,8 +45,9 @@ const app = createAccountApp({
   community: communityTokenFile ? {
     token: readSecret(communityTokenFile), pairs: communityPairs.map(([left, right]) => [left.toLowerCase(), right.toLowerCase()]),
   } : undefined,
+  sensStoreId: process.env.NAVIS_NCP_SENS_STORE_ID,
   promoFiles: marketingTokenPath && storageDirectory
-    ? { marketingToken: readSecret(marketingTokenPath), storageDirectory }
+    ? { marketingToken: readSecret(marketingTokenPath), storageDirectory, storage }
     : undefined,
 });
 pool.on('error', () => app.log.warn('Idle database connection closed unexpectedly'));

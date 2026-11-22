@@ -4,9 +4,10 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 import { dbPool } from '../../../../packages/db/index.ts';
 import { runMigrations } from '../../../../packages/db/migrate.ts';
 import { orderDetail } from '../02/reads.ts';
-import { receipt } from '../../reversals.ts';
+import { correctPayment, createReversalTokens, quoteReversal, receipt } from '../../reversals.ts';
 import { insertBill, recognizeSale, setPreparation } from '../../sales.ts';
 import { withStoreTransaction } from '../../transaction.ts';
+import { quoteMemberCheckout, recordMemberCheckout } from './checkout.ts';
 
 const pool = dbPool('pos', 'runtime', 'test');
 const actorId = randomUUID();
@@ -74,5 +75,58 @@ it('keeps the recorded walk-in cash order, receipt, and preparation contract', a
     expect(paid).not.toHaveProperty('realAmount');
     await setPreparation(scope, randomUUID(), orderId, 'preparing', order.revision);
     expect(await orderDetail(scope, orderId)).toMatchObject({ preparation: 'preparing', revision: 2, amount: 4500 });
+  }, { write: true });
+});
+
+it('applies one pass use to one unit of a two-unit sale and returns only the cash on refund', async () => {
+  const passStore = randomUUID();
+  const menuId = randomUUID(), membershipId = randomUUID(), claimId = randomUUID(), productId = randomUUID();
+  const client = {
+    async member() {
+      return { memberId, active: true, product: null, pass: {
+        membershipId, memberId, startsOn: '2026-11-17', endsOn: '2026-12-17',
+        status: 'active', usesLeft: 2, revision: 1, terms: {
+          productId, name: '라테 횟수권', kind: 'count' as const, soldPrice: 8000,
+          totalUses: 2, validDays: 30, dailyLimit: null, menuIds: [menuId], revision: 1,
+        },
+      } };
+    },
+    async reserve() { return { claimId, state: 'held', commandKey: 'claim' }; },
+    async archive() { throw new Error('Unused'); },
+  };
+  const catalog = async () => ({ items: [{ menuId, name: '라테', basePrice: 4500, baseCost: 1000,
+    recipeVersion: 'a'.repeat(64), saleStatus: 'selling' as const, groups: [] }] });
+  await withStoreTransaction(pool, passStore, async db => {
+    const scope = { ...tx(db), storeId: passStore };
+    await db.query('INSERT INTO pos.store VALUES ($1)', [passStore]);
+    await db.query(`INSERT INTO pos.business_day (store_id,business_date,starts_at,ends_at)
+      VALUES ($1, '2026-11-17', '2026-11-16T20:00:00Z', '2026-11-17T20:00:00Z')`, [passStore]);
+    const { billId, quote } = await insertBill(scope, { type: 'takeout', discount: 0, lines: [{ menuId, qty: 2, optionIds: [] }] }, catalog);
+    const allocationId = quote.lines[0].allocationId;
+    const selection = { memberId, allocations: [
+      { kind: 'membership_count', membershipId, allocationId, quantity: 1 },
+      { kind: 'method', method: 'cash', amount: 4500 },
+    ] };
+    const { quoteRevision, accountRevision } = await quoteMemberCheckout(scope, client, billId, selection, catalog);
+    const key = randomUUID(), input = { ...selection, quoteRevision, accountRevision };
+    const used = await recordMemberCheckout(scope, client, key, billId, input, catalog);
+    expect(await recordMemberCheckout(scope, client, key, billId, input, catalog)).toEqual(used);
+    expect(used.allocations[0]).toMatchObject({ quantity: 1, amount: 4000, membershipDiscount: 500 });
+    const paid = await receipt(scope, used.settlementId);
+    expect(paid).toMatchObject({ gross: 9000, discount: 500, realAmount: 4500, amount: 8500, splits: [{ method: 'cash', amount: 4500 }] });
+    const placed = await orderDetail(scope, used.orderId);
+    await setPreparation(scope, randomUUID(), used.orderId, 'preparing', placed.revision);
+    const tokens = createReversalTokens(randomUUID());
+    const reversal = await quoteReversal(scope, tokens, used.settlementId, { kind: 'refund' });
+    expect(reversal).toMatchObject({ canSubmit: true, stockEffect: 'keep', membershipEffect: 'restore', methods: [{ method: 'cash', amount: 4500 }] });
+    await correctPayment(scope, tokens, randomUUID(), reversal.quoteToken, { settlementId: used.settlementId, terminal: null });
+    const { rows: events } = await db.query<{ event_type: string; payload: object }>(
+      `SELECT event_type, payload FROM pos.outbox WHERE store_id=$1 AND event_type IN ('pos.sale_recognized.v1','pos.sale_corrected.v1') ORDER BY store_seq`, [passStore]);
+    expect(events).toMatchObject([
+      { event_type: 'pos.sale_recognized.v1', payload: { membershipContributions: [{ allocationId, quantity: 1 }] } },
+      { event_type: 'pos.sale_corrected.v1', payload: { memberUseRestored: true, usageEffect: 'keep' } },
+    ]);
+    const { rows } = await db.query(`SELECT amount::int FROM pos.payment_correction WHERE store_id=$1`, [passStore]);
+    expect(rows).toEqual([{ amount: 4500 }]);
   }, { write: true });
 });

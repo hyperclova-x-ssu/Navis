@@ -5,7 +5,7 @@ import { dbPool } from '../../../../packages/db/index.ts';
 import { runMigrations } from '../../../../packages/db/migrate.ts';
 import { demoIdentity } from '../../identity.ts';
 import { seed } from '../../seed.ts';
-import { readPreferences, savePreferences } from './settings.ts';
+import { parseProfile, readPreferences, readProfile, savePreferences, saveProfile } from './settings.ts';
 
 const { storeId, userId } = demoIdentity;
 const migrations = fileURLToPath(new URL('../../migrations/', import.meta.url));
@@ -43,4 +43,15 @@ it('defaults the seeded demo owner to light when no preference is stored', async
 it('returns an explicitly stored dark preference', async () => {
   await savePreferences(client, storeId, userId, { theme: 'dark', textScale: 125, locale: 'en', revision: 1 }, 1);
   expect(await readPreferences(client, storeId, userId)).toEqual({ theme: 'dark', textScale: 125, locale: 'en', revision: 1 });
+});
+
+it('persists the owner’s registered sender and 080 settings in the scoped profile', async () => {
+  const current = (await readProfile(client, storeId))!;
+  expect(current.smsSettings).toEqual({ senderNumber: null, optOutNumber: null });
+  const { patch } = parseProfile({ expectedRevision: current.revision,
+    smsSettings: { senderNumber: '010-1234-5678', optOutNumber: '080-123-4567' } });
+  await saveProfile(client, { ...current, ...patch }, current.revision + 1);
+  expect((await readProfile(client, storeId))?.smsSettings).toEqual({ senderNumber: '01012345678', optOutNumber: '0801234567' });
+  expect(() => parseProfile({ expectedRevision: 0,
+    smsSettings: { senderNumber: null, optOutNumber: '02-123-4567' } })).toThrow();
 });
